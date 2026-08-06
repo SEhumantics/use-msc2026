@@ -41,16 +41,38 @@ public final class URealValue extends UncertainValue {
     public RealValue toReal() { return new RealValue(value); }
     public IntegerValue toInteger() { return IntegerValue.valueOf((int) value); }
     public UIntegerValue toUInteger() { return new UIntegerValue((int) value, uncertainty); }
-    public UBooleanValue lessThan(URealValue o) { return UBooleanValue.probability(value < o.value, overlap(o)); }
+    public UBooleanValue lessThan(URealValue o) {
+        double probability = comparisonProbability(o);
+        return UBooleanValue.probability(true, probability);
+    }
     public UBooleanValue greaterThan(URealValue o) { return o.lessThan(this); }
-    private double overlap(URealValue o) { return (uncertainty == 0 && o.uncertainty == 0) ? 1 : 0.5; }
+    private double comparisonProbability(URealValue o) {
+        double sigma = Math.hypot(uncertainty, o.uncertainty);
+        if (sigma == 0) return value < o.value ? 1 : 0;
+        return normalCdf((o.value - value) / sigma);
+    }
+    private double overlap(URealValue o) {
+        if (uncertainty == 0 && o.uncertainty == 0) return value == o.value ? 1 : 0;
+        if (uncertainty == 0) return normalPdf((value-o.value)/o.uncertainty);
+        if (o.uncertainty == 0) return normalPdf((o.value-value)/uncertainty);
+        double lo=Math.min(value-8*uncertainty,o.value-8*o.uncertainty), hi=Math.max(value+8*uncertainty,o.value+8*o.uncertainty);
+        int steps=2048; double h=(hi-lo)/steps, sum=0;
+        for(int i=0;i<=steps;i++){double x=lo+i*h; double p=normalPdf((x-value)/uncertainty)/uncertainty, q=normalPdf((x-o.value)/o.uncertainty)/o.uncertainty; sum+= (i==0||i==steps?0.5:1)*Math.min(p,q);}
+        return Math.max(0,Math.min(1,sum*h));
+    }
+    private static double normalPdf(double z) { return Math.exp(-.5*z*z)/Math.sqrt(2*Math.PI); }
+    private static double normalCdf(double z) { return .5*(1+erf(z/Math.sqrt(2))); }
+    private static double erf(double x) {
+        double sign=x<0?-1:1, a=Math.abs(x), t=1/(1+0.3275911*a);
+        double y=1-((((1.061405429*t-1.453152027)*t+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-a*a);
+        return sign*y;
+    }
     @Override public UBooleanValue uEquals(Value other) {
         if (other instanceof IntegerValue i) return uEquals(new URealValue(i.value(), 0));
         if (other instanceof RealValue r) return uEquals(new URealValue(r.value(), 0));
         if (other instanceof UIntegerValue i) return uEquals(i.toUReal());
         if (!(other instanceof URealValue o)) return UBooleanValue.FALSE;
-        double distance = Math.abs(value-o.value), width=uncertainty+o.uncertainty;
-        return UBooleanValue.probability(true, width == 0 ? (distance == 0 ? 1 : 0) : Math.max(0, 1-distance/width));
+        return UBooleanValue.probability(true, overlap(o));
     }
     @Override public boolean equals(Object o) { return o instanceof URealValue x && Double.compare(value,x.value)==0 && Double.compare(uncertainty,x.uncertainty)==0; }
     @Override public int hashCode() { return java.util.Objects.hash(value, uncertainty); }

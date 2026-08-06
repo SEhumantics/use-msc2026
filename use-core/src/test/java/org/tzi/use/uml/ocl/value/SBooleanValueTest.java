@@ -36,4 +36,27 @@ class SBooleanValueTest {
             new SBooleanValue(.1,.3,.6,.5),new SBooleanValue(.4,.2,.4,.5),new SBooleanValue(.7,.1,.2,.5)));
         assertEquals(.629,result.belief(),.002); assertEquals(.182,result.disbelief(),.002); assertEquals(.189,result.uncertainty(),.002);
     }
+    @Test void historicalFusionSuiteGoldenValues() {
+        var opinions=List.of(new SBooleanValue(.55,.3,.15,.38),new SBooleanValue(.6,.3,.1,.38),
+            new SBooleanValue(.7,.2,.1,.38),new SBooleanValue(.8,.1,.1,.38),new SBooleanValue(.9,.05,.05,.38));
+        var weighted=SBooleanValue.weightedBeliefFusion(opinions);
+        assertEquals(.757,weighted.belief(),.002); assertEquals(.156,weighted.disbelief(),.002); assertEquals(.087,weighted.uncertainty(),.002);
+        var epistemic=SBooleanValue.epistemicCumulativeBeliefFusion(opinions);
+        assertEquals(.705,epistemic.belief(),.002); assertEquals(0,epistemic.disbelief(),.002); assertEquals(.295,epistemic.uncertainty(),.002);
+        var ccf=SBooleanValue.consensusAndCompromiseFusion(opinions);
+        assertEquals(.564,ccf.belief(),.002); assertEquals(.057,ccf.disbelief(),.002); assertEquals(.379,ccf.uncertainty(),.002);
+    }
+    @Test void weightedFusionHonorsRelativeWeights() {
+        var low=new SBooleanValue(1,0,0,.5,1); var high=new SBooleanValue(0,1,0,.5,3);
+        var result=SBooleanValue.weightedBeliefFusion(List.of(low,high));
+        assertEquals(.25,result.belief(),EPS);
+        assertEquals(4,result.relativeWeight(),EPS);
+    }
+    @Test void deductionMatchesHistoricalExamples() {
+        var yx=new SBooleanValue(.4,.5,.1,.4); var ynx=new SBooleanValue(0,.4,.6,.4);
+        var y=new SBooleanValue(0,0,1,.8).deduceY(yx,ynx);
+        assertEquals(.320,y.belief(),.002); assertEquals(.480,y.disbelief(),.002); assertEquals(.200,y.uncertainty(),.002);
+        y=new SBooleanValue(.10,.8,.1,.8).deduceY(yx,ynx);
+        assertEquals(.072,y.belief(),.002); assertEquals(.418,y.disbelief(),.002); assertEquals(.510,y.uncertainty(),.002);
+    }
 }

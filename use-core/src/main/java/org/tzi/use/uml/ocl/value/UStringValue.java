@@ -24,6 +24,24 @@ public final class UStringValue extends UncertainValue {
     public SequenceValue characters() { List<Value> chars=new ArrayList<>(); for(int i=0;i<value.length();i++) chars.add(new UStringValue(String.valueOf(value.charAt(i)),confidence)); return new SequenceValue(TypeFactory.mkUString(),chars); }
     public UIntegerValue indexOf(String needle) { return new UIntegerValue(value.indexOf(needle),confidence); }
     public UStringValue substring(int start,int end) { return new UStringValue(value.substring(start,end),confidence); }
+    public IntegerValue toInteger() { return IntegerValue.valueOf(Integer.parseInt(value)); }
+    public RealValue toReal() { return new RealValue(Double.parseDouble(value)); }
+    public BooleanValue toBoolean() { return BooleanValue.get(Boolean.parseBoolean(value)); }
+    public UBooleanValue toUBoolean() {
+        UBooleanValue yes=uEquals(new UStringValue("TRUE",1));
+        UBooleanValue no=uEquals(new UStringValue("FALSE",1));
+        if (yes.probability() >= .5) return yes;
+        if (no.probability() >= .5) return no.not();
+        return UBooleanValue.probability(.5);
+    }
+    private UBooleanValue compare(UStringValue other, int relation) {
+        int cmp=value.compareTo(other.value);
+        return UBooleanValue.probability(relation < 0 ? cmp < 0 : relation > 0 ? cmp > 0 : cmp <= 0, confidence*other.confidence);
+    }
+    public UBooleanValue lessThan(UStringValue o) { return compare(o,-1); }
+    public UBooleanValue lessOrEqual(UStringValue o) { return compare(o,0); }
+    public UBooleanValue greaterThan(UStringValue o) { return compare(o,1); }
+    public UBooleanValue greaterOrEqual(UStringValue o) { int cmp=value.compareTo(o.value); return UBooleanValue.probability(cmp>=0,confidence*o.confidence); }
     @Override public UBooleanValue uEquals(Value other) {
         if (other instanceof StringValue s) return UBooleanValue.probability(value.equals(s.value()) ? confidence : 1-confidence);
         if (other instanceof UStringValue s) return UBooleanValue.probability(value.equals(s.value) ? confidence*s.confidence : 1-confidence*s.confidence);

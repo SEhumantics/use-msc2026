@@ -17,6 +17,7 @@ public final class StandardOperationsUncertainty {
         unary(map,"toString", Type::isTypeOfUBoolean, TypeFactory.mkString(), a -> new StringValue(a[0].toString()));
         binary(map,"setValue", (t,h)->t.isTypeOfUBoolean(), (t,h)->t.isTypeOfBoolean(), TypeFactory.mkUBoolean(), a -> ((UBooleanValue)a[0]).withValue(((BooleanValue)a[1]).value()), false);
         binary(map,"setUncertainty", (t,h)->t.isTypeOfUBoolean(), Type::isKindOfReal, TypeFactory.mkUBoolean(), a -> ((UBooleanValue)a[0]).withConfidence(real(a[1])), false);
+        binary(map,"setConfidence", (t,h)->t.isTypeOfUBoolean(), Type::isKindOfReal, TypeFactory.mkUBoolean(), a -> ((UBooleanValue)a[0]).withConfidence(real(a[1])), false);
         unary(map,"toBoolean", Type::isTypeOfUBoolean, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).toBoolean());
         binary(map,"equalsC", (t,h)->t.isTypeOfUBoolean(), Type::isKindOfReal, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).equalsC(real(a[1])), false);
         binary(map,"toBooleanC", (t,h)->t.isTypeOfUBoolean(), Type::isKindOfReal, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).toBooleanC(real(a[1])), false);
@@ -60,6 +61,8 @@ public final class StandardOperationsUncertainty {
         binary(map,"setUncertainty", (t,h)->t.isTypeOfUInteger(), (t,h)->t.isKindOfReal(h), TypeFactory.mkUInteger(), a -> new UIntegerValue(((UIntegerValue)a[0]).value(),real(a[1])), false);
         unary(map,"abs", Type::isTypeOfUInteger, TypeFactory.mkUInteger(), a -> new UIntegerValue(Math.abs(((UIntegerValue)a[0]).value()),((UIntegerValue)a[0]).uncertainty()));
         unary(map,"neg", Type::isTypeOfUInteger, TypeFactory.mkUInteger(), a -> new UIntegerValue(-((UIntegerValue)a[0]).value(),((UIntegerValue)a[0]).uncertainty()));
+        unary(map,"sqrt", Type::isTypeOfUInteger, TypeFactory.mkUInteger(), a -> ((UIntegerValue)a[0]).sqrt());
+        binary(map,"power", (t,h)->t.isTypeOfUInteger(), Type::isKindOfReal, TypeFactory.mkUInteger(), a -> ((UIntegerValue)a[0]).power(real(a[1])), false);
         unary(map,"toString", Type::isTypeOfUInteger, TypeFactory.mkString(), a -> new StringValue(a[0].toString()));
         binary(map,"div", (t,h)->t.isTypeOfUInteger(), (t,h)->t.isTypeOfUInteger(), TypeFactory.mkUInteger(), a -> ((UIntegerValue)a[0]).div((UIntegerValue)a[1]), false);
         binary(map,"mod", (t,h)->t.isTypeOfUInteger(), (t,h)->t.isTypeOfUInteger(), TypeFactory.mkUInteger(), a -> ((UIntegerValue)a[0]).mod((UIntegerValue)a[1]), false);
@@ -77,6 +80,14 @@ public final class StandardOperationsUncertainty {
         ternary(map,"substring", (t,h)->t.isTypeOfUString(), (t,h)->t.isTypeOfInteger(), (t,h)->t.isTypeOfInteger(), TypeFactory.mkUString(), a -> ((UStringValue)a[0]).substring(((IntegerValue)a[1]).value(),((IntegerValue)a[2]).value()));
         unary(map,"toLowerCase", Type::isTypeOfUString, TypeFactory.mkUString(), a -> ((UStringValue)a[0]).lower());
         unary(map,"toUpperCase", Type::isTypeOfUString, TypeFactory.mkUString(), a -> ((UStringValue)a[0]).upper());
+        unary(map,"toInteger", Type::isTypeOfUString, TypeFactory.mkInteger(), a -> ((UStringValue)a[0]).toInteger());
+        unary(map,"toReal", Type::isTypeOfUString, TypeFactory.mkReal(), a -> ((UStringValue)a[0]).toReal());
+        unary(map,"toBoolean", Type::isTypeOfUString, TypeFactory.mkBoolean(), a -> ((UStringValue)a[0]).toBoolean());
+        unary(map,"toUBoolean", Type::isTypeOfUString, TypeFactory.mkUBoolean(), a -> ((UStringValue)a[0]).toUBoolean());
+        binary(map,"<", (t,h)->t.isTypeOfUString(), (t,h)->t.isTypeOfUString(), TypeFactory.mkUBoolean(), a -> ((UStringValue)a[0]).lessThan((UStringValue)a[1]), true);
+        binary(map,"<=", (t,h)->t.isTypeOfUString(), (t,h)->t.isTypeOfUString(), TypeFactory.mkUBoolean(), a -> ((UStringValue)a[0]).lessOrEqual((UStringValue)a[1]), true);
+        binary(map,">", (t,h)->t.isTypeOfUString(), (t,h)->t.isTypeOfUString(), TypeFactory.mkUBoolean(), a -> ((UStringValue)a[0]).greaterThan((UStringValue)a[1]), true);
+        binary(map,">=", (t,h)->t.isTypeOfUString(), (t,h)->t.isTypeOfUString(), TypeFactory.mkUBoolean(), a -> ((UStringValue)a[0]).greaterOrEqual((UStringValue)a[1]), true);
         binary(map,"+", (t,h)->t.isTypeOfUString(), (t,h)->t.isTypeOfUString(), TypeFactory.mkUString(), a -> ((UStringValue)a[0]).concat((UStringValue)a[1]), true);
 
         registerSBoolean(map);
@@ -91,7 +102,7 @@ public final class StandardOperationsUncertainty {
         unary(map,"toString", Type::isTypeOfSBoolean, TypeFactory.mkString(), a->new StringValue(a[0].toString()));
         unary(map,"toUBoolean", Type::isTypeOfSBoolean, TypeFactory.mkUBoolean(), a->sb(a[0]).toUBoolean());
         unary(map,"not", Type::isTypeOfSBoolean, TypeFactory.mkSBoolean(), a->sb(a[0]).not());
-        unary(map,"getRelativeWeight", Type::isTypeOfSBoolean, TypeFactory.mkReal(), a->new RealValue(1));
+        unary(map,"getRelativeWeight", Type::isTypeOfSBoolean, TypeFactory.mkReal(), a->new RealValue(sb(a[0]).relativeWeight()));
         binary(map,"isCertain", (t,h)->t.isTypeOfSBoolean(), Type::isKindOfReal, TypeFactory.mkBoolean(), a->BooleanValue.get(sb(a[0]).isCertain(real(a[1]))), false);
         binary(map,"isUncertain", (t,h)->t.isTypeOfSBoolean(), Type::isKindOfReal, TypeFactory.mkBoolean(), a->BooleanValue.get(sb(a[0]).isUncertain(real(a[1]))), false);
         unary(map,"uncertaintyMaximized", Type::isTypeOfSBoolean, TypeFactory.mkSBoolean(), a->sb(a[0]).uncertaintyMaximized());

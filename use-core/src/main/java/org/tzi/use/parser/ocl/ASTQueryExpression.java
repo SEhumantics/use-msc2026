@@ -132,6 +132,9 @@ public class ASTQueryExpression extends ASTExpression {
                                             opname + "'.");
 
             int idval = id.intValue();
+            if (fUncertainty != null && idval != ParserHelper.Q_USELECTC_ID) {
+                throw new SemanticException(fOp, "an uncertainty threshold is only valid for uSelectC");
+            }
             switch ( idval ) {
             case ParserHelper.Q_SELECT_ID:
             case ParserHelper.Q_COLLECT_ID:

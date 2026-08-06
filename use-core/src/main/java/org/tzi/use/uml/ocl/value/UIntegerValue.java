@@ -24,6 +24,8 @@ public final class UIntegerValue extends UncertainValue {
     public UIntegerValue div(UIntegerValue o) { if(o.value==0) throw new ArithmeticException("division by zero"); return new UIntegerValue(value/o.value,uncertainty+o.uncertainty); }
     public UIntegerValue abs() { return new UIntegerValue(Math.abs(value),uncertainty); }
     public UIntegerValue negate() { return new UIntegerValue(-value,uncertainty); }
+    public UIntegerValue sqrt() { if (value < 0) throw new ArithmeticException("sqrt domain"); return new UIntegerValue((int)Math.sqrt(value), uncertainty == 0 ? 0 : uncertainty/(2*Math.max(1,Math.sqrt(value)))); }
+    public UIntegerValue power(double exponent) { double v=Math.pow(value,exponent); double u=Math.abs(exponent*Math.pow(value,exponent-1))*uncertainty; if(!Double.isFinite(v)||!Double.isFinite(u)) throw new ArithmeticException("invalid power"); return new UIntegerValue((int)v,u); }
     @Override public UBooleanValue uEquals(Value other) { return toUReal().uEquals(other); }
     @Override public boolean equals(Object o) { return o instanceof UIntegerValue x && value==x.value && Double.compare(uncertainty,x.uncertainty)==0; }
     @Override public int hashCode() { return java.util.Objects.hash(value, uncertainty); }

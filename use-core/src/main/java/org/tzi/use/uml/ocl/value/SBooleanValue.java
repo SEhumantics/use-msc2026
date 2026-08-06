@@ -9,20 +9,26 @@ import org.tzi.use.uml.ocl.type.TypeFactory;
  */
 public final class SBooleanValue extends UncertainValue {
     public static final double MASS_TOLERANCE = 1e-3;
-    private final double belief, disbelief, uncertainty, baseRate;
+    private final double belief, disbelief, uncertainty, baseRate, relativeWeight;
     public static final SBooleanValue TRUE = new SBooleanValue(1,0,0,1);
     public static final SBooleanValue FALSE = new SBooleanValue(0,1,0,1);
     public SBooleanValue(double belief, double disbelief, double uncertainty, double baseRate) {
+        this(belief, disbelief, uncertainty, baseRate, 1);
+    }
+    public SBooleanValue(double belief,double disbelief,double uncertainty,double baseRate,double relativeWeight){
         super(TypeFactory.mkSBoolean());
         checkUnit(belief,"belief"); checkUnit(disbelief,"disbelief"); checkUnit(uncertainty,"uncertainty"); checkUnit(baseRate,"base rate");
         if (Math.abs(belief+disbelief+uncertainty-1) > MASS_TOLERANCE) throw new IllegalArgumentException("belief + disbelief + uncertainty must equal 1 within " + MASS_TOLERANCE);
+        if(!Double.isFinite(relativeWeight)||relativeWeight<=0)throw new IllegalArgumentException("relative weight must be positive");
         this.belief=belief; this.disbelief=disbelief; this.uncertainty=uncertainty; this.baseRate=baseRate;
+        this.relativeWeight=relativeWeight;
     }
     private static void checkUnit(double x, String name) { if (!Double.isFinite(x) || x < 0 || x > 1) throw new IllegalArgumentException(name+" must be in [0,1]"); }
     public double belief() { return belief; } public double disbelief() { return disbelief; }
     public double uncertainty() { return uncertainty; } public double baseRate() { return baseRate; }
     public double projection() { return belief + baseRate*uncertainty; }
     public double certainty() { return 1-uncertainty; }
+    public double relativeWeight() { return relativeWeight; }
     @Override public boolean isSBoolean() { return true; }
     public static SBooleanValue dogmatic(double probability, double baseRate) { return new SBooleanValue(probability,1-probability,0,baseRate); }
     public static SBooleanValue vacuous(double baseRate) { return new SBooleanValue(0,0,1,baseRate); }
@@ -151,7 +157,7 @@ public final class SBooleanValue extends UncertainValue {
     public static SBooleanValue weightedBeliefFusion(Collection<SBooleanValue> opinions) {
         requireNonEmpty(opinions,"weighted fusion"); List<SBooleanValue> os=List.copyOf(opinions);
         List<SBooleanValue> dogmatic=os.stream().filter(SBooleanValue::isDogmatic).toList();
-        if (!dogmatic.isEmpty()) return averageBeliefFusion(dogmatic);
+        if (!dogmatic.isEmpty()) { double total=dogmatic.stream().mapToDouble(SBooleanValue::relativeWeight).sum(), b=dogmatic.stream().mapToDouble(o->o.belief*o.relativeWeight).sum()/total; return new SBooleanValue(b,1-b,0,os.get(0).baseRate,total); }
         if (os.stream().allMatch(SBooleanValue::isVacuous)) return vacuous(os.stream().mapToDouble(SBooleanValue::baseRate).average().orElse(.5));
         double product=1,sumU=0,b=0,d=0,a=0; for(var o:os){product*=o.uncertainty;sumU+=o.uncertainty;}
         double denominator=0; for(var o:os){double w=product/o.uncertainty;denominator+=w;b+=w*o.belief*o.certainty();d+=w*o.disbelief*o.certainty();a+=o.baseRate*o.certainty();}
@@ -165,7 +171,17 @@ public final class SBooleanValue extends UncertainValue {
         for(var o:os)product*=o.uncertainty;
         double rb=0,rd=0,rx=0; List<Double> br=new ArrayList<>(),dr=new ArrayList<>(),ur=new ArrayList<>();
         for(var o:os){br.add(Math.max(o.belief-cb,0));dr.add(Math.max(o.disbelief-cd,0));ur.add(o.uncertainty);double w=o.uncertainty==0?0:product/o.uncertainty;rb+=br.get(br.size()-1)*w;rd+=dr.get(dr.size()-1)*w;}
-        for(List<Domain> p:domainOptions(os.size())){Domain intersection=Domain.DOMAIN, union=Domain.NIL;for(Domain x:p){intersection=intersection.intersect(x);union=union.union(x);}double prod=1;for(int i=0;i<p.size();i++){switch(p.get(i)){case TRUE->prod*=br.get(i);case FALSE->prod*=dr.get(i);case NIL,DOMAIN->prod=0;}}if(intersection==Domain.TRUE)rb+=prod;else if(intersection==Domain.FALSE)rd+=prod;if(intersection==Domain.NIL){if(union==Domain.TRUE)rb+=prod;else if(union==Domain.FALSE)rd+=prod;else if(union==Domain.DOMAIN)rx+=prod;}}
+        for(List<Domain> p:domainOptions(os.size())){
+            Domain intersection=Domain.DOMAIN, union=Domain.NIL;
+            for(Domain x:p){intersection=intersection.intersect(x);union=union.union(x);}
+            if(intersection==Domain.TRUE) rb+=productFor(p,br,dr,true);
+            else if(intersection==Domain.FALSE) rd+=productFor(p,br,dr,false);
+            if(intersection==Domain.NIL) {
+                if(union==Domain.DOMAIN) rx+=productFor(p,br,dr,false);
+                else if(union==Domain.TRUE) rb+=productFor(p,br,dr,false);
+                else if(union==Domain.FALSE) rd+=productFor(p,br,dr,false);
+            }
+        }
         double compromiseMass=rb+rd+rx, norm=compromiseMass==0?1:(1-cb-cd-product)/compromiseMass;
         double b=cb+norm*rb,d=cd+norm*rd;return new SBooleanValue(b,d,1-b-d,base);
     }
@@ -173,10 +189,15 @@ public final class SBooleanValue extends UncertainValue {
         Domain intersect(Domain x){if(this==NIL||x==NIL)return NIL;if(this==DOMAIN)return x;if(x==DOMAIN)return this;return this==x?this:NIL;}
         Domain union(Domain x){if(this==DOMAIN||x==DOMAIN)return DOMAIN;if(this==NIL)return x;if(x==NIL)return this;return this==x?this:DOMAIN;}
     }
+    private static double productFor(List<Domain> p,List<Double> br,List<Double> dr,boolean intersectionMass){
+        double prod=1; for(int i=0;i<p.size();i++){switch(p.get(i)){case TRUE->prod*=br.get(i);case FALSE->prod*=dr.get(i);case NIL,DOMAIN-> { return 0; }}}
+        return prod;
+    }
     private static List<List<Domain>> domainOptions(int n){List<List<Domain>> r=new ArrayList<>();if(n==0){r.add(new ArrayList<>());return r;}for(var p:domainOptions(n-1))for(var d:Domain.values()){List<Domain> q=new ArrayList<>(p);q.add(d);r.add(q);}return r;}
     private static void requireNonEmpty(Collection<SBooleanValue> os,String n){ if(os==null||os.isEmpty()||os.stream().anyMatch(Objects::isNull))throw new IllegalArgumentException(n+" requires non-null opinions"); }
     private static void requireTwo(Collection<SBooleanValue> os,String n){ requireNonEmpty(os,n); if(os.size()<2)throw new IllegalArgumentException(n+" requires at least two opinions"); }
-    @Override public UBooleanValue uEquals(Value other) { return other instanceof SBooleanValue o ? UBooleanValue.probability(1-projectiveDistance(o)) : UBooleanValue.FALSE; }
+    @Override public UBooleanValue uEquals(Value other) { return other instanceof SBooleanValue o ? equivalent(o).toUBoolean() : UBooleanValue.FALSE; }
+    @Override public UBooleanValue uDistinct(Value other) { return other instanceof SBooleanValue o ? xor(o).toUBoolean() : UBooleanValue.TRUE; }
     @Override public boolean equals(Object o) { return o instanceof SBooleanValue x && Double.compare(belief,x.belief)==0&&Double.compare(disbelief,x.disbelief)==0&&Double.compare(uncertainty,x.uncertainty)==0&&Double.compare(baseRate,x.baseRate)==0; }
     @Override public int hashCode() { return Objects.hash(belief,disbelief,uncertainty,baseRate); }
     /** Stable representation order only; it is not a subjective-logic preference relation. */
