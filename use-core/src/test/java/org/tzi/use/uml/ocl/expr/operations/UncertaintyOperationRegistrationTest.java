@@ -16,11 +16,10 @@ class UncertaintyOperationRegistrationTest {
         Multimap<String,OpGeneric> operations=HashMultimap.create();
         OpGeneric.registerOperations(operations);
         Set<String> names=operations.keySet();
-        for(String name:new String[]{"UReal","UInteger","UString","UBoolean","SBoolean","projection","belief","deduceY",
-            "minimumBeliefFusion","majorityBeliefFusion","beliefConstraintFusion","averageBeliefFusion",
-            "aleatoryCumulativeBeliefFusion","epistemicCumulativeBeliefFusion","weightedBeliefFusion",
-            "consensusAndCompromiseFusion","discount","uCount","uCountC","uIncludes","uExcludes"}) {
-            if(name.equals("UReal")||name.equals("UInteger")||name.equals("UString")||name.equals("UBoolean")||name.equals("SBoolean")) continue;
+        for(String name:new String[]{"value","uncertainty","setUncertainty","setValue","abs","inv","neg","toReal","toInteger","toUInteger","power","sqrt","atan","sin","cos","tan","asin","acos",
+            "div","mod","toUReal","confidence","setConfidence","at","character","+","indexOf","substring","toLowerCase","toUpperCase","size","toString","toBoolean","toUBoolean","<","<=",">",">=",
+            "toBooleanC","equalsC","and","or","not","implies","xor","equivalent","projection","belief","disbelief","baseRate","certainty","toUBoolean","getRelativeWeight","uncertaintyMaximized","uncertainOpinion","isAbsolute","isVacuous","isDogmatic","isMaximizedUncertainty","isCertain","isUncertain","projectiveDistance","conjunctiveCertainty","degreeOfConflict","min","max","applyOn","deduceY",
+            "minimumBeliefFusion","majorityBeliefFusion","beliefConstraintFusion","averageBeliefFusion","aleatoryCumulativeBeliefFusion","epistemicCumulativeBeliefFusion","weightedBeliefFusion","consensusAndCompromiseFusion","discount","uCount","uCountC","uIncludes","uExcludes"}) {
             assertTrue(names.contains(name), name);
         }
     }
