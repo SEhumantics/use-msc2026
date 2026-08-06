@@ -104,6 +104,7 @@ public final class StandardOperationsUncertainty {
         binary(map,"min",(t,h)->t.isTypeOfSBoolean(),(t,h)->t.isTypeOfSBoolean(),TypeFactory.mkSBoolean(),a->sb(a[0]).min(sb(a[1])),false);
         binary(map,"max",(t,h)->t.isTypeOfSBoolean(),(t,h)->t.isTypeOfSBoolean(),TypeFactory.mkSBoolean(),a->sb(a[0]).max(sb(a[1])),false);
         binary(map,"applyOn",(t,h)->t.isTypeOfSBoolean(),(t,h)->t.isTypeOfUBoolean(),TypeFactory.mkSBoolean(),a->sb(a[0]).applyOn((UBooleanValue)a[1]),false);
+        ternary(map,"deduceY",(t,h)->t.isTypeOfSBoolean(),(t,h)->t.isTypeOfSBoolean(),(t,h)->t.isTypeOfSBoolean(),TypeFactory.mkSBoolean(),a->sb(a[0]).deduceY(sb(a[1]),sb(a[2])));
         fusion(map,"minimumBeliefFusion",SBooleanValue::minimumBeliefFusion); fusion(map,"majorityBeliefFusion",SBooleanValue::majorityBeliefFusion);
         fusion(map,"beliefConstraintFusion",SBooleanValue::beliefConstraintFusion); fusion(map,"averageBeliefFusion",SBooleanValue::averageBeliefFusion);
         fusion(map,"aleatoryCumulativeBeliefFusion",SBooleanValue::aleatoryCumulativeBeliefFusion); fusion(map,"epistemicCumulativeBeliefFusion",SBooleanValue::epistemicCumulativeBeliefFusion);

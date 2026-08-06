@@ -78,6 +78,36 @@ public final class SBooleanValue extends UncertainValue {
         double b=Math.min(c*belief/baseRate,1-uncertainty);
         return new SBooleanValue(b,1-b-uncertainty,uncertainty,c);
     }
+    /** Historical subjective-logic deduction of Y from X and two conditional opinions. */
+    public SBooleanValue deduceY(SBooleanValue yGivenX, SBooleanValue yGivenNotX) {
+        double px=projection();
+        double a=(yGivenX.uncertainty+yGivenNotX.uncertainty<2)
+            ? (baseRate*yGivenX.belief+(1-baseRate)*yGivenNotX.belief)/(1-baseRate*yGivenX.uncertainty-(1-baseRate)*yGivenNotX.uncertainty)
+            : yGivenX.baseRate;
+        double pyxhat=yGivenX.belief*baseRate+yGivenNotX.belief*(1-baseRate)+a*(yGivenX.uncertainty*baseRate+yGivenNotX.uncertainty*(1-baseRate));
+        double bIy=belief*yGivenX.belief+disbelief*yGivenNotX.belief+uncertainty*(yGivenX.belief*baseRate+yGivenNotX.belief*(1-baseRate));
+        double dIy=belief*yGivenX.disbelief+disbelief*yGivenNotX.disbelief+uncertainty*(yGivenX.disbelief*baseRate+yGivenNotX.disbelief*(1-baseRate));
+        double uIy=belief*yGivenX.uncertainty+disbelief*yGivenNotX.uncertainty+uncertainty*(yGivenX.uncertainty*baseRate+yGivenNotX.uncertainty*(1-baseRate));
+        double k=0;
+        if(yGivenX.belief>yGivenNotX.belief&&yGivenX.disbelief<=yGivenNotX.disbelief){
+            if(pyxhat<=yGivenNotX.belief+a*(1-yGivenNotX.belief-yGivenX.disbelief)){
+                if(px<=baseRate)k=baseRate*uncertainty*(bIy-yGivenNotX.belief)/((belief+baseRate*uncertainty)*a);
+                else k=(1-baseRate)*uncertainty*(dIy-yGivenX.disbelief)*(yGivenX.belief-yGivenNotX.belief)/((disbelief+(1-baseRate)*uncertainty)*a*(yGivenNotX.disbelief-yGivenX.disbelief));
+            } else {
+                if(px<=baseRate)k=(1-baseRate)*uncertainty*(bIy-yGivenNotX.belief)*(yGivenNotX.disbelief-yGivenX.disbelief)/((belief+baseRate*uncertainty)*(1-a)*(yGivenX.belief-yGivenNotX.belief));
+                else k=(1-baseRate)*uncertainty*(dIy-yGivenX.disbelief)/((disbelief+(1-baseRate)*uncertainty)*(1-a));
+            }
+        } else if(yGivenX.belief<=yGivenNotX.belief&&yGivenX.disbelief>yGivenNotX.disbelief){
+            if(pyxhat<=yGivenX.belief+a*(1-yGivenX.belief-yGivenNotX.disbelief)){
+                if(px<=baseRate)k=(1-baseRate)*uncertainty*(dIy-yGivenNotX.disbelief)*(yGivenNotX.belief-yGivenX.belief)/((belief+baseRate*uncertainty)*a*(yGivenX.disbelief-yGivenNotX.disbelief));
+                else k=(1-baseRate)*uncertainty*(bIy-yGivenX.disbelief)/((disbelief+(1-baseRate)*uncertainty)*a);
+            } else {
+                if(px<=baseRate)k=baseRate*uncertainty*(dIy-yGivenNotX.belief)/((belief+baseRate*uncertainty)*(1-a));
+                else k=baseRate*uncertainty*(bIy-yGivenX.belief)*(yGivenX.disbelief-yGivenNotX.disbelief)/((disbelief+(1-baseRate)*uncertainty)*(1-a)*(yGivenNotX.belief-yGivenX.belief));
+            }
+        }
+        return new SBooleanValue(bIy-a*k,dIy-(1-a)*k,uIy+k,a);
+    }
     public static SBooleanValue minimumBeliefFusion(Collection<SBooleanValue> opinions) {
         requireTwo(opinions,"minimum fusion"); return opinions.stream().min(Comparator.comparingDouble(SBooleanValue::projection)).orElseThrow();
     }
