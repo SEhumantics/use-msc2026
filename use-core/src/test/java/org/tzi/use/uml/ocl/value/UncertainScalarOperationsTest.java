@@ -9,6 +9,7 @@ class UncertainScalarOperationsTest {
         assertEquals(.5,left.lessThan(right).probability(),.01);
         assertTrue(left.uEquals(right).probability()>0.99);
         assertEquals("UReal(1.2345678901, 0.123456789)",new URealValue(1.234567890123,0.12345678901).toString());
+        assertEquals(new URealValue(1.00000000001,.1),new URealValue(1.00000000002,.100000000001));
     }
     @Test void integerMathOperationsAreAvailable() {
         var x=new UIntegerValue(9,0);

@@ -27,7 +27,12 @@ public final class UIntegerValue extends UncertainValue {
     public UIntegerValue sqrt() { if (value < 0) throw new ArithmeticException("sqrt domain"); return new UIntegerValue((int)Math.sqrt(value), uncertainty == 0 ? 0 : uncertainty/(2*Math.max(1,Math.sqrt(value)))); }
     public UIntegerValue power(double exponent) { double v=Math.pow(value,exponent); double u=Math.abs(exponent*Math.pow(value,exponent-1))*uncertainty; if(!Double.isFinite(v)||!Double.isFinite(u)) throw new ArithmeticException("invalid power"); return new UIntegerValue((int)v,u); }
     @Override public UBooleanValue uEquals(Value other) { return toUReal().uEquals(other); }
-    @Override public boolean equals(Object o) { return o instanceof UIntegerValue x && value==x.value && Double.compare(uncertainty,x.uncertainty)==0; }
+    @Override public boolean equals(Object o) {
+        if(o instanceof UIntegerValue x) return value==x.value&&round(uncertainty,10)==round(x.uncertainty,10);
+        if(o instanceof IntegerValue x) return value==x.value()&&uncertainty==0;
+        if(o instanceof URealValue x) return x.equals(this);
+        return false;
+    }
     @Override public int hashCode() { return java.util.Objects.hash(value, uncertainty); }
     @Override public int compareTo(Value o) { if (o instanceof UndefinedValue) return 1; if (o instanceof UIntegerValue x) return Integer.compare(value,x.value); return toString().compareTo(o.toString()); }
     @Override public StringBuilder toString(StringBuilder b) { return b.append("UInteger(").append(value).append(", ").append(round(uncertainty,10)).append(')'); }
