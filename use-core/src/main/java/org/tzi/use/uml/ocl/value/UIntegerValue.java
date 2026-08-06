@@ -20,6 +20,10 @@ public final class UIntegerValue extends UncertainValue {
     public UIntegerValue subtract(UIntegerValue o) { return new UIntegerValue(value-o.value, uncertainty+o.uncertainty); }
     public UIntegerValue multiply(UIntegerValue o) { return new UIntegerValue(value*o.value, Math.abs(value)*o.uncertainty+Math.abs(o.value)*uncertainty+uncertainty*o.uncertainty); }
     public URealValue divide(UIntegerValue o) { return toUReal().divide(o.toUReal()); }
+    public UIntegerValue mod(UIntegerValue o) { if(o.value==0) throw new ArithmeticException("modulo by zero"); return new UIntegerValue(value%o.value,uncertainty+o.uncertainty); }
+    public UIntegerValue div(UIntegerValue o) { if(o.value==0) throw new ArithmeticException("division by zero"); return new UIntegerValue(value/o.value,uncertainty+o.uncertainty); }
+    public UIntegerValue abs() { return new UIntegerValue(Math.abs(value),uncertainty); }
+    public UIntegerValue negate() { return new UIntegerValue(-value,uncertainty); }
     @Override public UBooleanValue uEquals(Value other) { return toUReal().uEquals(other); }
     @Override public boolean equals(Object o) { return o instanceof UIntegerValue x && value==x.value && Double.compare(uncertainty,x.uncertainty)==0; }
     @Override public int hashCode() { return java.util.Objects.hash(value, uncertainty); }

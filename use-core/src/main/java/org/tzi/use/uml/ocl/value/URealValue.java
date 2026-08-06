@@ -27,6 +27,17 @@ public final class URealValue extends UncertainValue {
     }
     public URealValue negate() { return new URealValue(-value, uncertainty); }
     public URealValue abs() { return new URealValue(Math.abs(value), uncertainty); }
+    public URealValue inverse() { if (Math.abs(value)<=uncertainty) throw new ArithmeticException("uncertain value contains zero"); return new URealValue(1/value, uncertainty/(value*value)); }
+    public URealValue power(double exponent) { double v=Math.pow(value,exponent); double u=Math.abs(exponent*Math.pow(value,exponent-1))*uncertainty; return new URealValue(v,u); }
+    public URealValue sqrt() { if(value<0) throw new ArithmeticException("sqrt domain"); return power(.5); }
+    public URealValue floorValue() { return new URealValue(Math.floor(value),uncertainty); }
+    public URealValue roundValue() { return new URealValue(Math.rint(value),uncertainty); }
+    public URealValue sin() { return new URealValue(Math.sin(value),Math.abs(Math.cos(value))*uncertainty); }
+    public URealValue cos() { return new URealValue(Math.cos(value),Math.abs(Math.sin(value))*uncertainty); }
+    public URealValue tan() { return new URealValue(Math.tan(value),uncertainty/(Math.cos(value)*Math.cos(value))); }
+    public URealValue asin() { return new URealValue(Math.asin(value),uncertainty/Math.sqrt(1-value*value)); }
+    public URealValue acos() { return new URealValue(Math.acos(value),uncertainty/Math.sqrt(1-value*value)); }
+    public URealValue atan() { return new URealValue(Math.atan(value),uncertainty/(1+value*value)); }
     public RealValue toReal() { return new RealValue(value); }
     public IntegerValue toInteger() { return IntegerValue.valueOf((int) value); }
     public UIntegerValue toUInteger() { return new UIntegerValue((int) value, uncertainty); }

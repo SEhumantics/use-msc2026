@@ -1,6 +1,7 @@
 package org.tzi.use.uml.ocl.value;
 
 import org.tzi.use.uml.ocl.type.TypeFactory;
+import java.util.*;
 
 /** String with a confidence in its representative spelling. */
 public final class UStringValue extends UncertainValue {
@@ -18,6 +19,11 @@ public final class UStringValue extends UncertainValue {
     public UStringValue lower() { return new UStringValue(value.toLowerCase(), confidence); }
     public UStringValue upper() { return new UStringValue(value.toUpperCase(), confidence); }
     public UIntegerValue size() { return new UIntegerValue(value.length(), 0); }
+    public StringValue at(int index) { return new StringValue(String.valueOf(value.charAt(index))); }
+    public UStringValue character(int index) { return new UStringValue(String.valueOf(value.charAt(index)),confidence); }
+    public SequenceValue characters() { List<Value> chars=new ArrayList<>(); for(int i=0;i<value.length();i++) chars.add(new UStringValue(String.valueOf(value.charAt(i)),confidence)); return new SequenceValue(TypeFactory.mkUString(),chars); }
+    public UIntegerValue indexOf(String needle) { return new UIntegerValue(value.indexOf(needle),confidence); }
+    public UStringValue substring(int start,int end) { return new UStringValue(value.substring(start,end),confidence); }
     @Override public UBooleanValue uEquals(Value other) {
         if (other instanceof StringValue s) return UBooleanValue.probability(value.equals(s.value()) ? confidence : 1-confidence);
         if (other instanceof UStringValue s) return UBooleanValue.probability(value.equals(s.value) ? confidence*s.confidence : 1-confidence*s.confidence);
