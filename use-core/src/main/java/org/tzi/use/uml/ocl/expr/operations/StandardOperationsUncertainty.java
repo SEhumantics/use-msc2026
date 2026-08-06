@@ -15,7 +15,12 @@ public final class StandardOperationsUncertainty {
         // Canonical form: the carried Boolean of a UBoolean is always true.
         unary(map,"value", Type::isTypeOfUBoolean, TypeFactory.mkBoolean(), a -> BooleanValue.get(((UBooleanValue)a[0]).value()));
         unary(map,"confidence", Type::isTypeOfUBoolean, TypeFactory.mkReal(), a -> new RealValue(((UBooleanValue)a[0]).confidence()));
-        unary(map,"toString", Type::isTypeOfUBoolean, TypeFactory.mkString(), a -> new StringValue(a[0].toString()));
+        // The historical toString operation renders the more likely side,
+        // unlike the canonical rendering of the value itself.
+        unary(map,"toString", Type::isTypeOfUBoolean, TypeFactory.mkString(), a -> {
+            double p=((UBooleanValue)a[0]).probability();
+            return new StringValue(p<.5 ? "UBoolean(false, "+(1-p)+")" : "UBoolean(true, "+p+")");
+        });
         binary(map,"setValue", (t,h)->t.isTypeOfUBoolean(), (t,h)->t.isTypeOfBoolean(), TypeFactory.mkUBoolean(), a -> ((UBooleanValue)a[0]).withValue(((BooleanValue)a[1]).value()), false);
         binary(map,"setConfidence", (t,h)->t.isTypeOfUBoolean(), Type::isKindOfReal, TypeFactory.mkUBoolean(), a -> ((UBooleanValue)a[0]).withConfidence(real(a[1])), false);
         unary(map,"toBoolean", Type::isTypeOfUBoolean, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).toBoolean());
@@ -103,7 +108,8 @@ public final class StandardOperationsUncertainty {
         // UString public surface
         unary(map,"value", Type::isTypeOfUString, TypeFactory.mkString(), a -> ((UStringValue)a[0]).toStringValue());
         unary(map,"confidence", Type::isTypeOfUString, TypeFactory.mkReal(), a -> new RealValue(((UStringValue)a[0]).confidence()));
-        unary(map,"toString", Type::isTypeOfUString, TypeFactory.mkString(), a -> new StringValue(a[0].toString()));
+        // Historical UString toString yields the underlying string.
+        unary(map,"toString", Type::isTypeOfUString, TypeFactory.mkString(), a -> ((UStringValue)a[0]).toStringValue());
         binary(map,"setValue", (t,h)->t.isTypeOfUString(), (t,h)->t.isTypeOfString(), TypeFactory.mkUString(), a -> new UStringValue(((StringValue)a[1]).value(),((UStringValue)a[0]).confidence()), false);
         binary(map,"setConfidence", (t,h)->t.isTypeOfUString(), Type::isKindOfReal, TypeFactory.mkUString(), a -> new UStringValue(((UStringValue)a[0]).value(),real(a[1])), false);
         unary(map,"size", Type::isTypeOfUString, TypeFactory.mkUInteger(), a -> ((UStringValue)a[0]).size());

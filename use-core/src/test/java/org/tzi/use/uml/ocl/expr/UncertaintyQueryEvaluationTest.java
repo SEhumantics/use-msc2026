@@ -107,6 +107,18 @@ class UncertaintyQueryEvaluationTest {
         var fused=eval("SBoolean(0.6, 0.1, 0.3, 0.5)->averageBeliefFusion(Sequence{SBoolean(0.4, 0.2, 0.4, 0.5)})");
         assertTrue(fused instanceof SBooleanValue);
     }
+    /**
+     * The historical toString operations do not simply render the value: on a
+     * UString it yields the underlying string, and on a UBoolean it reports the
+     * more likely side rather than the canonical one.
+     */
+    @Test void toStringOperationsFollowTheHistoricalRendering() {
+        assertEquals("Hola",((StringValue)eval("UString('Hola', 0.8).toString()")).value());
+        assertEquals("UBoolean(true, 0.8)",((StringValue)eval("UBoolean(true, 0.8).toString()")).value());
+        assertEquals("UBoolean(false, 0.8)",((StringValue)eval("UBoolean(false, 0.8).toString()")).value());
+        // The value itself still renders canonically.
+        assertEquals("UBoolean(true, 0.2)",eval("UBoolean(false, 0.8)").toString());
+    }
     @Test void invalidUncertaintyValuesEvaluateUndefined() {
         assertTrue(eval("SBoolean(0.4, 0.4, 0.4, 0.5)").isUndefined());
         assertTrue(eval("UString('x', 1.2)").isUndefined());
