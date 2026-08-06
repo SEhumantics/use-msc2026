@@ -8,6 +8,7 @@ class UncertainScalarOperationsTest {
         var left=new URealValue(0,1); var right=new URealValue(0,1);
         assertEquals(.5,left.lessThan(right).probability(),.01);
         assertTrue(left.uEquals(right).probability()>0.99);
+        assertEquals("UReal(1.2345678901, 0.123456789)",new URealValue(1.234567890123,0.12345678901).toString());
     }
     @Test void integerMathOperationsAreAvailable() {
         var x=new UIntegerValue(9,0);
@@ -27,5 +28,6 @@ class UncertainScalarOperationsTest {
         assertTrue(new UStringValue("b",1).greaterThan(new UStringValue("a",1)).value());
         assertTrue(new UStringValue("true",1).toUBoolean().value());
         assertEquals(.8,new UStringValue("maybe",.2).toUBoolean().probability(),1e-12);
+        assertEquals("UBoolean(false, 0.2)",UBooleanValue.probability(.2).toString());
     }
 }

@@ -30,5 +30,6 @@ public final class UIntegerValue extends UncertainValue {
     @Override public boolean equals(Object o) { return o instanceof UIntegerValue x && value==x.value && Double.compare(uncertainty,x.uncertainty)==0; }
     @Override public int hashCode() { return java.util.Objects.hash(value, uncertainty); }
     @Override public int compareTo(Value o) { if (o instanceof UndefinedValue) return 1; if (o instanceof UIntegerValue x) return Integer.compare(value,x.value); return toString().compareTo(o.toString()); }
-    @Override public StringBuilder toString(StringBuilder b) { return b.append("UInteger(").append(value).append(", ").append(uncertainty).append(')'); }
+    @Override public StringBuilder toString(StringBuilder b) { return b.append("UInteger(").append(value).append(", ").append(round(uncertainty,10)).append(')'); }
+    private static double round(double value,int places){double scale=Math.pow(10,places);return Math.round(value*scale)/scale;}
 }

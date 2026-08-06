@@ -33,5 +33,6 @@ public final class UBooleanValue extends UncertainValue {
     @Override public boolean equals(Object o) { return o instanceof UBooleanValue x && Double.compare(probability,x.probability)==0; }
     @Override public int hashCode() { return Double.hashCode(probability); }
     @Override public int compareTo(Value o) { if (o instanceof UndefinedValue) return 1; if (o instanceof UBooleanValue x) return Double.compare(probability,x.probability); return toString().compareTo(o.toString()); }
-    @Override public StringBuilder toString(StringBuilder b) { return b.append("UBoolean(").append(value()).append(", ").append(confidence()).append(')'); }
+    @Override public StringBuilder toString(StringBuilder b) { return b.append("UBoolean(").append(value()).append(", ").append(round(probability,3)).append(')'); }
+    private static double round(double value,int places){double scale=Math.pow(10,places);return Math.round(value*scale)/scale;}
 }

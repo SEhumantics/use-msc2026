@@ -202,5 +202,6 @@ public final class SBooleanValue extends UncertainValue {
     @Override public int hashCode() { return Objects.hash(belief,disbelief,uncertainty,baseRate); }
     /** Stable representation order only; it is not a subjective-logic preference relation. */
     @Override public int compareTo(Value o) { if(o instanceof UndefinedValue)return 1; if(o instanceof SBooleanValue x){int c=Double.compare(projection(),x.projection());if(c!=0)return c;c=Double.compare(belief,x.belief);if(c!=0)return c;c=Double.compare(disbelief,x.disbelief);if(c!=0)return c;return Double.compare(baseRate,x.baseRate);} return toString().compareTo(o.toString()); }
-    @Override public StringBuilder toString(StringBuilder b) { return b.append("SBoolean(").append(belief).append(", ").append(disbelief).append(", ").append(uncertainty).append(", ").append(baseRate).append(')'); }
+    @Override public StringBuilder toString(StringBuilder b) { return b.append("SBoolean(").append(round(belief,3)).append(", ").append(round(disbelief,3)).append(", ").append(round(uncertainty,3)).append(", ").append(round(baseRate,3)).append(')'); }
+    private static double round(double value,int places){double scale=Math.pow(10,places);return Math.round(value*scale)/scale;}
 }

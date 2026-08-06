@@ -77,5 +77,6 @@ public final class URealValue extends UncertainValue {
     @Override public boolean equals(Object o) { return o instanceof URealValue x && Double.compare(value,x.value)==0 && Double.compare(uncertainty,x.uncertainty)==0; }
     @Override public int hashCode() { return java.util.Objects.hash(value, uncertainty); }
     @Override public int compareTo(Value o) { if (o instanceof UndefinedValue) return 1; if (o instanceof URealValue x) return Double.compare(value,x.value); return toString().compareTo(o.toString()); }
-    @Override public StringBuilder toString(StringBuilder b) { return b.append("UReal(").append(value).append(", ").append(uncertainty).append(')'); }
+    @Override public StringBuilder toString(StringBuilder b) { return b.append("UReal(").append(value==0?0:round(value,10)).append(", ").append(round(uncertainty,10)).append(')'); }
+    private static double round(double value,int places){double scale=Math.pow(10,places);return Math.round(value*scale)/scale;}
 }
