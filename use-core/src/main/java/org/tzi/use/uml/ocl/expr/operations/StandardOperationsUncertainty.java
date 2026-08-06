@@ -76,7 +76,7 @@ public final class StandardOperationsUncertainty {
         unary(map,"size", Type::isTypeOfUString, TypeFactory.mkUInteger(), a -> ((UStringValue)a[0]).size());
         binary(map,"at", (t,h)->t.isTypeOfUString(), (t,h)->t.isTypeOfInteger(), TypeFactory.mkUString(), a -> ((UStringValue)a[0]).character(((IntegerValue)a[1]).value()), false);
         unary(map,"character", Type::isTypeOfUString, TypeFactory.mkSequence(TypeFactory.mkUString()), a -> ((UStringValue)a[0]).characters());
-        binary(map,"indexOf", (t,h)->t.isTypeOfUString(), (t,h)->t.isTypeOfString(), TypeFactory.mkUString(), a -> ((UStringValue)a[0]).indexOf(((StringValue)a[1]).value()), false);
+        binary(map,"indexOf", (t,h)->t.isTypeOfUString(), (t,h)->t.isTypeOfString(), TypeFactory.mkInteger(), a -> ((UStringValue)a[0]).indexOf(((StringValue)a[1]).value()), false);
         ternary(map,"substring", (t,h)->t.isTypeOfUString(), (t,h)->t.isTypeOfInteger(), (t,h)->t.isTypeOfInteger(), TypeFactory.mkUString(), a -> ((UStringValue)a[0]).substring(((IntegerValue)a[1]).value(),((IntegerValue)a[2]).value()));
         unary(map,"toLowerCase", Type::isTypeOfUString, TypeFactory.mkUString(), a -> ((UStringValue)a[0]).lower());
         unary(map,"toUpperCase", Type::isTypeOfUString, TypeFactory.mkUString(), a -> ((UStringValue)a[0]).upper());

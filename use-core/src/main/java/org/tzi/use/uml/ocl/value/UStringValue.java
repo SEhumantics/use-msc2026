@@ -22,7 +22,7 @@ public final class UStringValue extends UncertainValue {
     public StringValue at(int index) { if(index<1||index>value.length()) throw new IndexOutOfBoundsException("index="+index); return new StringValue(String.valueOf(value.charAt(index-1))); }
     public UStringValue character(int index) { if(index<1||index>value.length()) throw new IndexOutOfBoundsException("index="+index); return new UStringValue(String.valueOf(value.charAt(index-1)),confidence); }
     public SequenceValue characters() { List<Value> chars=new ArrayList<>(); for(int i=1;i<=value.length();i++) chars.add(character(i)); return new SequenceValue(TypeFactory.mkUString(),chars); }
-    public UIntegerValue indexOf(String needle) { return new UIntegerValue(value.indexOf(needle),confidence); }
+    public IntegerValue indexOf(String needle) { return IntegerValue.valueOf(value.indexOf(needle)); }
     public UStringValue substring(int start,int end) { if(start<1||end<start||end>value.length()) throw new IndexOutOfBoundsException(); return new UStringValue(value.substring(start-1,end),confidence); }
     public IntegerValue toInteger() { return IntegerValue.valueOf(Integer.parseInt(value)); }
     public RealValue toReal() { return new RealValue(Double.parseDouble(value)); }
