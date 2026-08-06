@@ -81,4 +81,12 @@ class SBooleanValueTest {
         var zeroProjection=new SBooleanValue(0,.4,.6,0).uncertaintyMaximized();
         assertEquals(1,zeroProjection.uncertainty(),EPS);
     }
+    @Test void applyOnUsesUBooleanConfidenceAsHistoricalBaseRate() {
+        var opinion=new SBooleanValue(.2,.3,.5,.2);
+        var result=opinion.applyOn(UBooleanValue.probability(false,.8));
+        assertEquals(.8,result.baseRate(),EPS);
+        assertEquals(.5,result.belief(),EPS);
+        assertEquals(0,result.disbelief(),EPS);
+        assertEquals(.5,result.uncertainty(),EPS);
+    }
 }

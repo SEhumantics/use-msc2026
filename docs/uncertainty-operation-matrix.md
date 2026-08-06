@@ -15,7 +15,7 @@ registered.
 | `UBoolean`: `value`, `confidence`, `setValue`, `setConfidence`, `toBoolean`, `toBooleanC`, `toString`, `equalsC`, `and`, `or`, `not`, `implies`, `xor`, `equivalent` | `StandardOperationsUncertainty`, `UBooleanValue` | `UncertainScalarOperationsTest`, `UncertaintyQueryEvaluationTest` |
 | `SBoolean`: accessors, predicates, projections, logical operators, `deduceY`, `applyOn`, `min`, `max`, `discount` | `StandardOperationsUncertainty`, `SBooleanValue` | `SBooleanValueTest`, `UncertaintyQueryEvaluationTest` |
 | `SBoolean` collection fusion: minimum, majority, belief-constraint, average, aleatory cumulative, epistemic cumulative, weighted, consensus-and-compromise | `SBooleanValue` algebra and collection operation registration | `SBooleanValueTest`, `UncertaintyQueryEvaluationTest` |
-| Collection uncertainty: `includes`, `excludes`, `includesAll`, `excludesAll`, `uCount`, `uCountC` | `CollectionValue`, `StandardOperationsCollection` | `UncertaintyQueryEvaluationTest`, `UncertaintyOperationRegistrationTest` |
+| Collection uncertainty: `includes`, `excludes`, `includesAll`, `excludesAll`, `uCount`, `uCountC`, uncertain `sum` aggregation | `CollectionValue`, `StandardOperationsCollection` | `UncertaintyQueryEvaluationTest`, `UncertaintyOperationRegistrationTest` |
 | Query uncertainty: `uSelect`, `uSelectC`, uncertain `exists`, uncertain `forAll` | `ExpUSelect`, `ExpUSelectC`, `ExpQuery`, parser AST/grammar | `UncertaintyParserTest`, `UncertaintyQueryEvaluationTest` |
 
 Operation name registration is checked against the complete exposed historical

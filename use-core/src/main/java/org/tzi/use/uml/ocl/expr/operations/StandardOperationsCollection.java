@@ -15,6 +15,8 @@ import org.tzi.use.uml.ocl.value.BooleanValue;
 import org.tzi.use.uml.ocl.value.CollectionValue;
 import org.tzi.use.uml.ocl.value.IntegerValue;
 import org.tzi.use.uml.ocl.value.RealValue;
+import org.tzi.use.uml.ocl.value.UIntegerValue;
+import org.tzi.use.uml.ocl.value.URealValue;
 import org.tzi.use.uml.ocl.value.UndefinedValue;
 import org.tzi.use.uml.ocl.value.Value;
 import org.tzi.use.util.Log;
@@ -436,6 +438,10 @@ final class Op_collection_sum extends OpGeneric {
 				return TypeFactory.mkInteger();
 			else if (c.elemType().isTypeOfReal())
 				return TypeFactory.mkReal();
+			else if (c.elemType().isTypeOfUInteger())
+				return TypeFactory.mkUInteger();
+			else if (c.elemType().isTypeOfUReal())
+				return TypeFactory.mkUReal();
 		}
 		return null;
 	}
@@ -444,7 +450,29 @@ final class Op_collection_sum extends OpGeneric {
 		CollectionValue coll = (CollectionValue) args[0];
 		boolean isIntegerCollection = coll.elemType().isTypeOfInteger();
 
-		if (isIntegerCollection) {
+		if (resultType.isTypeOfUInteger()) {
+			UIntegerValue sum = new UIntegerValue(0, 0);
+			for (Value v : coll) {
+				if (v.isUndefined()) return UndefinedValue.instance;
+				UIntegerValue term = v instanceof UIntegerValue u ? u :
+						(v instanceof IntegerValue i ? new UIntegerValue(i.value(), 0) : null);
+				if (term == null) return UndefinedValue.instance;
+				sum = sum.add(term);
+			}
+			return sum;
+		} else if (resultType.isTypeOfUReal()) {
+			URealValue sum = new URealValue(0, 0);
+			for (Value v : coll) {
+				if (v.isUndefined()) return UndefinedValue.instance;
+				URealValue term = v instanceof URealValue u ? u :
+						(v instanceof UIntegerValue i ? i.toUReal() :
+						(v instanceof IntegerValue i ? new URealValue(i.value(), 0) :
+						(v instanceof RealValue r ? new URealValue(r.value(), 0) : null)));
+				if (term == null) return UndefinedValue.instance;
+				sum = sum.add(term);
+			}
+			return sum;
+		} else if (isIntegerCollection) {
 			int isum = 0;
 			for (Value v : coll) {
 				if (v.isUndefined())

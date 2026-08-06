@@ -50,8 +50,8 @@ public final class UIntegerValue extends UncertainValue {
     }
     public UIntegerValue abs() { return new UIntegerValue(Math.abs(value),uncertainty); }
     public UIntegerValue negate() { return new UIntegerValue(-value,uncertainty); }
-    public UIntegerValue sqrt() { if (value < 0) throw new ArithmeticException("sqrt domain"); return new UIntegerValue((int)Math.sqrt(value), uncertainty == 0 ? 0 : uncertainty/(2*Math.max(1,Math.sqrt(value)))); }
-    public UIntegerValue power(double exponent) { double v=Math.pow(value,exponent); double u=Math.abs(exponent*Math.pow(value,exponent-1))*uncertainty; if(!Double.isFinite(v)||!Double.isFinite(u)) throw new ArithmeticException("invalid power"); return new UIntegerValue((int)v,u); }
+    public UIntegerValue sqrt() { return toUReal().sqrt().toUInteger(); }
+    public UIntegerValue power(double exponent) { return toUReal().power(exponent).toUInteger(); }
     @Override public UBooleanValue uEquals(Value other) { return toUReal().uEquals(other); }
     @Override public boolean equals(Object o) {
         if(o instanceof UIntegerValue x) return value==x.value&&round(uncertainty,10)==round(x.uncertainty,10);

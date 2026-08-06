@@ -85,7 +85,9 @@ public final class SBooleanValue extends UncertainValue {
         return new SBooleanValue(p*belief,p*disbelief,1-p*(belief+disbelief),baseRate);
     }
     public SBooleanValue applyOn(UBooleanValue value) {
-        double c=value.probability();
+        // Historical UBoolean stores a truth flag and confidence separately;
+        // its confidence becomes the SBoolean base rate.
+        double c=value.confidence();
         if (baseRate==0) return new SBooleanValue(belief+disbelief*c, 1-belief-disbelief*c-uncertainty, uncertainty,c);
         double b=Math.min(c*belief/baseRate,1-uncertainty);
         return new SBooleanValue(b,1-b-uncertainty,uncertainty,c);

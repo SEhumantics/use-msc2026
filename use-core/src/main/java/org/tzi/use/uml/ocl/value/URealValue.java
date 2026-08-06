@@ -15,64 +15,91 @@ public final class URealValue extends UncertainValue {
     public double value() { return value; }
     public double uncertainty() { return uncertainty; }
     @Override public boolean isUReal() { return true; }
-    public URealValue add(URealValue o) { return new URealValue(value + o.value, uncertainty + o.uncertainty); }
-    public URealValue subtract(URealValue o) { return new URealValue(value - o.value, uncertainty + o.uncertainty); }
+    public URealValue add(URealValue o) { return new URealValue(value + o.value, Math.hypot(uncertainty, o.uncertainty)); }
+    public URealValue subtract(URealValue o) { return new URealValue(value - o.value, this == o ? 0 : Math.hypot(uncertainty, o.uncertainty)); }
     public URealValue multiply(URealValue o) {
-        return new URealValue(value * o.value, Math.abs(value) * o.uncertainty + Math.abs(o.value) * uncertainty + uncertainty * o.uncertainty);
+        return new URealValue(value * o.value, Math.sqrt(o.value*o.value*uncertainty*uncertainty + value*value*o.uncertainty*o.uncertainty));
     }
     public URealValue divide(URealValue o) {
-        if (Math.abs(o.value) <= o.uncertainty) throw new ArithmeticException("uncertain divisor contains zero");
-        double v = value / o.value;
-        return new URealValue(v, (Math.abs(value) * o.uncertainty + Math.abs(o.value) * uncertainty) / (o.value * o.value));
+        if (this == o) return new URealValue(1, 0);
+        if (o.uncertainty == 0) return new URealValue(value/o.value, Math.abs(uncertainty/o.value));
+        if (uncertainty == 0) return new URealValue(value/o.value, o.uncertainty/(o.value*o.value));
+        double c=(uncertainty*uncertainty)/Math.abs(o.value);
+        double d=(value*value*o.uncertainty*o.uncertainty)/(o.value*o.value*o.value*o.value);
+        return new URealValue(value/o.value, Math.sqrt(c+d));
     }
     public URealValue negate() { return new URealValue(-value, uncertainty); }
     public URealValue abs() { return new URealValue(Math.abs(value), uncertainty); }
-    public URealValue inverse() { if (Math.abs(value)<=uncertainty) throw new ArithmeticException("uncertain value contains zero"); return new URealValue(1/value, uncertainty/(value*value)); }
-    public URealValue power(double exponent) { double v=Math.pow(value,exponent); double u=Math.abs(exponent*Math.pow(value,exponent-1))*uncertainty; return new URealValue(v,u); }
-    public URealValue sqrt() { if(value<0) throw new ArithmeticException("sqrt domain"); return power(.5); }
+    public URealValue inverse() { return new URealValue(1,0).divide(this); }
+    public URealValue power(double exponent) { double v=Math.pow(value,exponent); double u=Math.abs(exponent*uncertainty*Math.pow(value,exponent-1)); if(!Double.isFinite(v)||!Double.isFinite(u)) throw new ArithmeticException("invalid power"); return new URealValue(v,u); }
+    public URealValue sqrt() { if(value==0 && uncertainty==0) return new URealValue(0,0); if(value<0) throw new ArithmeticException("sqrt domain"); return new URealValue(Math.sqrt(value), uncertainty/(2*Math.sqrt(value))); }
     public URealValue floorValue() { return new URealValue(Math.floor(value),uncertainty); }
-    public URealValue roundValue() { return new URealValue(Math.rint(value),uncertainty); }
+    public URealValue roundValue() { return new URealValue(Math.round(value),uncertainty); }
     public URealValue sin() { return new URealValue(Math.sin(value),Math.abs(Math.cos(value))*uncertainty); }
     public URealValue cos() { return new URealValue(Math.cos(value),Math.abs(Math.sin(value))*uncertainty); }
-    public URealValue tan() { return new URealValue(Math.tan(value),uncertainty/(Math.cos(value)*Math.cos(value))); }
-    public URealValue asin() { return new URealValue(Math.asin(value),uncertainty/Math.sqrt(1-value*value)); }
-    public URealValue acos() { return new URealValue(Math.acos(value),uncertainty/Math.sqrt(1-value*value)); }
+    public URealValue tan() { return sin().divide(cos()); }
+    public URealValue asin() { return new URealValue(Math.asin(value),Math.abs(value)==1 ? uncertainty : uncertainty/Math.sqrt(1-value*value)); }
+    public URealValue acos() { return new URealValue(Math.acos(value),Math.abs(value)==1 ? uncertainty : uncertainty/Math.sqrt(1-value*value)); }
     public URealValue atan() { return new URealValue(Math.atan(value),uncertainty/(1+value*value)); }
     public RealValue toReal() { return new RealValue(value); }
-    public IntegerValue toInteger() { return IntegerValue.valueOf((int) value); }
-    public UIntegerValue toUInteger() { return new UIntegerValue((int) value, uncertainty); }
-    public UBooleanValue lessThan(URealValue o) {
-        double probability = comparisonProbability(o);
-        return UBooleanValue.probability(true, probability);
+    public IntegerValue toInteger() { return IntegerValue.valueOf((int)Math.floor(value)); }
+    public UIntegerValue toUInteger() { int i=(int)Math.floor(value); return new UIntegerValue(i,Math.hypot(uncertainty,value-i)); }
+    public UBooleanValue lessThan(URealValue o) { return UBooleanValue.probability(true, calculate(o).lt); }
+    public UBooleanValue greaterThan(URealValue o) { return UBooleanValue.probability(true, calculate(o).gt); }
+    private static final class Comparison {
+        double lt, eq, gt;
+        Comparison(double lt,double eq,double gt){this.lt=lt;this.eq=eq;this.gt=gt;}
+        Comparison swapped(){return new Comparison(gt,eq,lt);}
     }
-    public UBooleanValue greaterThan(URealValue o) { return o.lessThan(this); }
-    private double comparisonProbability(URealValue o) {
-        double sigma = Math.hypot(uncertainty, o.uncertainty);
-        if (sigma == 0) return value < o.value ? 1 : 0;
-        return normalCdf((o.value - value) / sigma);
+    /** Historical Gaussian comparison algorithm used by UReal/UInteger. */
+    private Comparison calculate(URealValue other) {
+        double m1,m2,s1,s2; boolean swap=false;
+        if (value<=other.value) { m1=value; m2=other.value; s1=uncertainty; s2=other.uncertainty; }
+        else { m1=other.value; m2=value; s1=other.uncertainty; s2=uncertainty; swap=true; }
+        Comparison r;
+        if (s1==0 && s2==0) {
+            r=m1==m2?new Comparison(0,1,0):m1<m2?new Comparison(1,0,0):new Comparison(0,0,1);
+            return swap?r.swapped():r;
+        }
+        if (s1==0) { r=new Comparison(1-cndf(m1,m2,s2),0,cndf(m1,m2,s2)); return swap?r.swapped():r; }
+        if (s2==0) { r=new Comparison(cndf(m2,m1,s1),0,1-cndf(m2,m1,s1)); return swap?r.swapped():r; }
+        if (s1==s2) {
+            double crossing=(m1+m2)/2;
+            r=new Comparison(cndf(crossing,m1,s1)-cndf(crossing,m2,s2),0,0);
+            r.eq=1-r.lt;
+            return swap?r.swapped():r;
+        }
+        double rad=(m1-m2)*(m1-m2)-2*(s1*s1-s2*s2)*Math.log(s2/s1);
+        if (rad<0 || !Double.isFinite(rad)) {
+            double p=cndf((m2-m1)/Math.hypot(s1,s2));
+            r=new Comparison(p,0,1-p);
+            return swap?r.swapped():r;
+        }
+        double root=s1*s2*Math.sqrt(rad);
+        double crossing1=-(-m2*s1*s1+m1*s2*s2+root)/(s1*s1-s2*s2);
+        double crossing2=(m2*s1*s1-m1*s2*s2+root)/(s1*s1-s2*s2);
+        double c1=Math.min(crossing1,crossing2), c2=Math.max(crossing1,crossing2);
+        if (s1<s2) {
+            r=new Comparison(1-cndf(c2,m2,s2)-(1-cndf(c2,m1,s1)),0, cndf(c1,m2,s2)-cndf(c1,m1,s1));
+            r.eq=1-r.lt-r.gt;
+        } else {
+            r=new Comparison(cndf(c1,m1,s1)-cndf(c1,m2,s2),0,1-cndf(c2,m1,s1)-(1-cndf(c2,m2,s2)));
+            r.eq=1-r.lt-r.gt;
+        }
+        return swap?r.swapped():r;
     }
-    private double overlap(URealValue o) {
-        if (uncertainty == 0 && o.uncertainty == 0) return value == o.value ? 1 : 0;
-        if (uncertainty == 0) return normalPdf((value-o.value)/o.uncertainty);
-        if (o.uncertainty == 0) return normalPdf((o.value-value)/uncertainty);
-        double lo=Math.min(value-8*uncertainty,o.value-8*o.uncertainty), hi=Math.max(value+8*uncertainty,o.value+8*o.uncertainty);
-        int steps=2048; double h=(hi-lo)/steps, sum=0;
-        for(int i=0;i<=steps;i++){double x=lo+i*h; double p=normalPdf((x-value)/uncertainty)/uncertainty, q=normalPdf((x-o.value)/o.uncertainty)/o.uncertainty; sum+= (i==0||i==steps?0.5:1)*Math.min(p,q);}
-        return Math.max(0,Math.min(1,sum*h));
+    private static double cndf(double x) {
+        int neg=x<0?1:0; if(neg==1)x=-x; double k=1/(1+0.2316419*x);
+        double y=((((1.330274429*k-1.821255978)*k+1.781477937)*k-0.356563782)*k+0.319381530)*k;
+        y=1-0.398942280401*Math.exp(-0.5*x*x)*y; return neg==0?y:1-y;
     }
-    private static double normalPdf(double z) { return Math.exp(-.5*z*z)/Math.sqrt(2*Math.PI); }
-    private static double normalCdf(double z) { return .5*(1+erf(z/Math.sqrt(2))); }
-    private static double erf(double x) {
-        double sign=x<0?-1:1, a=Math.abs(x), t=1/(1+0.3275911*a);
-        double y=1-((((1.061405429*t-1.453152027)*t+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-a*a);
-        return sign*y;
-    }
+    private static double cndf(double x,double mean,double sigma){return cndf((x-mean)/sigma);}
     @Override public UBooleanValue uEquals(Value other) {
         if (other instanceof IntegerValue i) return uEquals(new URealValue(i.value(), 0));
         if (other instanceof RealValue r) return uEquals(new URealValue(r.value(), 0));
         if (other instanceof UIntegerValue i) return uEquals(i.toUReal());
         if (!(other instanceof URealValue o)) return UBooleanValue.FALSE;
-        return UBooleanValue.probability(true, overlap(o));
+        return UBooleanValue.probability(true, calculate(o).eq);
     }
     @Override public boolean equals(Object o) {
         if(o instanceof URealValue x) return round(value,10)==round(x.value,10)&&round(uncertainty,10)==round(x.uncertainty,10);

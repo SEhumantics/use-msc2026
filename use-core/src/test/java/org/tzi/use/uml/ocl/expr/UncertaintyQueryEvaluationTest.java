@@ -29,6 +29,16 @@ class UncertaintyQueryEvaluationTest {
         assertTrue(eval("Sequence{UString('a', 1)}->includesAll(Sequence{UString('a', 1)})") instanceof UBooleanValue);
         assertTrue(eval("Sequence{UString('a', 1)}->excludesAll(Sequence{UString('b', 1)})") instanceof UBooleanValue);
     }
+    @Test void uncertainCollectionSumPreservesUncertainResultType() {
+        var integerSum=eval("Sequence{UInteger(2, 0.1), UInteger(3, 0.2)}->sum()");
+        assertTrue(integerSum instanceof UIntegerValue);
+        assertEquals(5,((UIntegerValue)integerSum).value());
+        assertEquals(Math.hypot(.1,.2),((UIntegerValue)integerSum).uncertainty(),EPS);
+        var realSum=eval("Sequence{UReal(2.0, 0.1), UReal(3.0, 0.2)}->sum()");
+        assertTrue(realSum instanceof URealValue);
+        assertEquals(5,((URealValue)realSum).value(),EPS);
+        assertEquals(Math.hypot(.1,.2),((URealValue)realSum).uncertainty(),EPS);
+    }
     @Test void uncertainSelectExistsForAllEvaluateWithThresholds() {
         var selected=eval("Sequence{UBoolean(true, 0.9), UBoolean(false, 0.9)}->uSelect(x | x)");
         assertEquals(1,((CollectionValue)selected).size());
