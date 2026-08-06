@@ -24,6 +24,7 @@ class UncertainScalarOperationsTest {
         assertEquals("ab",word.substring(1,2).value());
         assertEquals(.6,word.size().uncertainty(),1e-12);
         assertTrue(new UStringValue("b",1).greaterThan(new UStringValue("a",1)).value());
+        assertTrue(new UStringValue("true",1).toUBoolean().value());
         assertEquals(.8,new UStringValue("maybe",.2).toUBoolean().probability(),1e-12);
     }
 }

@@ -28,11 +28,15 @@ public final class UStringValue extends UncertainValue {
     public RealValue toReal() { return new RealValue(Double.parseDouble(value)); }
     public BooleanValue toBoolean() { return BooleanValue.get(Boolean.parseBoolean(value)); }
     public UBooleanValue toUBoolean() {
-        UBooleanValue yes=uEquals(new UStringValue("TRUE",1));
-        UBooleanValue no=uEquals(new UStringValue("FALSE",1));
+        UBooleanValue yes=uEqualsIgnoreCase(new UStringValue("TRUE",1));
+        UBooleanValue no=uEqualsIgnoreCase(new UStringValue("FALSE",1));
         if (yes.probability() >= .5) return yes;
         if (no.probability() >= .5) return no.not();
         return UBooleanValue.probability(.5);
+    }
+    public UBooleanValue uEqualsIgnoreCase(UStringValue other) {
+        double confidenceProduct=confidence*other.confidence;
+        return UBooleanValue.probability(value.equalsIgnoreCase(other.value),confidenceProduct);
     }
     private UBooleanValue compare(UStringValue other, int relation) {
         int cmp=value.compareTo(other.value);
