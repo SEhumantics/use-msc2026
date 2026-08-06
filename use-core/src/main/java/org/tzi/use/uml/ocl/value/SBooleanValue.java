@@ -28,7 +28,7 @@ public final class SBooleanValue extends UncertainValue {
     public double uncertainty() { return uncertainty; } public double baseRate() { return baseRate; }
     public double projection() { return belief + baseRate*uncertainty; }
     public double certainty() { return 1-uncertainty; }
-    public double relativeWeight() { return relativeWeight; }
+    public double relativeWeight() { return isDogmatic() ? relativeWeight : 0; }
     @Override public boolean isSBoolean() { return true; }
     public static SBooleanValue dogmatic(double probability, double baseRate) { return new SBooleanValue(probability,1-probability,0,baseRate); }
     public static SBooleanValue vacuous(double baseRate) { return new SBooleanValue(0,0,1,baseRate); }

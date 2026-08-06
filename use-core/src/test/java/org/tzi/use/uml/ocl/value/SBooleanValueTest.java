@@ -51,6 +51,7 @@ class SBooleanValueTest {
         var result=SBooleanValue.weightedBeliefFusion(List.of(low,high));
         assertEquals(.25,result.belief(),EPS);
         assertEquals(4,result.relativeWeight(),EPS);
+        assertEquals(0,SBooleanValue.vacuous(.5).relativeWeight(),EPS);
     }
     @Test void deductionMatchesHistoricalExamples() {
         var yx=new SBooleanValue(.4,.5,.1,.4); var ynx=new SBooleanValue(0,.4,.6,.4);
