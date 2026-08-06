@@ -27,4 +27,10 @@ class UncertaintyParserTest {
         assertNull(OCLCompiler.compileExpression(model,
             "Sequence{1}->select(x | true, 0.8)","<ordinary-threshold>",out,new VarBindings()));
     }
+    @Test void malformedUncertaintyLiteralsAreRejected() {
+        MModel model=new ModelFactory().createModel("MalformedUncertainty");
+        for(String source:new String[]{"UReal(1)","UInteger(1)","UString('x')","UBoolean(true)"}) {
+            assertNull(OCLCompiler.compileExpression(model,source,"<malformed>",new PrintWriter(new StringWriter()),new VarBindings()),source);
+        }
+    }
 }

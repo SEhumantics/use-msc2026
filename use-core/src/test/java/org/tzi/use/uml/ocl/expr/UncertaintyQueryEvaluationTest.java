@@ -52,5 +52,9 @@ class UncertaintyQueryEvaluationTest {
         var fused=eval("SBoolean(0.6, 0.1, 0.3, 0.5)->averageBeliefFusion(Sequence{SBoolean(0.4, 0.2, 0.4, 0.5)})");
         assertTrue(fused instanceof SBooleanValue);
     }
+    @Test void invalidUncertaintyValuesEvaluateUndefined() {
+        assertTrue(eval("SBoolean(0.4, 0.4, 0.4, 0.5)").isUndefined());
+        assertTrue(eval("UString('x', 1.2)").isUndefined());
+    }
     private Expression op(String name,Expression... args) throws Exception { return ExpStdOp.create(name,args); }
 }
