@@ -30,6 +30,7 @@ class UncertainScalarOperationsTest {
         assertEquals(42,x.toReal().value(),1e-12);
         var word=new UStringValue("abc",.8);
         assertEquals("a",word.at(1).value());
+        assertEquals(.8,word.at(1).confidence(),1e-12);
         assertEquals("b",word.character(2).value());
         assertEquals("ab",word.substring(1,2).value());
         assertEquals(.6,word.size().uncertainty(),1e-12);
@@ -38,5 +39,8 @@ class UncertainScalarOperationsTest {
         assertTrue(new UStringValue("true",1).toUBoolean().value());
         assertEquals(.8,new UStringValue("maybe",.2).toUBoolean().probability(),1e-12);
         assertEquals("UBoolean(false, 0.2)",UBooleanValue.probability(.2).toString());
+        assertTrue(UBooleanValue.TRUE.equals(BooleanValue.TRUE));
+        assertTrue(UBooleanValue.FALSE.equals(BooleanValue.FALSE));
+        assertEquals(UBooleanValue.probability(.2), UBooleanValue.probability(.20000000001));
     }
 }

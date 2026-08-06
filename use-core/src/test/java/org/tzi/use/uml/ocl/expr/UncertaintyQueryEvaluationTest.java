@@ -56,8 +56,11 @@ class UncertaintyQueryEvaluationTest {
         var uiSum=(UIntegerValue)eval(op("+",ui,new ExpConstInteger(2)));
         assertEquals(11,uiSum.value());
         assertEquals(4.5,((URealValue)eval(op("/",ui,new ExpConstInteger(2)))).value(),EPS);
+        assertEquals(4,((UIntegerValue)eval(op("div",ui,new ExpConstInteger(2)))).value());
+        assertEquals(1,((UIntegerValue)eval(op("mod",ui,new ExpConstInteger(2)))).value());
         assertEquals(-9,((UIntegerValue)eval(op("-",ui))).value());
         Expression us=new ExpConstUncertain(ExpConstUncertain.Kind.USTRING,new ExpConstString("AB"),new ExpConstReal(1));
+        assertTrue(eval(op("at",us,new ExpConstInteger(1))) instanceof UStringValue);
         assertEquals("ab",((StringValue)eval(op("value",op("toLowerCase",us)))).value());
         assertEquals("AB!",((UStringValue)eval(op("+",us,new ExpConstString("!")))).value());
         assertTrue(((UBooleanValue)eval(op("<",us,new ExpConstString("Z")))).value());

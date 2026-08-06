@@ -30,8 +30,17 @@ public final class UBooleanValue extends UncertainValue {
     public UBooleanValue implies(UBooleanValue o) { return not().or(o); }
     public BooleanValue equalsC(UBooleanValue other,double threshold) { if(threshold<0||threshold>1) throw new IllegalArgumentException("threshold must be in [0,1]"); return BooleanValue.get(Math.abs(probability-other.probability) <= 1-threshold); }
     @Override public UBooleanValue uEquals(Value o) { if (o instanceof BooleanValue b) return probability(b.value() ? probability : 1-probability); if (o instanceof UBooleanValue b) return equivalent(b); return FALSE; }
-    @Override public boolean equals(Object o) { return o instanceof UBooleanValue x && Double.compare(probability,x.probability)==0; }
-    @Override public int hashCode() { return Double.hashCode(probability); }
+    /** Historical USE equality: ten decimal places, with only certain UBooleans
+     * equal to their corresponding ordinary Boolean values. */
+    @Override public boolean equals(Object o) {
+        if (o == this) return true;
+        if (o instanceof BooleanValue b)
+            return b.value() ? probability == 1.0 : probability == 0.0;
+        return o instanceof UBooleanValue x
+                && value() == x.value()
+                && round(probability, 10) == round(x.probability, 10);
+    }
+    @Override public int hashCode() { return 31 * Boolean.hashCode(value()) + Double.hashCode(round(probability, 10)); }
     @Override public int compareTo(Value o) { if (o instanceof UndefinedValue) return 1; if (o instanceof UBooleanValue x) return Double.compare(probability,x.probability); return toString().compareTo(o.toString()); }
     @Override public StringBuilder toString(StringBuilder b) { return b.append("UBoolean(").append(value()).append(", ").append(round(probability,3)).append(')'); }
     private static double round(double value,int places){double scale=Math.pow(10,places);return Math.round(value*scale)/scale;}

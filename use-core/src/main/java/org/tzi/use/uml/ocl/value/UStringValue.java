@@ -19,7 +19,8 @@ public final class UStringValue extends UncertainValue {
     public UStringValue lower() { return new UStringValue(value.toLowerCase(), confidence); }
     public UStringValue upper() { return new UStringValue(value.toUpperCase(), confidence); }
     public UIntegerValue size() { return new UIntegerValue(value.length(), value.length()*(1-confidence)); }
-    public StringValue at(int index) { if(index<1||index>value.length()) throw new IndexOutOfBoundsException("index="+index); return new StringValue(String.valueOf(value.charAt(index-1))); }
+    /** Historical uncertain operation: at returns a UString, retaining the source confidence. */
+    public UStringValue at(int index) { if(index<1||index>value.length()) throw new IndexOutOfBoundsException("index="+index); return new UStringValue(String.valueOf(value.charAt(index-1)), confidence); }
     public UStringValue character(int index) { if(index<1||index>value.length()) throw new IndexOutOfBoundsException("index="+index); return new UStringValue(String.valueOf(value.charAt(index-1)),confidence); }
     public SequenceValue characters() { List<Value> chars=new ArrayList<>(); for(int i=1;i<=value.length();i++) chars.add(character(i)); return new SequenceValue(TypeFactory.mkUString(),chars); }
     public IntegerValue indexOf(String needle) { return IntegerValue.valueOf(value.indexOf(needle)); }
