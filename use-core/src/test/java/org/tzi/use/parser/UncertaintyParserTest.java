@@ -17,4 +17,14 @@ class UncertaintyParserTest {
             assertNotNull(e,source);
         }
     }
+    @Test void uncertaintyQueriesParseAndOrdinaryQueriesRejectThresholds() {
+        MModel model=new ModelFactory().createModel("UncertaintyQueries");
+        var out=new PrintWriter(new StringWriter());
+        assertNotNull(OCLCompiler.compileExpression(model,
+            "Sequence{UBoolean(true, 0.9)}->uSelect(x | x)","<uSelect>",out,new VarBindings()));
+        assertNotNull(OCLCompiler.compileExpression(model,
+            "Sequence{UBoolean(true, 0.9)}->uSelectC(x | x, 0.8)","<uSelectC>",out,new VarBindings()));
+        assertNull(OCLCompiler.compileExpression(model,
+            "Sequence{1}->select(x | true, 0.8)","<ordinary-threshold>",out,new VarBindings()));
+    }
 }
