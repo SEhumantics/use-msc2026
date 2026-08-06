@@ -83,12 +83,15 @@ public abstract class OpGeneric {
 		StandardOperationsObject.registerTypeOperations(opmap);
 		
 		StandardOperationsEnum.registerTypeOperations(opmap);
+		// Uncertain overloads must precede generic numeric/string operations so
+		// overload resolution does not select a certain-value implementation for
+		// a native uncertain operand (notably sqrt/power and string conversions).
+		StandardOperationsUncertainty.registerTypeOperations(opmap);
 		
 		// Basic types
 		StandardOperationsNumber.registerTypeOperations(opmap);
 		StandardOperationsString.registerTypeOperations(opmap);
 		StandardOperationsBoolean.registerTypeOperations(opmap);
-		StandardOperationsUncertainty.registerTypeOperations(opmap);
 		
 		// Collections
 		StandardOperationsCollection.registerTypeOperations(opmap);

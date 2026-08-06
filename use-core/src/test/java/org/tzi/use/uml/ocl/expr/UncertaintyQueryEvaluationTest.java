@@ -18,6 +18,9 @@ class UncertaintyQueryEvaluationTest {
         assertNotNull(e,source);
         return new Evaluator().eval(e,new MSystem(model).state(),new VarBindings());
     }
+    private Value eval(Expression expression) {
+        return new Evaluator().eval(expression,new MSystem(model).state(),new VarBindings());
+    }
     @Test void uncertainCollectionMembershipAndCountsEvaluate() {
         var includes=eval("Sequence{UString('a', 1), UString('b', 0.8)}->includes(UString('a', 1))");
         assertTrue(includes instanceof UBooleanValue); assertEquals(1,((UBooleanValue)includes).probability(),EPS);
@@ -35,4 +38,19 @@ class UncertaintyQueryEvaluationTest {
         var forall=eval("Sequence{UBoolean(true, 0.8), UBoolean(false, 0.7)}->forAll(x | x)");
         assertTrue(forall instanceof UBooleanValue); assertTrue(((UBooleanValue)forall).probability()<.5);
     }
+    @Test void scalarAndSubjectiveOperationsEvaluateThroughLookup() throws Exception {
+        Expression ur=new ExpConstUncertain(ExpConstUncertain.Kind.UREAL,new ExpConstReal(4),new ExpConstReal(0));
+        assertEquals(2,((RealValue)eval(op("value",op("sqrt",ur)))).value(),EPS);
+        Expression ui=new ExpConstUncertain(ExpConstUncertain.Kind.UINTEGER,new ExpConstInteger(9),new ExpConstReal(0));
+        assertEquals(81,((IntegerValue)eval(op("toInteger",op("power",ui,new ExpConstInteger(2))))).value());
+        Expression us=new ExpConstUncertain(ExpConstUncertain.Kind.USTRING,new ExpConstString("AB"),new ExpConstReal(1));
+        assertEquals("ab",((StringValue)eval(op("value",op("toLowerCase",us)))).value());
+        Expression ub=new ExpConstUncertain(ExpConstUncertain.Kind.UBOOLEAN,new ExpConstBoolean(true),new ExpConstReal(.9));
+        assertTrue(((BooleanValue)eval(op("toBooleanC",ub,new ExpConstReal(.8)))).value());
+        Expression sb=new ExpConstUncertain(ExpConstUncertain.Kind.SBOOLEAN,new ExpConstReal(.6),new ExpConstReal(.1),new ExpConstReal(.3),new ExpConstReal(.5));
+        assertEquals(.6,((RealValue)eval(op("belief",sb))).value(),EPS);
+        var fused=eval("SBoolean(0.6, 0.1, 0.3, 0.5)->averageBeliefFusion(Sequence{SBoolean(0.4, 0.2, 0.4, 0.5)})");
+        assertTrue(fused instanceof SBooleanValue);
+    }
+    private Expression op(String name,Expression... args) throws Exception { return ExpStdOp.create(name,args); }
 }
