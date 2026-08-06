@@ -18,6 +18,11 @@ class UncertainScalarOperationsTest {
         var x=new UStringValue("42",1);
         assertEquals(42,x.toInteger().value());
         assertEquals(42,x.toReal().value(),1e-12);
+        var word=new UStringValue("abc",.8);
+        assertEquals("a",word.at(1).value());
+        assertEquals("b",word.character(2).value());
+        assertEquals("ab",word.substring(1,2).value());
+        assertEquals(.6,word.size().uncertainty(),1e-12);
         assertTrue(new UStringValue("b",1).greaterThan(new UStringValue("a",1)).value());
         assertEquals(.8,new UStringValue("maybe",.2).toUBoolean().probability(),1e-12);
     }

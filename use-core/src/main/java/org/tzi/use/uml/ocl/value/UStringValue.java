@@ -15,15 +15,15 @@ public final class UStringValue extends UncertainValue {
     public double confidence() { return confidence; }
     @Override public boolean isUString() { return true; }
     public StringValue toStringValue() { return new StringValue(value); }
-    public UStringValue concat(UStringValue o) { return new UStringValue(value+o.value, confidence*o.confidence); }
+    public UStringValue concat(UStringValue o) { String combined=value+o.value; double length=combined.length(); double uncertainty=(value.length()*(1-confidence))+(o.value.length()*(1-o.confidence)); return new UStringValue(combined,length==0?1:Math.max(0,1-uncertainty/length)); }
     public UStringValue lower() { return new UStringValue(value.toLowerCase(), confidence); }
     public UStringValue upper() { return new UStringValue(value.toUpperCase(), confidence); }
-    public UIntegerValue size() { return new UIntegerValue(value.length(), 0); }
-    public StringValue at(int index) { return new StringValue(String.valueOf(value.charAt(index))); }
-    public UStringValue character(int index) { return new UStringValue(String.valueOf(value.charAt(index)),confidence); }
-    public SequenceValue characters() { List<Value> chars=new ArrayList<>(); for(int i=0;i<value.length();i++) chars.add(new UStringValue(String.valueOf(value.charAt(i)),confidence)); return new SequenceValue(TypeFactory.mkUString(),chars); }
+    public UIntegerValue size() { return new UIntegerValue(value.length(), value.length()*(1-confidence)); }
+    public StringValue at(int index) { if(index<1||index>value.length()) throw new IndexOutOfBoundsException("index="+index); return new StringValue(String.valueOf(value.charAt(index-1))); }
+    public UStringValue character(int index) { if(index<1||index>value.length()) throw new IndexOutOfBoundsException("index="+index); return new UStringValue(String.valueOf(value.charAt(index-1)),confidence); }
+    public SequenceValue characters() { List<Value> chars=new ArrayList<>(); for(int i=1;i<=value.length();i++) chars.add(character(i)); return new SequenceValue(TypeFactory.mkUString(),chars); }
     public UIntegerValue indexOf(String needle) { return new UIntegerValue(value.indexOf(needle),confidence); }
-    public UStringValue substring(int start,int end) { return new UStringValue(value.substring(start,end),confidence); }
+    public UStringValue substring(int start,int end) { if(start<1||end<start||end>value.length()) throw new IndexOutOfBoundsException(); return new UStringValue(value.substring(start-1,end),confidence); }
     public IntegerValue toInteger() { return IntegerValue.valueOf(Integer.parseInt(value)); }
     public RealValue toReal() { return new RealValue(Double.parseDouble(value)); }
     public BooleanValue toBoolean() { return BooleanValue.get(Boolean.parseBoolean(value)); }
