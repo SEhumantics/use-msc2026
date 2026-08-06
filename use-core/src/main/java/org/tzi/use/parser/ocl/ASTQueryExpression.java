@@ -39,6 +39,8 @@ import org.tzi.use.uml.ocl.expr.ExpOne;
 import org.tzi.use.uml.ocl.expr.ExpReject;
 import org.tzi.use.uml.ocl.expr.ExpSelect;
 import org.tzi.use.uml.ocl.expr.ExpSortedBy;
+import org.tzi.use.uml.ocl.expr.ExpUSelect;
+import org.tzi.use.uml.ocl.expr.ExpUSelectC;
 import org.tzi.use.uml.ocl.expr.ExpVariable;
 import org.tzi.use.uml.ocl.expr.Expression;
 import org.tzi.use.uml.ocl.expr.VarDecl;
@@ -56,6 +58,7 @@ public class ASTQueryExpression extends ASTExpression {
     private ASTExpression fRange; // may be null
     private ASTElemVarsDeclaration fDeclList;
     private ASTExpression fExpr;
+    private ASTExpression fUncertainty;
 
     public ASTQueryExpression(Token op, 
                               ASTExpression range, 
@@ -65,6 +68,9 @@ public class ASTQueryExpression extends ASTExpression {
         fRange = range;
         fDeclList = declList;
         fExpr = expr;
+    }
+    public ASTQueryExpression(Token op, ASTExpression range, ASTElemVarsDeclaration declList, ASTExpression expr, ASTExpression uncertainty) {
+        this(op, range, declList, expr); fUncertainty=uncertainty;
     }
 
     public Expression gen(Context ctx) throws SemanticException {
@@ -135,6 +141,8 @@ public class ASTQueryExpression extends ASTExpression {
             case ParserHelper.Q_SORTEDBY_ID:
             case ParserHelper.Q_ANY_ID:
             case ParserHelper.Q_CLOSURE_ID:
+            case ParserHelper.Q_USELECT_ID:
+            case ParserHelper.Q_USELECTC_ID:
                 VarDecl decl;
                 if (declList.isEmpty() )
                     decl = null;
@@ -167,6 +175,13 @@ public class ASTQueryExpression extends ASTExpression {
                     break;
                 case ParserHelper.Q_CLOSURE_ID:
                     res = new ExpClosure(decl, range, expr);
+                    break;
+                case ParserHelper.Q_USELECT_ID:
+                    res = new ExpUSelect(decl, range, expr);
+                    break;
+                case ParserHelper.Q_USELECTC_ID:
+                    if (fUncertainty == null) throw new SemanticException(fOp, "uSelectC requires a confidence expression");
+                    res = new ExpUSelectC(decl, range, expr, fUncertainty.gen(ctx));
                     break;
                 default:
                     // TODO: ignore or error on default?

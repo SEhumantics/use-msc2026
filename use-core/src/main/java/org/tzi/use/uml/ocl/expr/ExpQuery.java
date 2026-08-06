@@ -93,7 +93,7 @@ public abstract class ExpQuery extends Expression {
 	
     protected void assertBooleanQuery() throws ExpInvalidException {
         // queryExp must be a boolean expression
-        if (!fQueryExp.type().isTypeOfBoolean())
+        if (!fQueryExp.type().isTypeOfBoolean() && !fQueryExp.type().isKindOfUBoolean(VoidHandling.EXCLUDE_VOID))
             throw new ExpInvalidException("Argument expression of `" + name()
                     + "' must have boolean type, found `" + fQueryExp.type()
                     + "'.");
@@ -133,7 +133,8 @@ public abstract class ExpQuery extends Expression {
             if (queryVal.isUndefined())
                 queryVal = BooleanValue.FALSE;
 
-            if (((BooleanValue) queryVal).value() == doSelect)
+            boolean selected = queryVal instanceof UBooleanValue ? ((UBooleanValue) queryVal).probability() >= .5 : ((BooleanValue) queryVal).value();
+            if (selected == doSelect)
                 resValues.add(elemVal);
         }
 
@@ -142,6 +143,21 @@ public abstract class ExpQuery extends Expression {
         
         // result is collection with selected/rejected values
         return ((CollectionType)rangeVal.type()).createCollectionValue(resValues);
+    }
+
+    protected final Value evalUSelect(EvalContext ctx, double threshold) {
+        Value range=fRangeExp.eval(ctx);
+        if (range.isUndefined() || !(range instanceof CollectionValue collection)) return UndefinedValue.instance;
+        List<Value> result=new ArrayList<>();
+        if (!fElemVarDecls.isEmpty()) ctx.pushVarBinding(fElemVarDecls.varDecl(0).name(), null);
+        for(Value element:collection){
+            if(!fElemVarDecls.isEmpty())ctx.varBindings().setPeekValue(element);
+            Value q=fQueryExp.eval(ctx); if(q.isUndefined())continue;
+            double p=q instanceof UBooleanValue u?u.probability():((BooleanValue)q).value()?1:0;
+            if(p>=threshold)result.add(element);
+        }
+        if(!fElemVarDecls.isEmpty())ctx.popVarBinding();
+        return ((CollectionType)collection.type()).createCollectionValue(result);
     }
 
     /**
@@ -158,8 +174,26 @@ public abstract class ExpQuery extends Expression {
 
         // we need recursion for the permutation of assignments of
         // range values to all element variables.
+        if (fQueryExp.type().isKindOfUBoolean(VoidHandling.EXCLUDE_VOID))
+            return evalUncertainExistsOrForAll(ctx, rangeVal, doExists);
         boolean res = evalExistsOrForAll0(0, rangeVal, ctx, doExists);
         return BooleanValue.get(res);
+    }
+
+    private Value evalUncertainExistsOrForAll(EvalContext ctx, CollectionValue rangeVal, boolean doExists) {
+        UBooleanValue result = doExists ? UBooleanValue.FALSE : UBooleanValue.TRUE;
+        if (!fElemVarDecls.isEmpty()) ctx.pushVarBinding(fElemVarDecls.varDecl(0).name(), null);
+        for (Value elem : rangeVal) {
+            if (!fElemVarDecls.isEmpty()) ctx.varBindings().setPeekValue(elem);
+            Value q=fQueryExp.eval(ctx);
+            UBooleanValue uq;
+            if (q.isUndefined()) uq=UBooleanValue.FALSE;
+            else if (q instanceof UBooleanValue u) uq=u;
+            else uq=UBooleanValue.valueOf(((BooleanValue)q).value());
+            result=doExists?result.or(uq):result.and(uq);
+        }
+        if (!fElemVarDecls.isEmpty()) ctx.popVarBinding();
+        return result;
     }
 
     private final boolean evalExistsOrForAll0(int nesting,

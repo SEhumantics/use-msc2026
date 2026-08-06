@@ -38,7 +38,7 @@ public class ExpForAll extends ExpQuery {
         throws ExpInvalidException
     {
         // result is of boolean type
-        super(TypeFactory.mkBoolean(), elemVarDecls, rangeExp, queryExp);
+        super(queryExp.type().isKindOfUBoolean(org.tzi.use.uml.ocl.type.Type.VoidHandling.EXCLUDE_VOID) ? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean(), elemVarDecls, rangeExp, queryExp);
     
         // queryExp must be a boolean expression
         assertBooleanQuery();
@@ -80,4 +80,3 @@ public class ExpForAll extends ExpQuery {
 		visitor.visitForAll(this);
 	}
 }
-

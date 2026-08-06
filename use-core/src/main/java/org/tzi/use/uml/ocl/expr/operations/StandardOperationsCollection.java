@@ -44,6 +44,10 @@ public class StandardOperationsCollection {
 		OpGeneric.registerOperation(new Op_collection_flatten(), opmap);
 		
 		OpGeneric.registerOperation(new Op_collection_single(), opmap); // USE specific
+		OpGeneric.registerOperation(new Op_collection_uCount(), opmap);
+		OpGeneric.registerOperation(new Op_collection_uCountC(), opmap);
+		OpGeneric.registerOperation(new Op_collection_uIncludes(), opmap);
+		OpGeneric.registerOperation(new Op_collection_uExcludes(), opmap);
 		
 	}
 }
@@ -102,7 +106,7 @@ final class Op_collection_includes extends OpGeneric {
 		if (params.length == 2 && params[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)) {			
 			CollectionType coll = (CollectionType) params[0];
 			if (params[1].getLeastCommonSupertype(coll.elemType()) != null)
-				return TypeFactory.mkBoolean();
+				return (coll.elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)||params[1].isKindOfUncertain(VoidHandling.EXCLUDE_VOID)) ? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean();
 			
 		}
 		return null;
@@ -113,6 +117,7 @@ final class Op_collection_includes extends OpGeneric {
 			return BooleanValue.FALSE;
 		
 		CollectionValue coll = (CollectionValue) args[0];
+		if (resultType.isTypeOfUBoolean()) return coll.uIncludes(args[1]);
 		boolean res = coll.includes(args[1]);
 		return BooleanValue.get(res);
 	}
@@ -154,7 +159,7 @@ final class Op_collection_excludes extends OpGeneric {
 		if (params.length == 2 && params[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)) {
 			CollectionType coll = (CollectionType) params[0];
 			if (params[1].getLeastCommonSupertype(coll.elemType()) != null)
-				return TypeFactory.mkBoolean();
+				return (coll.elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)||params[1].isKindOfUncertain(VoidHandling.EXCLUDE_VOID)) ? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean();
 		}
 		return null;
 	}
@@ -163,6 +168,7 @@ final class Op_collection_excludes extends OpGeneric {
 		if (args[0].isUndefined())
 			return BooleanValue.FALSE;
 		CollectionValue coll = (CollectionValue) args[0];
+		if (resultType.isTypeOfUBoolean()) return coll.uExcludes(args[1]);
 		boolean res = !coll.includes(args[1]);
 		return BooleanValue.get(res);
 	}
@@ -257,7 +263,7 @@ final class Op_collection_includesAll extends OpGeneric {
 			CollectionType coll2 = (CollectionType) params[1];
 
 			if (coll2.getLeastCommonSupertype(coll1) != null)
-				return TypeFactory.mkBoolean();
+				return (((CollectionType)params[0]).elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)||((CollectionType)params[1]).elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)) ? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean();
 		}
 		return null;
 	}
@@ -265,6 +271,7 @@ final class Op_collection_includesAll extends OpGeneric {
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
 		CollectionValue coll1 = (CollectionValue) args[0];
 		CollectionValue coll2 = (CollectionValue) args[1];
+		if (resultType.isTypeOfUBoolean()) return coll1.uIncludesAll(coll2);
 		boolean res = coll1.includesAll(coll2);
 		return BooleanValue.get(res);
 	}
@@ -315,7 +322,7 @@ final class Op_collection_excludesAll extends OpGeneric {
 			CollectionType coll2 = (CollectionType) params[1];
 
 			if (coll2.getLeastCommonSupertype(coll1) != null)
-				return TypeFactory.mkBoolean();
+				return (((CollectionType)params[0]).elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)||((CollectionType)params[1]).elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)) ? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean();
 		}
 		return null;
 	}
@@ -323,6 +330,7 @@ final class Op_collection_excludesAll extends OpGeneric {
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
 		CollectionValue coll1 = (CollectionValue) args[0];
 		CollectionValue coll2 = (CollectionValue) args[1];
+		if (resultType.isTypeOfUBoolean()) return coll1.uExcludesAll(coll2);
 		boolean res = coll1.excludesAll(coll2);
 		return BooleanValue.get(res);
 	}
@@ -785,4 +793,25 @@ final class Op_collection_single extends OpGeneric {
 		
 		return res;
 	}
+}
+
+final class Op_collection_uCount extends OpGeneric {
+    public String name(){return "uCount";} public int kind(){return OPERATION;} public boolean isInfixOrPrefix(){return false;}
+    public Type matches(Type[] p){return p.length==2&&p[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)?TypeFactory.mkInteger():null;}
+    public Value eval(EvalContext c,Value[] a,Type r){return IntegerValue.valueOf(((CollectionValue)a[0]).uCount(a[1]));}
+}
+final class Op_collection_uCountC extends OpGeneric {
+    public String name(){return "uCountC";} public int kind(){return OPERATION;} public boolean isInfixOrPrefix(){return false;}
+    public Type matches(Type[] p){return p.length==3&&p[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)&&p[2].isKindOfReal(VoidHandling.EXCLUDE_VOID)?TypeFactory.mkInteger():null;}
+    public Value eval(EvalContext c,Value[] a,Type r){double t=a[2] instanceof IntegerValue i?i.value():((RealValue)a[2]).value();return IntegerValue.valueOf(((CollectionValue)a[0]).uCountC(a[1],t));}
+}
+final class Op_collection_uIncludes extends OpGeneric {
+    public String name(){return "uIncludes";} public int kind(){return OPERATION;} public boolean isInfixOrPrefix(){return false;}
+    public Type matches(Type[] p){return p.length==2&&p[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)?TypeFactory.mkUBoolean():null;}
+    public Value eval(EvalContext c,Value[] a,Type r){return ((CollectionValue)a[0]).uIncludes(a[1]);}
+}
+final class Op_collection_uExcludes extends OpGeneric {
+    public String name(){return "uExcludes";} public int kind(){return OPERATION;} public boolean isInfixOrPrefix(){return false;}
+    public Type matches(Type[] p){return p.length==2&&p[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)?TypeFactory.mkUBoolean():null;}
+    public Value eval(EvalContext c,Value[] a,Type r){return ((CollectionValue)a[0]).uExcludes(a[1]);}
 }
