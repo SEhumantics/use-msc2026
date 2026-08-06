@@ -796,14 +796,14 @@ final class Op_collection_single extends OpGeneric {
 }
 
 final class Op_collection_uCount extends OpGeneric {
-    public String name(){return "uCount";} public int kind(){return OPERATION;} public boolean isInfixOrPrefix(){return false;}
+    public String name(){return "uCount";} public int kind(){return SPECIAL;} public boolean isInfixOrPrefix(){return false;}
     public Type matches(Type[] p){return p.length==2&&p[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)?TypeFactory.mkInteger():null;}
-    public Value eval(EvalContext c,Value[] a,Type r){return IntegerValue.valueOf(((CollectionValue)a[0]).uCount(a[1]));}
+    public Value eval(EvalContext c,Value[] a,Type r){return a[0].isUndefined()?IntegerValue.valueOf(0):IntegerValue.valueOf(((CollectionValue)a[0]).uCount(a[1]));}
 }
 final class Op_collection_uCountC extends OpGeneric {
-    public String name(){return "uCountC";} public int kind(){return OPERATION;} public boolean isInfixOrPrefix(){return false;}
+    public String name(){return "uCountC";} public int kind(){return SPECIAL;} public boolean isInfixOrPrefix(){return false;}
     public Type matches(Type[] p){return p.length==3&&p[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)&&p[2].isKindOfReal(VoidHandling.EXCLUDE_VOID)?TypeFactory.mkInteger():null;}
-    public Value eval(EvalContext c,Value[] a,Type r){double t=a[2] instanceof IntegerValue i?i.value():((RealValue)a[2]).value();return IntegerValue.valueOf(((CollectionValue)a[0]).uCountC(a[1],t));}
+    public Value eval(EvalContext c,Value[] a,Type r){double t=a[2] instanceof IntegerValue i?i.value():((RealValue)a[2]).value();return a[0].isUndefined()?IntegerValue.valueOf(0):IntegerValue.valueOf(((CollectionValue)a[0]).uCountC(a[1],t));}
 }
 final class Op_collection_uIncludes extends OpGeneric {
     public String name(){return "uIncludes";} public int kind(){return OPERATION;} public boolean isInfixOrPrefix(){return false;}

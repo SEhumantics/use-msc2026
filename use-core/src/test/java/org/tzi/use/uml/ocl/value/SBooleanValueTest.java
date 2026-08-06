@@ -59,4 +59,13 @@ class SBooleanValueTest {
         y=new SBooleanValue(.10,.8,.1,.8).deduceY(yx,ynx);
         assertEquals(.072,y.belief(),.002); assertEquals(.418,y.disbelief(),.002); assertEquals(.510,y.uncertainty(),.002);
     }
+    @Test void degenerateFusionCasesMatchHistoricalBehavior() {
+        var t=new SBooleanValue(1,0,0,.5); var f=new SBooleanValue(0,1,0,.5); var v=SBooleanValue.vacuous(.5);
+        var tied=SBooleanValue.consensusAndCompromiseFusion(List.of(f,t));
+        assertEquals(0,tied.belief(),EPS); assertEquals(0,tied.disbelief(),EPS); assertEquals(1,tied.uncertainty(),EPS);
+        var average=SBooleanValue.averageBeliefFusion(List.of(f,t));
+        assertEquals(.5,average.belief(),EPS); assertEquals(.5,average.disbelief(),EPS); assertEquals(0,average.uncertainty(),EPS);
+        assertEquals(1,SBooleanValue.consensusAndCompromiseFusion(List.of(t,v)).uncertainty(),EPS);
+        assertEquals(1,SBooleanValue.consensusAndCompromiseFusion(List.of(v,v)).uncertainty(),EPS);
+    }
 }
