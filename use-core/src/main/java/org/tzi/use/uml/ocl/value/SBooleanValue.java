@@ -159,14 +159,21 @@ public final class SBooleanValue extends UncertainValue {
         return new SBooleanValue(b/(denominator-os.size()*product),d/(denominator-os.size()*product),u,a/(os.size()-sumU));
     }
     public static SBooleanValue consensusAndCompromiseFusion(Collection<SBooleanValue> opinions) {
-        requireTwo(opinions,"consensus and compromise fusion");
-        double base=opinions.iterator().next().baseRate; for(var o:opinions)if(o.baseRate!=base)throw new IllegalArgumentException("CCF requires equal base rates");
-        double cb=opinions.stream().mapToDouble(SBooleanValue::belief).min().orElse(0), cd=opinions.stream().mapToDouble(SBooleanValue::disbelief).min().orElse(0), product=1;
-        for(var o:opinions)product*=o.uncertainty;
-        double rb=0,rd=0,rx=0; for(var o:opinions){double w=o.uncertainty==0?0:product/o.uncertainty;rb+=Math.max(o.belief-cb,0)*w;rd+=Math.max(o.disbelief-cd,0)*w;}
-        double mass=cb+cd+product, norm=(rb+rd)==0?1:(1-mass-product)/(rb+rd);
-        return new SBooleanValue(cb+norm*rb,cd+norm*rd,1-(cb+norm*rb)-(cd+norm*rd),base);
+        requireTwo(opinions,"consensus and compromise fusion"); List<SBooleanValue> os=List.copyOf(opinions);
+        double base=os.get(0).baseRate; for(var o:os)if(o.baseRate!=base)throw new IllegalArgumentException("CCF requires equal base rates");
+        double cb=os.stream().mapToDouble(SBooleanValue::belief).min().orElse(0), cd=os.stream().mapToDouble(SBooleanValue::disbelief).min().orElse(0), product=1;
+        for(var o:os)product*=o.uncertainty;
+        double rb=0,rd=0,rx=0; List<Double> br=new ArrayList<>(),dr=new ArrayList<>(),ur=new ArrayList<>();
+        for(var o:os){br.add(Math.max(o.belief-cb,0));dr.add(Math.max(o.disbelief-cd,0));ur.add(o.uncertainty);double w=o.uncertainty==0?0:product/o.uncertainty;rb+=br.get(br.size()-1)*w;rd+=dr.get(dr.size()-1)*w;}
+        for(List<Domain> p:domainOptions(os.size())){Domain intersection=Domain.DOMAIN, union=Domain.NIL;for(Domain x:p){intersection=intersection.intersect(x);union=union.union(x);}double prod=1;for(int i=0;i<p.size();i++){switch(p.get(i)){case TRUE->prod*=br.get(i);case FALSE->prod*=dr.get(i);case NIL,DOMAIN->prod=0;}}if(intersection==Domain.TRUE)rb+=prod;else if(intersection==Domain.FALSE)rd+=prod;if(intersection==Domain.NIL){if(union==Domain.TRUE)rb+=prod;else if(union==Domain.FALSE)rd+=prod;else if(union==Domain.DOMAIN)rx+=prod;}}
+        double compromiseMass=rb+rd+rx, norm=compromiseMass==0?1:(1-cb-cd-product)/compromiseMass;
+        double b=cb+norm*rb,d=cd+norm*rd;return new SBooleanValue(b,d,1-b-d,base);
     }
+    private enum Domain { NIL, TRUE, FALSE, DOMAIN;
+        Domain intersect(Domain x){if(this==NIL||x==NIL)return NIL;if(this==DOMAIN)return x;if(x==DOMAIN)return this;return this==x?this:NIL;}
+        Domain union(Domain x){if(this==DOMAIN||x==DOMAIN)return DOMAIN;if(this==NIL)return x;if(x==NIL)return this;return this==x?this:DOMAIN;}
+    }
+    private static List<List<Domain>> domainOptions(int n){List<List<Domain>> r=new ArrayList<>();if(n==0){r.add(new ArrayList<>());return r;}for(var p:domainOptions(n-1))for(var d:Domain.values()){List<Domain> q=new ArrayList<>(p);q.add(d);r.add(q);}return r;}
     private static void requireNonEmpty(Collection<SBooleanValue> os,String n){ if(os==null||os.isEmpty()||os.stream().anyMatch(Objects::isNull))throw new IllegalArgumentException(n+" requires non-null opinions"); }
     private static void requireTwo(Collection<SBooleanValue> os,String n){ requireNonEmpty(os,n); if(os.size()<2)throw new IllegalArgumentException(n+" requires at least two opinions"); }
     @Override public UBooleanValue uEquals(Value other) { return other instanceof SBooleanValue o ? UBooleanValue.probability(1-projectiveDistance(o)) : UBooleanValue.FALSE; }

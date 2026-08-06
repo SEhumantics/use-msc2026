@@ -31,4 +31,9 @@ class SBooleanValueTest {
         var result=SBooleanValue.beliefConstraintFusion(List.of(a,b));
         assertEquals(.50/.74,result.belief(),EPS); assertEquals(.06/.74,result.uncertainty(),EPS);
     }
+    @Test void consensusCompromiseMatchesHistoricalThreeOpinionGolden() {
+        var result=SBooleanValue.consensusAndCompromiseFusion(List.of(
+            new SBooleanValue(.1,.3,.6,.5),new SBooleanValue(.4,.2,.4,.5),new SBooleanValue(.7,.1,.2,.5)));
+        assertEquals(.629,result.belief(),.002); assertEquals(.182,result.disbelief(),.002); assertEquals(.189,result.uncertainty(),.002);
+    }
 }
