@@ -69,4 +69,16 @@ class SBooleanValueTest {
         assertEquals(1,SBooleanValue.consensusAndCompromiseFusion(List.of(t,v)).uncertainty(),EPS);
         assertEquals(1,SBooleanValue.consensusAndCompromiseFusion(List.of(v,v)).uncertainty(),EPS);
     }
+    @Test void logicalOperatorsUseHistoricalBaseRateFormulas() {
+        var left=new SBooleanValue(.2,.6,.2,.5); var right=new SBooleanValue(.6,.2,.2,.5);
+        var or=left.or(right); assertEquals(.680,or.belief(),.002); assertEquals(.173,or.disbelief(),.002); assertEquals(.147,or.uncertainty(),.002); assertEquals(.75,or.baseRate(),EPS);
+        var and=left.and(right); assertEquals(.173,and.belief(),.002); assertEquals(.680,and.disbelief(),.002); assertEquals(.147,and.uncertainty(),.002); assertEquals(.25,and.baseRate(),EPS);
+        var xor=left.xor(right); assertEquals(.4,xor.belief(),EPS); assertEquals(.56,xor.disbelief(),EPS); assertEquals(.04,xor.uncertainty(),EPS);
+    }
+    @Test void uncertaintyMaximizationPreservesHistoricalBoundaryCases() {
+        var zeroBase=new SBooleanValue(.4,.4,.2,0).uncertaintyMaximized();
+        assertEquals(.4,zeroBase.belief(),EPS); assertEquals(0,zeroBase.disbelief(),EPS); assertEquals(.6,zeroBase.uncertainty(),EPS);
+        var zeroProjection=new SBooleanValue(0,.4,.6,0).uncertaintyMaximized();
+        assertEquals(1,zeroProjection.uncertainty(),EPS);
+    }
 }

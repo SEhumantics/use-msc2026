@@ -19,7 +19,7 @@ public final class SBooleanValue extends UncertainValue {
         super(TypeFactory.mkSBoolean());
         checkUnit(belief,"belief"); checkUnit(disbelief,"disbelief"); checkUnit(uncertainty,"uncertainty"); checkUnit(baseRate,"base rate");
         if (Math.abs(belief+disbelief+uncertainty-1) > MASS_TOLERANCE) throw new IllegalArgumentException("belief + disbelief + uncertainty must equal 1 within " + MASS_TOLERANCE);
-        if(!Double.isFinite(relativeWeight)||relativeWeight<=0)throw new IllegalArgumentException("relative weight must be positive");
+        if(!Double.isFinite(relativeWeight)||relativeWeight<0)throw new IllegalArgumentException("relative weight must be non-negative");
         this.belief=belief; this.disbelief=disbelief; this.uncertainty=uncertainty; this.baseRate=baseRate;
         this.relativeWeight=relativeWeight;
     }
@@ -33,18 +33,24 @@ public final class SBooleanValue extends UncertainValue {
     public static SBooleanValue dogmatic(double probability, double baseRate) { return new SBooleanValue(probability,1-probability,0,baseRate); }
     public static SBooleanValue vacuous(double baseRate) { return new SBooleanValue(0,0,1,baseRate); }
     public UBooleanValue toUBoolean() { return UBooleanValue.probability(projection()); }
-    public SBooleanValue not() { return new SBooleanValue(disbelief, belief, uncertainty, 1-baseRate); }
+    public SBooleanValue not() { return new SBooleanValue(disbelief, belief, uncertainty, 1-baseRate, relativeWeight); }
     public SBooleanValue and(SBooleanValue o) {
-        return new SBooleanValue(belief*o.belief, disbelief+o.disbelief-disbelief*o.disbelief,
-            belief*o.uncertainty+uncertainty*o.belief+uncertainty*o.uncertainty, baseRate*o.baseRate);
+        if (this == o) return this;
+        double a=baseRate*o.baseRate;
+        double b=belief*o.belief+(a==1?0:((1-baseRate)*o.baseRate*belief*o.uncertainty+baseRate*(1-o.baseRate)*uncertainty*o.belief)/(1-a));
+        double d=disbelief+o.disbelief-disbelief*o.disbelief;
+        return new SBooleanValue(b,d,1-b-d,a,relativeWeight()+o.relativeWeight());
     }
     public SBooleanValue or(SBooleanValue o) {
-        return new SBooleanValue(belief+o.belief-belief*o.belief, disbelief*o.disbelief,
-            disbelief*o.uncertainty+uncertainty*o.disbelief+uncertainty*o.uncertainty, baseRate+o.baseRate-baseRate*o.baseRate);
+        if (this == o) return this;
+        double a=baseRate+o.baseRate-baseRate*o.baseRate;
+        double b=belief+o.belief-belief*o.belief;
+        double d=disbelief*o.disbelief+(baseRate+o.baseRate==baseRate*o.baseRate?0:(baseRate*(1-o.baseRate)*disbelief*o.uncertainty+o.baseRate*(1-baseRate)*uncertainty*o.disbelief)/a);
+        return new SBooleanValue(b,d,1-b-d,a,relativeWeight()+o.relativeWeight());
     }
     public SBooleanValue xor(SBooleanValue o) {
         double b=Math.abs(belief-o.belief), u=uncertainty*o.uncertainty;
-        return new SBooleanValue(b,1-b-u,u,Math.abs(baseRate-o.baseRate));
+        return new SBooleanValue(b,1-b-u,u,Math.abs(baseRate-o.baseRate),relativeWeight()+o.relativeWeight());
     }
     public SBooleanValue equivalent(SBooleanValue o) { return xor(o).not(); }
     public SBooleanValue implies(SBooleanValue o) { return not().or(o); }
@@ -59,10 +65,10 @@ public final class SBooleanValue extends UncertainValue {
     public boolean isUncertain(double threshold) { checkUnit(threshold,"threshold"); return certainty() < threshold; }
     public SBooleanValue uncertaintyMaximized() {
         double p=projection();
-        if (baseRate==0) return new SBooleanValue(p,1-p,0,baseRate);
-        if (baseRate==1) return new SBooleanValue(0,1-p,p,baseRate);
+        if (baseRate==0) return belief==0 ? new SBooleanValue(0,0,1,baseRate,relativeWeight) : new SBooleanValue(p,0,1-p,baseRate,relativeWeight);
+        if (baseRate==1) return new SBooleanValue(0,1-p,p,baseRate,relativeWeight);
         double u=Math.min(p/baseRate,(1-p)/(1-baseRate));
-        return new SBooleanValue(p-baseRate*u,1-p-(1-baseRate)*u,u,baseRate);
+        return new SBooleanValue(p-baseRate*u,1-p-(1-baseRate)*u,u,baseRate,relativeWeight);
     }
     public SBooleanValue uncertainOpinion() { return uncertaintyMaximized(); }
     public SBooleanValue min(SBooleanValue o) { return projection() <= o.projection() ? this : o; }
@@ -98,7 +104,7 @@ public final class SBooleanValue extends UncertainValue {
         if(yGivenX.belief>yGivenNotX.belief&&yGivenX.disbelief<=yGivenNotX.disbelief){
             if(pyxhat<=yGivenNotX.belief+a*(1-yGivenNotX.belief-yGivenX.disbelief)){
                 if(px<=baseRate)k=baseRate*uncertainty*(bIy-yGivenNotX.belief)/((belief+baseRate*uncertainty)*a);
-                else k=(1-baseRate)*uncertainty*(dIy-yGivenX.disbelief)*(yGivenX.belief-yGivenNotX.belief)/((disbelief+(1-baseRate)*uncertainty)*a*(yGivenNotX.disbelief-yGivenX.disbelief));
+                else k=baseRate*uncertainty*(dIy-yGivenX.disbelief)*(yGivenX.belief-yGivenNotX.belief)/((disbelief+(1-baseRate)*uncertainty)*a*(yGivenNotX.disbelief-yGivenX.disbelief));
             } else {
                 if(px<=baseRate)k=(1-baseRate)*uncertainty*(bIy-yGivenNotX.belief)*(yGivenNotX.disbelief-yGivenX.disbelief)/((belief+baseRate*uncertainty)*(1-a)*(yGivenX.belief-yGivenNotX.belief));
                 else k=(1-baseRate)*uncertainty*(dIy-yGivenX.disbelief)/((disbelief+(1-baseRate)*uncertainty)*(1-a));
@@ -129,16 +135,19 @@ public final class SBooleanValue extends UncertainValue {
     }
     public static SBooleanValue aleatoryCumulativeBeliefFusion(Collection<SBooleanValue> opinions) {
         requireNonEmpty(opinions,"cumulative fusion"); List<SBooleanValue> os=List.copyOf(opinions); List<SBooleanValue> dogs=os.stream().filter(SBooleanValue::isDogmatic).toList();
-        if(!dogs.isEmpty()) return averageBeliefFusion(dogs); double product=1,a=0; for(var o:os){product*=o.uncertainty;a+=o.baseRate;} double den=0,b=0,d=0; for(var o:os){double w=product/o.uncertainty;den+=w;b+=w*o.belief;d+=w*o.disbelief;} den-=(os.size()-1)*product; return new SBooleanValue(b/den,d/den,product/den,a/os.size());
+        if (os.size() == 1) return os.get(0);
+        if (!dogs.isEmpty()) return dogmaticFusion(dogs, os.get(0).baseRate);
+        double product=1,a=os.get(0).baseRate; for(var o:os){product*=o.uncertainty;} double den=0,b=0,d=0; for(var o:os){double w=product/o.uncertainty;den+=w;b+=w*o.belief;d+=w*o.disbelief;} den-=(os.size()-1)*product; return new SBooleanValue(b/den,d/den,product/den,a,0);
     }
     public static SBooleanValue epistemicCumulativeBeliefFusion(Collection<SBooleanValue> opinions) {
         requireNonEmpty(opinions,"epistemic cumulative fusion"); List<SBooleanValue> os=List.copyOf(opinions);
         List<SBooleanValue> dogs=os.stream().filter(SBooleanValue::isDogmatic).toList();
-        if(!dogs.isEmpty()) return averageBeliefFusion(dogs).uncertaintyMaximized();
-        double product=1,b=0,d=0,den=0,a=0; for(var o:os)product*=o.uncertainty;
-        for(var o:os){double w=product/o.uncertainty;den+=w;b+=w*o.belief;d+=w*o.disbelief;a+=o.baseRate;}
+        if (os.size() == 1) return os.get(0);
+        if (!dogs.isEmpty()) return dogmaticFusion(dogs, os.get(0).baseRate).uncertaintyMaximized();
+        double product=1,b=0,d=0,den=0,a=os.get(0).baseRate; for(var o:os)product*=o.uncertainty;
+        for(var o:os){double w=product/o.uncertainty;den+=w;b+=w*o.belief;d+=w*o.disbelief;}
         den-=(os.size()-1)*product;
-        return new SBooleanValue(b/den,d/den,product/den,a/os.size()).uncertaintyMaximized();
+        return new SBooleanValue(b/den,d/den,product/den,a,0).uncertaintyMaximized();
     }
     public static SBooleanValue beliefConstraintFusion(Collection<SBooleanValue> opinions) {
         requireTwo(opinions,"belief constraint fusion"); SBooleanValue result=null;
@@ -156,13 +165,21 @@ public final class SBooleanValue extends UncertainValue {
     }
     public static SBooleanValue weightedBeliefFusion(Collection<SBooleanValue> opinions) {
         requireNonEmpty(opinions,"weighted fusion"); List<SBooleanValue> os=List.copyOf(opinions);
+        if (os.size() == 1) return os.get(0);
         List<SBooleanValue> dogmatic=os.stream().filter(SBooleanValue::isDogmatic).toList();
-        if (!dogmatic.isEmpty()) { double total=dogmatic.stream().mapToDouble(SBooleanValue::relativeWeight).sum(), b=dogmatic.stream().mapToDouble(o->o.belief*o.relativeWeight).sum()/total; return new SBooleanValue(b,1-b,0,os.get(0).baseRate,total); }
+        if (!dogmatic.isEmpty()) return dogmaticFusion(dogmatic, os.get(0).baseRate);
         if (os.stream().allMatch(SBooleanValue::isVacuous)) return vacuous(os.stream().mapToDouble(SBooleanValue::baseRate).average().orElse(.5));
         double product=1,sumU=0,b=0,d=0,a=0; for(var o:os){product*=o.uncertainty;sumU+=o.uncertainty;}
         double denominator=0; for(var o:os){double w=product/o.uncertainty;denominator+=w;b+=w*o.belief*o.certainty();d+=w*o.disbelief*o.certainty();a+=o.baseRate*o.certainty();}
         double u=(os.size()-sumU)*product/ (denominator-os.size()*product);
         return new SBooleanValue(b/(denominator-os.size()*product),d/(denominator-os.size()*product),u,a/(os.size()-sumU));
+    }
+    private static SBooleanValue dogmaticFusion(List<SBooleanValue> opinions, double baseRate) {
+        double total=opinions.stream().mapToDouble(SBooleanValue::relativeWeight).sum();
+        if (total == 0) throw new IllegalArgumentException("dogmatic fusion requires positive relative weight");
+        double b=opinions.stream().mapToDouble(o->o.belief*o.relativeWeight()).sum()/total;
+        double d=opinions.stream().mapToDouble(o->o.disbelief*o.relativeWeight()).sum()/total;
+        return new SBooleanValue(b,d,0,baseRate,total);
     }
     public static SBooleanValue consensusAndCompromiseFusion(Collection<SBooleanValue> opinions) {
         requireTwo(opinions,"consensus and compromise fusion"); List<SBooleanValue> os=List.copyOf(opinions);

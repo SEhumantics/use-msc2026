@@ -43,12 +43,23 @@ class UncertaintyQueryEvaluationTest {
         assertEquals(2,((RealValue)eval(op("value",op("sqrt",ur)))).value(),EPS);
         Expression ui=new ExpConstUncertain(ExpConstUncertain.Kind.UINTEGER,new ExpConstInteger(9),new ExpConstReal(0));
         assertEquals(81,((IntegerValue)eval(op("toInteger",op("power",ui,new ExpConstInteger(2))))).value());
+        var uiSum=(UIntegerValue)eval(op("+",ui,new ExpConstInteger(2)));
+        assertEquals(11,uiSum.value());
+        assertEquals(4.5,((URealValue)eval(op("/",ui,new ExpConstInteger(2)))).value(),EPS);
+        assertEquals(-9,((UIntegerValue)eval(op("-",ui))).value());
         Expression us=new ExpConstUncertain(ExpConstUncertain.Kind.USTRING,new ExpConstString("AB"),new ExpConstReal(1));
         assertEquals("ab",((StringValue)eval(op("value",op("toLowerCase",us)))).value());
+        assertEquals("AB!",((UStringValue)eval(op("+",us,new ExpConstString("!")))).value());
+        assertTrue(((UBooleanValue)eval(op("<",us,new ExpConstString("Z")))).value());
         Expression ub=new ExpConstUncertain(ExpConstUncertain.Kind.UBOOLEAN,new ExpConstBoolean(true),new ExpConstReal(.9));
         assertTrue(((BooleanValue)eval(op("toBooleanC",ub,new ExpConstReal(.8)))).value());
+        Expression ub2=new ExpConstUncertain(ExpConstUncertain.Kind.UBOOLEAN,new ExpConstBoolean(true),new ExpConstReal(.8));
+        assertTrue(((BooleanValue)eval(op("equalsC",ub,ub2,new ExpConstReal(.8)))).value());
+        assertTrue(eval(op("equalsC",ub,ub2,new ExpConstReal(1.1))).isUndefined());
         Expression sb=new ExpConstUncertain(ExpConstUncertain.Kind.SBOOLEAN,new ExpConstReal(.6),new ExpConstReal(.1),new ExpConstReal(.3),new ExpConstReal(.5));
         assertEquals(.6,((RealValue)eval(op("belief",sb))).value(),EPS);
+        var mixed=(SBooleanValue)eval(op("and",sb,ub2));
+        assertEquals(.4,mixed.baseRate(),EPS);
         var fused=eval("SBoolean(0.6, 0.1, 0.3, 0.5)->averageBeliefFusion(Sequence{SBoolean(0.4, 0.2, 0.4, 0.5)})");
         assertTrue(fused instanceof SBooleanValue);
     }

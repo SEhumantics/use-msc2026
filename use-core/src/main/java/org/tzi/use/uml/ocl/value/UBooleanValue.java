@@ -28,7 +28,7 @@ public final class UBooleanValue extends UncertainValue {
     public UBooleanValue xor(UBooleanValue o) { return probability(probability*(1-o.probability)+(1-probability)*o.probability); }
     public UBooleanValue equivalent(UBooleanValue o) { return xor(o).not(); }
     public UBooleanValue implies(UBooleanValue o) { return not().or(o); }
-    public BooleanValue equalsC(double threshold) { return BooleanValue.get(confidence() >= threshold); }
+    public BooleanValue equalsC(UBooleanValue other,double threshold) { if(threshold<0||threshold>1) throw new IllegalArgumentException("threshold must be in [0,1]"); return BooleanValue.get(Math.abs(probability-other.probability) <= 1-threshold); }
     @Override public UBooleanValue uEquals(Value o) { if (o instanceof BooleanValue b) return probability(b.value() ? probability : 1-probability); if (o instanceof UBooleanValue b) return equivalent(b); return FALSE; }
     @Override public boolean equals(Object o) { return o instanceof UBooleanValue x && Double.compare(probability,x.probability)==0; }
     @Override public int hashCode() { return Double.hashCode(probability); }
