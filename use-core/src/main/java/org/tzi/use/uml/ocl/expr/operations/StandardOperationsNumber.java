@@ -4,6 +4,7 @@ import org.tzi.use.uml.ocl.expr.EvalContext;
 import org.tzi.use.uml.ocl.type.Type;
 import org.tzi.use.uml.ocl.type.Type.VoidHandling;
 import org.tzi.use.uml.ocl.type.TypeFactory;
+import org.tzi.use.uml.ocl.type.UncertainType;
 import org.tzi.use.uml.ocl.value.BooleanValue;
 import org.tzi.use.uml.ocl.value.IntegerValue;
 import org.tzi.use.uml.ocl.value.RealValue;
@@ -67,11 +68,18 @@ abstract class ArithOperation extends OpGeneric {
 		if (params.length == 2) {
 			if (params[0].isTypeOfInteger() && params[1].isTypeOfInteger())
 				return TypeFactory.mkInteger();
-			else if (params[0].isKindOfNumber(VoidHandling.INCLUDE_VOID)
-					&& params[1].isKindOfNumber(VoidHandling.INCLUDE_VOID))
+			else if (isCertainNumber(params[0]) && isCertainNumber(params[1]))
 				return TypeFactory.mkReal();
 		}
 		return null;
+	}
+
+	/**
+	 * Uncertain numbers are numbers too, but their arithmetic is registered
+	 * separately and must not be narrowed to a certain result here.
+	 */
+	private static boolean isCertainNumber(Type type) {
+		return type.isKindOfNumber(VoidHandling.INCLUDE_VOID) && !(type instanceof UncertainType);
 	}
 }
 

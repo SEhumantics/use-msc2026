@@ -6,10 +6,8 @@
 # the honest, shrinking record of remaining port gaps.
 #
 # Remaining causes:
-#     62  mixed UInteger/Real arithmetic cast failure
 #     44  UBoolean canonical form (b is always true, c is P(true))
-#     17  domain error thrown instead of evaluating to undefined
-#     15  uncertain =/<> yields Boolean instead of UBoolean
+#     19  domain error thrown instead of evaluating to undefined
 #     15  uncertain operator lacks undefined overload
 #     11  behavioural divergence
 #      8  expected value or diagnostic, evaluated to undefined
@@ -97,88 +95,13 @@ UCollectionOperations.in:149  # uncertain type name not accepted as a type expre
 UCollectionOperations.in:153  # uncertain type name not accepted as a type expression
 UCollectionOperations.in:168  # uncertain type name not accepted as a type expression
 UCollectionOperations.in:172  # uncertain type name not accepted as a type expression
-UIntegerExpression.in:403  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:406  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:409  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:412  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:415  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:418  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:421  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:424  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:427  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:430  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:433  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:436  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:484  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:495  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:509  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:518  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:670  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:673  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:676  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:679  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:682  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:685  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:688  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:691  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:694  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:697  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:700  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:703  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:752  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:769  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:921  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:924  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:927  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:930  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:933  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:936  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:939  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:942  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:945  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:948  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:951  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:954  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1005  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1013  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1016  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1022  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1035  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1049  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:1152  # domain error thrown instead of evaluating to undefined
 UIntegerExpression.in:1155  # domain error thrown instead of evaluating to undefined
 UIntegerExpression.in:1164  # domain error thrown instead of evaluating to undefined
 UIntegerExpression.in:1167  # domain error thrown instead of evaluating to undefined
-UIntegerExpression.in:1201  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1204  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1207  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1210  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1213  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1216  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1219  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1222  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1225  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1228  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1231  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1234  # mixed UInteger/Real arithmetic cast failure
+UIntegerExpression.in:1213  # domain error thrown instead of evaluating to undefined
+UIntegerExpression.in:1219  # domain error thrown instead of evaluating to undefined
 UIntegerExpression.in:1278  # domain error thrown instead of evaluating to undefined
-UIntegerExpression.in:1285  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1296  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1730  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1733  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1736  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1739  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1742  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1844  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1847  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1850  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1853  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1856  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1958  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1961  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1964  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1967  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1970  # uncertain =/<> yields Boolean instead of UBoolean
 URealExpression.in:61  # expected value or diagnostic, evaluated to undefined
 URealExpression.in:64  # expected value or diagnostic, evaluated to undefined
 URealExpression.in:80  # uncertain type name not accepted as a type expression
