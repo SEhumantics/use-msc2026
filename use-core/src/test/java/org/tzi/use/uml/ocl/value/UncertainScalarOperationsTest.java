@@ -22,9 +22,15 @@ class UncertainScalarOperationsTest {
         var a=new URealValue(3,4); var b=new URealValue(1,2);
         assertEquals(Math.hypot(4,2),a.add(b).uncertainty(),1e-12);
         assertEquals(Math.sqrt(1*1*4*4+3*3*2*2),a.multiply(b).uncertainty(),1e-12);
+        // The USE-level conversion truncates and keeps the uncertainty; the
+        // library conversion the integer algebra uses floors and folds the
+        // discarded fraction in.
         var converted=new URealValue(-1.25,.5).toUInteger();
-        assertEquals(-2,converted.value());
-        assertEquals(Math.hypot(.5,.75),converted.uncertainty(),1e-12);
+        assertEquals(-1,converted.value());
+        assertEquals(.5,converted.uncertainty(),1e-12);
+        var flooring=new URealValue(-1.25,.5).toUIntegerFlooring();
+        assertEquals(-2,flooring.value());
+        assertEquals(Math.hypot(.5,.75),flooring.uncertainty(),1e-12);
     }
     @Test void stringConversionsAndComparisonsAreAvailable() {
         var x=new UStringValue("42",1);

@@ -6,30 +6,13 @@
 # the honest, shrinking record of remaining port gaps.
 #
 # Remaining causes:
-#     19  domain error thrown instead of evaluating to undefined
-#      9  UBoolean canonical form (b is always true, c is P(true))
 #      9  behavioural divergence
 #      8  uncertain type name not accepted as a type expression
 #      5  expected value or diagnostic, evaluated to undefined
-#      4  operation overload missing
-#      2  uncertain arithmetic/conversion result differs
 
 UBooleanExpression.in:7  # expected value or diagnostic, evaluated to undefined
 UBooleanExpression.in:10  # expected value or diagnostic, evaluated to undefined
 UBooleanExpression.in:13  # expected value or diagnostic, evaluated to undefined
-UBooleanExpression.in:266  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:269  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:272  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:308  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:311  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:314  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:317  # operation overload missing
-UBooleanExpression.in:320  # operation overload missing
-UBooleanExpression.in:323  # operation overload missing
-UBooleanExpression.in:326  # operation overload missing
-UBooleanExpression.in:363  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:366  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:369  # UBoolean canonical form (b is always true, c is P(true))
 UCollectionOperations.in:39  # behavioural divergence
 UCollectionOperations.in:74  # behavioural divergence
 UCollectionOperations.in:78  # behavioural divergence
@@ -44,29 +27,8 @@ UCollectionOperations.in:149  # uncertain type name not accepted as a type expre
 UCollectionOperations.in:153  # uncertain type name not accepted as a type expression
 UCollectionOperations.in:168  # uncertain type name not accepted as a type expression
 UCollectionOperations.in:172  # uncertain type name not accepted as a type expression
-UIntegerExpression.in:1152  # domain error thrown instead of evaluating to undefined
-UIntegerExpression.in:1155  # domain error thrown instead of evaluating to undefined
-UIntegerExpression.in:1164  # domain error thrown instead of evaluating to undefined
-UIntegerExpression.in:1167  # domain error thrown instead of evaluating to undefined
-UIntegerExpression.in:1213  # domain error thrown instead of evaluating to undefined
-UIntegerExpression.in:1219  # domain error thrown instead of evaluating to undefined
-UIntegerExpression.in:1278  # domain error thrown instead of evaluating to undefined
 URealExpression.in:61  # expected value or diagnostic, evaluated to undefined
 URealExpression.in:64  # expected value or diagnostic, evaluated to undefined
 URealExpression.in:80  # uncertain type name not accepted as a type expression
 URealExpression.in:83  # uncertain type name not accepted as a type expression
 URealExpression.in:86  # uncertain type name not accepted as a type expression
-URealExpression.in:161  # domain error thrown instead of evaluating to undefined
-URealExpression.in:227  # domain error thrown instead of evaluating to undefined
-URealExpression.in:302  # domain error thrown instead of evaluating to undefined
-URealExpression.in:599  # uncertain arithmetic/conversion result differs
-URealExpression.in:605  # uncertain arithmetic/conversion result differs
-URealExpression.in:1254  # domain error thrown instead of evaluating to undefined
-URealExpression.in:1257  # domain error thrown instead of evaluating to undefined
-URealExpression.in:1266  # domain error thrown instead of evaluating to undefined
-URealExpression.in:1269  # domain error thrown instead of evaluating to undefined
-URealExpression.in:1316  # domain error thrown instead of evaluating to undefined
-URealExpression.in:1322  # domain error thrown instead of evaluating to undefined
-URealExpression.in:1354  # domain error thrown instead of evaluating to undefined
-URealExpression.in:1360  # domain error thrown instead of evaluating to undefined
-URealExpression.in:1383  # domain error thrown instead of evaluating to undefined

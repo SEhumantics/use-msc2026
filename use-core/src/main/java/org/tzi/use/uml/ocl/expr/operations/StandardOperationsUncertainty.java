@@ -25,7 +25,24 @@ public final class StandardOperationsUncertainty {
         uLogical(map,"and", UBooleanValue::and, 0);
         uLogical(map,"or", UBooleanValue::or, 1);
         uLogical(map,"xor", UBooleanValue::xor, -1);
-        uLogical(map,"equivalent", UBooleanValue::equivalent, -1);
+        // equivalent is the one historical logical operator that also applies to
+        // two plain Booleans, in which case the result is a plain Boolean.
+        map.put("equivalent", new BooleanOperation(){
+            public String name(){return "equivalent";}
+            public boolean isInfixOrPrefix(){return false;}
+            public Type matches(Type[] x){
+                if (x.length!=2 || !x[0].isKindOfUBoolean(Type.VoidHandling.INCLUDE_VOID)
+                        || !x[1].isKindOfUBoolean(Type.VoidHandling.INCLUDE_VOID)) return null;
+                return x[0].isTypeOfBoolean() && x[1].isTypeOfBoolean()
+                    ? TypeFactory.mkBoolean() : TypeFactory.mkUBoolean();
+            }
+            public Value evalWithArgs(EvalContext c,org.tzi.use.uml.ocl.expr.Expression[] args){
+                Value left=args[0].eval(c), right=args[1].eval(c);
+                if (!left.isDefined() || !right.isDefined()) return UndefinedValue.instance;
+                UBooleanValue result=ub(left).equivalent(ub(right));
+                return left.isBoolean() && right.isBoolean() ? result.toBoolean() : result;
+            }
+        });
         uLogical(map,"implies", UBooleanValue::implies, -1);
 
         // Uncertain numeric accessors
@@ -155,7 +172,10 @@ public final class StandardOperationsUncertainty {
         Type common = x[0].getLeastCommonSupertype(x[1]);
         return common != null && !common.isTypeOfUInteger();
     }
-    private static class Base extends OpGeneric { final String n;final Type r;final Function<Value[],Value> f;final boolean infix;Base(String n,Type r,Function<Value[],Value>f,boolean i){this.n=n;this.r=r;this.f=f;this.infix=i;} public String name(){return n;}public int kind(){return OPERATION;}public boolean isInfixOrPrefix(){return infix;}public Type matches(Type[]x){return null;}public Value eval(EvalContext c,Value[]a,Type t){return f.apply(a);} }
+    private static class Base extends OpGeneric { final String n;final Type r;final Function<Value[],Value> f;final boolean infix;Base(String n,Type r,Function<Value[],Value>f,boolean i){this.n=n;this.r=r;this.f=f;this.infix=i;} public String name(){return n;}public int kind(){return OPERATION;}public boolean isInfixOrPrefix(){return infix;}public Type matches(Type[]x){return null;}/** Historical uncertainty operations compute with plain doubles and report a
+     *  non-finite outcome as undefined; here the value constructors reject the
+     *  non-finite result instead, so that rejection is what maps to undefined. */
+    public Value eval(EvalContext c,Value[]a,Type t){ try { return f.apply(a); } catch (ArithmeticException|IllegalArgumentException ex) { return UndefinedValue.instance; } } }
     private interface UBin { UBooleanValue apply(UBooleanValue x,UBooleanValue y); } private interface SBin { SBooleanValue apply(SBooleanValue x,SBooleanValue y); } private interface Cmp { UBooleanValue apply(URealValue x,URealValue y); } private interface UIntegerBin { Value apply(UIntegerValue x,UIntegerValue y); } private interface UIntegerIntegral { UIntegerValue apply(UIntegerValue x,UIntegerValue y); } private interface UIntegerCmp { UBooleanValue apply(UIntegerValue x,UIntegerValue y); }
     private static void uIntegerIntegralBinary(Multimap<String,OpGeneric>m,String n,UIntegerIntegral f){m.put(n,new Base(n,TypeFactory.mkUInteger(),a->f.apply(ui(a[0]),ui(a[1])),true){public Type matches(Type[] x){return x.length==2&&x[0].isKindOfUInteger(Type.VoidHandling.EXCLUDE_VOID)&&x[1].isKindOfUInteger(Type.VoidHandling.EXCLUDE_VOID)&&(x[0].isTypeOfUInteger()||x[1].isTypeOfUInteger())?r:null;}});}
     private static void uIntegerMinMax(Multimap<String,OpGeneric>m,String n,java.util.function.BiFunction<UIntegerValue,UIntegerValue,UIntegerValue> f){m.put(n,new Base(n,TypeFactory.mkUInteger(),a->f.apply(ui(a[0]),ui(a[1])),false){public Type matches(Type[] x){return x.length==2&&x[0].isKindOfUInteger(Type.VoidHandling.EXCLUDE_VOID)&&x[1].isKindOfUInteger(Type.VoidHandling.EXCLUDE_VOID)&&(x[0].isTypeOfUInteger()||x[1].isTypeOfUInteger())?r:null;}});}

@@ -29,7 +29,9 @@ public final class UBooleanValue extends UncertainBooleanValue {
     @Override public UBooleanValue toUBoolean() { return this; }
     public UBooleanValue and(UBooleanValue o) { return probability *o.probability == 0 ? FALSE : probability(probability*o.probability); }
     public UBooleanValue or(UBooleanValue o) { return probability(1-(1-probability)*(1-o.probability)); }
-    public UBooleanValue xor(UBooleanValue o) { return probability(probability*(1-o.probability)+(1-probability)*o.probability); }
+    /** Historical xor is the distance between the two confidences, not the
+     *  probabilistic exclusive or. */
+    public UBooleanValue xor(UBooleanValue o) { return probability(Math.abs(probability-o.probability)); }
     public UBooleanValue equivalent(UBooleanValue o) { return xor(o).not(); }
     public UBooleanValue implies(UBooleanValue o) { return not().or(o); }
     public BooleanValue equalsC(UBooleanValue other,double threshold) { if(threshold<0||threshold>1) throw new IllegalArgumentException("threshold must be in [0,1]"); return BooleanValue.get(Math.abs(probability-other.probability) <= 1-threshold); }

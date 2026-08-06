@@ -48,7 +48,12 @@ public final class URealValue extends UncertainValue {
     public URealValue atan() { return new URealValue(Math.atan(value),uncertainty/(1+value*value)); }
     public RealValue toReal() { return new RealValue(value); }
     public IntegerValue toInteger() { return IntegerValue.valueOf((int)Math.floor(value)); }
-    public UIntegerValue toUInteger() { int i=(int)Math.floor(value); return new UIntegerValue(i,Math.hypot(uncertainty,value-i)); }
+    /** The USE-level toUInteger operation truncates towards zero and carries
+     *  the uncertainty over unchanged. */
+    public UIntegerValue toUInteger() { return new UIntegerValue((int) value, uncertainty); }
+    /** The library conversion the uncertain integer algebra is built on: it
+     *  floors and folds the discarded fraction into the uncertainty. */
+    public UIntegerValue toUIntegerFlooring() { int i=(int)Math.floor(value); return new UIntegerValue(i,Math.hypot(uncertainty,value-i)); }
     public UBooleanValue lessThan(URealValue o) { return UBooleanValue.probability(true, calculate(o).lt); }
     public UBooleanValue greaterThan(URealValue o) { return UBooleanValue.probability(true, calculate(o).gt); }
     private static final class Comparison {
