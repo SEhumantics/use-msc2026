@@ -3,7 +3,7 @@ package org.tzi.use.uml.ocl.value;
 import org.tzi.use.uml.ocl.type.TypeFactory;
 
 /** A Boolean proposition represented by its projected probability of truth. */
-public final class UBooleanValue extends UncertainValue {
+public final class UBooleanValue extends UncertainBooleanValue {
     public static final UBooleanValue TRUE = new UBooleanValue(1.0);
     public static final UBooleanValue FALSE = new UBooleanValue(0.0);
     private final double probability;
@@ -22,7 +22,8 @@ public final class UBooleanValue extends UncertainValue {
     @Override public boolean isUBoolean() { return true; }
     public BooleanValue toBoolean() { return BooleanValue.get(value()); }
     public BooleanValue toBooleanC(double threshold) { return BooleanValue.get(probability >= threshold); }
-    public UBooleanValue not() { return probability(1-probability); }
+    @Override public UBooleanValue not() { return probability(1-probability); }
+    @Override public UBooleanValue toUBoolean() { return this; }
     public UBooleanValue and(UBooleanValue o) { return probability *o.probability == 0 ? FALSE : probability(probability*o.probability); }
     public UBooleanValue or(UBooleanValue o) { return probability(1-(1-probability)*(1-o.probability)); }
     public UBooleanValue xor(UBooleanValue o) { return probability(probability*(1-o.probability)+(1-probability)*o.probability); }

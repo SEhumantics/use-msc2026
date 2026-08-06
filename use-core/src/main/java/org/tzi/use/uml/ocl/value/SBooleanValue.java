@@ -7,7 +7,7 @@ import org.tzi.use.uml.ocl.type.TypeFactory;
  * Native binary subjective opinion.  Values retain full double precision;
  * the historical 0.001 mass tolerance is accepted but never silently normalised.
  */
-public final class SBooleanValue extends UncertainValue {
+public final class SBooleanValue extends UncertainBooleanValue {
     public static final double MASS_TOLERANCE = 1e-3;
     private final double belief, disbelief, uncertainty, baseRate, relativeWeight;
     public static final SBooleanValue TRUE = new SBooleanValue(1,0,0,1);
@@ -32,8 +32,8 @@ public final class SBooleanValue extends UncertainValue {
     @Override public boolean isSBoolean() { return true; }
     public static SBooleanValue dogmatic(double probability, double baseRate) { return new SBooleanValue(probability,1-probability,0,baseRate); }
     public static SBooleanValue vacuous(double baseRate) { return new SBooleanValue(0,0,1,baseRate); }
-    public UBooleanValue toUBoolean() { return UBooleanValue.probability(projection()); }
-    public SBooleanValue not() { return new SBooleanValue(disbelief, belief, uncertainty, 1-baseRate, relativeWeight); }
+    @Override public UBooleanValue toUBoolean() { return UBooleanValue.probability(projection()); }
+    @Override public SBooleanValue not() { return new SBooleanValue(disbelief, belief, uncertainty, 1-baseRate, relativeWeight); }
     public SBooleanValue and(SBooleanValue o) {
         if (this == o) return this;
         double a=baseRate*o.baseRate;
@@ -215,8 +215,9 @@ public final class SBooleanValue extends UncertainValue {
     private static List<List<Domain>> domainOptions(int n){List<List<Domain>> r=new ArrayList<>();if(n==0){r.add(new ArrayList<>());return r;}for(var p:domainOptions(n-1))for(var d:Domain.values()){List<Domain> q=new ArrayList<>(p);q.add(d);r.add(q);}return r;}
     private static void requireNonEmpty(Collection<SBooleanValue> os,String n){ if(os==null||os.isEmpty()||os.stream().anyMatch(Objects::isNull))throw new IllegalArgumentException(n+" requires non-null opinions"); }
     private static void requireTwo(Collection<SBooleanValue> os,String n){ requireNonEmpty(os,n); if(os.size()<2)throw new IllegalArgumentException(n+" requires at least two opinions"); }
-    @Override public UBooleanValue uEquals(Value other) { return other instanceof SBooleanValue o ? equivalent(o).toUBoolean() : UBooleanValue.FALSE; }
-    @Override public UBooleanValue uDistinct(Value other) { return other instanceof SBooleanValue o ? xor(o).toUBoolean() : UBooleanValue.TRUE; }
+    /** Historical SBoolean equality stays in the subjective domain. */
+    @Override public SBooleanValue uEquals(Value other) { return other instanceof SBooleanValue o ? equivalent(o) : FALSE; }
+    @Override public SBooleanValue uDistinct(Value other) { return other instanceof SBooleanValue o ? xor(o) : TRUE; }
     @Override public boolean equals(Object o) { return o instanceof SBooleanValue x && Double.compare(belief,x.belief)==0&&Double.compare(disbelief,x.disbelief)==0&&Double.compare(uncertainty,x.uncertainty)==0&&Double.compare(baseRate,x.baseRate)==0; }
     @Override public int hashCode() { return Objects.hash(belief,disbelief,uncertainty,baseRate); }
     /** Subjective opinions have no defined total ordering. */

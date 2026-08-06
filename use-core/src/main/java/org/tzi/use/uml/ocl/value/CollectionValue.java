@@ -99,12 +99,14 @@ public abstract class CollectionValue extends Value implements Iterable<Value> {
     
     public abstract Collection<Value> collection();
 
+    /** Uncertain membership. Subjective operands are projected onto their
+     *  probability, which is the identity for every UBoolean-valued case. */
     public UBooleanValue uIncludes(Value value) {
         UBooleanValue result=UBooleanValue.FALSE;
         for (Value element: this) {
             UBooleanValue candidate;
-            if (element instanceof UncertainValue u) candidate=u.uEquals(value);
-            else if (value instanceof UncertainValue u) candidate=u.uEquals(element);
+            if (element instanceof UncertainValue u) candidate=u.uEquals(value).toUBoolean();
+            else if (value instanceof UncertainValue u) candidate=u.uEquals(element).toUBoolean();
             else candidate=UBooleanValue.probability(element.equals(value)?1:0);
             if (candidate.probability()>result.probability()) result=candidate;
             if (result.probability()==1) break;
@@ -119,15 +121,15 @@ public abstract class CollectionValue extends Value implements Iterable<Value> {
         UBooleanValue result=UBooleanValue.TRUE;
         for(Value element:this){
             UBooleanValue candidate;
-            if(element instanceof UncertainValue u) candidate=u.uDistinct(value);
-            else if(value instanceof UncertainValue u) candidate=u.uDistinct(element);
+            if(element instanceof UncertainValue u) candidate=u.uDistinct(value).toUBoolean();
+            else if(value instanceof UncertainValue u) candidate=u.uDistinct(element).toUBoolean();
             else candidate=UBooleanValue.probability(element.equals(value)?0:1);
             result=result.and(candidate); if(result.probability()==0)break;
         }
         return result;
     }
     public UBooleanValue uExcludesAll(CollectionValue other) { UBooleanValue result=UBooleanValue.TRUE;for(Value v:other){result=result.and(uExcludes(v));if(result.probability()==0)break;}return result; }
-    public int uCountC(Value value,double confidence){if(confidence<0||confidence>1)throw new IllegalArgumentException("confidence must be in [0,1]");int n=0;for(Value element:this){UBooleanValue e;if(element instanceof UncertainValue u)e=u.uEquals(value);else if(value instanceof UncertainValue u)e=u.uEquals(element);else e=UBooleanValue.probability(element.equals(value)?1:0);if(e.probability()>=confidence)n++;}return n;}
+    public int uCountC(Value value,double confidence){if(confidence<0||confidence>1)throw new IllegalArgumentException("confidence must be in [0,1]");int n=0;for(Value element:this){UBooleanValue e;if(element instanceof UncertainValue u)e=u.uEquals(value).toUBoolean();else if(value instanceof UncertainValue u)e=u.uEquals(element).toUBoolean();else e=UBooleanValue.probability(element.equals(value)?1:0);if(e.probability()>=confidence)n++;}return n;}
     public int uCount(Value value){return uCountC(value,.5);}
 
     @Override

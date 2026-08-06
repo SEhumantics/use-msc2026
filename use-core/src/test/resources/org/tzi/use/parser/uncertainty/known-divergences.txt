@@ -6,15 +6,15 @@
 # the honest, shrinking record of remaining port gaps.
 #
 # Remaining causes:
-#    136  uncertain =/<> yields Boolean instead of UBoolean
-#    128  equals operation not registered for uncertain types
-#     48  mixed UInteger/Real arithmetic cast failure
-#     40  UBoolean canonical form (b is always true, c is P(true))
-#     18  behavioural divergence
-#     15  uncertain logical operator lacks undefined overload
-#     14  domain error thrown instead of evaluating to undefined
+#     62  mixed UInteger/Real arithmetic cast failure
+#     44  UBoolean canonical form (b is always true, c is P(true))
+#     17  domain error thrown instead of evaluating to undefined
+#     15  uncertain =/<> yields Boolean instead of UBoolean
+#     15  uncertain operator lacks undefined overload
+#     11  behavioural divergence
 #      8  expected value or diagnostic, evaluated to undefined
 #      8  uncertain type name not accepted as a type expression
+#      2  uncertain arithmetic/conversion result differs
 
 UBooleanExpression.in:7  # expected value or diagnostic, evaluated to undefined
 UBooleanExpression.in:10  # expected value or diagnostic, evaluated to undefined
@@ -30,53 +30,32 @@ UBooleanExpression.in:54  # UBoolean canonical form (b is always true, c is P(tr
 UBooleanExpression.in:57  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:60  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:63  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:72  # uncertain logical operator lacks undefined overload
-UBooleanExpression.in:78  # uncertain logical operator lacks undefined overload
-UBooleanExpression.in:84  # uncertain logical operator lacks undefined overload
-UBooleanExpression.in:87  # uncertain logical operator lacks undefined overload
-UBooleanExpression.in:93  # equals operation not registered for uncertain types
-UBooleanExpression.in:96  # equals operation not registered for uncertain types
-UBooleanExpression.in:99  # uncertain logical operator lacks undefined overload
-UBooleanExpression.in:103  # equals operation not registered for uncertain types
-UBooleanExpression.in:106  # equals operation not registered for uncertain types
-UBooleanExpression.in:109  # uncertain logical operator lacks undefined overload
-UBooleanExpression.in:113  # equals operation not registered for uncertain types
-UBooleanExpression.in:116  # equals operation not registered for uncertain types
+UBooleanExpression.in:72  # uncertain operator lacks undefined overload
+UBooleanExpression.in:78  # uncertain operator lacks undefined overload
+UBooleanExpression.in:84  # uncertain operator lacks undefined overload
+UBooleanExpression.in:87  # uncertain operator lacks undefined overload
+UBooleanExpression.in:99  # uncertain operator lacks undefined overload
+UBooleanExpression.in:109  # uncertain operator lacks undefined overload
 UBooleanExpression.in:125  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:131  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:137  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:146  # uncertain logical operator lacks undefined overload
-UBooleanExpression.in:152  # uncertain logical operator lacks undefined overload
-UBooleanExpression.in:158  # uncertain logical operator lacks undefined overload
-UBooleanExpression.in:161  # uncertain logical operator lacks undefined overload
-UBooleanExpression.in:167  # equals operation not registered for uncertain types
-UBooleanExpression.in:170  # equals operation not registered for uncertain types
-UBooleanExpression.in:173  # uncertain logical operator lacks undefined overload
-UBooleanExpression.in:177  # equals operation not registered for uncertain types
-UBooleanExpression.in:180  # equals operation not registered for uncertain types
-UBooleanExpression.in:183  # uncertain logical operator lacks undefined overload
-UBooleanExpression.in:187  # equals operation not registered for uncertain types
-UBooleanExpression.in:190  # equals operation not registered for uncertain types
-UBooleanExpression.in:193  # equals operation not registered for uncertain types
-UBooleanExpression.in:196  # uncertain logical operator lacks undefined overload
+UBooleanExpression.in:146  # uncertain operator lacks undefined overload
+UBooleanExpression.in:152  # uncertain operator lacks undefined overload
+UBooleanExpression.in:158  # uncertain operator lacks undefined overload
+UBooleanExpression.in:161  # uncertain operator lacks undefined overload
+UBooleanExpression.in:173  # uncertain operator lacks undefined overload
+UBooleanExpression.in:183  # uncertain operator lacks undefined overload
+UBooleanExpression.in:196  # uncertain operator lacks undefined overload
 UBooleanExpression.in:207  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:216  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:219  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:225  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:237  # equals operation not registered for uncertain types
-UBooleanExpression.in:240  # equals operation not registered for uncertain types
-UBooleanExpression.in:244  # equals operation not registered for uncertain types
-UBooleanExpression.in:247  # equals operation not registered for uncertain types
-UBooleanExpression.in:250  # equals operation not registered for uncertain types
-UBooleanExpression.in:254  # equals operation not registered for uncertain types
-UBooleanExpression.in:257  # equals operation not registered for uncertain types
-UBooleanExpression.in:260  # equals operation not registered for uncertain types
 UBooleanExpression.in:266  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:269  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:272  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:278  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:299  # uncertain logical operator lacks undefined overload
-UBooleanExpression.in:302  # uncertain logical operator lacks undefined overload
+UBooleanExpression.in:299  # uncertain operator lacks undefined overload
+UBooleanExpression.in:302  # uncertain operator lacks undefined overload
 UBooleanExpression.in:308  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:311  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:314  # UBoolean canonical form (b is always true, c is P(true))
@@ -87,20 +66,15 @@ UBooleanExpression.in:326  # UBoolean canonical form (b is always true, c is P(t
 UBooleanExpression.in:329  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:340  # behavioural divergence
 UBooleanExpression.in:351  # behavioural divergence
-UBooleanExpression.in:363  # behavioural divergence
-UBooleanExpression.in:366  # behavioural divergence
-UBooleanExpression.in:369  # behavioural divergence
-UBooleanExpression.in:372  # behavioural divergence
-UBooleanExpression.in:375  # behavioural divergence
-UBooleanExpression.in:378  # behavioural divergence
+UBooleanExpression.in:363  # UBoolean canonical form (b is always true, c is P(true))
+UBooleanExpression.in:366  # UBoolean canonical form (b is always true, c is P(true))
+UBooleanExpression.in:369  # UBoolean canonical form (b is always true, c is P(true))
+UBooleanExpression.in:372  # UBoolean canonical form (b is always true, c is P(true))
 UCollectionOperations.in:12  # UBoolean canonical form (b is always true, c is P(true))
 UCollectionOperations.in:15  # UBoolean canonical form (b is always true, c is P(true))
 UCollectionOperations.in:18  # UBoolean canonical form (b is always true, c is P(true))
-UCollectionOperations.in:22  # equals operation not registered for uncertain types
-UCollectionOperations.in:25  # equals operation not registered for uncertain types
 UCollectionOperations.in:32  # UBoolean canonical form (b is always true, c is P(true))
-UCollectionOperations.in:36  # equals operation not registered for uncertain types
-UCollectionOperations.in:39  # equals operation not registered for uncertain types
+UCollectionOperations.in:39  # behavioural divergence
 UCollectionOperations.in:47  # UBoolean canonical form (b is always true, c is P(true))
 UCollectionOperations.in:50  # UBoolean canonical form (b is always true, c is P(true))
 UCollectionOperations.in:53  # UBoolean canonical form (b is always true, c is P(true))
@@ -118,7 +92,6 @@ UCollectionOperations.in:107  # behavioural divergence
 UCollectionOperations.in:119  # UBoolean canonical form (b is always true, c is P(true))
 UCollectionOperations.in:123  # behavioural divergence
 UCollectionOperations.in:128  # behavioural divergence
-UCollectionOperations.in:133  # equals operation not registered for uncertain types
 UCollectionOperations.in:146  # uncertain type name not accepted as a type expression
 UCollectionOperations.in:149  # uncertain type name not accepted as a type expression
 UCollectionOperations.in:153  # uncertain type name not accepted as a type expression
@@ -136,19 +109,10 @@ UIntegerExpression.in:427  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:430  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:433  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:436  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:478  # equals operation not registered for uncertain types
-UIntegerExpression.in:481  # equals operation not registered for uncertain types
-UIntegerExpression.in:484  # equals operation not registered for uncertain types
-UIntegerExpression.in:487  # equals operation not registered for uncertain types
-UIntegerExpression.in:492  # equals operation not registered for uncertain types
-UIntegerExpression.in:495  # equals operation not registered for uncertain types
-UIntegerExpression.in:498  # equals operation not registered for uncertain types
-UIntegerExpression.in:501  # equals operation not registered for uncertain types
-UIntegerExpression.in:506  # equals operation not registered for uncertain types
-UIntegerExpression.in:509  # equals operation not registered for uncertain types
-UIntegerExpression.in:512  # equals operation not registered for uncertain types
-UIntegerExpression.in:515  # equals operation not registered for uncertain types
-UIntegerExpression.in:518  # equals operation not registered for uncertain types
+UIntegerExpression.in:484  # mixed UInteger/Real arithmetic cast failure
+UIntegerExpression.in:495  # mixed UInteger/Real arithmetic cast failure
+UIntegerExpression.in:509  # mixed UInteger/Real arithmetic cast failure
+UIntegerExpression.in:518  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:670  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:673  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:676  # mixed UInteger/Real arithmetic cast failure
@@ -161,14 +125,8 @@ UIntegerExpression.in:694  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:697  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:700  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:703  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:746  # equals operation not registered for uncertain types
-UIntegerExpression.in:749  # equals operation not registered for uncertain types
-UIntegerExpression.in:752  # equals operation not registered for uncertain types
-UIntegerExpression.in:755  # equals operation not registered for uncertain types
-UIntegerExpression.in:760  # equals operation not registered for uncertain types
-UIntegerExpression.in:763  # equals operation not registered for uncertain types
-UIntegerExpression.in:766  # equals operation not registered for uncertain types
-UIntegerExpression.in:769  # equals operation not registered for uncertain types
+UIntegerExpression.in:752  # mixed UInteger/Real arithmetic cast failure
+UIntegerExpression.in:769  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:921  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:924  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:927  # mixed UInteger/Real arithmetic cast failure
@@ -181,22 +139,12 @@ UIntegerExpression.in:945  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:948  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:951  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:954  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:996  # equals operation not registered for uncertain types
-UIntegerExpression.in:999  # equals operation not registered for uncertain types
-UIntegerExpression.in:1002  # equals operation not registered for uncertain types
-UIntegerExpression.in:1005  # equals operation not registered for uncertain types
-UIntegerExpression.in:1010  # equals operation not registered for uncertain types
-UIntegerExpression.in:1013  # equals operation not registered for uncertain types
-UIntegerExpression.in:1016  # equals operation not registered for uncertain types
-UIntegerExpression.in:1019  # equals operation not registered for uncertain types
-UIntegerExpression.in:1022  # equals operation not registered for uncertain types
-UIntegerExpression.in:1025  # equals operation not registered for uncertain types
-UIntegerExpression.in:1030  # equals operation not registered for uncertain types
-UIntegerExpression.in:1035  # equals operation not registered for uncertain types
-UIntegerExpression.in:1038  # equals operation not registered for uncertain types
-UIntegerExpression.in:1043  # equals operation not registered for uncertain types
-UIntegerExpression.in:1046  # equals operation not registered for uncertain types
-UIntegerExpression.in:1049  # equals operation not registered for uncertain types
+UIntegerExpression.in:1005  # mixed UInteger/Real arithmetic cast failure
+UIntegerExpression.in:1013  # mixed UInteger/Real arithmetic cast failure
+UIntegerExpression.in:1016  # mixed UInteger/Real arithmetic cast failure
+UIntegerExpression.in:1022  # mixed UInteger/Real arithmetic cast failure
+UIntegerExpression.in:1035  # mixed UInteger/Real arithmetic cast failure
+UIntegerExpression.in:1049  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:1152  # domain error thrown instead of evaluating to undefined
 UIntegerExpression.in:1155  # domain error thrown instead of evaluating to undefined
 UIntegerExpression.in:1164  # domain error thrown instead of evaluating to undefined
@@ -213,15 +161,9 @@ UIntegerExpression.in:1225  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:1228  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:1231  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:1234  # mixed UInteger/Real arithmetic cast failure
-UIntegerExpression.in:1275  # equals operation not registered for uncertain types
-UIntegerExpression.in:1278  # equals operation not registered for uncertain types
-UIntegerExpression.in:1282  # equals operation not registered for uncertain types
-UIntegerExpression.in:1285  # equals operation not registered for uncertain types
-UIntegerExpression.in:1288  # equals operation not registered for uncertain types
-UIntegerExpression.in:1293  # equals operation not registered for uncertain types
-UIntegerExpression.in:1296  # equals operation not registered for uncertain types
-UIntegerExpression.in:1299  # equals operation not registered for uncertain types
-UIntegerExpression.in:1304  # equals operation not registered for uncertain types
+UIntegerExpression.in:1278  # domain error thrown instead of evaluating to undefined
+UIntegerExpression.in:1285  # mixed UInteger/Real arithmetic cast failure
+UIntegerExpression.in:1296  # mixed UInteger/Real arithmetic cast failure
 UIntegerExpression.in:1730  # uncertain =/<> yields Boolean instead of UBoolean
 UIntegerExpression.in:1733  # uncertain =/<> yields Boolean instead of UBoolean
 UIntegerExpression.in:1736  # uncertain =/<> yields Boolean instead of UBoolean
@@ -237,131 +179,16 @@ UIntegerExpression.in:1961  # uncertain =/<> yields Boolean instead of UBoolean
 UIntegerExpression.in:1964  # uncertain =/<> yields Boolean instead of UBoolean
 UIntegerExpression.in:1967  # uncertain =/<> yields Boolean instead of UBoolean
 UIntegerExpression.in:1970  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1976  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1979  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1982  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1985  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1988  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1991  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1994  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:1997  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2000  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2003  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2006  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2009  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2012  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2016  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2019  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2022  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2025  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2028  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2031  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2034  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2037  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2040  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2043  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2046  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2049  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2052  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2056  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2059  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2062  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2065  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2068  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2072  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2075  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2078  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2081  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2084  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2096  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2099  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2102  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2105  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2108  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2111  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2114  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2117  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2120  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2123  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2126  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2129  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2132  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2136  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2139  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2142  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2145  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2148  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2151  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2154  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2157  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2160  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2163  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2166  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2169  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2172  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2176  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2179  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2182  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2185  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2188  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2192  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2195  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2198  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2201  # uncertain =/<> yields Boolean instead of UBoolean
-UIntegerExpression.in:2204  # uncertain =/<> yields Boolean instead of UBoolean
 URealExpression.in:61  # expected value or diagnostic, evaluated to undefined
 URealExpression.in:64  # expected value or diagnostic, evaluated to undefined
 URealExpression.in:80  # uncertain type name not accepted as a type expression
 URealExpression.in:83  # uncertain type name not accepted as a type expression
 URealExpression.in:86  # uncertain type name not accepted as a type expression
 URealExpression.in:161  # domain error thrown instead of evaluating to undefined
-URealExpression.in:224  # equals operation not registered for uncertain types
-URealExpression.in:227  # equals operation not registered for uncertain types
-URealExpression.in:284  # equals operation not registered for uncertain types
-URealExpression.in:287  # equals operation not registered for uncertain types
-URealExpression.in:290  # equals operation not registered for uncertain types
-URealExpression.in:293  # equals operation not registered for uncertain types
+URealExpression.in:227  # domain error thrown instead of evaluating to undefined
 URealExpression.in:302  # domain error thrown instead of evaluating to undefined
-URealExpression.in:599  # behavioural divergence
-URealExpression.in:605  # behavioural divergence
-URealExpression.in:786  # equals operation not registered for uncertain types
-URealExpression.in:789  # equals operation not registered for uncertain types
-URealExpression.in:792  # equals operation not registered for uncertain types
-URealExpression.in:797  # equals operation not registered for uncertain types
-URealExpression.in:800  # equals operation not registered for uncertain types
-URealExpression.in:803  # equals operation not registered for uncertain types
-URealExpression.in:808  # equals operation not registered for uncertain types
-URealExpression.in:811  # equals operation not registered for uncertain types
-URealExpression.in:814  # equals operation not registered for uncertain types
-URealExpression.in:817  # equals operation not registered for uncertain types
-URealExpression.in:820  # equals operation not registered for uncertain types
-URealExpression.in:979  # equals operation not registered for uncertain types
-URealExpression.in:982  # equals operation not registered for uncertain types
-URealExpression.in:985  # equals operation not registered for uncertain types
-URealExpression.in:990  # equals operation not registered for uncertain types
-URealExpression.in:993  # equals operation not registered for uncertain types
-URealExpression.in:996  # equals operation not registered for uncertain types
-URealExpression.in:1000  # equals operation not registered for uncertain types
-URealExpression.in:1002  # equals operation not registered for uncertain types
-URealExpression.in:1007  # equals operation not registered for uncertain types
-URealExpression.in:1010  # equals operation not registered for uncertain types
-URealExpression.in:1013  # equals operation not registered for uncertain types
-URealExpression.in:1016  # equals operation not registered for uncertain types
-URealExpression.in:1173  # equals operation not registered for uncertain types
-URealExpression.in:1176  # equals operation not registered for uncertain types
-URealExpression.in:1179  # equals operation not registered for uncertain types
-URealExpression.in:1182  # equals operation not registered for uncertain types
-URealExpression.in:1187  # equals operation not registered for uncertain types
-URealExpression.in:1190  # equals operation not registered for uncertain types
-URealExpression.in:1193  # equals operation not registered for uncertain types
-URealExpression.in:1196  # equals operation not registered for uncertain types
-URealExpression.in:1199  # equals operation not registered for uncertain types
-URealExpression.in:1202  # equals operation not registered for uncertain types
-URealExpression.in:1207  # equals operation not registered for uncertain types
-URealExpression.in:1212  # equals operation not registered for uncertain types
-URealExpression.in:1215  # equals operation not registered for uncertain types
-URealExpression.in:1220  # equals operation not registered for uncertain types
-URealExpression.in:1223  # equals operation not registered for uncertain types
+URealExpression.in:599  # uncertain arithmetic/conversion result differs
+URealExpression.in:605  # uncertain arithmetic/conversion result differs
 URealExpression.in:1254  # domain error thrown instead of evaluating to undefined
 URealExpression.in:1257  # domain error thrown instead of evaluating to undefined
 URealExpression.in:1266  # domain error thrown instead of evaluating to undefined
@@ -370,64 +197,4 @@ URealExpression.in:1316  # domain error thrown instead of evaluating to undefine
 URealExpression.in:1322  # domain error thrown instead of evaluating to undefined
 URealExpression.in:1354  # domain error thrown instead of evaluating to undefined
 URealExpression.in:1360  # domain error thrown instead of evaluating to undefined
-URealExpression.in:1380  # equals operation not registered for uncertain types
-URealExpression.in:1383  # equals operation not registered for uncertain types
-URealExpression.in:1387  # equals operation not registered for uncertain types
-URealExpression.in:1390  # equals operation not registered for uncertain types
-URealExpression.in:1393  # equals operation not registered for uncertain types
-URealExpression.in:1398  # equals operation not registered for uncertain types
-URealExpression.in:1401  # equals operation not registered for uncertain types
-URealExpression.in:1404  # equals operation not registered for uncertain types
-URealExpression.in:1409  # equals operation not registered for uncertain types
-URealExpression.in:1487  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1490  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1493  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1715  # equals operation not registered for uncertain types
-URealExpression.in:1718  # equals operation not registered for uncertain types
-URealExpression.in:1721  # equals operation not registered for uncertain types
-URealExpression.in:1727  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1730  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1733  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1736  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1739  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1742  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1745  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1748  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1751  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1754  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1757  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1760  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1763  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1767  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1770  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1773  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1776  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1779  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1783  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1786  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1789  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1792  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1795  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1807  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1810  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1813  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1816  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1819  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1822  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1825  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1828  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1831  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1834  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1837  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1840  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1843  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1847  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1850  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1853  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1856  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1859  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1863  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1866  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1869  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1872  # uncertain =/<> yields Boolean instead of UBoolean
-URealExpression.in:1875  # uncertain =/<> yields Boolean instead of UBoolean
+URealExpression.in:1383  # domain error thrown instead of evaluating to undefined
