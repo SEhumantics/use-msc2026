@@ -6,21 +6,18 @@
 # the honest, shrinking record of remaining port gaps.
 #
 # Remaining causes:
-#      8  uncertain type name not accepted as a type expression
 #      5  expected value or diagnostic, evaluated to undefined
+#      5  operation overload missing
 #      1  behavioural divergence
 
 UBooleanExpression.in:7  # expected value or diagnostic, evaluated to undefined
 UBooleanExpression.in:10  # expected value or diagnostic, evaluated to undefined
 UBooleanExpression.in:13  # expected value or diagnostic, evaluated to undefined
 UCollectionOperations.in:39  # behavioural divergence
-UCollectionOperations.in:146  # uncertain type name not accepted as a type expression
-UCollectionOperations.in:149  # uncertain type name not accepted as a type expression
-UCollectionOperations.in:153  # uncertain type name not accepted as a type expression
-UCollectionOperations.in:168  # uncertain type name not accepted as a type expression
-UCollectionOperations.in:172  # uncertain type name not accepted as a type expression
+UCollectionOperations.in:146  # operation overload missing
+UCollectionOperations.in:149  # operation overload missing
+UCollectionOperations.in:153  # operation overload missing
+UCollectionOperations.in:168  # operation overload missing
+UCollectionOperations.in:172  # operation overload missing
 URealExpression.in:61  # expected value or diagnostic, evaluated to undefined
 URealExpression.in:64  # expected value or diagnostic, evaluated to undefined
-URealExpression.in:80  # uncertain type name not accepted as a type expression
-URealExpression.in:83  # uncertain type name not accepted as a type expression
-URealExpression.in:86  # uncertain type name not accepted as a type expression

@@ -614,7 +614,20 @@ type returns [ASTType n]
     | nTCollection=collectionType { $n = $nTCollection.n; if ($n != null) $n.setStartToken(tok); }
     | nTTuple=tupleType { $n = $nTTuple.n; if ($n != null) $n.setStartToken(tok); }
     | nTModelQualifiedType=modelQualifiedType { $n = $nTModelQualifiedType.n; if ($n != null) $n.setStartToken(tok); }
+    | nTUncertainty=uncertaintyType { $n = $nTUncertainty.n; if ($n != null) $n.setStartToken(tok); }
     )
+    ;
+
+
+/* ------------------------------------
+  uncertaintyType ::= "UReal" | "UInteger" | "UBoolean" | "UString" | "SBoolean"
+
+  The uncertainty built-ins are keywords because they introduce literals, so
+  they need their own alternative to stay usable as type names.
+*/
+uncertaintyType returns [ASTSimpleType n]
+:
+    name=('UReal'|'UInteger'|'UBoolean'|'UString'|'SBoolean') { $n = new ASTSimpleType($name); }
     ;
 
 
