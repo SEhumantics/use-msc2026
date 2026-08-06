@@ -17,6 +17,8 @@ public final class UBooleanValue extends UncertainValue {
     public double probability() { return probability; }
     public boolean value() { return probability >= .5; }
     public double confidence() { return value() ? probability : 1-probability; }
+    public UBooleanValue withValue(boolean value) { return probability(value ? confidence() : 1-confidence()); }
+    public UBooleanValue withConfidence(double confidence) { return probability(value(),confidence); }
     @Override public boolean isUBoolean() { return true; }
     public BooleanValue toBoolean() { return BooleanValue.get(value()); }
     public BooleanValue toBooleanC(double threshold) { return BooleanValue.get(probability >= threshold); }

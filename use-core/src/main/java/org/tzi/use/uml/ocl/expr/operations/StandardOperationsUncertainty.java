@@ -14,6 +14,9 @@ public final class StandardOperationsUncertainty {
         // UBoolean algebra and accessors
         unary(map,"value", Type::isTypeOfUBoolean, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).toBoolean());
         unary(map,"confidence", Type::isTypeOfUBoolean, TypeFactory.mkReal(), a -> new RealValue(((UBooleanValue)a[0]).confidence()));
+        unary(map,"toString", Type::isTypeOfUBoolean, TypeFactory.mkString(), a -> new StringValue(a[0].toString()));
+        binary(map,"setValue", (t,h)->t.isTypeOfUBoolean(), (t,h)->t.isTypeOfBoolean(), TypeFactory.mkUBoolean(), a -> ((UBooleanValue)a[0]).withValue(((BooleanValue)a[1]).value()), false);
+        binary(map,"setUncertainty", (t,h)->t.isTypeOfUBoolean(), Type::isKindOfReal, TypeFactory.mkUBoolean(), a -> ((UBooleanValue)a[0]).withConfidence(real(a[1])), false);
         unary(map,"toBoolean", Type::isTypeOfUBoolean, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).toBoolean());
         binary(map,"equalsC", (t,h)->t.isTypeOfUBoolean(), Type::isKindOfReal, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).equalsC(real(a[1])), false);
         binary(map,"toBooleanC", (t,h)->t.isTypeOfUBoolean(), Type::isKindOfReal, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).toBooleanC(real(a[1])), false);
