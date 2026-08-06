@@ -158,7 +158,9 @@ class UncertaintyCompilerCorpusTest {
                         line.substring(3), name + ":" + startLine));
                     expression = null;
                 } else if (line.endsWith("\\")) {
-                    expression.append(line, 0, line.length() - 1).append(' ');
+                    // The corpus continues a line with a doubled backslash, and
+                    // the historical reader drops both characters.
+                    expression.append(line, 0, line.length() - 2).append(' ');
                 } else {
                     expression.append(line).append(' ');
                 }
