@@ -12,7 +12,8 @@ public final class StandardOperationsUncertainty {
     private StandardOperationsUncertainty() { }
     public static void registerTypeOperations(Multimap<String, OpGeneric> map) {
         // UBoolean algebra and accessors
-        unary(map,"value", Type::isTypeOfUBoolean, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).toBoolean());
+        // Canonical form: the carried Boolean of a UBoolean is always true.
+        unary(map,"value", Type::isTypeOfUBoolean, TypeFactory.mkBoolean(), a -> BooleanValue.get(((UBooleanValue)a[0]).value()));
         unary(map,"confidence", Type::isTypeOfUBoolean, TypeFactory.mkReal(), a -> new RealValue(((UBooleanValue)a[0]).confidence()));
         unary(map,"toString", Type::isTypeOfUBoolean, TypeFactory.mkString(), a -> new StringValue(a[0].toString()));
         binary(map,"setValue", (t,h)->t.isTypeOfUBoolean(), (t,h)->t.isTypeOfBoolean(), TypeFactory.mkUBoolean(), a -> ((UBooleanValue)a[0]).withValue(((BooleanValue)a[1]).value()), false);
@@ -21,8 +22,11 @@ public final class StandardOperationsUncertainty {
         binary(map,"toBooleanC", (t,h)->t.isTypeOfUBoolean(), Type::isKindOfReal, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).toBooleanC(real(a[1])), false);
         ternary(map,"equalsC", (t,h)->t.isTypeOfUBoolean(), (t,h)->t.isKindOfUBoolean(h), Type::isKindOfReal, TypeFactory.mkBoolean(), a -> { double c=real(a[2]); return c<0||c>1?UndefinedValue.instance:((UBooleanValue)a[0]).equalsC((UBooleanValue)a[1],c); });
         unary(map,"not", Type::isTypeOfUBoolean, TypeFactory.mkUBoolean(), a -> ((UBooleanValue)a[0]).not());
-        ubinary(map,"and", (x,y)->x.and(y)); ubinary(map,"or", (x,y)->x.or(y)); ubinary(map,"xor", (x,y)->x.xor(y));
-        ubinary(map,"equivalent", (x,y)->x.equivalent(y)); ubinary(map,"implies", (x,y)->x.implies(y));
+        uLogical(map,"and", UBooleanValue::and, 0);
+        uLogical(map,"or", UBooleanValue::or, 1);
+        uLogical(map,"xor", UBooleanValue::xor, -1);
+        uLogical(map,"equivalent", UBooleanValue::equivalent, -1);
+        uLogical(map,"implies", UBooleanValue::implies, -1);
 
         // Uncertain numeric accessors
         unary(map,"value", Type::isTypeOfUReal, TypeFactory.mkReal(), a -> ((URealValue)a[0]).toReal());
@@ -76,8 +80,8 @@ public final class StandardOperationsUncertainty {
         uIntegerCompare(map,">", (x,y)->x.toUReal().greaterThan(y.toUReal()));
         uIntegerCompare(map,"<=", (x,y)->x.toUReal().lessThan(y.toUReal()).or(x.uEquals(y)));
         uIntegerCompare(map,">=", (x,y)->x.toUReal().greaterThan(y.toUReal()).or(x.uEquals(y)));
-        uIntegerMinMax(map,"min",(x,y)->x.toUReal().lessThan(y.toUReal()).value()?x:y);
-        uIntegerMinMax(map,"max",(x,y)->x.toUReal().greaterThan(y.toUReal()).value()?x:y);
+        uIntegerMinMax(map,"min",(x,y)->x.toUReal().lessThan(y.toUReal()).toBoolean().value()?x:y);
+        uIntegerMinMax(map,"max",(x,y)->x.toUReal().greaterThan(y.toUReal()).toBoolean().value()?x:y);
 
         // UString public surface
         unary(map,"value", Type::isTypeOfUString, TypeFactory.mkString(), a -> ((UStringValue)a[0]).toStringValue());
@@ -157,6 +161,36 @@ public final class StandardOperationsUncertainty {
     private static void uIntegerMinMax(Multimap<String,OpGeneric>m,String n,java.util.function.BiFunction<UIntegerValue,UIntegerValue,UIntegerValue> f){m.put(n,new Base(n,TypeFactory.mkUInteger(),a->f.apply(ui(a[0]),ui(a[1])),false){public Type matches(Type[] x){return x.length==2&&x[0].isKindOfUInteger(Type.VoidHandling.EXCLUDE_VOID)&&x[1].isKindOfUInteger(Type.VoidHandling.EXCLUDE_VOID)&&(x[0].isTypeOfUInteger()||x[1].isTypeOfUInteger())?r:null;}});}
     private interface UStringCmp { UBooleanValue apply(UStringValue x,UStringValue y); }
     private static void uRealMinMax(Multimap<String,OpGeneric>m,String n,java.util.function.BiFunction<URealValue,URealValue,URealValue> f){m.put(n,new Base(n,TypeFactory.mkUReal(),a->f.apply(ur(a[0]),ur(a[1])),false){public Type matches(Type[] x){return uncertainRealOperands(x)?r:null;}});}
-    private static void ubinary(Multimap<String,OpGeneric>m,String n,UBin f){binary(m,n,Type::isKindOfUBoolean,Type::isKindOfUBoolean,TypeFactory.mkUBoolean(),a->f.apply(ub(a[0]),ub(a[1])),true);} private static void sbinary(Multimap<String,OpGeneric>m,String n,SBin f){binary(m,n,Type::isKindOfSBoolean,Type::isKindOfSBoolean,TypeFactory.mkSBoolean(),a->f.apply(sb(a[0]),sb(a[1])),true);} private static void uRealBinary(Multimap<String,OpGeneric>m,String n,java.util.function.BiFunction<URealValue,URealValue,URealValue> f){m.put(n,new Base(n,TypeFactory.mkUReal(),a->f.apply(ur(a[0]),ur(a[1])),true){public Type matches(Type[] x){return uncertainRealOperands(x)?r:null;}});} private static void uRealCompare(Multimap<String,OpGeneric>m,String n,Cmp f){m.put(n,new Base(n,TypeFactory.mkUBoolean(),a->f.apply(ur(a[0]),ur(a[1])),true){public Type matches(Type[] x){return uncertainRealOperands(x)?r:null;}});} private static void uIntegerBinary(Multimap<String,OpGeneric>m,String n,Type r,UIntegerBin f){m.put(n,new Base(n,r,a->f.apply(ui(a[0]),ui(a[1])),true){public Type matches(Type[] x){return x.length==2&&x[0].isKindOfUInteger(Type.VoidHandling.EXCLUDE_VOID)&&x[1].isKindOfUInteger(Type.VoidHandling.EXCLUDE_VOID)&&(x[0].isTypeOfUInteger()||x[1].isTypeOfUInteger())?r:null;}});} private static void uIntegerCompare(Multimap<String,OpGeneric>m,String n,UIntegerCmp f){m.put(n,new Base(n,TypeFactory.mkUBoolean(),a->f.apply(ui(a[0]),ui(a[1])),true){public Type matches(Type[] x){return x.length==2&&x[0].isKindOfUInteger(Type.VoidHandling.EXCLUDE_VOID)&&x[1].isKindOfUInteger(Type.VoidHandling.EXCLUDE_VOID)&&(x[0].isTypeOfUInteger()||x[1].isTypeOfUInteger())?r:null;}});} private static void uStringCompare(Multimap<String,OpGeneric>m,String n,UStringCmp f){m.put(n,new Base(n,TypeFactory.mkUBoolean(),a->f.apply(us(a[0]),us(a[1])),true){public Type matches(Type[] x){return x.length==2&&x[0].isKindOfUString(Type.VoidHandling.EXCLUDE_VOID)&&x[1].isKindOfUString(Type.VoidHandling.EXCLUDE_VOID)&&(x[0].isTypeOfUString()||x[1].isTypeOfUString())?r:null;}});}
+    /**
+     * Registers a historical uncertain logical operator. Undefined operands are
+     * absorbed the way the historical implementation absorbs them: {@code and}
+     * still yields its zero-probability operand and {@code or} its certain one,
+     * so an undefined operand only makes the result undefined when it could
+     * still have influenced it. {@code absorbing} is that short-circuit
+     * probability, or -1 for the operators that simply propagate undefined.
+     */
+    private static void uLogical(Multimap<String,OpGeneric>m,String n,UBin f,int absorbing){
+        m.put(n,new BooleanOperation(){
+            public String name(){return n;}
+            public boolean isInfixOrPrefix(){return true;}
+            public Type matches(Type[] x){
+                return x.length==2
+                    && x[0].isKindOfUBoolean(Type.VoidHandling.INCLUDE_VOID)
+                    && x[1].isKindOfUBoolean(Type.VoidHandling.INCLUDE_VOID)
+                    && (x[0].isTypeOfUBoolean()||x[1].isTypeOfUBoolean())
+                    ? TypeFactory.mkUBoolean() : null;
+            }
+            public Value evalWithArgs(EvalContext c,org.tzi.use.uml.ocl.expr.Expression[] args){
+                Value left=args[0].eval(c), right=args[1].eval(c);
+                UBooleanValue l=left.isDefined()?ub(left):null;
+                UBooleanValue r=right.isDefined()?ub(right):null;
+                if (absorbing>=0) {
+                    if (l!=null && l.probability()==absorbing) return l;
+                    if (r!=null && r.probability()==absorbing) return r;
+                }
+                return l==null||r==null ? UndefinedValue.instance : f.apply(l,r);
+            }
+        });
+    } private static void sbinary(Multimap<String,OpGeneric>m,String n,SBin f){m.put(n,new Base(n,TypeFactory.mkSBoolean(),a->f.apply(sb(a[0]),sb(a[1])),true){public Type matches(Type[] x){return x.length==2&&x[0].isKindOfSBoolean(Type.VoidHandling.EXCLUDE_VOID)&&x[1].isKindOfSBoolean(Type.VoidHandling.EXCLUDE_VOID)&&(x[0].isTypeOfSBoolean()||x[1].isTypeOfSBoolean())?r:null;}});} private static void uRealBinary(Multimap<String,OpGeneric>m,String n,java.util.function.BiFunction<URealValue,URealValue,URealValue> f){m.put(n,new Base(n,TypeFactory.mkUReal(),a->f.apply(ur(a[0]),ur(a[1])),true){public Type matches(Type[] x){return uncertainRealOperands(x)?r:null;}});} private static void uRealCompare(Multimap<String,OpGeneric>m,String n,Cmp f){m.put(n,new Base(n,TypeFactory.mkUBoolean(),a->f.apply(ur(a[0]),ur(a[1])),true){public Type matches(Type[] x){return uncertainRealOperands(x)?r:null;}});} private static void uIntegerBinary(Multimap<String,OpGeneric>m,String n,Type r,UIntegerBin f){m.put(n,new Base(n,r,a->f.apply(ui(a[0]),ui(a[1])),true){public Type matches(Type[] x){return x.length==2&&x[0].isKindOfUInteger(Type.VoidHandling.EXCLUDE_VOID)&&x[1].isKindOfUInteger(Type.VoidHandling.EXCLUDE_VOID)&&(x[0].isTypeOfUInteger()||x[1].isTypeOfUInteger())?r:null;}});} private static void uIntegerCompare(Multimap<String,OpGeneric>m,String n,UIntegerCmp f){m.put(n,new Base(n,TypeFactory.mkUBoolean(),a->f.apply(ui(a[0]),ui(a[1])),true){public Type matches(Type[] x){return x.length==2&&x[0].isKindOfUInteger(Type.VoidHandling.EXCLUDE_VOID)&&x[1].isKindOfUInteger(Type.VoidHandling.EXCLUDE_VOID)&&(x[0].isTypeOfUInteger()||x[1].isTypeOfUInteger())?r:null;}});} private static void uStringCompare(Multimap<String,OpGeneric>m,String n,UStringCmp f){m.put(n,new Base(n,TypeFactory.mkUBoolean(),a->f.apply(us(a[0]),us(a[1])),true){public Type matches(Type[] x){return x.length==2&&x[0].isKindOfUString(Type.VoidHandling.EXCLUDE_VOID)&&x[1].isKindOfUString(Type.VoidHandling.EXCLUDE_VOID)&&(x[0].isTypeOfUString()||x[1].isTypeOfUString())?r:null;}});}
     private static double real(Value v){return v instanceof IntegerValue i?i.value():((RealValue)v).value();} private static URealValue ur(Value v){if(v instanceof URealValue x)return x;if(v instanceof UIntegerValue x)return x.toUReal();if(v instanceof IntegerValue x)return new URealValue(x.value(),0);return new URealValue(((RealValue)v).value(),0);} private static UIntegerValue ui(Value v){return v instanceof UIntegerValue x?x:new UIntegerValue(((IntegerValue)v).value(),0);} private static UBooleanValue ub(Value v){return v instanceof UBooleanValue x?x:UBooleanValue.valueOf(((BooleanValue)v).value());}private static UStringValue us(Value v){return v instanceof UStringValue x?x:new UStringValue(((StringValue)v).value(),1);}private static SBooleanValue sb(Value v){if(v instanceof SBooleanValue x)return x;if(v instanceof UBooleanValue x)return SBooleanValue.dogmatic(x.confidence(),x.confidence());return ((BooleanValue)v).value()?SBooleanValue.TRUE:SBooleanValue.FALSE;}
 }

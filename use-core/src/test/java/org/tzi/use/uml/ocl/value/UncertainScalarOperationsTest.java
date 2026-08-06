@@ -37,12 +37,16 @@ class UncertainScalarOperationsTest {
         assertEquals("ab",word.substring(1,2).value());
         assertEquals(.6,word.size().uncertainty(),1e-12);
         assertEquals(1,word.indexOf("b").value());
-        assertTrue(new UStringValue("b",1).greaterThan(new UStringValue("a",1)).value());
-        assertTrue(new UStringValue("true",1).toUBoolean().value());
+        assertTrue(new UStringValue("b",1).greaterThan(new UStringValue("a",1)).toBoolean().value());
+        assertTrue(new UStringValue("true",1).toUBoolean().toBoolean().value());
         assertEquals(.8,new UStringValue("maybe",.2).toUBoolean().probability(),1e-12);
-        assertEquals("UBoolean(false, 0.2)",UBooleanValue.probability(.2).toString());
+        // Canonical form: the carried Boolean is always true and the number is
+        // the probability that it holds.
+        assertEquals("UBoolean(true, 0.2)",UBooleanValue.probability(.2).toString());
         assertTrue(UBooleanValue.TRUE.equals(BooleanValue.TRUE));
-        assertTrue(UBooleanValue.FALSE.equals(BooleanValue.FALSE));
+        // Historical asymmetry that follows from the canonical form: no
+        // uncertain Boolean ever equals Boolean false.
+        assertFalse(UBooleanValue.FALSE.equals(BooleanValue.FALSE));
         assertEquals(UBooleanValue.probability(.2), UBooleanValue.probability(.20000000001));
     }
 }

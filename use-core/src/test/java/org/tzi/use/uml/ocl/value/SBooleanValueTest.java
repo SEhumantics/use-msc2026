@@ -83,7 +83,10 @@ class SBooleanValueTest {
     }
     @Test void applyOnUsesUBooleanConfidenceAsHistoricalBaseRate() {
         var opinion=new SBooleanValue(.2,.3,.5,.2);
-        var result=opinion.applyOn(UBooleanValue.probability(false,.8));
+        // The base rate is the canonical probability of the UBoolean, so a
+        // false-valued literal contributes the complement of its confidence.
+        assertEquals(.2,opinion.applyOn(UBooleanValue.probability(false,.8)).baseRate(),EPS);
+        var result=opinion.applyOn(UBooleanValue.probability(true,.8));
         assertEquals(.8,result.baseRate(),EPS);
         assertEquals(.5,result.belief(),EPS);
         assertEquals(0,result.disbelief(),EPS);

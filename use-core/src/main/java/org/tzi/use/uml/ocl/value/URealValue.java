@@ -33,8 +33,8 @@ public final class URealValue extends UncertainValue {
     public URealValue negate() { return new URealValue(-value, uncertainty); }
     public URealValue abs() { return new URealValue(Math.abs(value), uncertainty); }
     /** Historical min/max select the opinion whose probabilistic comparison wins. */
-    public URealValue min(URealValue o) { return o.lessThan(this).value() ? new URealValue(o.value, o.uncertainty) : new URealValue(value, uncertainty); }
-    public URealValue max(URealValue o) { return o.greaterThan(this).value() ? new URealValue(o.value, o.uncertainty) : new URealValue(value, uncertainty); }
+    public URealValue min(URealValue o) { return o.lessThan(this).toBoolean().value() ? new URealValue(o.value, o.uncertainty) : new URealValue(value, uncertainty); }
+    public URealValue max(URealValue o) { return o.greaterThan(this).toBoolean().value() ? new URealValue(o.value, o.uncertainty) : new URealValue(value, uncertainty); }
     public URealValue inverse() { return new URealValue(1,0).divide(this); }
     public URealValue power(double exponent) { double v=Math.pow(value,exponent); double u=Math.abs(exponent*uncertainty*Math.pow(value,exponent-1)); if(!Double.isFinite(v)||!Double.isFinite(u)) throw new ArithmeticException("invalid power"); return new URealValue(v,u); }
     public URealValue sqrt() { if(value==0 && uncertainty==0) return new URealValue(0,0); if(value<0) throw new ArithmeticException("sqrt domain"); return new URealValue(Math.sqrt(value), uncertainty/(2*Math.sqrt(value))); }
@@ -118,8 +118,8 @@ public final class URealValue extends UncertainValue {
         if (o instanceof UndefinedValue) return 1;
         if (o instanceof URealValue || o instanceof UIntegerValue || o instanceof IntegerValue || o instanceof RealValue) {
             URealValue other = o instanceof URealValue x ? x : o instanceof UIntegerValue x ? x.toUReal() : o instanceof IntegerValue x ? new URealValue(x.value(),0) : new URealValue(((RealValue)o).value(),0);
-            if (uEquals(other).value()) return 0;
-            return lessThan(other).value() ? -1 : 1;
+            if (uEquals(other).toBoolean().value()) return 0;
+            return lessThan(other).toBoolean().value() ? -1 : 1;
         }
         return 0;
     }

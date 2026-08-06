@@ -6,88 +6,37 @@
 # the honest, shrinking record of remaining port gaps.
 #
 # Remaining causes:
-#     44  UBoolean canonical form (b is always true, c is P(true))
 #     19  domain error thrown instead of evaluating to undefined
-#     15  uncertain operator lacks undefined overload
-#     11  behavioural divergence
-#      8  expected value or diagnostic, evaluated to undefined
+#      9  UBoolean canonical form (b is always true, c is P(true))
+#      9  behavioural divergence
 #      8  uncertain type name not accepted as a type expression
+#      5  expected value or diagnostic, evaluated to undefined
+#      4  operation overload missing
 #      2  uncertain arithmetic/conversion result differs
 
 UBooleanExpression.in:7  # expected value or diagnostic, evaluated to undefined
 UBooleanExpression.in:10  # expected value or diagnostic, evaluated to undefined
 UBooleanExpression.in:13  # expected value or diagnostic, evaluated to undefined
-UBooleanExpression.in:27  # expected value or diagnostic, evaluated to undefined
-UBooleanExpression.in:30  # expected value or diagnostic, evaluated to undefined
-UBooleanExpression.in:33  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:36  # expected value or diagnostic, evaluated to undefined
-UBooleanExpression.in:45  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:48  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:51  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:54  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:57  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:60  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:63  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:72  # uncertain operator lacks undefined overload
-UBooleanExpression.in:78  # uncertain operator lacks undefined overload
-UBooleanExpression.in:84  # uncertain operator lacks undefined overload
-UBooleanExpression.in:87  # uncertain operator lacks undefined overload
-UBooleanExpression.in:99  # uncertain operator lacks undefined overload
-UBooleanExpression.in:109  # uncertain operator lacks undefined overload
-UBooleanExpression.in:125  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:131  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:137  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:146  # uncertain operator lacks undefined overload
-UBooleanExpression.in:152  # uncertain operator lacks undefined overload
-UBooleanExpression.in:158  # uncertain operator lacks undefined overload
-UBooleanExpression.in:161  # uncertain operator lacks undefined overload
-UBooleanExpression.in:173  # uncertain operator lacks undefined overload
-UBooleanExpression.in:183  # uncertain operator lacks undefined overload
-UBooleanExpression.in:196  # uncertain operator lacks undefined overload
-UBooleanExpression.in:207  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:216  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:219  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:225  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:266  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:269  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:272  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:278  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:299  # uncertain operator lacks undefined overload
-UBooleanExpression.in:302  # uncertain operator lacks undefined overload
 UBooleanExpression.in:308  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:311  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:314  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:317  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:320  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:323  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:326  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:329  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:340  # behavioural divergence
-UBooleanExpression.in:351  # behavioural divergence
+UBooleanExpression.in:317  # operation overload missing
+UBooleanExpression.in:320  # operation overload missing
+UBooleanExpression.in:323  # operation overload missing
+UBooleanExpression.in:326  # operation overload missing
 UBooleanExpression.in:363  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:366  # UBoolean canonical form (b is always true, c is P(true))
 UBooleanExpression.in:369  # UBoolean canonical form (b is always true, c is P(true))
-UBooleanExpression.in:372  # UBoolean canonical form (b is always true, c is P(true))
-UCollectionOperations.in:12  # UBoolean canonical form (b is always true, c is P(true))
-UCollectionOperations.in:15  # UBoolean canonical form (b is always true, c is P(true))
-UCollectionOperations.in:18  # UBoolean canonical form (b is always true, c is P(true))
-UCollectionOperations.in:32  # UBoolean canonical form (b is always true, c is P(true))
 UCollectionOperations.in:39  # behavioural divergence
-UCollectionOperations.in:47  # UBoolean canonical form (b is always true, c is P(true))
-UCollectionOperations.in:50  # UBoolean canonical form (b is always true, c is P(true))
-UCollectionOperations.in:53  # UBoolean canonical form (b is always true, c is P(true))
-UCollectionOperations.in:56  # UBoolean canonical form (b is always true, c is P(true))
-UCollectionOperations.in:61  # UBoolean canonical form (b is always true, c is P(true))
-UCollectionOperations.in:64  # UBoolean canonical form (b is always true, c is P(true))
-UCollectionOperations.in:70  # UBoolean canonical form (b is always true, c is P(true))
 UCollectionOperations.in:74  # behavioural divergence
 UCollectionOperations.in:78  # behavioural divergence
 UCollectionOperations.in:82  # behavioural divergence
-UCollectionOperations.in:95  # UBoolean canonical form (b is always true, c is P(true))
 UCollectionOperations.in:99  # behavioural divergence
 UCollectionOperations.in:103  # behavioural divergence
 UCollectionOperations.in:107  # behavioural divergence
-UCollectionOperations.in:119  # UBoolean canonical form (b is always true, c is P(true))
 UCollectionOperations.in:123  # behavioural divergence
 UCollectionOperations.in:128  # behavioural divergence
 UCollectionOperations.in:146  # uncertain type name not accepted as a type expression

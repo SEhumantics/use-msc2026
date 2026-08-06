@@ -55,6 +55,31 @@ public class VoidType extends TypeImpl {
 	}
 
 	@Override
+	public boolean isKindOfUInteger(VoidHandling h) {
+		return h == VoidHandling.INCLUDE_VOID;
+	}
+
+	@Override
+	public boolean isKindOfUReal(VoidHandling h) {
+		return h == VoidHandling.INCLUDE_VOID;
+	}
+
+	@Override
+	public boolean isKindOfUBoolean(VoidHandling h) {
+		return h == VoidHandling.INCLUDE_VOID;
+	}
+
+	@Override
+	public boolean isKindOfUString(VoidHandling h) {
+		return h == VoidHandling.INCLUDE_VOID;
+	}
+
+	@Override
+	public boolean isKindOfSBoolean(VoidHandling h) {
+		return h == VoidHandling.INCLUDE_VOID;
+	}
+
+	@Override
 	public boolean isKindOfEnum(VoidHandling h) {
 		return h == VoidHandling.INCLUDE_VOID;
 	}

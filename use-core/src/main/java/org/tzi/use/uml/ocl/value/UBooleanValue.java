@@ -15,12 +15,15 @@ public final class UBooleanValue extends UncertainBooleanValue {
     }
     public static UBooleanValue valueOf(boolean value) { return value ? TRUE : FALSE; }
     public double probability() { return probability; }
-    public boolean value() { return probability >= .5; }
-    public double confidence() { return value() ? probability : 1-probability; }
-    public UBooleanValue withValue(boolean value) { return probability(value ? confidence() : 1-confidence()); }
-    public UBooleanValue withConfidence(double confidence) { return probability(value(),confidence); }
+    /** Historical uncertain Booleans are kept in canonical form: the carried
+     *  Boolean is always {@code true} and the confidence is the probability
+     *  that it holds. {@link #toBoolean()} is what decides the actual truth. */
+    public boolean value() { return true; }
+    public double confidence() { return probability; }
+    public UBooleanValue withValue(boolean value) { return value ? this : probability(1-probability); }
+    public UBooleanValue withConfidence(double confidence) { return probability(confidence); }
     @Override public boolean isUBoolean() { return true; }
-    public BooleanValue toBoolean() { return BooleanValue.get(value()); }
+    public BooleanValue toBoolean() { return BooleanValue.get(probability >= .5); }
     public BooleanValue toBooleanC(double threshold) { return BooleanValue.get(probability >= threshold); }
     @Override public UBooleanValue not() { return probability(1-probability); }
     @Override public UBooleanValue toUBoolean() { return this; }
@@ -35,19 +38,22 @@ public final class UBooleanValue extends UncertainBooleanValue {
      * equal to their corresponding ordinary Boolean values. */
     @Override public boolean equals(Object o) {
         if (o == this) return true;
+        // Historical asymmetry: because the carried Boolean is always true, an
+        // uncertain Boolean can equal Boolean true but never Boolean false.
         if (o instanceof BooleanValue b)
-            return b.value() ? probability == 1.0 : probability == 0.0;
+            return b.value() ? probability == 1.0 && value() : probability == 0.0 && !value();
         return o instanceof UBooleanValue x
                 && value() == x.value()
                 && round(probability, 10) == round(x.probability, 10);
     }
     @Override public int hashCode() { return 31 * Boolean.hashCode(value()) + Double.hashCode(round(probability, 10)); }
     @Override public int compareTo(Value o) {
+        if (o == this) return 0;
         if (o instanceof UndefinedValue) return 1;
-        if (o instanceof BooleanValue b) return Boolean.compare(value(), b.value());
-        if (o instanceof UBooleanValue b) return Boolean.compare(value(), b.value());
-        return 0;
+        if (!(o instanceof BooleanValue || o instanceof UBooleanValue)) return toString().compareTo(o.toString());
+        boolean other = o instanceof BooleanValue b ? b.value() : ((UBooleanValue) o).value();
+        return toBoolean().value() == other ? 0 : toBoolean().value() ? 1 : -1;
     }
-    @Override public StringBuilder toString(StringBuilder b) { return b.append("UBoolean(").append(value()).append(", ").append(round(probability,3)).append(')'); }
+    @Override public StringBuilder toString(StringBuilder b) { return b.append("UBoolean(").append(value()).append(", ").append(round(probability,10)).append(')'); }
     private static double round(double value,int places){double scale=Math.pow(10,places);return Math.round(value*scale)/scale;}
 }
