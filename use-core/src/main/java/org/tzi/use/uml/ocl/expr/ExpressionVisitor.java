@@ -25,6 +25,7 @@ package org.tzi.use.uml.ocl.expr;
  *
  */
 public interface ExpressionVisitor {
+	default void visitUncertainConstant(Expression exp) { }
 	void visitAllInstances (ExpAllInstances exp);
 	void visitAny (ExpAny exp);
 	void visitAsType (ExpAsType exp);

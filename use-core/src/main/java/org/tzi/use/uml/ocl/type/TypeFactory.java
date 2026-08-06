@@ -44,6 +44,11 @@ public final class TypeFactory {
     private static final RealType realType = new RealType();
     private static final StringType stringType = new StringType();
     private static final BooleanType booleanType = new BooleanType();
+    private static final URealType uRealType = new URealType();
+    private static final UIntegerType uIntegerType = new UIntegerType();
+    private static final UStringType uStringType = new UStringType();
+    private static final UBooleanType uBooleanType = new UBooleanType();
+    private static final SBooleanType sBooleanType = new SBooleanType();
     private static final OclAnyType oclAnyType = new OclAnyType();
     private static final VoidType voidType = new VoidType();
     
@@ -52,7 +57,12 @@ public final class TypeFactory {
     	buildInTypesMap.put("UnlimitedNatural", unlimitedNaturalType);
     	buildInTypesMap.put("String", stringType);
     	buildInTypesMap.put("Boolean", booleanType);
-    	buildInTypesMap.put("Real", realType);
+	buildInTypesMap.put("Real", realType);
+	buildInTypesMap.put("UReal", uRealType);
+	buildInTypesMap.put("UInteger", uIntegerType);
+	buildInTypesMap.put("UString", uStringType);
+	buildInTypesMap.put("UBoolean", uBooleanType);
+	buildInTypesMap.put("SBoolean", sBooleanType);
     	buildInTypesMap.put("OclAny", oclAnyType);
     	buildInTypesMap.put("OclVoid", voidType);
     }
@@ -82,6 +92,12 @@ public final class TypeFactory {
     public static BooleanType mkBoolean() {
         return booleanType;
     }
+
+    public static URealType mkUReal() { return uRealType; }
+    public static UIntegerType mkUInteger() { return uIntegerType; }
+    public static UStringType mkUString() { return uStringType; }
+    public static UBooleanType mkUBoolean() { return uBooleanType; }
+    public static SBooleanType mkSBoolean() { return sBooleanType; }
 
     public static EnumType mkEnum(String name, List<String> literals) {
         return new EnumType(null, name, literals);

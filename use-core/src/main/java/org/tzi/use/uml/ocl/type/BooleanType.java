@@ -42,13 +42,15 @@ public final class BooleanType extends BasicType {
     public boolean isKindOfBoolean(VoidHandling h) {
     	return true;
     }
+    @Override public boolean isKindOfUBoolean(VoidHandling h) { return true; }
+    @Override public boolean isKindOfSBoolean(VoidHandling h) { return true; }
     
     /** 
      * Returns true if this type is a subtype of <code>t</code>. 
      */
     @Override
     public boolean conformsTo(Type other) {
-        return this.equals(other) || other.isTypeOfOclAny();
+        return this.equals(other) || other.isTypeOfUBoolean() || other.isTypeOfSBoolean() || other.isTypeOfOclAny();
     }
 
     /** 
@@ -59,6 +61,8 @@ public final class BooleanType extends BasicType {
         Set<Type> res = new HashSet<Type>(2);
         res.add(TypeFactory.mkOclAny());
         res.add(this);
+        res.add(TypeFactory.mkUBoolean());
+        res.add(TypeFactory.mkSBoolean());
         return res;
     }
 }

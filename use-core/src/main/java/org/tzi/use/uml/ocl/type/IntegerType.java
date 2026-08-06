@@ -48,16 +48,19 @@ public final class IntegerType extends BasicType {
     }
     
     @Override
-  	public boolean isKindOfReal(VoidHandling h) {
+    public boolean isKindOfReal(VoidHandling h) {
       	return true;
     }
+
+    @Override public boolean isKindOfUReal(VoidHandling h) { return true; }
+    @Override public boolean isKindOfUInteger(VoidHandling h) { return true; }
     
     /** 
      * Returns true if this type is a subtype of <code>t</code>. 
      */
     @Override
 	public boolean conformsTo(Type t) {
-        return !t.isTypeOfVoidType() && (t.isKindOfNumber(VoidHandling.EXCLUDE_VOID) || t.isTypeOfOclAny());
+        return !t.isTypeOfVoidType() && (t.isKindOfNumber(VoidHandling.EXCLUDE_VOID) || t.isTypeOfUReal() || t.isTypeOfUInteger() || t.isTypeOfOclAny());
     }
 
     /** 
@@ -68,6 +71,8 @@ public final class IntegerType extends BasicType {
         Set<Type> res = new HashSet<Type>(3);
         res.add(TypeFactory.mkOclAny());
         res.add(TypeFactory.mkReal());
+        res.add(TypeFactory.mkUReal());
+        res.add(TypeFactory.mkUInteger());
         res.add(this);
         return res;
     }

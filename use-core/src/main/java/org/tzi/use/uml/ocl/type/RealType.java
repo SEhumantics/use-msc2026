@@ -47,12 +47,13 @@ public final class RealType extends BasicType {
     public boolean isKindOfReal(VoidHandling h) {
     	return true;
     }
+    @Override public boolean isKindOfUReal(VoidHandling h) { return true; }
     
     /** 
      * Returns true if this type is a subtype of <code>t</code>. 
      */
     public boolean conformsTo(Type t) {
-        return equals(t) || t.isTypeOfOclAny();
+        return equals(t) || t.isTypeOfUReal() || t.isTypeOfOclAny();
     }
 
     /** 
@@ -62,6 +63,7 @@ public final class RealType extends BasicType {
         Set<Type> res = new HashSet<Type>(2);
         res.add(TypeFactory.mkOclAny());
         res.add(this);
+        res.add(TypeFactory.mkUReal());
         return res;
     }
 }

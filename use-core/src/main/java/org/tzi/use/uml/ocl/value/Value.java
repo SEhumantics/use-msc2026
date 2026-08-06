@@ -80,6 +80,11 @@ public abstract class Value implements Comparable<Value>, BufferedToString {
     public boolean isBoolean() {
         return false;
     }
+    public boolean isUReal() { return false; }
+    public boolean isUInteger() { return false; }
+    public boolean isUString() { return false; }
+    public boolean isUBoolean() { return false; }
+    public boolean isSBoolean() { return false; }
 
     public boolean isDefined() {
         return ! isUndefined();
@@ -191,4 +196,3 @@ public abstract class Value implements Comparable<Value>, BufferedToString {
     	this.fType = getRuntimeType();
     }
 }
-

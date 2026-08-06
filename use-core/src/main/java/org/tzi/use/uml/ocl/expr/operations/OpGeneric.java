@@ -88,6 +88,7 @@ public abstract class OpGeneric {
 		StandardOperationsNumber.registerTypeOperations(opmap);
 		StandardOperationsString.registerTypeOperations(opmap);
 		StandardOperationsBoolean.registerTypeOperations(opmap);
+		StandardOperationsUncertainty.registerTypeOperations(opmap);
 		
 		// Collections
 		StandardOperationsCollection.registerTypeOperations(opmap);

@@ -474,7 +474,12 @@ ifExpression returns [ASTExpression n]
 */
 literal returns [ASTExpression n]
 :
-      t='true'   { $n = new ASTBooleanLiteral(true); }
+      'UReal' LPAREN a=additiveExpression COMMA b=additiveExpression RPAREN { $n = new ASTUncertainLiteral(org.tzi.use.uml.ocl.expr.ExpConstUncertain.Kind.UREAL, $a.n, $b.n); }
+    | 'UInteger' LPAREN a=additiveExpression COMMA b=additiveExpression RPAREN { $n = new ASTUncertainLiteral(org.tzi.use.uml.ocl.expr.ExpConstUncertain.Kind.UINTEGER, $a.n, $b.n); }
+    | 'UString' LPAREN a=additiveExpression COMMA b=additiveExpression RPAREN { $n = new ASTUncertainLiteral(org.tzi.use.uml.ocl.expr.ExpConstUncertain.Kind.USTRING, $a.n, $b.n); }
+    | 'UBoolean' LPAREN a=conditionalImpliesExpression COMMA b=additiveExpression RPAREN { $n = new ASTUncertainLiteral(org.tzi.use.uml.ocl.expr.ExpConstUncertain.Kind.UBOOLEAN, $a.n, $b.n); }
+    | 'SBoolean' LPAREN a=additiveExpression COMMA b=additiveExpression COMMA c=additiveExpression COMMA d=additiveExpression RPAREN { $n = new ASTUncertainLiteral(org.tzi.use.uml.ocl.expr.ExpConstUncertain.Kind.SBOOLEAN, $a.n, $b.n, $c.n, $d.n); }
+    | t='true'   { $n = new ASTBooleanLiteral(true); }
     | f='false'  { $n = new ASTBooleanLiteral(false); }
     | i=INT    { $n = new ASTIntegerLiteral($i); }
     | r=REAL   { $n = new ASTRealLiteral($r); }

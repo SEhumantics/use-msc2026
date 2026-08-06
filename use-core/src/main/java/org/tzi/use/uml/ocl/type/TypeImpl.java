@@ -214,6 +214,18 @@ public abstract class TypeImpl implements Type {
 		return false;
 	}
 
+    @Override public boolean isKindOfUncertain(VoidHandling h) { return false; }
+    @Override public boolean isTypeOfUReal() { return false; }
+    @Override public boolean isKindOfUReal(VoidHandling h) { return false; }
+    @Override public boolean isTypeOfUInteger() { return false; }
+    @Override public boolean isKindOfUInteger(VoidHandling h) { return false; }
+    @Override public boolean isTypeOfUString() { return false; }
+    @Override public boolean isKindOfUString(VoidHandling h) { return false; }
+    @Override public boolean isTypeOfUBoolean() { return false; }
+    @Override public boolean isKindOfUBoolean(VoidHandling h) { return false; }
+    @Override public boolean isTypeOfSBoolean() { return false; }
+    @Override public boolean isKindOfSBoolean(VoidHandling h) { return false; }
+
 	@Override
 	public boolean isKindOfEnum(VoidHandling h) {
 		return false;
@@ -344,4 +356,3 @@ public abstract class TypeImpl implements Type {
 		return false;
 	}
 }
-
