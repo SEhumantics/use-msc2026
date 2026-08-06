@@ -32,6 +32,47 @@ class UncertaintyOperationRegistrationTest {
         assertTrue(ExpStdOp.exists("floor", new Type[]{TypeFactory.mkUReal()}));
         assertTrue(ExpStdOp.exists("round", new Type[]{TypeFactory.mkUReal()}));
     }
+    /**
+     * The historical registrations pin down argument types, not just names.
+     * These are the signatures of the families the replayed compiler corpus
+     * does not reach, taken from StandardOperationsUString and
+     * StandardOperationsSBoolean.
+     */
+    @Test void historicalUStringAndSBooleanSignaturesAreReachable() {
+        Type uString=TypeFactory.mkUString(), string=TypeFactory.mkString();
+        Type integer=TypeFactory.mkInteger(), real=TypeFactory.mkReal();
+        Type sBoolean=TypeFactory.mkSBoolean(), uBoolean=TypeFactory.mkUBoolean();
+        Type opinions=TypeFactory.mkSequence(sBoolean);
+
+        for (String name : new String[]{"value","confidence","toLowerCase","toUpperCase","size","toString",
+                "toInteger","toReal","toBoolean","toUBoolean","character"})
+            assertTrue(ExpStdOp.exists(name, new Type[]{uString}), "UString." + name);
+        assertTrue(ExpStdOp.exists("setValue", new Type[]{uString, string}));
+        assertTrue(ExpStdOp.exists("setConfidence", new Type[]{uString, real}));
+        assertTrue(ExpStdOp.exists("at", new Type[]{uString, integer}));
+        assertTrue(ExpStdOp.exists("indexOf", new Type[]{uString, string}));
+        assertTrue(ExpStdOp.exists("substring", new Type[]{uString, integer, integer}));
+        for (String name : new String[]{"+","<","<=",">",">="})
+            assertTrue(ExpStdOp.exists(name, new Type[]{uString, uString}), "UString " + name);
+
+        for (String name : new String[]{"projection","belief","disbelief","baseRate","uncertainty","certainty",
+                "getRelativeWeight","uncertaintyMaximized","uncertainOpinion","isAbsolute","isVacuous",
+                "isDogmatic","isMaximizedUncertainty","toUBoolean","toString","not"})
+            assertTrue(ExpStdOp.exists(name, new Type[]{sBoolean}), "SBoolean." + name);
+        for (String name : new String[]{"isCertain","isUncertain"})
+            assertTrue(ExpStdOp.exists(name, new Type[]{sBoolean, real}), "SBoolean." + name);
+        for (String name : new String[]{"and","or","xor","implies","equivalent","min","max"})
+            assertTrue(ExpStdOp.exists(name, new Type[]{sBoolean, sBoolean}), "SBoolean " + name);
+        for (String name : new String[]{"projectiveDistance","conjunctiveCertainty","degreeOfConflict"})
+            assertTrue(ExpStdOp.exists(name, new Type[]{sBoolean, sBoolean}), "SBoolean." + name);
+        assertTrue(ExpStdOp.exists("deduceY", new Type[]{sBoolean, sBoolean, sBoolean}));
+        assertTrue(ExpStdOp.exists("applyOn", new Type[]{sBoolean, uBoolean}));
+        // Fusion is receiver plus a collection of further opinions.
+        for (String name : new String[]{"minimumBeliefFusion","majorityBeliefFusion","beliefConstraintFusion",
+                "averageBeliefFusion","aleatoryCumulativeBeliefFusion","epistemicCumulativeBeliefFusion",
+                "weightedBeliefFusion","consensusAndCompromiseFusion","discount"})
+            assertTrue(ExpStdOp.exists(name, new Type[]{sBoolean, opinions}), "SBoolean." + name);
+    }
     @Test void uncertainCountPreservesHistoricalUndefinedCollectionHandling() {
         Value result=new Op_collection_uCount().eval(null,
             new Value[]{UndefinedValue.instance,new UStringValue("x",1)},TypeFactory.mkInteger());

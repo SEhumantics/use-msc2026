@@ -47,3 +47,16 @@ queries too), and the behaviour each was asserting is covered directly by
 Two historical renderings are deliberately not reproduced because they belong to
 the modern USE baseline rather than to uncertainty: the undefined value renders
 as `null` rather than `Undefined`, and compiler diagnostics use current wording.
+
+The corpus does not reach `UString` or `SBoolean`. Those two families were
+traced against the historical registrations in `StandardOperationsUString` and
+`StandardOperationsSBoolean` instead, and their signatures — including the
+receiver-plus-collection shape of the fusion operations — are asserted by
+`UncertaintyOperationRegistrationTest`, with the algebra itself covered by
+`SBooleanValueTest` and `UncertainScalarOperationsTest`.
+
+One historical declaration is deliberately corrected: the historical `indexOf`
+and `toString` on `UString` declare a `UString` result while returning an
+`Integer` and a `String` respectively. The port declares the type the operation
+actually returns, since the historical declaration would mistype every
+expression built on those results.
