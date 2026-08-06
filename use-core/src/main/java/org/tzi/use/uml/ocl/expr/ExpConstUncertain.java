@@ -10,6 +10,45 @@ public final class ExpConstUncertain extends Expression {
     public ExpConstUncertain(Kind kind, Expression... parts) throws ExpInvalidException {
         super(switch(kind) { case UREAL -> TypeFactory.mkUReal(); case UINTEGER -> TypeFactory.mkUInteger(); case USTRING -> TypeFactory.mkUString(); case UBOOLEAN -> TypeFactory.mkUBoolean(); case SBOOLEAN -> TypeFactory.mkSBoolean(); });
         int arity=kind==Kind.SBOOLEAN?4:2; if(parts.length!=arity)throw new ExpInvalidException(kind+" requires "+arity+" arguments"); this.kind=kind;this.parts=parts.clone();
+        checkArgumentTypes();
+    }
+    /**
+     * Historical literals reject arguments of the wrong type while compiling,
+     * with these diagnostics. An argument of the right type that turns out to
+     * be undefined is a runtime concern and still yields an undefined value.
+     */
+    private void checkArgumentTypes() throws ExpInvalidException {
+        switch (kind) {
+        case UREAL -> {
+            if (!isIntegerOrReal(parts[0])) throw new ExpInvalidException("Value must be Integer or Real");
+            if (!isIntegerOrReal(parts[1])) throw new ExpInvalidException("Uncertainty must be Integer or Real");
+        }
+        case UINTEGER -> {
+            if (!parts[0].type().isTypeOfInteger() && !parts[0].type().isTypeOfVoidType())
+                throw new ExpInvalidException("Value must be Integer");
+            if (!isIntegerOrReal(parts[1]) && !parts[1].type().isTypeOfVoidType())
+                throw new ExpInvalidException("Uncertainty must be Integer or Real");
+        }
+        case UBOOLEAN -> {
+            if (!parts[0].type().isTypeOfBoolean()) throw new ExpInvalidException("Value must be Boolean");
+            if (!isIntegerOrReal(parts[1])) throw new ExpInvalidException("Probability must be a Integer or Real");
+        }
+        case USTRING -> {
+            if (!parts[1].type().isKindOfReal(org.tzi.use.uml.ocl.type.Type.VoidHandling.EXCLUDE_VOID))
+                throw new ExpInvalidException("UString : confidance need to be kind of Real");
+            if (!parts[0].type().isTypeOfString())
+                throw new ExpInvalidException("UString : value must be type of String");
+        }
+        case SBOOLEAN -> {
+            String[] names = {"Belief", "Disbelief", "Uncertainty", "Agent"};
+            for (int i = 0; i < parts.length; i++)
+                if (!parts[i].type().isKindOfReal(org.tzi.use.uml.ocl.type.Type.VoidHandling.EXCLUDE_VOID))
+                    throw new ExpInvalidException(names[i] + "  must be a kind of Real");
+        }
+        }
+    }
+    private static boolean isIntegerOrReal(Expression e) {
+        return e.type().isTypeOfInteger() || e.type().isTypeOfReal();
     }
     @Override public Value eval(EvalContext ctx) {
         ctx.enter(this); Value[] v=new Value[parts.length]; for(int i=0;i<v.length;i++){v[i]=parts[i].eval(ctx);if(v[i].isUndefined()){ctx.exit(this,UndefinedValue.instance);return UndefinedValue.instance;}}

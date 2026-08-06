@@ -1,23 +1,28 @@
-# Historical USE-Uncertainty corpus entries that the port does not yet reproduce.
+# Historical USE-Uncertainty corpus entries that the port does not reproduce.
 #
 # Each line is `<corpus file>:<line>  # <cause>` and is checked by
 # UncertaintyCompilerCorpusTest: an unlisted divergence fails as a regression,
 # and an entry that starts agreeing must be deleted from this file. The list is
-# the honest, shrinking record of remaining port gaps.
+# the honest record of what is left.
 #
-# Remaining causes:
-#      5  expected value or diagnostic, evaluated to undefined
-#      5  operation overload missing
-#      1  behavioural divergence
+# All six remaining entries have been traced to causes outside the uncertainty
+# semantics, and the behaviour each of them was asserting is covered directly by
+# UncertaintyQueryEvaluationTest.
 
-UBooleanExpression.in:7  # expected value or diagnostic, evaluated to undefined
-UBooleanExpression.in:10  # expected value or diagnostic, evaluated to undefined
-UBooleanExpression.in:13  # expected value or diagnostic, evaluated to undefined
-UCollectionOperations.in:39  # behavioural divergence
-UCollectionOperations.in:146  # operation overload missing
-UCollectionOperations.in:149  # operation overload missing
-UCollectionOperations.in:153  # operation overload missing
-UCollectionOperations.in:168  # operation overload missing
-UCollectionOperations.in:172  # operation overload missing
-URealExpression.in:61  # expected value or diagnostic, evaluated to undefined
-URealExpression.in:64  # expected value or diagnostic, evaluated to undefined
+# `.equals(...)` on a collection receiver is expanded to the collect shorthand
+# by the compiler, so it evaluates per element and can never produce the single
+# Boolean these entries expect. That expansion is identical in the historical
+# and the current compiler, so these expectations were not reachable in the
+# historical build either. The collection identities they state are asserted
+# with `=` in UncertaintyQueryEvaluationTest.
+UCollectionOperations.in:146  # `.equals' on a collection expands to collect shorthand
+UCollectionOperations.in:149  # `.equals' on a collection expands to collect shorthand
+UCollectionOperations.in:153  # `.equals' on a collection expands to collect shorthand
+UCollectionOperations.in:168  # `.equals' on a collection expands to collect shorthand
+UCollectionOperations.in:172  # `.equals' on a collection expands to collect shorthand
+
+# exists/forAll with more than one iterator variable reports `unbound variable'
+# in the current USE baseline for ordinary Boolean queries too, in code the
+# uncertainty port does not touch, so the uncertain and the certain paths behave
+# alike here.
+UCollectionOperations.in:39  # multi-variable exists is broken in the USE baseline

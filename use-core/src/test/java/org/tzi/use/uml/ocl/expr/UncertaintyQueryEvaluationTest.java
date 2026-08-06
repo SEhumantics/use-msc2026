@@ -29,6 +29,30 @@ class UncertaintyQueryEvaluationTest {
         assertTrue(eval("Sequence{UString('a', 1)}->includesAll(Sequence{UString('a', 1)})") instanceof UBooleanValue);
         assertTrue(eval("Sequence{UString('a', 1)}->excludesAll(Sequence{UString('b', 1)})") instanceof UBooleanValue);
     }
+    /**
+     * The historical corpus states these collection identities through
+     * {@code .equals(...)} on a collection receiver, which the compiler expands
+     * to a collect shorthand and so cannot yield a single Boolean. The
+     * identities themselves are checked here with {@code =} instead.
+     */
+    @Test void uncertainCollectionIdentitiesFromTheHistoricalCorpusHold() {
+        assertTrue(((BooleanValue)eval(
+            "let A = Set{2, 3, UReal(3, 0.5)} in "
+            + "(A->iterate(v; acc : Set(UReal) = Set{} | "
+            + "if (v > 2).toBoolean() then acc->including(v) else acc endif)) = A->uSelect(e | e > 2)")).value());
+        assertTrue(((BooleanValue)eval(
+            "let A = Set{UReal(2, 0.5), 2.5, 3.2, 1, UReal(3, 0.25)} in let C = 0.7 in "
+            + "(A->iterate(v; acc : Set(UReal) = Set{} | "
+            + "if (v >= 2).toBooleanC(C) then acc->including(v) else acc endif)) = A->uSelectC(e | e >= 2, C)")).value());
+        var includesAll=eval(
+            "let A = Set{UReal(2, 0.5), 1, 2.5, 3.2, UReal(3.5, 0.25)} in let B = Set{UReal(2, 0.5), 1, 3.2} in "
+            + "(B->forAll(e | A->includes(e))) = A->includesAll(B)");
+        assertTrue(((UBooleanValue)includesAll).toBoolean().value());
+        var excludes=eval(
+            "let A = Set{UReal(2, 0.5), 1, 2.5, 3.2, UReal(3.5, 0.25)} in let B = UReal(59, 2) in "
+            + "(A->forAll(e | e <> B)) = A->excludes(B)");
+        assertTrue(((UBooleanValue)excludes).toBoolean().value());
+    }
     @Test void uncertainCollectionSumPreservesUncertainResultType() {
         var integerSum=eval("Sequence{UInteger(2, 0.1), UInteger(3, 0.2)}->sum()");
         assertTrue(integerSum instanceof UIntegerValue);
