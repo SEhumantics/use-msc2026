@@ -8,9 +8,11 @@ public final class URealValue extends UncertainValue {
     private final double uncertainty;
     public URealValue(double value, double uncertainty) {
         super(TypeFactory.mkUReal());
-        if (!Double.isFinite(value) || !Double.isFinite(uncertainty) || uncertainty < 0)
-            throw new IllegalArgumentException("UReal uncertainty must be finite and non-negative");
-        this.value = value; this.uncertainty = uncertainty;
+        if (!Double.isFinite(value) || !Double.isFinite(uncertainty))
+            throw new IllegalArgumentException("UReal value and uncertainty must be finite");
+        // Historical uDataTypes.UReal normalizes uncertainty through setU(),
+        // so negative literal/setUncertainty arguments are accepted.
+        this.value = value; this.uncertainty = Math.abs(uncertainty);
     }
     public double value() { return value; }
     public double uncertainty() { return uncertainty; }
@@ -30,6 +32,9 @@ public final class URealValue extends UncertainValue {
     }
     public URealValue negate() { return new URealValue(-value, uncertainty); }
     public URealValue abs() { return new URealValue(Math.abs(value), uncertainty); }
+    /** Historical min/max select the opinion whose probabilistic comparison wins. */
+    public URealValue min(URealValue o) { return o.lessThan(this).value() ? new URealValue(o.value, o.uncertainty) : new URealValue(value, uncertainty); }
+    public URealValue max(URealValue o) { return o.greaterThan(this).value() ? new URealValue(o.value, o.uncertainty) : new URealValue(value, uncertainty); }
     public URealValue inverse() { return new URealValue(1,0).divide(this); }
     public URealValue power(double exponent) { double v=Math.pow(value,exponent); double u=Math.abs(exponent*uncertainty*Math.pow(value,exponent-1)); if(!Double.isFinite(v)||!Double.isFinite(u)) throw new ArithmeticException("invalid power"); return new URealValue(v,u); }
     public URealValue sqrt() { if(value==0 && uncertainty==0) return new URealValue(0,0); if(value<0) throw new ArithmeticException("sqrt domain"); return new URealValue(Math.sqrt(value), uncertainty/(2*Math.sqrt(value))); }
@@ -108,8 +113,16 @@ public final class URealValue extends UncertainValue {
         if(o instanceof UIntegerValue x) return equals(x.toUReal());
         return false;
     }
-    @Override public int hashCode() { return java.util.Objects.hash(value, uncertainty); }
-    @Override public int compareTo(Value o) { if (o instanceof UndefinedValue) return 1; if (o instanceof URealValue x) return Double.compare(value,x.value); return toString().compareTo(o.toString()); }
+    @Override public int hashCode() { return java.util.Objects.hash(round(value,10), round(uncertainty,10)); }
+    @Override public int compareTo(Value o) {
+        if (o instanceof UndefinedValue) return 1;
+        if (o instanceof URealValue || o instanceof UIntegerValue || o instanceof IntegerValue || o instanceof RealValue) {
+            URealValue other = o instanceof URealValue x ? x : o instanceof UIntegerValue x ? x.toUReal() : o instanceof IntegerValue x ? new URealValue(x.value(),0) : new URealValue(((RealValue)o).value(),0);
+            if (uEquals(other).value()) return 0;
+            return lessThan(other).value() ? -1 : 1;
+        }
+        return 0;
+    }
     @Override public StringBuilder toString(StringBuilder b) { return b.append("UReal(").append(value==0?0:round(value,10)).append(", ").append(round(uncertainty,10)).append(')'); }
     private static double round(double value,int places){double scale=Math.pow(10,places);return Math.round(value*scale)/scale;}
 }

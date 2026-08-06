@@ -831,7 +831,7 @@ final class Op_collection_uCount extends OpGeneric {
 final class Op_collection_uCountC extends OpGeneric {
     public String name(){return "uCountC";} public int kind(){return SPECIAL;} public boolean isInfixOrPrefix(){return false;}
     public Type matches(Type[] p){return p.length==3&&p[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)&&p[2].isKindOfReal(VoidHandling.EXCLUDE_VOID)?TypeFactory.mkInteger():null;}
-    public Value eval(EvalContext c,Value[] a,Type r){double t=a[2] instanceof IntegerValue i?i.value():((RealValue)a[2]).value();return a[0].isUndefined()?IntegerValue.valueOf(0):IntegerValue.valueOf(((CollectionValue)a[0]).uCountC(a[1],t));}
+    public Value eval(EvalContext c,Value[] a,Type r){double t=a[2] instanceof IntegerValue i?i.value():((RealValue)a[2]).value();if(t<0||t>1)throw new IllegalArgumentException("uCountC confidence must be between 0 and 1");return a[0].isUndefined()?IntegerValue.valueOf(0):IntegerValue.valueOf(((CollectionValue)a[0]).uCountC(a[1],t));}
 }
 final class Op_collection_uIncludes extends OpGeneric {
     public String name(){return "uIncludes";} public int kind(){return OPERATION;} public boolean isInfixOrPrefix(){return false;}

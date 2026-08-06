@@ -20,7 +20,7 @@ class SBooleanValueTest {
         assertEquals(.45,SBooleanValue.averageBeliefFusion(List.of(SBooleanValue.averageBeliefFusion(List.of(a,b)),c)).belief(),EPS);
     }
     @Test void malformedMassIsRejectedWithoutNormalization() { assertThrows(IllegalArgumentException.class,()->new SBooleanValue(.4,.4,.4,.5)); }
-    @Test void stableComparisonIsNotTheHistoricalAlwaysZeroPlaceholder() { assertNotEquals(0,new SBooleanValue(.6,.2,.2,.5).compareTo(new SBooleanValue(.2,.6,.2,.5))); }
+    @Test void comparisonDoesNotInventSubjectiveOpinionOrdering() { assertEquals(0,new SBooleanValue(.6,.2,.2,.5).compareTo(new SBooleanValue(.2,.6,.2,.5))); }
     @Test void collectionDiscountMultipliesProjectedTrust() {
         var source=new SBooleanValue(.8,.05,.15,.2);
         var result=source.discount(List.of(SBooleanValue.dogmatic(.98,.2),SBooleanValue.dogmatic(.5,.2)));

@@ -8,6 +8,8 @@ import org.tzi.use.uml.ocl.value.BooleanValue;
 import org.tzi.use.uml.ocl.value.IntegerValue;
 import org.tzi.use.uml.ocl.value.RealValue;
 import org.tzi.use.uml.ocl.value.StringValue;
+import org.tzi.use.uml.ocl.value.UIntegerValue;
+import org.tzi.use.uml.ocl.value.URealValue;
 import org.tzi.use.uml.ocl.value.UnlimitedNaturalValue;
 import org.tzi.use.uml.ocl.value.Value;
 
@@ -394,12 +396,14 @@ final class Op_real_floor extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
-		return (params.length == 1 && params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? TypeFactory
-				.mkInteger() : null;
+		if (params.length != 1 || !params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID)) return null;
+		return params[0].isTypeOfUReal() ? TypeFactory.mkUReal() : TypeFactory.mkInteger();
 	}
 
 	@Override
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
+		if (args[0] instanceof URealValue) return ((URealValue) args[0]).floorValue();
+		if (args[0] instanceof UIntegerValue) return IntegerValue.valueOf(((UIntegerValue) args[0]).value());
 		double d1;
 		if (args[0].isInteger())
 			d1 = ((IntegerValue) args[0]).value();
@@ -432,12 +436,14 @@ final class Op_real_round extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
-		return (params.length == 1 && params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? TypeFactory
-				.mkInteger() : null;
+		if (params.length != 1 || !params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID)) return null;
+		return params[0].isTypeOfUReal() ? TypeFactory.mkUReal() : TypeFactory.mkInteger();
 	}
 
 	@Override
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
+		if (args[0] instanceof URealValue) return ((URealValue) args[0]).roundValue();
+		if (args[0] instanceof UIntegerValue) return IntegerValue.valueOf(((UIntegerValue) args[0]).value());
 		double d1;
 		if (args[0].isInteger())
 			d1 = ((IntegerValue) args[0]).value();

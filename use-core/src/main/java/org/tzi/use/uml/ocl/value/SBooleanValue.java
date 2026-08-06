@@ -219,8 +219,8 @@ public final class SBooleanValue extends UncertainValue {
     @Override public UBooleanValue uDistinct(Value other) { return other instanceof SBooleanValue o ? xor(o).toUBoolean() : UBooleanValue.TRUE; }
     @Override public boolean equals(Object o) { return o instanceof SBooleanValue x && Double.compare(belief,x.belief)==0&&Double.compare(disbelief,x.disbelief)==0&&Double.compare(uncertainty,x.uncertainty)==0&&Double.compare(baseRate,x.baseRate)==0; }
     @Override public int hashCode() { return Objects.hash(belief,disbelief,uncertainty,baseRate); }
-    /** Stable representation order only; it is not a subjective-logic preference relation. */
-    @Override public int compareTo(Value o) { if(o instanceof UndefinedValue)return 1; if(o instanceof SBooleanValue x){int c=Double.compare(projection(),x.projection());if(c!=0)return c;c=Double.compare(belief,x.belief);if(c!=0)return c;c=Double.compare(disbelief,x.disbelief);if(c!=0)return c;return Double.compare(baseRate,x.baseRate);} return toString().compareTo(o.toString()); }
+    /** Subjective opinions have no defined total ordering. */
+    @Override public int compareTo(Value o) { return o instanceof UndefinedValue ? 1 : 0; }
     @Override public StringBuilder toString(StringBuilder b) { return b.append("SBoolean(").append(round(belief,3)).append(", ").append(round(disbelief,3)).append(", ").append(round(uncertainty,3)).append(", ").append(round(baseRate,3)).append(')'); }
     private static double round(double value,int places){double scale=Math.pow(10,places);return Math.round(value*scale)/scale;}
 }

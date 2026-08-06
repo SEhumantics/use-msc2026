@@ -42,6 +42,7 @@ class UncertaintyQueryEvaluationTest {
     @Test void uncertainSelectExistsForAllEvaluateWithThresholds() {
         var selected=eval("Sequence{UBoolean(true, 0.9), UBoolean(false, 0.9)}->uSelect(x | x)");
         assertEquals(1,((CollectionValue)selected).size());
+        assertEquals(1,((CollectionValue)eval("Sequence{UBoolean(true, 0.9), UBoolean(false, 0.9)}->select(x | x)")).size());
         assertEquals(1,((CollectionValue)eval("Sequence{UBoolean(true, 0.9), UBoolean(false, 0.9)}->uSelectC(x | x, 0.8)")).size());
         var exists=eval("Sequence{UBoolean(false, 0.8), UBoolean(true, 0.7)}->exists(x | x)");
         assertTrue(exists instanceof UBooleanValue); assertTrue(((UBooleanValue)exists).probability()>.5);
@@ -51,14 +52,20 @@ class UncertaintyQueryEvaluationTest {
     @Test void scalarAndSubjectiveOperationsEvaluateThroughLookup() throws Exception {
         Expression ur=new ExpConstUncertain(ExpConstUncertain.Kind.UREAL,new ExpConstReal(4),new ExpConstReal(0));
         assertEquals(2,((RealValue)eval(op("value",op("sqrt",ur)))).value(),EPS);
+        assertEquals(4,((URealValue)eval(op("floor",ur))).value(),EPS);
+        assertEquals(4,((URealValue)eval(op("round",ur))).value(),EPS);
+        assertEquals(0,((URealValue)eval(op("min",ur,new ExpConstInteger(0)))).value(),EPS);
+        assertEquals(4,((URealValue)eval(op("max",ur,new ExpConstInteger(0)))).value(),EPS);
         Expression ui=new ExpConstUncertain(ExpConstUncertain.Kind.UINTEGER,new ExpConstInteger(9),new ExpConstReal(0));
         assertEquals(81,((IntegerValue)eval(op("toInteger",op("power",ui,new ExpConstInteger(2))))).value());
+        assertEquals(9,((IntegerValue)eval(op("floor",ui))).value());
         var uiSum=(UIntegerValue)eval(op("+",ui,new ExpConstInteger(2)));
         assertEquals(11,uiSum.value());
         assertEquals(4.5,((URealValue)eval(op("/",ui,new ExpConstInteger(2)))).value(),EPS);
         assertEquals(4,((UIntegerValue)eval(op("div",ui,new ExpConstInteger(2)))).value());
         assertEquals(1,((UIntegerValue)eval(op("mod",ui,new ExpConstInteger(2)))).value());
         assertEquals(-9,((UIntegerValue)eval(op("-",ui))).value());
+        assertEquals(2,((UIntegerValue)eval(op("min",ui,new ExpConstInteger(2)))).value());
         Expression us=new ExpConstUncertain(ExpConstUncertain.Kind.USTRING,new ExpConstString("AB"),new ExpConstReal(1));
         assertTrue(eval(op("at",us,new ExpConstInteger(1))) instanceof UStringValue);
         assertEquals("ab",((StringValue)eval(op("value",op("toLowerCase",us)))).value());
@@ -79,6 +86,8 @@ class UncertaintyQueryEvaluationTest {
     @Test void invalidUncertaintyValuesEvaluateUndefined() {
         assertTrue(eval("SBoolean(0.4, 0.4, 0.4, 0.5)").isUndefined());
         assertTrue(eval("UString('x', 1.2)").isUndefined());
+        assertEquals(.5, ((URealValue)eval("UReal(2, -0.5)")).uncertainty(), EPS);
+        assertEquals(5, ((UIntegerValue)eval("UInteger(2, -5)")).uncertainty(), EPS);
     }
     private Expression op(String name,Expression... args) throws Exception { return ExpStdOp.create(name,args); }
 }

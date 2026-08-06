@@ -9,8 +9,8 @@ registered.
 
 | Historical operation family | Current implementation | Coverage |
 | --- | --- | --- |
-| `UReal`: `value`, `uncertainty`, `setValue`, `setUncertainty`, `abs`, `inv`, `neg`, `toReal`, `toInteger`, `toUInteger`, `power`, `sqrt`, `atan`, `sin`, `cos`, `tan`, `asin`, `acos` | `StandardOperationsUncertainty`, `URealValue` | `UncertainScalarOperationsTest`, `UncertaintyQueryEvaluationTest` |
-| `UInteger`: `value`, `uncertainty`, `setValue`, `setUncertainty`, `abs`, `neg`, `div`, `mod`, `sqrt`, `power`, `toReal`, `toUReal` | `StandardOperationsUncertainty`, `UIntegerValue` | `UncertainScalarOperationsTest`, `UncertaintyQueryEvaluationTest` |
+| `UReal`: `value`, `uncertainty`, `setValue`, `setUncertainty`, `abs`, `inv`, `neg`, `min`, `max`, `floor`, `round`, `toReal`, `toInteger`, `toUInteger`, `power`, `sqrt`, `atan`, `sin`, `cos`, `tan`, `asin`, `acos` | `StandardOperationsUncertainty`, `StandardOperationsNumber`, `URealValue` | `UncertainScalarOperationsTest`, `UncertaintyQueryEvaluationTest` |
+| `UInteger`: `value`, `uncertainty`, `setValue`, `setUncertainty`, `abs`, `neg`, `min`, `max`, `div`, `mod`, `sqrt`, `power`, `toReal`, `toUReal` | `StandardOperationsUncertainty`, `UIntegerValue` | `UncertainScalarOperationsTest`, `UncertaintyQueryEvaluationTest` |
 | `UString`: `value`, `confidence`, `setValue`, `setConfidence`, `at`, `character`, `+`, `indexOf`, `substring`, `toLowerCase`, `toUpperCase`, `size`, `toString`, `toInteger`, `toReal`, `toBoolean`, `toUBoolean`, `<`, `<=`, `>`, `>=` | `StandardOperationsUncertainty`, `UStringValue` | `UncertainScalarOperationsTest`, `UncertaintyQueryEvaluationTest` |
 | `UBoolean`: `value`, `confidence`, `setValue`, `setConfidence`, `toBoolean`, `toBooleanC`, `toString`, `equalsC`, `and`, `or`, `not`, `implies`, `xor`, `equivalent` | `StandardOperationsUncertainty`, `UBooleanValue` | `UncertainScalarOperationsTest`, `UncertaintyQueryEvaluationTest` |
 | `SBoolean`: accessors, predicates, projections, logical operators, `deduceY`, `applyOn`, `min`, `max`, `discount` | `StandardOperationsUncertainty`, `SBooleanValue` | `SBooleanValueTest`, `UncertaintyQueryEvaluationTest` |

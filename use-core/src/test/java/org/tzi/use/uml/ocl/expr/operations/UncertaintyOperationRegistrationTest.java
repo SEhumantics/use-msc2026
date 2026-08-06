@@ -7,9 +7,11 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 import org.tzi.use.uml.ocl.type.TypeFactory;
 import org.tzi.use.uml.ocl.value.IntegerValue;
+import org.tzi.use.uml.ocl.expr.ExpStdOp;
 import org.tzi.use.uml.ocl.value.UStringValue;
 import org.tzi.use.uml.ocl.value.UndefinedValue;
 import org.tzi.use.uml.ocl.value.Value;
+import org.tzi.use.uml.ocl.type.Type;
 
 class UncertaintyOperationRegistrationTest {
     @Test void historicalUncertaintyNamesAreRegistered() {
@@ -22,6 +24,13 @@ class UncertaintyOperationRegistrationTest {
             "minimumBeliefFusion","majorityBeliefFusion","beliefConstraintFusion","averageBeliefFusion","aleatoryCumulativeBeliefFusion","epistemicCumulativeBeliefFusion","weightedBeliefFusion","consensusAndCompromiseFusion","discount","uCount","uCountC","uIncludes","uExcludes"}) {
             assertTrue(names.contains(name), name);
         }
+    }
+    @Test void uncertainNumericMinMaxOverloadsAreReachable() {
+        assertTrue(ExpStdOp.exists("min", new Type[]{TypeFactory.mkUReal(), TypeFactory.mkInteger()}));
+        assertTrue(ExpStdOp.exists("max", new Type[]{TypeFactory.mkInteger(), TypeFactory.mkUReal()}));
+        assertTrue(ExpStdOp.exists("min", new Type[]{TypeFactory.mkUInteger(), TypeFactory.mkUInteger()}));
+        assertTrue(ExpStdOp.exists("floor", new Type[]{TypeFactory.mkUReal()}));
+        assertTrue(ExpStdOp.exists("round", new Type[]{TypeFactory.mkUReal()}));
     }
     @Test void uncertainCountPreservesHistoricalUndefinedCollectionHandling() {
         Value result=new Op_collection_uCount().eval(null,

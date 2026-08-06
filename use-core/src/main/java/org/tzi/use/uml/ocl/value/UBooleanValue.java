@@ -41,7 +41,12 @@ public final class UBooleanValue extends UncertainValue {
                 && round(probability, 10) == round(x.probability, 10);
     }
     @Override public int hashCode() { return 31 * Boolean.hashCode(value()) + Double.hashCode(round(probability, 10)); }
-    @Override public int compareTo(Value o) { if (o instanceof UndefinedValue) return 1; if (o instanceof UBooleanValue x) return Double.compare(probability,x.probability); return toString().compareTo(o.toString()); }
+    @Override public int compareTo(Value o) {
+        if (o instanceof UndefinedValue) return 1;
+        if (o instanceof BooleanValue b) return Boolean.compare(value(), b.value());
+        if (o instanceof UBooleanValue b) return Boolean.compare(value(), b.value());
+        return 0;
+    }
     @Override public StringBuilder toString(StringBuilder b) { return b.append("UBoolean(").append(value()).append(", ").append(round(probability,3)).append(')'); }
     private static double round(double value,int places){double scale=Math.pow(10,places);return Math.round(value*scale)/scale;}
 }
