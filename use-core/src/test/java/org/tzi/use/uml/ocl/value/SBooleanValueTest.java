@@ -21,4 +21,14 @@ class SBooleanValueTest {
     }
     @Test void malformedMassIsRejectedWithoutNormalization() { assertThrows(IllegalArgumentException.class,()->new SBooleanValue(.4,.4,.4,.5)); }
     @Test void stableComparisonIsNotTheHistoricalAlwaysZeroPlaceholder() { assertNotEquals(0,new SBooleanValue(.6,.2,.2,.5).compareTo(new SBooleanValue(.2,.6,.2,.5))); }
+    @Test void collectionDiscountMultipliesProjectedTrust() {
+        var source=new SBooleanValue(.8,.05,.15,.2);
+        var result=source.discount(List.of(SBooleanValue.dogmatic(.98,.2),SBooleanValue.dogmatic(.5,.2)));
+        assertEquals(.392,result.belief(),EPS); assertEquals(.0245,result.disbelief(),EPS);
+    }
+    @Test void beliefConstraintFusionUsesConflictNormalization() {
+        var a=new SBooleanValue(.6,.2,.2,.5); var b=new SBooleanValue(.4,.3,.3,.5);
+        var result=SBooleanValue.beliefConstraintFusion(List.of(a,b));
+        assertEquals(.50/.74,result.belief(),EPS); assertEquals(.06/.74,result.uncertainty(),EPS);
+    }
 }

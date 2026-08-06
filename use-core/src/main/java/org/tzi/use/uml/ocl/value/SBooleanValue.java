@@ -63,8 +63,14 @@ public final class SBooleanValue extends UncertainValue {
     public SBooleanValue max(SBooleanValue o) { return projection() >= o.projection() ? this : o; }
     /** Historical probability-sensitive trust discounting. */
     public SBooleanValue discount(SBooleanValue trust) {
+        if (trust == null) throw new IllegalArgumentException("discount requires a trust opinion");
         double p=trust.projection();
         return new SBooleanValue(belief*p, disbelief*p, 1-(belief+disbelief)*p, baseRate);
+    }
+    public SBooleanValue discount(Collection<SBooleanValue> trusts) {
+        if (trusts == null || trusts.stream().anyMatch(Objects::isNull)) throw new IllegalArgumentException("discount requires non-null trusts");
+        double p=1; for (SBooleanValue t: trusts) p*=t.projection();
+        return new SBooleanValue(p*belief,p*disbelief,1-p*(belief+disbelief),baseRate);
     }
     public SBooleanValue applyOn(UBooleanValue value) {
         double c=value.probability();
@@ -89,10 +95,48 @@ public final class SBooleanValue extends UncertainValue {
         requireNonEmpty(opinions,"cumulative fusion"); List<SBooleanValue> os=List.copyOf(opinions); List<SBooleanValue> dogs=os.stream().filter(SBooleanValue::isDogmatic).toList();
         if(!dogs.isEmpty()) return averageBeliefFusion(dogs); double product=1,a=0; for(var o:os){product*=o.uncertainty;a+=o.baseRate;} double den=0,b=0,d=0; for(var o:os){double w=product/o.uncertainty;den+=w;b+=w*o.belief;d+=w*o.disbelief;} den-=(os.size()-1)*product; return new SBooleanValue(b/den,d/den,product/den,a/os.size());
     }
-    public static SBooleanValue epistemicCumulativeBeliefFusion(Collection<SBooleanValue> opinions) { return aleatoryCumulativeBeliefFusion(opinions).uncertaintyMaximized(); }
-    public static SBooleanValue weightedBeliefFusion(Collection<SBooleanValue> opinions) { return averageBeliefFusion(opinions); }
-    public static SBooleanValue beliefConstraintFusion(Collection<SBooleanValue> opinions) { return aleatoryCumulativeBeliefFusion(opinions); }
-    public static SBooleanValue consensusAndCompromiseFusion(Collection<SBooleanValue> opinions) { return averageBeliefFusion(opinions); }
+    public static SBooleanValue epistemicCumulativeBeliefFusion(Collection<SBooleanValue> opinions) {
+        requireNonEmpty(opinions,"epistemic cumulative fusion"); List<SBooleanValue> os=List.copyOf(opinions);
+        List<SBooleanValue> dogs=os.stream().filter(SBooleanValue::isDogmatic).toList();
+        if(!dogs.isEmpty()) return averageBeliefFusion(dogs).uncertaintyMaximized();
+        double product=1,b=0,d=0,den=0,a=0; for(var o:os)product*=o.uncertainty;
+        for(var o:os){double w=product/o.uncertainty;den+=w;b+=w*o.belief;d+=w*o.disbelief;a+=o.baseRate;}
+        den-=(os.size()-1)*product;
+        return new SBooleanValue(b/den,d/den,product/den,a/os.size()).uncertaintyMaximized();
+    }
+    public static SBooleanValue beliefConstraintFusion(Collection<SBooleanValue> opinions) {
+        requireTwo(opinions,"belief constraint fusion"); SBooleanValue result=null;
+        for (SBooleanValue next: opinions) result=result==null?next:beliefConstraintBinary(result,next);
+        return result;
+    }
+    private static SBooleanValue beliefConstraintBinary(SBooleanValue x,SBooleanValue y) {
+        double harmony=x.belief*y.uncertainty+x.uncertainty*y.belief+x.belief*y.belief;
+        double conflict=x.belief*y.disbelief+x.disbelief*y.belief;
+        if (conflict==1) throw new IllegalArgumentException("belief constraint fusion: total conflict");
+        double b=harmony/(1-conflict), u=x.uncertainty*y.uncertainty/(1-conflict);
+        double a=(x.uncertainty+y.uncertainty==2)?(x.baseRate+y.baseRate)/2:
+            (x.baseRate*(1-x.uncertainty)+y.baseRate*(1-y.uncertainty))/(2-x.uncertainty-y.uncertainty);
+        return new SBooleanValue(b,1-b-u,u,a);
+    }
+    public static SBooleanValue weightedBeliefFusion(Collection<SBooleanValue> opinions) {
+        requireNonEmpty(opinions,"weighted fusion"); List<SBooleanValue> os=List.copyOf(opinions);
+        List<SBooleanValue> dogmatic=os.stream().filter(SBooleanValue::isDogmatic).toList();
+        if (!dogmatic.isEmpty()) return averageBeliefFusion(dogmatic);
+        if (os.stream().allMatch(SBooleanValue::isVacuous)) return vacuous(os.stream().mapToDouble(SBooleanValue::baseRate).average().orElse(.5));
+        double product=1,sumU=0,b=0,d=0,a=0; for(var o:os){product*=o.uncertainty;sumU+=o.uncertainty;}
+        double denominator=0; for(var o:os){double w=product/o.uncertainty;denominator+=w;b+=w*o.belief*o.certainty();d+=w*o.disbelief*o.certainty();a+=o.baseRate*o.certainty();}
+        double u=(os.size()-sumU)*product/ (denominator-os.size()*product);
+        return new SBooleanValue(b/(denominator-os.size()*product),d/(denominator-os.size()*product),u,a/(os.size()-sumU));
+    }
+    public static SBooleanValue consensusAndCompromiseFusion(Collection<SBooleanValue> opinions) {
+        requireTwo(opinions,"consensus and compromise fusion");
+        double base=opinions.iterator().next().baseRate; for(var o:opinions)if(o.baseRate!=base)throw new IllegalArgumentException("CCF requires equal base rates");
+        double cb=opinions.stream().mapToDouble(SBooleanValue::belief).min().orElse(0), cd=opinions.stream().mapToDouble(SBooleanValue::disbelief).min().orElse(0), product=1;
+        for(var o:opinions)product*=o.uncertainty;
+        double rb=0,rd=0,rx=0; for(var o:opinions){double w=o.uncertainty==0?0:product/o.uncertainty;rb+=Math.max(o.belief-cb,0)*w;rd+=Math.max(o.disbelief-cd,0)*w;}
+        double mass=cb+cd+product, norm=(rb+rd)==0?1:(1-mass-product)/(rb+rd);
+        return new SBooleanValue(cb+norm*rb,cd+norm*rd,1-(cb+norm*rb)-(cd+norm*rd),base);
+    }
     private static void requireNonEmpty(Collection<SBooleanValue> os,String n){ if(os==null||os.isEmpty()||os.stream().anyMatch(Objects::isNull))throw new IllegalArgumentException(n+" requires non-null opinions"); }
     private static void requireTwo(Collection<SBooleanValue> os,String n){ requireNonEmpty(os,n); if(os.size()<2)throw new IllegalArgumentException(n+" requires at least two opinions"); }
     @Override public UBooleanValue uEquals(Value other) { return other instanceof SBooleanValue o ? UBooleanValue.probability(1-projectiveDistance(o)) : UBooleanValue.FALSE; }

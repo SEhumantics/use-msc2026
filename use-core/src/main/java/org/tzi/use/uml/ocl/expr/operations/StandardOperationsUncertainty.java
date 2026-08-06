@@ -15,6 +15,7 @@ public final class StandardOperationsUncertainty {
         unary(map,"value", Type::isTypeOfUBoolean, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).toBoolean());
         unary(map,"confidence", Type::isTypeOfUBoolean, TypeFactory.mkReal(), a -> new RealValue(((UBooleanValue)a[0]).confidence()));
         unary(map,"toBoolean", Type::isTypeOfUBoolean, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).toBoolean());
+        binary(map,"equalsC", (t,h)->t.isTypeOfUBoolean(), Type::isKindOfReal, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).equalsC(real(a[1])), false);
         binary(map,"toBooleanC", (t,h)->t.isTypeOfUBoolean(), Type::isKindOfReal, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).toBooleanC(real(a[1])), false);
         unary(map,"not", Type::isTypeOfUBoolean, TypeFactory.mkUBoolean(), a -> ((UBooleanValue)a[0]).not());
         ubinary(map,"and", (x,y)->x.and(y)); ubinary(map,"or", (x,y)->x.or(y)); ubinary(map,"xor", (x,y)->x.xor(y));
@@ -28,6 +29,8 @@ public final class StandardOperationsUncertainty {
         unary(map,"toUInteger", Type::isTypeOfUReal, TypeFactory.mkUInteger(), a -> ((URealValue)a[0]).toUInteger());
         unary(map,"abs", Type::isTypeOfUReal, TypeFactory.mkUReal(), a -> ((URealValue)a[0]).abs());
         unary(map,"neg", Type::isTypeOfUReal, TypeFactory.mkUReal(), a -> ((URealValue)a[0]).negate());
+        binary(map,"setValue", (t,h)->t.isTypeOfUReal(), (t,h)->t.isKindOfReal(h), TypeFactory.mkUReal(), a -> new URealValue(real(a[1]),((URealValue)a[0]).uncertainty()), false);
+        binary(map,"setUncertainty", (t,h)->t.isTypeOfUReal(), (t,h)->t.isKindOfReal(h), TypeFactory.mkUReal(), a -> new URealValue(((URealValue)a[0]).value(),real(a[1])), false);
         binary(map,"+", Type::isKindOfUReal, Type::isKindOfUReal, TypeFactory.mkUReal(), a -> ur(a[0]).add(ur(a[1])), true);
         binary(map,"-", Type::isKindOfUReal, Type::isKindOfUReal, TypeFactory.mkUReal(), a -> ur(a[0]).subtract(ur(a[1])), true);
         binary(map,"*", Type::isKindOfUReal, Type::isKindOfUReal, TypeFactory.mkUReal(), a -> ur(a[0]).multiply(ur(a[1])), true);
@@ -39,10 +42,16 @@ public final class StandardOperationsUncertainty {
         unary(map,"toUReal", Type::isTypeOfUInteger, TypeFactory.mkUReal(), a -> ((UIntegerValue)a[0]).toUReal());
         unary(map,"toReal", Type::isTypeOfUInteger, TypeFactory.mkReal(), a -> ((UIntegerValue)a[0]).toReal());
         unary(map,"toInteger", Type::isTypeOfUInteger, TypeFactory.mkInteger(), a -> ((UIntegerValue)a[0]).toInteger());
+        binary(map,"setValue", (t,h)->t.isTypeOfUInteger(), (t,h)->t.isTypeOfInteger(), TypeFactory.mkUInteger(), a -> new UIntegerValue(((IntegerValue)a[1]).value(),((UIntegerValue)a[0]).uncertainty()), false);
+        binary(map,"setUncertainty", (t,h)->t.isTypeOfUInteger(), (t,h)->t.isKindOfReal(h), TypeFactory.mkUInteger(), a -> new UIntegerValue(((UIntegerValue)a[0]).value(),real(a[1])), false);
+        unary(map,"abs", Type::isTypeOfUInteger, TypeFactory.mkUInteger(), a -> new UIntegerValue(Math.abs(((UIntegerValue)a[0]).value()),((UIntegerValue)a[0]).uncertainty()));
+        unary(map,"neg", Type::isTypeOfUInteger, TypeFactory.mkUInteger(), a -> new UIntegerValue(-((UIntegerValue)a[0]).value(),((UIntegerValue)a[0]).uncertainty()));
 
         // UString public surface
         unary(map,"value", Type::isTypeOfUString, TypeFactory.mkString(), a -> ((UStringValue)a[0]).toStringValue());
         unary(map,"confidence", Type::isTypeOfUString, TypeFactory.mkReal(), a -> new RealValue(((UStringValue)a[0]).confidence()));
+        binary(map,"setValue", (t,h)->t.isTypeOfUString(), (t,h)->t.isTypeOfString(), TypeFactory.mkUString(), a -> new UStringValue(((StringValue)a[1]).value(),((UStringValue)a[0]).confidence()), false);
+        binary(map,"setConfidence", (t,h)->t.isTypeOfUString(), Type::isKindOfReal, TypeFactory.mkUString(), a -> new UStringValue(((UStringValue)a[0]).value(),real(a[1])), false);
         unary(map,"size", Type::isTypeOfUString, TypeFactory.mkUInteger(), a -> ((UStringValue)a[0]).size());
         unary(map,"toLowerCase", Type::isTypeOfUString, TypeFactory.mkUString(), a -> ((UStringValue)a[0]).lower());
         unary(map,"toUpperCase", Type::isTypeOfUString, TypeFactory.mkUString(), a -> ((UStringValue)a[0]).upper());
@@ -59,6 +68,9 @@ public final class StandardOperationsUncertainty {
         unary(map,"certainty", Type::isTypeOfSBoolean, TypeFactory.mkReal(), a->new RealValue(sb(a[0]).certainty()));
         unary(map,"toUBoolean", Type::isTypeOfSBoolean, TypeFactory.mkUBoolean(), a->sb(a[0]).toUBoolean());
         unary(map,"not", Type::isTypeOfSBoolean, TypeFactory.mkSBoolean(), a->sb(a[0]).not());
+        unary(map,"getRelativeWeight", Type::isTypeOfSBoolean, TypeFactory.mkReal(), a->new RealValue(1));
+        binary(map,"isCertain", (t,h)->t.isTypeOfSBoolean(), Type::isKindOfReal, TypeFactory.mkBoolean(), a->BooleanValue.get(sb(a[0]).isCertain(real(a[1]))), false);
+        binary(map,"isUncertain", (t,h)->t.isTypeOfSBoolean(), Type::isKindOfReal, TypeFactory.mkBoolean(), a->BooleanValue.get(sb(a[0]).isUncertain(real(a[1]))), false);
         unary(map,"uncertaintyMaximized", Type::isTypeOfSBoolean, TypeFactory.mkSBoolean(), a->sb(a[0]).uncertaintyMaximized());
         unary(map,"uncertainOpinion", Type::isTypeOfSBoolean, TypeFactory.mkSBoolean(), a->sb(a[0]).uncertainOpinion());
         unary(map,"isAbsolute", Type::isTypeOfSBoolean, TypeFactory.mkBoolean(), a->BooleanValue.get(sb(a[0]).isAbsolute()));
@@ -76,6 +88,7 @@ public final class StandardOperationsUncertainty {
         fusion(map,"beliefConstraintFusion",SBooleanValue::beliefConstraintFusion); fusion(map,"averageBeliefFusion",SBooleanValue::averageBeliefFusion);
         fusion(map,"aleatoryCumulativeBeliefFusion",SBooleanValue::aleatoryCumulativeBeliefFusion); fusion(map,"epistemicCumulativeBeliefFusion",SBooleanValue::epistemicCumulativeBeliefFusion);
         fusion(map,"weightedBeliefFusion",SBooleanValue::weightedBeliefFusion); fusion(map,"consensusAndCompromiseFusion",SBooleanValue::consensusAndCompromiseFusion);
+        fusion(map,"discount", opinions -> { SBooleanValue first=opinions.iterator().next(); return first.discount(new ArrayList<>(opinions).subList(1,opinions.size())); });
     }
     private static void fusion(Multimap<String,OpGeneric> m,String n,Function<Collection<SBooleanValue>,SBooleanValue> f){ binary(m,n,(t,h)->t.isTypeOfSBoolean(),(t,h)->t.isKindOfCollection(h),TypeFactory.mkSBoolean(),a->{List<SBooleanValue>x=new ArrayList<>();x.add(sb(a[0]));for(Value v:(CollectionValue)a[1])x.add(sb(v));return f.apply(x);},false); }
     private interface TypeTest { boolean test(Type t, Type.VoidHandling h); }
