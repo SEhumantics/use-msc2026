@@ -19,9 +19,11 @@
 
 package org.tzi.use.uml.ocl.expr;
 
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.io.PrintWriter;
 
-import junit.framework.*;
 
 import org.tzi.use.parser.ocl.OCLCompiler;
 import org.tzi.use.uml.ocl.value.BooleanValue;
@@ -36,8 +38,9 @@ import org.tzi.use.uml.sys.ObjectCreation;
  * @author <a href="mailto:hanna@tzi.de">Hanna Bauerdick</a>
  * @author <a href="mailto:gutsche@tzi.de">Fabian Gutsche</a>
  */
-public class NavigationTest extends TestCase {
+public class NavigationTest {
 
+    @Test
     public void testModelWithObjects() {
         ObjectCreation.getInstance().createModelWithObjects();
         ObjectCreation.getInstance().createModelWithManyObjects();
@@ -51,6 +54,7 @@ public class NavigationTest extends TestCase {
     /**
      * Test the navigation from p1 to company (a normal association).
      */
+    @Test
     public void testNavigationWithNormalAssoc() {
         MSystem system = ObjectCreation.getInstance().createModelWithManyObjects();
         String expr = "p1.company->size";
@@ -74,6 +78,7 @@ public class NavigationTest extends TestCase {
      * Test the navigation from p1 to a attribute of company
      * (a normal association).
      */
+    @Test
     public void testNavigationToAnAttributeWithNormalAssoc() {
         MSystem system = ObjectCreation.getInstance().createModelWithManyObjects();
         String expr = "p1.company->exists(c|c.name='IBM')";
@@ -94,6 +99,7 @@ public class NavigationTest extends TestCase {
      * Test the navigation from p1 to an attribute of company
      * (with associationclass).
      */
+    @Test
     public void testNavigationToAnAttributeWithAssocClass1() {
         MSystem system = ObjectCreation.getInstance().createModelWithObjectsAndLinkObject();
         String expr = "c1.name = 'IBM'";
@@ -115,6 +121,7 @@ public class NavigationTest extends TestCase {
      * Test the navigation from p1 over p2 to the attribute of company
      * (with associationclass).
      */
+    @Test
     public void testNavigationToAnAttributeWithAssocClass2() {
         MSystem system = ObjectCreation.getInstance().createModelWithObjectsAndLinkObject2();
         String expr = "p1.boss.company.name = p1.company.name";
@@ -137,6 +144,7 @@ public class NavigationTest extends TestCase {
      * Test the navigation from p1 to the attribute of company
      * (with associationclass).
      */
+    @Test
     public void testNavigationToAnAttributeWithTernaryAssocClass() {
         MSystem system = ObjectCreation.getInstance().createModelWithObjectsAndTenaryLinkObject();
         String expr = "c1.job = s1.job and p1.job = s1.job and c1.job = p1.job";
@@ -156,11 +164,4 @@ public class NavigationTest extends TestCase {
     }
 
 
-    /**
-     * Entry point
-     */
-    public static void main( String[] args ) {
-        junit.textui.TestRunner.run( new TestSuite( ExprNavigationTest.class ) );
-
-    }
 }

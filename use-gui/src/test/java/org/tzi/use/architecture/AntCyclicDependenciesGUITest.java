@@ -1,5 +1,9 @@
 package org.tzi.use.architecture;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
@@ -8,8 +12,6 @@ import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.library.dependencies.SliceAssignment;
 import com.tngtech.archunit.library.dependencies.SliceIdentifier;
 import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition;
-import org.junit.Before;
-import org.junit.Test;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -33,7 +35,7 @@ public class AntCyclicDependenciesGUITest {
     private static final String VIEWS_PACKAGE_RESULTS = new File(PROJECT_ROOT, "ant_cyclic_dependencies_views_results.csv").getAbsolutePath();
     private static final String XMLPARSER_PACKAGE_RESULTS = new File(PROJECT_ROOT, "ant_cyclic_dependencies_xmlparser_results.csv").getAbsolutePath();
 
-    @Before
+    @BeforeEach
     public void setup() {
         try {
             File file = new File(ALL_PACKAGES_RESULTS_FILE);

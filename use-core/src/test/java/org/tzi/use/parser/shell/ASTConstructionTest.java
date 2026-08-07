@@ -19,14 +19,15 @@
 
 package org.tzi.use.parser.shell;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-import junit.framework.TestCase;
 
-import org.junit.Before;
-import org.junit.Test;
 import org.tzi.use.parser.soil.ast.ASTAttributeAssignmentStatement;
 import org.tzi.use.parser.soil.ast.ASTEmptyStatement;
 import org.tzi.use.parser.soil.ast.ASTEnterOperationStatement;
@@ -45,12 +46,11 @@ import org.tzi.use.util.NullPrintWriter;
  * @author Daniel
  *
  */
-public class ASTConstructionTest extends TestCase {
+public class ASTConstructionTest {
 
 	private ASTStatement fResult;
 
-	@Override
-	@Before
+	@BeforeEach
 	public void setUp() {
 		fResult = null;
 	}

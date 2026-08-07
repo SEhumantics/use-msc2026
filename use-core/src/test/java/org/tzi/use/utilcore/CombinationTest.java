@@ -21,6 +21,9 @@
 
 package org.tzi.use.utilcore;
 
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,7 +32,6 @@ import org.tzi.use.util.collections.CollectionUtil;
 import org.tzi.use.util.collections.MinCombinationsIterator;
 import org.tzi.use.util.collections.CollectionUtil.UniqueList;
 
-import junit.framework.TestCase;
 
 
 /**
@@ -37,7 +39,7 @@ import junit.framework.TestCase;
  *
  * @author  Fabian Gutsche
  */
-public class CombinationTest extends TestCase {
+public class CombinationTest {
            
 	private List<String> getList(int offSet, int numElements) {
 		List<String> result = new ArrayList<String>(numElements);
@@ -47,6 +49,7 @@ public class CombinationTest extends TestCase {
 		return result;
 	}
 	
+    @Test
     public void testCombination() {
         List<String> l1 = getList(0, 3);
         List<String> l2 = getList(3, 3);
@@ -56,6 +59,7 @@ public class CombinationTest extends TestCase {
     }
     
     
+    @Test
     public void testCombinationIterator() {
     	List<String> l1 = getList(0,3);
         List<String> l2 = getList(3,3);

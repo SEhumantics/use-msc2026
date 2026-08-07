@@ -19,8 +19,9 @@
 
 package org.tzi.use.uml.sys;
 
-import junit.framework.TestCase;
-import junit.framework.TestSuite;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 
 import org.tzi.use.api.UseApiException;
 import org.tzi.use.api.UseSystemApi;
@@ -34,11 +35,12 @@ import org.tzi.use.uml.mm.MAssociation;
  * @author <a href="mailto:hanna@tzi.de">Hanna Bauerdick</a>
  * @author <a href="mailto:gutsche@tzi.de">Fabian Gutsche</a>
  */
-public class DeletionTest extends TestCase {
+public class DeletionTest {
 
     /**
      * This test only tests the model which is used in this class.
      */
+    @Test
     public void testModel() {
         ObjectCreation.getInstance().createModelWithObjectsAndLinkObject();
     }
@@ -47,6 +49,7 @@ public class DeletionTest extends TestCase {
      * Tests if a link object is deleted with the command 'delete', which
      * is normally for deleting links.
      */
+    @Test
     public void testDeleteLinkObject() {
         try {
             MSystem system = ObjectCreation.getInstance()
@@ -68,6 +71,7 @@ public class DeletionTest extends TestCase {
      * Tests if a link object is deleted with the command 'destroy',
      * which is normally used for deleting links.
      */
+    @Test
     public void testDestroyLinkObject() {
         try {
             MSystem system = 
@@ -95,6 +99,7 @@ public class DeletionTest extends TestCase {
      * Tests if an object, which is connected to a link object,
      * is deleted with the command 'destroy'.
      */
+    @Test
     public void testDestroyConnectedObject() {
         try {
             MSystem system = 
@@ -112,10 +117,4 @@ public class DeletionTest extends TestCase {
         }
     }
 
-    /**
-     * Entry point
-     */
-    public static void main( String[] args ) {
-        junit.textui.TestRunner.run( new TestSuite( DeletionTest.class ) );
-    }
 }

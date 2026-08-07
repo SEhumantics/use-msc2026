@@ -19,10 +19,11 @@
 
 package org.tzi.use.utilcore.soil;
 
-import junit.framework.TestCase;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
-import org.junit.Before;
-import org.junit.Test;
+
 import org.tzi.use.parser.soil.ast.ASTEmptyStatement;
 import org.tzi.use.parser.soil.ast.ASTStatement;
 import org.tzi.use.uml.ocl.type.Type;
@@ -36,7 +37,7 @@ import org.tzi.use.util.soil.SymbolTable;
  * @author Daniel Gent
  * @see SymbolTable
  */
-public class SymbolTableTest extends TestCase {
+public class SymbolTableTest {
 	/** the test subject */
 	private SymbolTable fST;
 	/** arbitrary name */
@@ -55,8 +56,7 @@ public class SymbolTableTest extends TestCase {
 	/**
 	 * constructs the fixture
 	 */
-	@Override
-	@Before
+	@BeforeEach
 	public void setUp() {
 		fST = new SymbolTable();
 		fVariableName = "name";

@@ -19,7 +19,10 @@
 
 package org.tzi.use.uml.sys;
 
-import junit.framework.TestCase;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 
 import org.tzi.use.api.UseApiException;
 import org.tzi.use.api.UseModelApi;
@@ -38,7 +41,7 @@ import org.tzi.use.uml.ocl.value.Value;
  * @see     MCmdDestroyObjects
  */
 
-public class MCmdDestroyObjectsTest extends TestCase {
+public class MCmdDestroyObjectsTest {
     private UseModelApi modelApi;
     private UseSystemApi systemApi;
 
@@ -49,6 +52,7 @@ public class MCmdDestroyObjectsTest extends TestCase {
     /**
      * Creates the model and system every test is working with.
      */
+    @BeforeEach
     protected void setUp() {
         modelApi = new UseModelApi("Test");
                 
@@ -66,6 +70,7 @@ public class MCmdDestroyObjectsTest extends TestCase {
     /**
      * Test destruction of a single object.
      */
+    @Test
     public void testDestroySingleObject() {   
         try{
         	// create one object of class a
@@ -90,6 +95,7 @@ public class MCmdDestroyObjectsTest extends TestCase {
      * Tests the destruction of six objects. Two objects are always 
      * from the same type.
      */
+    @Test
     public void testDestroyObjectsWithDifferentTypes() {
         try{
         	// create two objects of class `A'

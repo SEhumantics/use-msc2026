@@ -18,9 +18,10 @@
  */
 package org.tzi.use.uml.mm.statemachines;
 
-import junit.framework.TestCase;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
-import org.junit.Test;
+
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.TestModelUtil;
 import org.tzi.use.uml.ocl.expr.ExpressionWithValue;
@@ -31,7 +32,7 @@ import org.tzi.use.uml.sys.MSystemException;
  * @author Lars Hamann
  *
  */
-public class TestProtocolStateMachine extends TestCase {
+public class TestProtocolStateMachine {
 
 	@Test
 	public void testUniqueStateNames() {
@@ -92,8 +93,8 @@ public class TestProtocolStateMachine extends TestCase {
 		} catch (MSystemException e) {
 			
 		}
-		assertEquals("Added invalid transition!", numTransitions, defaultRegion
-				.getTransitions().size());
+		assertEquals(numTransitions, defaultRegion
+				.getTransitions().size(), "Added invalid transition!");
 		
 		// valid transition
 		try {
@@ -102,8 +103,8 @@ public class TestProtocolStateMachine extends TestCase {
 		} catch (MSystemException e) {
 			fail(e.getMessage());
 		}
-		assertEquals("Valid transition was not added!", ++numTransitions,
-				defaultRegion.getTransitions().size());
+		assertEquals(++numTransitions,
+				defaultRegion.getTransitions().size(), "Valid transition was not added!");
 		
 		// only one transition is allowed
 		try {
@@ -113,8 +114,8 @@ public class TestProtocolStateMachine extends TestCase {
 		} catch (MSystemException e) {
 			
 		}
-		assertEquals("Added invalid transition!", numTransitions, defaultRegion
-				.getTransitions().size());
+		assertEquals(numTransitions, defaultRegion
+				.getTransitions().size(), "Added invalid transition!");
 		
 		// No incoming transitions
 		try {
@@ -124,8 +125,8 @@ public class TestProtocolStateMachine extends TestCase {
 		} catch (MSystemException e) {
 			
 		}
-		assertEquals("Added invalid transition!", numTransitions, defaultRegion
-				.getTransitions().size());
+		assertEquals(numTransitions, defaultRegion
+				.getTransitions().size(), "Added invalid transition!");
 	}
 	
 	@Test
@@ -165,7 +166,7 @@ public class TestProtocolStateMachine extends TestCase {
 			fail(e.getMessage());
 		}
 		
-		assertEquals("Lost subvertex!", defaultRegion.getSubvertices().size(), 6);
+		assertEquals(defaultRegion.getSubvertices().size(), 6, "Lost subvertex!");
 		
 		// duplicate name for final state 
 		try {
@@ -174,7 +175,7 @@ public class TestProtocolStateMachine extends TestCase {
 		} catch (MSystemException e) {
 			
 		}
-		assertEquals("Added invalid subvertex!", defaultRegion.getSubvertices().size(), 6);
+		assertEquals(defaultRegion.getSubvertices().size(), 6, "Added invalid subvertex!");
 				
 		int numTransitions = defaultRegion.getTransitions().size();
 		// No outgoing transitions from final state
@@ -185,7 +186,7 @@ public class TestProtocolStateMachine extends TestCase {
 		} catch (MSystemException e) {
 			
 		}
-		assertEquals("Added invalid transition!", numTransitions, defaultRegion.getTransitions().size());
+		assertEquals(numTransitions, defaultRegion.getTransitions().size(), "Added invalid transition!");
 	}
 	
 	@Test

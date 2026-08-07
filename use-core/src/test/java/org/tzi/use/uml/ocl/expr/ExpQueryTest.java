@@ -19,13 +19,16 @@
 
 package org.tzi.use.uml.ocl.expr;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import junit.framework.TestCase;
 
 import org.tzi.use.parser.ocl.OCLCompiler;
 import org.tzi.use.uml.mm.MAggregationKind;
@@ -56,7 +59,7 @@ import org.tzi.use.uml.sys.MSystemState;
  * @author Mark Richters
  */
 
-public class ExpQueryTest extends TestCase {
+public class ExpQueryTest {
     static List<Value> emptyQualifierValues = Collections.emptyList();
     
 	private MSystemState fState;
@@ -65,6 +68,7 @@ public class ExpQueryTest extends TestCase {
     private Expression fE1NotEqualsE2;
     private Evaluator e;
 
+    @BeforeEach
     protected void setUp() throws Exception {
         fState = new MSystem(new ModelFactory().createModel("Test")).state();
         // create range
@@ -90,16 +94,17 @@ public class ExpQueryTest extends TestCase {
         e = new Evaluator();
     }
 
+    @Test
     public void testSelect1() throws ExpInvalidException {
         Expression exp = new ExpSelect((VarDecl)null, fSet123, new ExpConstBoolean(true));
         Value[] values =
             new Value[] { IntegerValue.valueOf(1), IntegerValue.valueOf(2), IntegerValue.valueOf(3)};
         assertEquals(
-                     exp.toString(),
                      new SetValue(TypeFactory.mkInteger(), values),
-                     e.eval(exp, fState));
+                     e.eval(exp, fState),exp.toString());
     }
 
+    @Test
     public void testSelect2() throws ExpInvalidException {
         Expression exp =
             new ExpSelect(
@@ -108,11 +113,11 @@ public class ExpQueryTest extends TestCase {
                           fEGreater1);
         Value[] values = new Value[] { IntegerValue.valueOf(2), IntegerValue.valueOf(3)};
         assertEquals(
-                     exp.toString(),
                      new SetValue(TypeFactory.mkInteger(), values),
-                     e.eval(exp, fState));
+                     e.eval(exp, fState),exp.toString());
     }
 
+    @Test
     public void testReject() throws ExpInvalidException {
         Expression exp =
             new ExpReject(
@@ -121,45 +126,49 @@ public class ExpQueryTest extends TestCase {
                           fEGreater1);
         Value[] values = new Value[] { IntegerValue.valueOf(1)};
         assertEquals(
-                     exp.toString(),
                      new SetValue(TypeFactory.mkInteger(), values),
-                     e.eval(exp, fState));
+                     e.eval(exp, fState),exp.toString());
     }
 
+    @Test
     public void testExists1() throws ExpInvalidException {
         Expression exp =
             new ExpExists(
                           new VarDecl("e", TypeFactory.mkInteger()),
                           fSet123,
                           fEGreater1);
-        assertEquals(exp.toString(), BooleanValue.TRUE, e.eval(exp, fState));
+        assertEquals( BooleanValue.TRUE, e.eval(exp, fState),exp.toString());
     }
 
+    @Test
     public void testExists2() throws ExpInvalidException {
         VarDeclList elemVars = new VarDeclList(true);
         elemVars.add(new VarDecl("e1", TypeFactory.mkInteger()));
         elemVars.add(new VarDecl("e2", TypeFactory.mkInteger()));
         Expression exp = new ExpExists(elemVars, fSet123, fE1NotEqualsE2);
-        assertEquals(exp.toString(), BooleanValue.TRUE, e.eval(exp, fState));
+        assertEquals( BooleanValue.TRUE, e.eval(exp, fState),exp.toString());
     }
 
+    @Test
     public void testForAll1() throws ExpInvalidException {
         Expression exp =
             new ExpForAll(
                           new VarDecl("e", TypeFactory.mkInteger()),
                           fSet123,
                           fEGreater1);
-        assertEquals(exp.toString(), BooleanValue.FALSE, e.eval(exp, fState));
+        assertEquals( BooleanValue.FALSE, e.eval(exp, fState),exp.toString());
     }
 
+    @Test
     public void testForAll2() throws ExpInvalidException {
         VarDeclList elemVars = new VarDeclList(true);
         elemVars.add(new VarDecl("e1", TypeFactory.mkInteger()));
         elemVars.add(new VarDecl("e2", TypeFactory.mkInteger()));
         Expression exp = new ExpForAll(elemVars, fSet123, fE1NotEqualsE2);
-        assertEquals(exp.toString(), BooleanValue.FALSE, e.eval(exp, fState));
+        assertEquals( BooleanValue.FALSE, e.eval(exp, fState),exp.toString());
     }
 
+    @Test
     public void testCollect() throws ExpInvalidException {
         Expression[] args =
             new Expression[] {
@@ -171,11 +180,11 @@ public class ExpQueryTest extends TestCase {
         Value[] values =
             new Value[] { IntegerValue.valueOf(2), IntegerValue.valueOf(4), IntegerValue.valueOf(6)};
         assertEquals(
-                     exp.toString(),
                      new BagValue(TypeFactory.mkInteger(), values),
-                     e.eval(exp, fState));
+                     e.eval(exp, fState),exp.toString());
     }
 
+    @Test
     public void testIterate1() throws ExpInvalidException {
         // Set { 1..100 }->iterate(e; acc : Integer= 0 | acc + e);
         Value[] args1 = new Value[100];
@@ -199,9 +208,10 @@ public class ExpQueryTest extends TestCase {
                                               new ExpConstInteger(0)),
                            set1To100,
                            accPlusE);
-        assertEquals(exp.toString(), IntegerValue.valueOf(5050), e.eval(exp, fState));
+        assertEquals( IntegerValue.valueOf(5050), e.eval(exp, fState),exp.toString());
     }
 
+    @Test
     public void testIterate2() throws ExpInvalidException {
         // Set { 1..3 }->iterate(e1, e2; acc : Integer= 0 | acc + e1 * e2));
         Value[] args1 = new Value[3];
@@ -233,13 +243,14 @@ public class ExpQueryTest extends TestCase {
                                               new ExpConstInteger(0)),
                            set1To3,
                            add);
-        assertEquals(exp.toString(), IntegerValue.valueOf(36), e.eval(exp, fState));
+        assertEquals( IntegerValue.valueOf(36), e.eval(exp, fState),exp.toString());
     }
 
     /**
      * Tests that navigating under invalid multiplicities does throw
      * the proper exception (and no RuntimeException).
      */
+    @Test
     public void testNavigationWithMultiplicityFailure() {
     	List<VarDecl> emptyQualifiers = Collections.emptyList();
     	
@@ -303,6 +314,7 @@ public class ExpQueryTest extends TestCase {
     /**
      * Test for bug0020.
      */
+    @Test
     public void testSetOfSetSequenceAndBag() {
         ModelFactory f = new ModelFactory();
         MModel model =  f.createModel("Test");
@@ -323,6 +335,7 @@ public class ExpQueryTest extends TestCase {
     /**
      * Test for bug0020.
      */
+    @Test
     public void testBagOfSetSequenceAndBag() {
         ModelFactory f = new ModelFactory();
         MModel model =  f.createModel("Test");

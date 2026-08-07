@@ -19,8 +19,10 @@
 
 package org.tzi.use.gui.views.diagrams.util;
 
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.google.common.testing.EqualsTester;
-import junit.framework.TestCase;
 
 /**
  * Test DirectedLine class.
@@ -29,7 +31,8 @@ import junit.framework.TestCase;
  * @see     DirectedLine
  */
 
-public class DirectedLineTest extends TestCase {
+public class DirectedLineTest {
+    @Test
     public void testEquals() {
 
         DirectedLine orig = 

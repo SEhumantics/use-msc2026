@@ -19,11 +19,12 @@
 
 package org.tzi.use.uml.mm;
 
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.util.Collections;
 import java.util.List;
 
-import junit.framework.TestCase;
-import junit.framework.TestSuite;
 
 import org.tzi.use.api.UseApiException;
 import org.tzi.use.api.UseModelApi;
@@ -40,13 +41,14 @@ import org.tzi.use.uml.ocl.type.TypeFactory;
  * @author <a href="mailto:hanna@tzi.de">Hanna Bauerdick</a>
  * @author <a href="mailto:gutsche@tzi.de">Fabian Gutsche</a>
  */
-public class MAssociationClassTest extends TestCase {
+public class MAssociationClassTest {
 
 	static final List<VarDecl> emptyQualifiers = Collections.emptyList();
 	
     /**
      * Creates a model with classes and an associationclass.
      */
+    @Test
     public void testCreateModel() {
         TestModelUtil.getInstance().createModelWithClassAndAssocClass();
     }
@@ -55,6 +57,7 @@ public class MAssociationClassTest extends TestCase {
      * Creates a model with classes and an associationclass an
      * creates objects of these.
      */
+    @Test
     public void testCreateObjects() {
         try {
             MModel model = TestModelUtil.getInstance()
@@ -79,6 +82,7 @@ public class MAssociationClassTest extends TestCase {
      * Tests that no Attribute of an AssociationClass can have the same name
      * as its rolename.
      */
+    @Test
     public void testOverlappingAttributeAndAssociationEndNames() {
         // Test for Well-Formedness Rule No. 1 of AssociationClass of OMG 1.4
         try {
@@ -102,6 +106,7 @@ public class MAssociationClassTest extends TestCase {
      * Tests that no rolename of an AssociationClass can have the same name
      * as its attribute.
      */
+    @Test
     public void testOverlappingAssociationEndAndAttributeNames() {
         // Test for Well-Formedness Rule No. 1 of AssociationClass of OMG 1.4
     	
@@ -143,6 +148,7 @@ public class MAssociationClassTest extends TestCase {
      * Tests that an AssociationClass cannot be defiened between itself
      * and something else.
      */
+    @Test
     public void testAssocClassBetweenItself() {
         // Test for Well-Formedness Rule No. 2 of AssociationClass of OMG 1.4
         MAssociationClass job = null;
@@ -186,6 +192,7 @@ public class MAssociationClassTest extends TestCase {
      * Tests that an ternary AssociationClass cannot be used with
      * an aggregation.
      */
+    @Test
     public void testTernaryAssocClassWithAggregation() {
         
     	UseModelApi api = new UseModelApi("PersonCompanySalary");
@@ -209,11 +216,5 @@ public class MAssociationClassTest extends TestCase {
         }
     }
 
-    /**
-     * Entry point
-     */
-    public static void main( String[] args ) {
-        junit.textui.TestRunner.run( new TestSuite( MAssociationClassTest.class ) );
-    }
 
 }

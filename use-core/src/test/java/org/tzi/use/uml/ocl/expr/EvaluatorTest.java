@@ -18,9 +18,11 @@
  */
 
 package org.tzi.use.uml.ocl.expr;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 import java.util.ArrayList;
 
-import junit.framework.TestCase;
 
 import org.tzi.use.uml.mm.ModelFactory;
 import org.tzi.use.uml.ocl.type.TypeFactory;
@@ -36,8 +38,9 @@ import org.tzi.use.util.collections.Queue;
  * @author  Mark Richters
  */
 
-public class EvaluatorTest extends TestCase {
+public class EvaluatorTest {
 
+    @Test
     public void test1() throws ExpInvalidException, InterruptedException {
         MSystemState systemState =
             new MSystem(new ModelFactory().createModel("Test")).state();
@@ -82,7 +85,7 @@ public class EvaluatorTest extends TestCase {
             Value v = (Value) q.get();
             int s1 = (numExpr - i) * factor;
             int s2 = s1 * (s1 + 1) / 2;
-            assertEquals("Sum 1.." + s1, IntegerValue.valueOf(s2), v);
+            assertEquals( IntegerValue.valueOf(s2), v,"Sum 1.." + s1);
         }
 
         // env.printHeader("Time: " + (System.currentTimeMillis() - t0) + " ms");

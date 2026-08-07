@@ -18,10 +18,12 @@
  */
 
 package org.tzi.use.utilcore;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 
-import junit.framework.TestCase;
 import org.tzi.use.util.Report;
 
 /**
@@ -30,8 +32,9 @@ import org.tzi.use.util.Report;
  * @author  Mark Richters
  */
 
-public class ReportTest extends TestCase {
+public class ReportTest {
 
+    @Test
     public void test1() {
         Report r = new Report(4, "[ $c = $r, $r, $l ]");
         r.addRuler('-');

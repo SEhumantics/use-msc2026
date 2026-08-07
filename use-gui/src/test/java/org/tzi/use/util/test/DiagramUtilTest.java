@@ -19,14 +19,15 @@
 
 package org.tzi.use.util.test;
 
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 
-import junit.framework.TestCase;
 
-import org.junit.Test;
 import org.tzi.use.gui.views.diagrams.util.Util;
 
 /**
@@ -34,7 +35,7 @@ import org.tzi.use.gui.views.diagrams.util.Util;
  * @author Lars Hamann
  *
  */
-public class DiagramUtilTest extends TestCase {
+public class DiagramUtilTest {
 	@Test
 	public void testCircleIntersection() {
 		Ellipse2D circle = new Ellipse2D.Double(-4, -4, 8, 8);
@@ -66,6 +67,7 @@ public class DiagramUtilTest extends TestCase {
 		assertEquals(res, res2);
 	}
 	
+	@Test
 	public void testRectangleInterception() {
 		Rectangle2D.Double r = new Rectangle2D.Double();
 		r.x = 0;

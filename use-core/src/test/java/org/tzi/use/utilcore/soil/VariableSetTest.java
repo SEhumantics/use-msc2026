@@ -19,12 +19,13 @@
 
 package org.tzi.use.utilcore.soil;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.util.Random;
 
-import junit.framework.TestCase;
 
-import org.junit.Before;
-import org.junit.Test;
 import org.tzi.use.uml.ocl.type.Type;
 import org.tzi.use.uml.ocl.type.TypeFactory;
 import org.tzi.use.util.soil.VariableSet;
@@ -36,7 +37,7 @@ import org.tzi.use.util.soil.VariableSet;
  * @author Daniel Gent
  * @see VariableSet
  */
-public class VariableSetTest extends TestCase {
+public class VariableSetTest {
 	/** {@code VariableSet} A */
 	private VariableSet fA;
 	/** {@code VariableSet} B */
@@ -46,8 +47,7 @@ public class VariableSetTest extends TestCase {
 	/**
 	 * constructs the fixtures
 	 */
-	@Override
-	@Before
+	@BeforeEach
 	public void setUp() {
 		
 		// fill A and B with some random data

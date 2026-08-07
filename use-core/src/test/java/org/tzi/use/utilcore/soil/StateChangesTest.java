@@ -19,13 +19,14 @@
 
 package org.tzi.use.utilcore.soil;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 
 import java.util.Arrays;
 
-import junit.framework.TestCase;
 
-import org.junit.Before;
-import org.junit.Test;
 import org.tzi.use.uml.mm.MAssociation;
 import org.tzi.use.uml.mm.MAssociationClass;
 import org.tzi.use.uml.mm.MClass;
@@ -46,7 +47,7 @@ import org.tzi.use.util.soil.StateDifference;
  * @author Daniel Gent
  * @see StateDifference
  */
-public class StateChangesTest extends TestCase {
+public class StateChangesTest {
 	/** the test subject */
 	private StateDifference fSC;
 	/** an arbitrary object */
@@ -61,8 +62,7 @@ public class StateChangesTest extends TestCase {
 	 * builds the fixture consisting of the {@code StateChanges} object 
 	 * + the objects to insert
 	 */
-	@Override
-	@Before
+	@BeforeEach
 	public void setUp() {
 		
 		fSC = new StateDifference();

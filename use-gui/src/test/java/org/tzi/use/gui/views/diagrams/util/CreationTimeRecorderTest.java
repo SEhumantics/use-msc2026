@@ -19,9 +19,11 @@
 
 package org.tzi.use.gui.views.diagrams.util;
 
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.util.List;
 
-import junit.framework.TestCase;
 
 import org.tzi.use.api.UseApiException;
 import org.tzi.use.api.UseSystemApi;
@@ -39,7 +41,7 @@ import org.tzi.use.uml.sys.events.LinkDeletedEvent;
  * @author Lars Hamann
  *
  */
-public class CreationTimeRecorderTest extends TestCase {
+public class CreationTimeRecorderTest {
 	/**
      * Creates a model with two classes and an association class. It
      * creates instances of those as well.
@@ -73,6 +75,7 @@ public class CreationTimeRecorderTest extends TestCase {
         }
     }
     
+	@Test
 	public void testTime() {
 		MSystem system = createModelWithObject();
 		List<Event> events = system.getAllEvents();
@@ -104,7 +107,7 @@ public class CreationTimeRecorderTest extends TestCase {
 		events = system.getAllEvents();
 		assertEquals(5, events.size());
 		
-		assertTrue("Expected LinkDeletedEvent", events.get(4) instanceof LinkDeletedEvent);
+		assertTrue( events.get(4) instanceof LinkDeletedEvent,"Expected LinkDeletedEvent");
 		rec.addMessage(new MMessage(events.get(4)));
 				
 		assertEquals(2, rec.getLastCreationTime(j1));

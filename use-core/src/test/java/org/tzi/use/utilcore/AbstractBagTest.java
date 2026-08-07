@@ -19,7 +19,9 @@
 
 package org.tzi.use.utilcore;
 
-import junit.framework.TestCase;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 
 import org.tzi.use.api.UseApiException;
 import org.tzi.use.api.UseModelApi;
@@ -38,7 +40,7 @@ import org.tzi.use.uml.sys.MSystem;
  *
  * @author  Fabian Gutsche
  */
-public class AbstractBagTest extends TestCase {
+public class AbstractBagTest {
     
     private MSystem system;
     private MClass a;
@@ -49,6 +51,7 @@ public class AbstractBagTest extends TestCase {
      * Tests if the equals method returns false if the bags are not the
      * same size. (values are primitiv)
      */
+    @Test
     public void testBagWithoutSameSize() {
         Value[] valuesForBag1 = { IntegerValue.valueOf(1) };
         
@@ -78,6 +81,7 @@ public class AbstractBagTest extends TestCase {
      * Tests if the equals method returns false if the values of the
      * two bags are not the same. (values are primitiv)
      */
+    @Test
     public void testSameBagSize() {
         Value[] valuesForBag1 = { IntegerValue.valueOf(1), 
                                   IntegerValue.valueOf(1) };
@@ -110,6 +114,7 @@ public class AbstractBagTest extends TestCase {
      * Tests if the equals method returns true if the values of the
      * two bags are the same. (values are primitiv)
      */
+    @Test
     public void testSameBagSizeWithSameValues() {
         Value[] valuesForBag1 = { IntegerValue.valueOf(1), 
                                   IntegerValue.valueOf(1) };
@@ -149,6 +154,7 @@ public class AbstractBagTest extends TestCase {
      * Tests if the equals method returns false if the bags are not the
      * same size. (values are objects)
      */
+    @Test
     public void testBagWithoutSameSizeWithObjects() {
         createModel();
         ObjectValue o1 = new ObjectValue( a, 
@@ -189,6 +195,7 @@ public class AbstractBagTest extends TestCase {
      * Tests if the equals method returns false if the values of the
      * two bags are not the same. (values are objects)
      */
+    @Test
     public void testSameBagSizeObjects() {
         createModel();
         ObjectValue o1 = new ObjectValue( a, 
@@ -235,6 +242,7 @@ public class AbstractBagTest extends TestCase {
      * Tests if the equals method returns true if the values of the
      * two bags are the same. (values are objects)
      */
+    @Test
     public void testSameBagSizeWithObjectsValuesAreTheSame() {
         createModel();
         ObjectValue o1 = new ObjectValue( a, 

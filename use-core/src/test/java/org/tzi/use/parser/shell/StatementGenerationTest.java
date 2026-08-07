@@ -19,14 +19,15 @@
 
 package org.tzi.use.parser.shell;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import junit.framework.TestCase;
 
-import org.junit.Before;
-import org.junit.Test;
 import org.tzi.use.uml.mm.MAggregationKind;
 import org.tzi.use.uml.mm.MAssociation;
 import org.tzi.use.uml.mm.MAssociationClass;
@@ -54,7 +55,7 @@ import org.tzi.use.util.NullPrintWriter;
  * test the generation of statements
  * @author Daniel Gent
  */
-public class StatementGenerationTest extends TestCase {
+public class StatementGenerationTest {
 	
 	private MStatement fStatement;
 	
@@ -70,8 +71,7 @@ public class StatementGenerationTest extends TestCase {
 	
 	private MObject fO4;
 
-	@Before
-	@Override
+	@BeforeEach
 	public void setUp() throws Exception {
 		fStatement = null;
 		generateModelAndState();	

@@ -19,16 +19,19 @@
 
 package org.tzi.use.gui.views.diagrams.util;
 
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.awt.geom.Point2D;
 
-import junit.framework.TestCase;
 
 /**
  * Tests the enumeration Direction
  * @author Lars Hamann
  *
  */
-public class DirectionTest extends TestCase {
+public class DirectionTest {
+	@Test
 	public void testHelper() {
 		assertTrue(Direction.NORTH.isLocatedNorth());
 		assertFalse(Direction.NORTH.isLocatedEast());

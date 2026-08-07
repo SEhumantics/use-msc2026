@@ -19,8 +19,9 @@
 
 package org.tzi.use.uml.sys;
 
-import junit.framework.TestCase;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import org.tzi.use.api.UseApiException;
 import org.tzi.use.api.UseModelApi;
 import org.tzi.use.api.UseSystemApi;
@@ -40,8 +41,9 @@ import java.util.Arrays;
 /**
  * @author Fabian Buettner
  */
-public class MSystemStateTest extends TestCase {
+public class MSystemStateTest {
 
+    @Test
     public void testGetCrossProductOfInstanceSets() throws UseApiException {
     	
         UseModelApi api = new UseModelApi("test");

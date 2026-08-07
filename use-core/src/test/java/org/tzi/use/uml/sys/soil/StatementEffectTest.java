@@ -19,15 +19,16 @@
 
 package org.tzi.use.uml.sys.soil;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import junit.framework.TestCase;
 
-import org.junit.Before;
-import org.junit.Test;
 import org.tzi.use.TestSystem;
 import org.tzi.use.api.UseSystemApi;
 import org.tzi.use.parser.shell.ShellCommandCompiler;
@@ -47,7 +48,7 @@ import org.tzi.use.util.soil.VariableEnvironment;
  * @author Daniel Gent
  *
  */
-public class StatementEffectTest extends TestCase {
+public class StatementEffectTest {
 
 	private TestSystem fTestSystem;
 
@@ -59,8 +60,7 @@ public class StatementEffectTest extends TestCase {
 
 	private VariableEnvironment fOldVarEnv;
 
-	@Before
-	@Override
+	@BeforeEach
 	public void setUp() throws MInvalidModelException, MSystemException, ExpInvalidException {
 		fTestSystem = new TestSystem();
 		systemApi = UseSystemApi.create(fTestSystem.getSystem(), false);

@@ -19,9 +19,10 @@
 
 package org.tzi.use.uml.mm.statemachines;
 
-import junit.framework.TestCase;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
-import org.junit.Test;
+
 import org.tzi.use.api.UseApiException;
 import org.tzi.use.api.UseModelApi;
 import org.tzi.use.uml.mm.MClass;
@@ -37,7 +38,7 @@ import org.tzi.use.uml.mm.commonbehavior.communications.MSignal;
  * @author Lars Hamann
  *
  */
-public class TestSignals extends TestCase {
+public class TestSignals {
 	
 	@Test
 	public void testGeneration() {

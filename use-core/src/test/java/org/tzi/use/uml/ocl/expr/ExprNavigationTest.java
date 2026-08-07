@@ -19,6 +19,9 @@
 
 package org.tzi.use.uml.ocl.expr;
 
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
@@ -27,8 +30,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
-import junit.framework.TestCase;
-import junit.framework.TestSuite;
 
 import org.tzi.use.parser.ocl.OCLCompiler;
 import org.tzi.use.uml.mm.MAssociation;
@@ -58,10 +59,11 @@ import org.tzi.use.uml.sys.soil.MSequenceStatement;
  * @author <a href="mailto:hanna@tzi.de">Hanna Bauerdick</a>
  * @author <a href="mailto:gutsche@tzi.de">Fabian Gutsche</a>
  */
-public class ExprNavigationTest extends TestCase {
+public class ExprNavigationTest {
 
 	static List<Value> emptyQualiferValues = Collections.emptyList();
 	
+    @Test
     public void testModelWithObjects() {
         ObjectCreation.getInstance().createModelWithObjects();
         ObjectCreation.getInstance().createModelWithManyObjects();
@@ -72,6 +74,7 @@ public class ExprNavigationTest extends TestCase {
 // Tests for Navigation with normal links
 //-------------------------------------------------------------
 
+    @Test
     public void testNavigationWithAssocs() {
         MSystem system = ObjectCreation.getInstance().createModelWithObjects();
         List<MAssociationEnd> assocEnds = system.model().getAssociation( "Job" ).associationEnds();
@@ -103,6 +106,7 @@ public class ExprNavigationTest extends TestCase {
         }
     }
 
+    @Test
     public void testNavigationWithAssocs1_MANY() {
         MSystem system = ObjectCreation.getInstance().createModelWithManyObjects();
         List<MAssociationEnd> assocEnds = system.model().getAssociation( "Job" ).associationEnds();
@@ -146,6 +150,7 @@ public class ExprNavigationTest extends TestCase {
 // Tests for navigation with linkobjects
 //-------------------------------------------------------------
 
+    @Test
     public void testNavigationWithAssocClass() {
         MSystem system = ObjectCreation.getInstance().createModelWithObjectsAndLinkObject();
         MAssociationClass job = system.model().getAssociationClass( "Job" );
@@ -182,6 +187,7 @@ public class ExprNavigationTest extends TestCase {
     /**
      * Test the navigation from a specific object to the linkobject j1.
      */
+    @Test
     public void testNavigableElementsToLinkObject() {
         try {
             MSystem system = ObjectCreation.getInstance().createModelWithObjectsAndLinkObject();
@@ -245,6 +251,7 @@ public class ExprNavigationTest extends TestCase {
     /**
      * Test the navigation from linkobject j1 to a specific object.
      */
+    @Test
     public void testNavigableElementsFromLinkObject() {
         try {
             MSystem system = ObjectCreation.getInstance().createModelWithObjectsAndLinkObject();
@@ -267,6 +274,7 @@ public class ExprNavigationTest extends TestCase {
      * Test the navigation from an object to a specific object
      * respectively to the associationClass Job.
      */
+    @Test
     public void testNavigableElementsWithAssocClass() {
         try {
             MSystem system = ObjectCreation.getInstance().createModelWithObjectsAndLinkObject();
@@ -292,6 +300,7 @@ public class ExprNavigationTest extends TestCase {
      * Test the navigation from a specific object respectively to the
      * association Job.
      */
+    @Test
     public void testNavigableElementsWithNormalAssoc() {
         try {
             MSystem system = ObjectCreation.getInstance().createModelWithObjects();
@@ -358,6 +367,7 @@ public class ExprNavigationTest extends TestCase {
     /**
      * Test the navigation from p1 to company (a normal association).
      */
+    @Test
     public void testNavigationWithNormalAssoc() {
         MSystem system = ObjectCreation.getInstance().createModelWithObjectsAndLinkObject();
         String expr = "p1.company->size";
@@ -380,6 +390,7 @@ public class ExprNavigationTest extends TestCase {
      * Test the navigation from j1 to company (from an linkObject to an
      * object).
      */
+    @Test
     public void testNavigationFromLinkObjectToObject() {
         MSystem system = ObjectCreation.getInstance().createModelWithObjectsAndLinkObject();
         String expr = "j1.company->size";
@@ -402,6 +413,7 @@ public class ExprNavigationTest extends TestCase {
      * Test the navigation from c1 to job (from an object to an
      * linkObject).
      */
+    @Test
     public void testNavigationFromObjectToLinkObject() {
         MSystem system = ObjectCreation.getInstance().createModelWithObjectsAndLinkObject();
         String expr = "c1.job->size";
@@ -424,6 +436,7 @@ public class ExprNavigationTest extends TestCase {
      * Test the navigation from c1 to job with an explicit rolename is given for
      * navigation (from an object to an linkObject).
      */
+    @Test
     public void testNavigationFromObjectToLinkObjectWithExplicitRolename() {
         MSystem system = ObjectCreation.getInstance()
             .createModelWithObjectsOfSameClassAndLinkObject();
@@ -470,11 +483,4 @@ public class ExprNavigationTest extends TestCase {
         assertTrue( value.isUndefined() );
     }
 
-    /**
-     * Entry point
-     */
-    public static void main( String[] args ) {
-        junit.textui.TestRunner.run( new TestSuite( ExprNavigationTest.class ) );
-
-    }
 }

@@ -1,5 +1,9 @@
 package org.tzi.use.architecture;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
@@ -10,8 +14,6 @@ import com.tngtech.archunit.lang.EvaluationResult;
 import com.tngtech.archunit.library.dependencies.SliceAssignment;
 import com.tngtech.archunit.library.dependencies.SliceIdentifier;
 import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition;
-import org.junit.Before;
-import org.junit.Test;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -20,7 +22,7 @@ public class AntCyclicDependenciesCoreTest {
 
     private JavaClasses classes;
 
-    @Before
+    @BeforeEach
     public void setup() {
         // Create reports directory if it doesn't exist
         File reportsDir = new File("target/archunit-reports");

@@ -18,7 +18,9 @@
  */
 
 package org.tzi.use.utilcore;
-import junit.framework.TestCase;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 import org.tzi.use.util.StringUtil;
 
 /**
@@ -27,12 +29,10 @@ import org.tzi.use.util.StringUtil;
  * @author  Mark Richters
  */
 
-public class StringUtilTest extends TestCase {
+public class StringUtilTest {
 
-    public StringUtilTest(String name) {
-        super(name);
-    }
 
+    @Test
     public void testNthIndexOf() {
         assertEquals(-1, StringUtil.nthIndexOf("abbbb", 0, "bb"));
         assertEquals(1, StringUtil.nthIndexOf("abbbb", 1, "bb"));
@@ -44,16 +44,19 @@ public class StringUtilTest extends TestCase {
         assertEquals(3, StringUtil.nthIndexOf("abbbb", 3, 'b'));
     }
 
+    @Test
     public void testPad() {
         assertEquals("a", StringUtil.pad("a", 1));
         assertEquals("a ", StringUtil.pad("a", 2));
     }
 
+    @Test
     public void testCenter() {
         assertEquals(" a ", StringUtil.center("a", 3));
         assertEquals(" a ", StringUtil.center("a", 3));
     }
 
+    @Test
     public void testEscapeChar() {
         assertEquals("a", StringUtil.escapeChar('a', '"'));
         assertEquals("\\344", StringUtil.escapeChar('\344', '"'));

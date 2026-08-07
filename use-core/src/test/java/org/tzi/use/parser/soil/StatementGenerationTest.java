@@ -19,10 +19,11 @@
 
 package org.tzi.use.parser.soil;
 
-import junit.framework.TestCase;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
-import org.junit.Before;
-import org.junit.Test;
+
 import org.tzi.use.TestSystem;
 import org.tzi.use.config.Options;
 import org.tzi.use.config.Options.WarningType;
@@ -50,14 +51,13 @@ import org.tzi.use.util.NullPrintWriter;
  * @author Daniel Gent
  *
  */
-public class StatementGenerationTest extends TestCase {
+public class StatementGenerationTest {
 	
 	private MStatement fStatement;
 	
 	private TestSystem fTestSystem;
 
-	@Before
-	@Override
+	@BeforeEach
 	public void setUp() throws Exception {
 		fStatement = null;
 		fTestSystem = new TestSystem();

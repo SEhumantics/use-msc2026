@@ -18,10 +18,12 @@
  */
 
 package org.tzi.use.graph;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 import java.util.Arrays;
 import java.util.HashSet;
 
-import junit.framework.TestCase;
 
 
 /**
@@ -31,8 +33,9 @@ import junit.framework.TestCase;
  * @see         DirectedGraph
  */
 
-public class GraphTest extends TestCase {
+public class GraphTest {
 
+    @Test
     public void test1() {
         DirectedGraph<Integer, DirectedEdgeBase<Integer>> g;
         Integer n0, n1, n2, n3, n4, n5;
@@ -156,6 +159,7 @@ public class GraphTest extends TestCase {
         assertEquals(7, g.numEdges());
     }
     
+    @Test
     public void test2() {
         DirectedGraph<Integer, DirectedEdgeBase<Integer>> g;
         Integer n0, n1, n2, n3, n4, n5;

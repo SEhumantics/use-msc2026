@@ -19,12 +19,14 @@
 
 package org.tzi.use.uml.mm;
 
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import junit.framework.TestCase;
 
 import org.tzi.use.uml.ocl.value.StringValue;
 import org.tzi.use.uml.ocl.value.Value;
@@ -43,12 +45,13 @@ import org.tzi.use.uml.sys.soil.MRValueExpression;
  * @author <a href="mailto:hanna@tzi.de">Hanna Bauerdick</a>
  * @author <a href="mailto:gutsche@tzi.de">Fabian Gutsche</a>
  */
-public class ModelCreationTest extends TestCase {
+public class ModelCreationTest {
 
     /**
      * Tests, if the method <code>createEmptyModel</code> really creates
      * an empty USE-model.
      */
+    @Test
     public void testCreateEmptyModel() {
         MModel model = TestModelUtil.getInstance().createEmptyModel();
         assertTrue( model.classes().isEmpty() );
@@ -58,6 +61,7 @@ public class ModelCreationTest extends TestCase {
      * This method instanciate Objects of the classes, which are created in the
      * method <code>createModelWithClasses</code>.
      */
+    @Test
     public void testCreateModelWithClasses() {
         try {
             MModel model = TestModelUtil.getInstance().createModelWithClasses();
@@ -90,6 +94,7 @@ public class ModelCreationTest extends TestCase {
      * Create links and objects of the associations and classes
      * in <code>TestModelUtil</code>.
      */
+    @Test
     public void testCreateModelWithClassAndAssocs() {
         try {
             MModel model = TestModelUtil.getInstance().createModelWithClassAndAssocs();
@@ -145,6 +150,7 @@ public class ModelCreationTest extends TestCase {
      * Create links and objects of the qualified association and classes
      * in <code>TestModelUtil</code>.
      */
+    @Test
     public void testCreateModelWithClassAndQualifiedAssoc() {
         try {
             MModel model = TestModelUtil.getInstance().createModelWithClassAndQualifiedAssoc();

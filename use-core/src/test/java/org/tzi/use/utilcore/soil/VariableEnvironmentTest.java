@@ -19,11 +19,12 @@
 
 package org.tzi.use.utilcore.soil;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
-import junit.framework.TestCase;
 
-import org.junit.Before;
-import org.junit.Test;
+
 import org.tzi.use.TestSystem;
 import org.tzi.use.uml.mm.MClass;
 import org.tzi.use.uml.mm.MInvalidModelException;
@@ -46,7 +47,7 @@ import org.tzi.use.util.soil.VariableEnvironment;
  * @author Daniel Gent
  * @see VariableEnvironment
  */
-public class VariableEnvironmentTest extends TestCase {
+public class VariableEnvironmentTest {
 	private VariableEnvironment ve;
 	private String n1;
 	private String n2;
@@ -60,8 +61,7 @@ public class VariableEnvironmentTest extends TestCase {
 	/**
 	 * constructs fixture
 	 */
-	@Override
-	@Before
+	@BeforeEach
 	public void setUp() throws Exception {
 		TestSystem testSystem = new TestSystem();
 		ve = new VariableEnvironment(testSystem.getState());

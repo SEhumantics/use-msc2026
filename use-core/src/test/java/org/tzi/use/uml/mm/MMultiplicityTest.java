@@ -18,7 +18,9 @@
  */
 
 package org.tzi.use.uml.mm;
-import junit.framework.TestCase;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
 
 /**
@@ -28,8 +30,9 @@ import junit.framework.TestCase;
  * @see     MMultiplicity
  */
 
-public class MMultiplicityTest extends TestCase {
+public class MMultiplicityTest {
 
+    @Test
     public void test1() {
         // env.printHeader("testing MMultiplicity...");
 

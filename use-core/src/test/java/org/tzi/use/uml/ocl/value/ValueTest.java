@@ -19,8 +19,10 @@
 
 package org.tzi.use.uml.ocl.value;
 
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.google.common.testing.EqualsTester;
-import junit.framework.TestCase;
 import org.tzi.use.uml.ocl.type.EnumType;
 import org.tzi.use.uml.ocl.type.TypeFactory;
 
@@ -32,12 +34,13 @@ import java.util.Arrays;
  * @author  Mark Richters
  */
 
-public class ValueTest extends TestCase {
+public class ValueTest {
 
+    @Test
     public void testEnum() {
         String[] literals = { "a", "b", "c" };
         EnumType enm = TypeFactory.mkEnum("E", Arrays.asList(literals));
-        assertEquals("EnumValue.value", "b", new EnumValue(enm, "b").value());
+        assertEquals( "b", new EnumValue(enm, "b").value(),"EnumValue.value");
         try {
             new EnumValue(enm, "d");
             fail("Illegal EnumValue");
@@ -46,58 +49,57 @@ public class ValueTest extends TestCase {
         }
     }
 
+    @Test
     public void testInt() {
-        assertEquals("IntegerValue.value", 42, IntegerValue.valueOf(42).value());
+        assertEquals( 42, IntegerValue.valueOf(42).value(),"IntegerValue.value");
         assertEquals(
-                     "IntegerValue.type",
                      TypeFactory.mkInteger(),
-                     IntegerValue.valueOf(42).type());
+                     IntegerValue.valueOf(42).type(),"IntegerValue.type");
         assertTrue(
-                   "IntegerValue.equals",
-                   IntegerValue.valueOf(42).equals(IntegerValue.valueOf(42)));
+                   IntegerValue.valueOf(42).equals(IntegerValue.valueOf(42)),"IntegerValue.equals");
     }
 
+    @Test
     public void testReal() {
-        assertEquals("RealValue.value", 1.2, new RealValue(1.2).value(), 0);
-        assertEquals("RealValue.type", TypeFactory.mkReal(), new RealValue(1.2).type());
-        assertTrue("RealValue.equals", new RealValue(1.2).equals(new RealValue(1.2)));
+        assertEquals( 1.2, new RealValue(1.2).value(), 0,"RealValue.value");
+        assertEquals( TypeFactory.mkReal(), new RealValue(1.2).type(),"RealValue.type");
+        assertTrue( new RealValue(1.2).equals(new RealValue(1.2)),"RealValue.equals");
     }
 
+    @Test
     public void testBoolean() {
-        assertTrue("BooleanValue.value", BooleanValue.TRUE.value());
-        assertFalse("BooleanValue.value", BooleanValue.FALSE.value());
-        assertEquals("BooleanValue.value", BooleanValue.TRUE, BooleanValue.get(true));
-        assertEquals("BooleanValue.value", BooleanValue.FALSE, BooleanValue.get(false));
+        assertTrue( BooleanValue.TRUE.value(),"BooleanValue.value");
+        assertFalse( BooleanValue.FALSE.value(),"BooleanValue.value");
+        assertEquals( BooleanValue.TRUE, BooleanValue.get(true),"BooleanValue.value");
+        assertEquals( BooleanValue.FALSE, BooleanValue.get(false),"BooleanValue.value");
         assertEquals(
-                     "BooleanValue.type",
                      TypeFactory.mkBoolean(),
-                     BooleanValue.TRUE.type());
+                     BooleanValue.TRUE.type(),"BooleanValue.type");
         assertEquals(
-                     "BooleanValue.type",
                      TypeFactory.mkBoolean(),
-                     BooleanValue.FALSE.type());
-        assertTrue("BooleanValue.equals", BooleanValue.FALSE.equals(BooleanValue.FALSE));
-        assertTrue("BooleanValue.equals", BooleanValue.FALSE.equals(BooleanValue.FALSE));
+                     BooleanValue.FALSE.type(),"BooleanValue.type");
+        assertTrue( BooleanValue.FALSE.equals(BooleanValue.FALSE),"BooleanValue.equals");
+        assertTrue( BooleanValue.FALSE.equals(BooleanValue.FALSE),"BooleanValue.equals");
     }
 
+    @Test
     public void testString() {
-        assertEquals("StringValue.value", "foo", new StringValue("foo").value());
+        assertEquals( "foo", new StringValue("foo").value(),"StringValue.value");
         assertEquals(
-                     "StringValue.type",
                      TypeFactory.mkString(),
-                     new StringValue("foo").type());
+                     new StringValue("foo").type(),"StringValue.type");
         assertTrue(
-                   "StringValue.equals",
-                   new StringValue("bar").equals(new StringValue("bar")));
+                   new StringValue("bar").equals(new StringValue("bar")),"StringValue.equals");
     }
 
+    @Test
     public void testSet() {
         SetValue intSet = new SetValue(TypeFactory.mkInteger());
-        assertEquals("SetValue.size", 0, intSet.size());
+        assertEquals( 0, intSet.size(),"SetValue.size");
         intSet.add(IntegerValue.valueOf(3));
-        assertEquals("SetValue.insert", 1, intSet.size());
+        assertEquals( 1, intSet.size(),"SetValue.insert");
         intSet.add(IntegerValue.valueOf(3));
-        assertEquals("SetValue/no duplicates", 1, intSet.size());
+        assertEquals( 1, intSet.size(),"SetValue/no duplicates");
         try {
             intSet.add(new StringValue("foo"));
             // fail("SetValue/matching element type");
@@ -112,19 +114,20 @@ public class ValueTest extends TestCase {
         SetValue set2 = new SetValue(TypeFactory.mkInteger());
         set2.add(IntegerValue.valueOf(2));
         set2.add(IntegerValue.valueOf(3));
-        assertFalse("SetValue.equals", set1.equals(set2));
+        assertFalse( set1.equals(set2),"SetValue.equals");
         set2.add(IntegerValue.valueOf(1));
-        assertTrue("SetValue.equals", set1.equals(set2));
-        assertEquals("SetValue.toString", "Set{1,2,3}", set1.toString());
+        assertTrue( set1.equals(set2),"SetValue.equals");
+        assertEquals( "Set{1,2,3}", set1.toString(),"SetValue.toString");
     }
 
+    @Test
     public void testBag() {
         BagValue intBag = new BagValue(TypeFactory.mkInteger());
-        assertEquals("BagValue.size", 0, intBag.size());
+        assertEquals( 0, intBag.size(),"BagValue.size");
         intBag.add(IntegerValue.valueOf(3));
-        assertEquals("BagValue.insert", 1, intBag.size());
+        assertEquals( 1, intBag.size(),"BagValue.insert");
         intBag.add(IntegerValue.valueOf(3));
-        assertEquals("BagValue/duplicates", 2, intBag.size());
+        assertEquals( 2, intBag.size(),"BagValue/duplicates");
         try {
             intBag.add(new StringValue("foo"));
             //            fail("BagValue/matching element type");
@@ -138,20 +141,21 @@ public class ValueTest extends TestCase {
         BagValue bag2 = new BagValue(TypeFactory.mkInteger());
         bag2.add(IntegerValue.valueOf(2));
         bag2.add(IntegerValue.valueOf(3));
-        assertFalse("BagValue.equals", bag1.equals(bag2));
+        assertFalse( bag1.equals(bag2),"BagValue.equals");
         bag2.add(IntegerValue.valueOf(1));
-        assertTrue("BagValue.equals", bag1.equals(bag2));
+        assertTrue( bag1.equals(bag2),"BagValue.equals");
         bag2.add(IntegerValue.valueOf(1));
-        assertEquals("BagValue.toString", "Bag{1,1,2,3}", bag2.toString());
+        assertEquals( "Bag{1,1,2,3}", bag2.toString(),"BagValue.toString");
     }
 
+    @Test
     public void testSequence() {
         SequenceValue intSeq = new SequenceValue(TypeFactory.mkInteger());
-        assertEquals("SequenceValue.size", 0, intSeq.size());
+        assertEquals( 0, intSeq.size(),"SequenceValue.size");
         intSeq.add(IntegerValue.valueOf(3));
-        assertEquals("SequenceValue.insert", 1, intSeq.size());
+        assertEquals( 1, intSeq.size(),"SequenceValue.insert");
         intSeq.add(IntegerValue.valueOf(3));
-        assertEquals("SequenceValue/duplicates", 2, intSeq.size());
+        assertEquals( 2, intSeq.size(),"SequenceValue/duplicates");
         try {
             intSeq.add(new StringValue("foo"));
             //            fail("SequenceValue/matching element type");
@@ -165,13 +169,14 @@ public class ValueTest extends TestCase {
         SequenceValue seq2 = new SequenceValue(TypeFactory.mkInteger());
         seq2.add(IntegerValue.valueOf(1));
         seq2.add(IntegerValue.valueOf(2));
-        assertFalse("SequenceValue.equals", seq1.equals(seq2));
+        assertFalse( seq1.equals(seq2),"SequenceValue.equals");
         seq2.add(IntegerValue.valueOf(3));
-        assertTrue("SequenceValue.equals", seq1.equals(seq2));
+        assertTrue( seq1.equals(seq2),"SequenceValue.equals");
         seq2.add(IntegerValue.valueOf(1));
-        assertEquals("SequenceValue.toString", "Sequence{1,2,3,1}", seq2.toString());
+        assertEquals( "Sequence{1,2,3,1}", seq2.toString(),"SequenceValue.toString");
     }
 
+    @Test
     public void testSetEquals() {
         SetValue intSet1 = new SetValue(TypeFactory.mkInteger());
         intSet1.add(IntegerValue.valueOf(1));
@@ -189,6 +194,7 @@ public class ValueTest extends TestCase {
                 .testEquals();
     }
     
+    @Test
     public void testSequenceEquals() {
         SequenceValue intSequence1 = new SequenceValue(TypeFactory.mkInteger());
         intSequence1.add(IntegerValue.valueOf(1));
@@ -207,6 +213,7 @@ public class ValueTest extends TestCase {
     }
 
 
+    @Test
     public void testBagEquals() {
         BagValue intBag1 = new BagValue(TypeFactory.mkInteger());
         intBag1.add(IntegerValue.valueOf(1));

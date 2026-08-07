@@ -19,10 +19,11 @@
 
 package org.tzi.use.uml.sys;
 
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
 import java.util.Iterator;
 
-import junit.framework.TestCase;
-import junit.framework.TestSuite;
 
 import org.tzi.use.api.UseApiException;
 import org.tzi.use.api.UseSystemApi;
@@ -39,11 +40,12 @@ import org.tzi.use.uml.mm.TestModelUtil;
  * @author <a href="mailto:hanna@tzi.de">Hanna Bauerdick</a>
  * @author <a href="mailto:gutsche@tzi.de">Fabian Gutsche</a>
  */
-public class LinkTest extends TestCase {
+public class LinkTest {
 
     /**
      * Creates instances of associations and association class.
      */
+    @Test
     public void testLinkCreation() {
         MSystem system = createModelWithObject();
 
@@ -72,6 +74,7 @@ public class LinkTest extends TestCase {
      * Deletes Link object between Objects with command
      * <code>MCmdDestroyObjects</code>.
      */
+    @Test
     public void testObjectDestroy() {
         try {
             MSystem system = createModelWithObject();
@@ -103,6 +106,7 @@ public class LinkTest extends TestCase {
      * Deletes link object between Objects with command
      * <code>MCmdDeleteLink</code>.
      */
+    @Test
     public void testLinkDeletion() {
         try {
             MSystem system = createModelWithObject();
@@ -124,6 +128,7 @@ public class LinkTest extends TestCase {
         }
     }
 
+    @Test
     public void testLinkCreationAndUndo() {
         try {
             MSystem system = createModelWithObject();
@@ -161,6 +166,7 @@ public class LinkTest extends TestCase {
      * Creates link object between Objects with command
      * <code>MCmdInsertLink</code>.
      */
+    @Test
     public void testCreationLinkObjectWithCmdInsertLink() {
         try {
             MSystem system = createModelWithoutLinkObject();
@@ -186,6 +192,7 @@ public class LinkTest extends TestCase {
      * Tries to create link object with command
      * <code>MCmdCreateObjects</code>.
      */
+    @Test
     public void testCreationLinkObjectWithCmdCreateObjects() {
         MSystem system = null;
         try {
@@ -212,6 +219,7 @@ public class LinkTest extends TestCase {
      * Tests that two AssociationClasses cannot be defined between
      * two other objects with the command create-between .
      */
+    @Test
     public void testTwoLinkObjectsBetweenTwoOtherObjects() {
         MSystem system = null;
         try {
@@ -237,6 +245,7 @@ public class LinkTest extends TestCase {
      * Tests that two AssociationClasses cannot be defined between
      * two other objects with the command insert.
      */
+    @Test
     public void testTwoLinkObjectsBetweenTwoOtherObjectsWithInsert() {
         MSystem system = null;
         MAssociationClass assocClass = null;
@@ -337,12 +346,6 @@ public class LinkTest extends TestCase {
     }
 
 
-    /**
-     * Entry point
-     */
-    public static void main( String[] args ) {
-        junit.textui.TestRunner.run( new TestSuite( LinkTest.class ) );
-    }
 
 }
 
