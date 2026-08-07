@@ -146,7 +146,10 @@ public abstract class ExpQuery extends Expression {
             if (queryVal.isUndefined())
                 queryVal = BooleanValue.FALSE;
 
-            boolean selected = queryVal instanceof UBooleanValue ? ((UBooleanValue) queryVal).probability() >= .5 : ((BooleanValue) queryVal).value();
+            // An uncertain predicate selects on the more likely side.
+            boolean selected = queryVal instanceof UBooleanValue uncertain
+                    ? uncertain.probability() >= .5
+                    : ((BooleanValue) queryVal).value();
             if (selected == doSelect)
                 resValues.add(elemVal);
         }

@@ -214,17 +214,66 @@ public abstract class TypeImpl implements Type {
 		return false;
 	}
 
-    @Override public boolean isKindOfUncertain(VoidHandling h) { return false; }
-    @Override public boolean isTypeOfUReal() { return false; }
-    @Override public boolean isKindOfUReal(VoidHandling h) { return false; }
-    @Override public boolean isTypeOfUInteger() { return false; }
-    @Override public boolean isKindOfUInteger(VoidHandling h) { return false; }
-    @Override public boolean isTypeOfUString() { return false; }
-    @Override public boolean isKindOfUString(VoidHandling h) { return false; }
-    @Override public boolean isTypeOfUBoolean() { return false; }
-    @Override public boolean isKindOfUBoolean(VoidHandling h) { return false; }
-    @Override public boolean isTypeOfSBoolean() { return false; }
-    @Override public boolean isKindOfSBoolean(VoidHandling h) { return false; }
+	/*
+	 * The uncertainty built-ins, answered negatively here and overridden by the
+	 * types in the uncertain lattice: UncertainType and its five subclasses, and
+	 * the basic types that are kind of one of them.
+	 */
+
+	@Override
+	public boolean isKindOfUncertain(VoidHandling h) {
+		return false;
+	}
+
+	@Override
+	public boolean isTypeOfUReal() {
+		return false;
+	}
+
+	@Override
+	public boolean isKindOfUReal(VoidHandling h) {
+		return false;
+	}
+
+	@Override
+	public boolean isTypeOfUInteger() {
+		return false;
+	}
+
+	@Override
+	public boolean isKindOfUInteger(VoidHandling h) {
+		return false;
+	}
+
+	@Override
+	public boolean isTypeOfUString() {
+		return false;
+	}
+
+	@Override
+	public boolean isKindOfUString(VoidHandling h) {
+		return false;
+	}
+
+	@Override
+	public boolean isTypeOfUBoolean() {
+		return false;
+	}
+
+	@Override
+	public boolean isKindOfUBoolean(VoidHandling h) {
+		return false;
+	}
+
+	@Override
+	public boolean isTypeOfSBoolean() {
+		return false;
+	}
+
+	@Override
+	public boolean isKindOfSBoolean(VoidHandling h) {
+		return false;
+	}
 
 	@Override
 	public boolean isKindOfEnum(VoidHandling h) {

@@ -101,16 +101,32 @@ public interface Type extends BufferedToString {
 
     boolean isTypeOfBoolean();
 
+    /*
+     * The uncertainty built-ins. These are defaulted rather than abstract so that
+     * a type implemented outside this project -- a plugin's -- keeps compiling and
+     * simply answers false to all of them.
+     */
+
     default boolean isKindOfUncertain(VoidHandling h) { return false; }
+
     default boolean isTypeOfUReal() { return false; }
+
     default boolean isKindOfUReal(VoidHandling h) { return false; }
+
     default boolean isTypeOfUInteger() { return false; }
+
     default boolean isKindOfUInteger(VoidHandling h) { return false; }
+
     default boolean isTypeOfUString() { return false; }
+
     default boolean isKindOfUString(VoidHandling h) { return false; }
+
     default boolean isTypeOfUBoolean() { return false; }
+
     default boolean isKindOfUBoolean(VoidHandling h) { return false; }
+
     default boolean isTypeOfSBoolean() { return false; }
+
     default boolean isKindOfSBoolean(VoidHandling h) { return false; }
     
     boolean isKindOfEnum(VoidHandling h);

@@ -99,38 +99,83 @@ public abstract class CollectionValue extends Value implements Iterable<Value> {
     
     public abstract Collection<Value> collection();
 
-    /** Uncertain membership. Subjective operands are projected onto their
-     *  probability, which is the identity for every UBoolean-valued case. */
+    /**
+     * The probability that an element equals <code>value</code>, for the uncertain
+     * membership operations below. Whichever side carries uncertainty decides;
+     * a subjective operand is projected onto its probability, which is the
+     * identity for every UBoolean-valued case.
+     */
+    private static UBooleanValue equality(Value element, Value value) {
+        if (element instanceof UncertainValue u) return u.uEquals(value).toUBoolean();
+        if (value instanceof UncertainValue u) return u.uEquals(element).toUBoolean();
+        return UBooleanValue.probability(element.equals(value) ? 1 : 0);
+    }
+
+    /** Uncertain membership: the best match anywhere in the collection. */
     public UBooleanValue uIncludes(Value value) {
-        UBooleanValue result=UBooleanValue.FALSE;
-        for (Value element: this) {
-            UBooleanValue candidate;
-            if (element instanceof UncertainValue u) candidate=u.uEquals(value).toUBoolean();
-            else if (value instanceof UncertainValue u) candidate=u.uEquals(element).toUBoolean();
-            else candidate=UBooleanValue.probability(element.equals(value)?1:0);
-            if (candidate.probability()>result.probability()) result=candidate;
-            if (result.probability()==1) break;
+        UBooleanValue result = UBooleanValue.FALSE;
+        for (Value element : this) {
+            UBooleanValue candidate = equality(element, value);
+            if (candidate.probability() > result.probability()) result = candidate;
+            if (result.probability() == 1) break;
         }
         return result;
     }
+
+    /**
+     * The short circuit on size is wrong for an argument holding duplicates -- a
+     * two-element receiver can include a three-element bag of two distinct values.
+     * It is byte for byte the historical implementation and is kept deliberately.
+     */
     public UBooleanValue uIncludesAll(CollectionValue other) {
-        if (other.size()>size()) return UBooleanValue.FALSE;
-        UBooleanValue result=UBooleanValue.TRUE; for(Value v:other){result=result.and(uIncludes(v));if(result.probability()==0)break;} return result;
-    }
-    public UBooleanValue uExcludes(Value value) {
-        UBooleanValue result=UBooleanValue.TRUE;
-        for(Value element:this){
-            UBooleanValue candidate;
-            if(element instanceof UncertainValue u) candidate=u.uDistinct(value).toUBoolean();
-            else if(value instanceof UncertainValue u) candidate=u.uDistinct(element).toUBoolean();
-            else candidate=UBooleanValue.probability(element.equals(value)?0:1);
-            result=result.and(candidate); if(result.probability()==0)break;
+        if (other.size() > size()) return UBooleanValue.FALSE;
+        UBooleanValue result = UBooleanValue.TRUE;
+        for (Value v : other) {
+            result = result.and(uIncludes(v));
+            if (result.probability() == 0) break;
         }
         return result;
     }
-    public UBooleanValue uExcludesAll(CollectionValue other) { UBooleanValue result=UBooleanValue.TRUE;for(Value v:other){result=result.and(uExcludes(v));if(result.probability()==0)break;}return result; }
-    public int uCountC(Value value,double confidence){if(confidence<0||confidence>1)throw new IllegalArgumentException("confidence must be in [0,1]");int n=0;for(Value element:this){UBooleanValue e;if(element instanceof UncertainValue u)e=u.uEquals(value).toUBoolean();else if(value instanceof UncertainValue u)e=u.uEquals(element).toUBoolean();else e=UBooleanValue.probability(element.equals(value)?1:0);if(e.probability()>=confidence)n++;}return n;}
-    public int uCount(Value value){return uCountC(value,.5);}
+
+    /** Uncertain non-membership: every element has to differ. */
+    public UBooleanValue uExcludes(Value value) {
+        UBooleanValue result = UBooleanValue.TRUE;
+        for (Value element : this) {
+            UBooleanValue candidate;
+            if (element instanceof UncertainValue u) candidate = u.uDistinct(value).toUBoolean();
+            else if (value instanceof UncertainValue u) candidate = u.uDistinct(element).toUBoolean();
+            else candidate = UBooleanValue.probability(element.equals(value) ? 0 : 1);
+            result = result.and(candidate);
+            if (result.probability() == 0) break;
+        }
+        return result;
+    }
+
+    public UBooleanValue uExcludesAll(CollectionValue other) {
+        UBooleanValue result = UBooleanValue.TRUE;
+        for (Value v : other) {
+            result = result.and(uExcludes(v));
+            if (result.probability() == 0) break;
+        }
+        return result;
+    }
+
+    /** How many elements equal <code>value</code> with at least this confidence. */
+    public int uCountC(Value value, double confidence) {
+        if (confidence < 0 || confidence > 1) {
+            throw new IllegalArgumentException("confidence must be in [0,1]");
+        }
+        int n = 0;
+        for (Value element : this) {
+            if (equality(element, value).probability() >= confidence) n++;
+        }
+        return n;
+    }
+
+    /** {@link #uCountC} at the default confidence of one half. */
+    public int uCount(Value value) {
+        return uCountC(value, .5);
+    }
 
     @Override
     public boolean isCollection() {

@@ -47,7 +47,11 @@ public final class RealType extends BasicType {
     public boolean isKindOfReal(VoidHandling h) {
     	return true;
     }
-    @Override public boolean isKindOfUReal(VoidHandling h) { return true; }
+    /** A certain real is an uncertain one with an uncertainty of zero. */
+    @Override
+    public boolean isKindOfUReal(VoidHandling h) {
+    	return true;
+    }
     
     /** 
      * Returns true if this type is a subtype of <code>t</code>. 

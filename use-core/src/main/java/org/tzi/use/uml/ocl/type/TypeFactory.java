@@ -57,12 +57,12 @@ public final class TypeFactory {
     	buildInTypesMap.put("UnlimitedNatural", unlimitedNaturalType);
     	buildInTypesMap.put("String", stringType);
     	buildInTypesMap.put("Boolean", booleanType);
-	buildInTypesMap.put("Real", realType);
-	buildInTypesMap.put("UReal", uRealType);
-	buildInTypesMap.put("UInteger", uIntegerType);
-	buildInTypesMap.put("UString", uStringType);
-	buildInTypesMap.put("UBoolean", uBooleanType);
-	buildInTypesMap.put("SBoolean", sBooleanType);
+    	buildInTypesMap.put("Real", realType);
+    	buildInTypesMap.put("UReal", uRealType);
+    	buildInTypesMap.put("UInteger", uIntegerType);
+    	buildInTypesMap.put("UString", uStringType);
+    	buildInTypesMap.put("UBoolean", uBooleanType);
+    	buildInTypesMap.put("SBoolean", sBooleanType);
     	buildInTypesMap.put("OclAny", oclAnyType);
     	buildInTypesMap.put("OclVoid", voidType);
     }

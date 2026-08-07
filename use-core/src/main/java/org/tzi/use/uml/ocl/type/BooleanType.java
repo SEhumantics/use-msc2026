@@ -42,8 +42,17 @@ public final class BooleanType extends BasicType {
     public boolean isKindOfBoolean(VoidHandling h) {
     	return true;
     }
-    @Override public boolean isKindOfUBoolean(VoidHandling h) { return true; }
-    @Override public boolean isKindOfSBoolean(VoidHandling h) { return true; }
+    /** A certain Boolean is an uncertain one held with full confidence. */
+    @Override
+    public boolean isKindOfUBoolean(VoidHandling h) {
+    	return true;
+    }
+
+    /** ... and an opinion that is dogmatically believed or disbelieved. */
+    @Override
+    public boolean isKindOfSBoolean(VoidHandling h) {
+    	return true;
+    }
     
     /** 
      * Returns true if this type is a subtype of <code>t</code>. 

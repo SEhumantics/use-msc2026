@@ -109,7 +109,10 @@ final class Op_collection_includes extends OpGeneric {
 		if (params.length == 2 && params[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)) {			
 			CollectionType coll = (CollectionType) params[0];
 			if (params[1].getLeastCommonSupertype(coll.elemType()) != null)
-				return (coll.elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)||params[1].isKindOfUncertain(VoidHandling.EXCLUDE_VOID)) ? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean();
+				// An uncertain element or argument makes the membership itself uncertain.
+				return coll.elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)
+						|| params[1].isKindOfUncertain(VoidHandling.EXCLUDE_VOID)
+						? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean();
 			
 		}
 		return null;
@@ -162,7 +165,10 @@ final class Op_collection_excludes extends OpGeneric {
 		if (params.length == 2 && params[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)) {
 			CollectionType coll = (CollectionType) params[0];
 			if (params[1].getLeastCommonSupertype(coll.elemType()) != null)
-				return (coll.elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)||params[1].isKindOfUncertain(VoidHandling.EXCLUDE_VOID)) ? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean();
+				// An uncertain element or argument makes the membership itself uncertain.
+				return coll.elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)
+						|| params[1].isKindOfUncertain(VoidHandling.EXCLUDE_VOID)
+						? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean();
 		}
 		return null;
 	}
@@ -266,7 +272,10 @@ final class Op_collection_includesAll extends OpGeneric {
 			CollectionType coll2 = (CollectionType) params[1];
 
 			if (coll2.getLeastCommonSupertype(coll1) != null)
-				return (((CollectionType)params[0]).elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)||((CollectionType)params[1]).elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)) ? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean();
+				// An uncertain element on either side makes the membership uncertain.
+				return coll1.elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)
+						|| coll2.elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)
+						? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean();
 		}
 		return null;
 	}
@@ -325,7 +334,10 @@ final class Op_collection_excludesAll extends OpGeneric {
 			CollectionType coll2 = (CollectionType) params[1];
 
 			if (coll2.getLeastCommonSupertype(coll1) != null)
-				return (((CollectionType)params[0]).elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)||((CollectionType)params[1]).elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)) ? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean();
+				// An uncertain element on either side makes the membership uncertain.
+				return coll1.elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)
+						|| coll2.elemType().isKindOfUncertain(VoidHandling.EXCLUDE_VOID)
+						? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean();
 		}
 		return null;
 	}
@@ -824,27 +836,124 @@ final class Op_collection_single extends OpGeneric {
 	}
 }
 
+/* uCount : Collection(T) x T -> Integer */
 final class Op_collection_uCount extends OpGeneric {
-    public String name(){return "uCount";} public int kind(){return SPECIAL;} public boolean isInfixOrPrefix(){return false;}
-    public Type matches(Type[] p){return p.length==2&&p[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)?TypeFactory.mkInteger():null;}
-    public Value eval(EvalContext c,Value[] a,Type r){return a[0].isUndefined()?IntegerValue.valueOf(0):IntegerValue.valueOf(((CollectionValue)a[0]).uCount(a[1]));}
+
+	public String name() {
+		return "uCount";
+	}
+
+	public int kind() {
+		return SPECIAL;
+	}
+
+	public boolean isInfixOrPrefix() {
+		return false;
+	}
+
+	public Type matches(Type[] params) {
+		return params.length == 2 && params[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)
+				? TypeFactory.mkInteger() : null;
+	}
+
+	/** An undefined receiver counts nothing rather than propagating undefined. */
+	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
+		if (args[0].isUndefined())
+			return IntegerValue.valueOf(0);
+
+		return IntegerValue.valueOf(((CollectionValue) args[0]).uCount(args[1]));
+	}
 }
+
+// --------------------------------------------------------
+
+/* uCountC : Collection(T) x T x Real -> Integer */
 final class Op_collection_uCountC extends OpGeneric {
-    public String name(){return "uCountC";} public int kind(){return SPECIAL;} public boolean isInfixOrPrefix(){return false;}
-    public Type matches(Type[] p){return p.length==3&&p[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)&&p[2].isKindOfReal(VoidHandling.EXCLUDE_VOID)?TypeFactory.mkInteger():null;}
-    public Value eval(EvalContext c,Value[] a,Type r){
-        if(a[2].isUndefined())return UndefinedValue.instance;
-        double t=a[2] instanceof IntegerValue i?i.value():((RealValue)a[2]).value();
-        if(t<0||t>1)return UndefinedValue.instance;
-        return a[0].isUndefined()?IntegerValue.valueOf(0):IntegerValue.valueOf(((CollectionValue)a[0]).uCountC(a[1],t));}
+
+	public String name() {
+		return "uCountC";
+	}
+
+	public int kind() {
+		return SPECIAL;
+	}
+
+	public boolean isInfixOrPrefix() {
+		return false;
+	}
+
+	public Type matches(Type[] params) {
+		return params.length == 3 && params[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)
+				&& params[2].isKindOfReal(VoidHandling.EXCLUDE_VOID)
+				? TypeFactory.mkInteger() : null;
+	}
+
+	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
+		if (args[2].isUndefined())
+			return UndefinedValue.instance;
+
+		double confidence = args[2] instanceof IntegerValue i ? i.value()
+				: ((RealValue) args[2]).value();
+		if (confidence < 0 || confidence > 1)
+			return UndefinedValue.instance;
+
+		if (args[0].isUndefined())
+			return IntegerValue.valueOf(0);
+
+		return IntegerValue.valueOf(((CollectionValue) args[0]).uCountC(args[1], confidence));
+	}
 }
+
+// --------------------------------------------------------
+
+/* uIncludes : Collection(T) x T -> UBoolean */
 final class Op_collection_uIncludes extends OpGeneric {
-    public String name(){return "uIncludes";} public int kind(){return OPERATION;} public boolean isInfixOrPrefix(){return false;}
-    public Type matches(Type[] p){return p.length==2&&p[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)?TypeFactory.mkUBoolean():null;}
-    public Value eval(EvalContext c,Value[] a,Type r){return ((CollectionValue)a[0]).uIncludes(a[1]);}
+
+	public String name() {
+		return "uIncludes";
+	}
+
+	public int kind() {
+		return OPERATION;
+	}
+
+	public boolean isInfixOrPrefix() {
+		return false;
+	}
+
+	public Type matches(Type[] params) {
+		return params.length == 2 && params[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)
+				? TypeFactory.mkUBoolean() : null;
+	}
+
+	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
+		return ((CollectionValue) args[0]).uIncludes(args[1]);
+	}
 }
+
+// --------------------------------------------------------
+
+/* uExcludes : Collection(T) x T -> UBoolean */
 final class Op_collection_uExcludes extends OpGeneric {
-    public String name(){return "uExcludes";} public int kind(){return OPERATION;} public boolean isInfixOrPrefix(){return false;}
-    public Type matches(Type[] p){return p.length==2&&p[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)?TypeFactory.mkUBoolean():null;}
-    public Value eval(EvalContext c,Value[] a,Type r){return ((CollectionValue)a[0]).uExcludes(a[1]);}
+
+	public String name() {
+		return "uExcludes";
+	}
+
+	public int kind() {
+		return OPERATION;
+	}
+
+	public boolean isInfixOrPrefix() {
+		return false;
+	}
+
+	public Type matches(Type[] params) {
+		return params.length == 2 && params[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)
+				? TypeFactory.mkUBoolean() : null;
+	}
+
+	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
+		return ((CollectionValue) args[0]).uExcludes(args[1]);
+	}
 }
