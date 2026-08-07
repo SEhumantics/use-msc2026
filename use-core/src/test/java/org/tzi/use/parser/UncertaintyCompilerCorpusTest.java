@@ -66,7 +66,7 @@ class UncertaintyCompilerCorpusTest {
             for (Entry entry : readCorpus(file)) {
                 checked++;
                 String actual = evaluate(model, entry.expression());
-                if (normalize(entry.expected()).equals(actual)) continue;
+                if (agrees(normalize(entry.expected()), actual)) continue;
                 stillDiverging.add(entry.id());
                 if (!known.contains(entry.id())) {
                     regressions.add(entry.id() + "  " + entry.expression()
@@ -86,6 +86,30 @@ class UncertaintyCompilerCorpusTest {
         assertTrue(stale.isEmpty(),
             "known-divergences.txt lists entries that now agree with the historical corpus; "
                 + "remove them:\n" + String.join("\n", stale));
+    }
+
+    /**
+     * The entries extracted from the historical operation tests write their
+     * numbers the way a comment does, so 0 stands for 0.0. Compare the
+     * non-numeric shape exactly and the numbers by value.
+     */
+    private static boolean agrees(String expected, String actual) {
+        if (expected.equals(actual)) return true;
+        return shape(expected).equals(shape(actual)) && numbers(expected).equals(numbers(actual));
+    }
+
+    private static final java.util.regex.Pattern NUMBER =
+        java.util.regex.Pattern.compile("-?\\d+(?:\\.\\d+)?(?:[eE][-+]?\\d+)?");
+
+    private static String shape(String text) {
+        return NUMBER.matcher(text).replaceAll("#");
+    }
+
+    private static List<Double> numbers(String text) {
+        List<Double> found = new ArrayList<>();
+        java.util.regex.Matcher m = NUMBER.matcher(text);
+        while (m.find()) found.add(Double.valueOf(m.group()));
+        return found;
     }
 
     /**

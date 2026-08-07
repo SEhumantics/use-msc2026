@@ -24,8 +24,8 @@ public final class StandardOperationsUncertainty {
         binary(map,"setValue", (t,h)->t.isTypeOfUBoolean(), (t,h)->t.isTypeOfBoolean(), TypeFactory.mkUBoolean(), a -> ((UBooleanValue)a[0]).withValue(((BooleanValue)a[1]).value()), false);
         binary(map,"setConfidence", (t,h)->t.isTypeOfUBoolean(), Type::isKindOfReal, TypeFactory.mkUBoolean(), a -> ((UBooleanValue)a[0]).withConfidence(real(a[1])), false);
         unary(map,"toBoolean", Type::isTypeOfUBoolean, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).toBoolean());
-        binary(map,"toBooleanC", (t,h)->t.isTypeOfUBoolean(), Type::isKindOfReal, TypeFactory.mkBoolean(), a -> ((UBooleanValue)a[0]).toBooleanC(real(a[1])), false);
-        ternary(map,"equalsC", (t,h)->t.isTypeOfUBoolean(), (t,h)->t.isKindOfUBoolean(h), Type::isKindOfReal, TypeFactory.mkBoolean(), a -> { double c=real(a[2]); return c<0||c>1?UndefinedValue.instance:((UBooleanValue)a[0]).equalsC((UBooleanValue)a[1],c); });
+        binary(map,"toBooleanC", (t,h)->t.isTypeOfUBoolean(), Type::isKindOfReal, TypeFactory.mkBoolean(), a -> { double c=real(a[1]); return c<0||c>1?UndefinedValue.instance:ub(a[0]).toBooleanC(c); }, false);
+        ternary(map,"equalsC", (t,h)->t.isTypeOfUBoolean(), (t,h)->t.isKindOfUBoolean(h), Type::isKindOfReal, TypeFactory.mkBoolean(), a -> { double c=real(a[2]); return c<0||c>1?UndefinedValue.instance:ub(a[0]).equalsC(ub(a[1]),c); });
         unary(map,"not", Type::isTypeOfUBoolean, TypeFactory.mkUBoolean(), a -> ((UBooleanValue)a[0]).not());
         uLogical(map,"and", UBooleanValue::and, 0);
         uLogical(map,"or", UBooleanValue::or, 1);
@@ -48,7 +48,34 @@ public final class StandardOperationsUncertainty {
                 return left.isBoolean() && right.isBoolean() ? result.toBoolean() : result;
             }
         });
-        uLogical(map,"implies", UBooleanValue::implies, -1);
+        // implies absorbs from either side: a false antecedent makes it certainly
+        // true, and a certainly true consequent does the same
+        map.put("implies", new BooleanOperation(){
+            public String name(){return "implies";}
+            public boolean isInfixOrPrefix(){return true;}
+            public Type matches(Type[] x){
+                return x.length==2
+                    && x[0].isKindOfUBoolean(Type.VoidHandling.INCLUDE_VOID)
+                    && x[1].isKindOfUBoolean(Type.VoidHandling.INCLUDE_VOID)
+                    && (x[0].isTypeOfUBoolean()||x[1].isTypeOfUBoolean())
+                    ? TypeFactory.mkUBoolean() : null;
+            }
+            public Value evalWithArgs(EvalContext c,org.tzi.use.uml.ocl.expr.Expression[] args){
+                Value left=args[0].eval(c);
+                if (left.isDefined()) {
+                    UBooleanValue l=ub(left);
+                    if (l.probability()==0) return UBooleanValue.TRUE;
+                    Value right=args[1].eval(c);
+                    return right.isDefined() ? l.implies(ub(right)) : UndefinedValue.instance;
+                }
+                Value right=args[1].eval(c);
+                if (right.isDefined()) {
+                    UBooleanValue r=ub(right);
+                    if (r.probability()==1) return r;
+                }
+                return UndefinedValue.instance;
+            }
+        });
 
         // Uncertain numeric accessors
         unary(map,"value", Type::isTypeOfUReal, TypeFactory.mkReal(), a -> ((URealValue)a[0]).toReal());
