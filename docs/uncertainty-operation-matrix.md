@@ -107,6 +107,55 @@ its correction term `NaN` yields `(0, 0, 0, a)` — an opinion whose masses sum 
 zero. Roughly 0.4% of inputs reach that branch. The port has no way to represent
 such a value and evaluates to undefined instead.
 
+## Historical to current source map
+
+Every uncertainty-related file of the historical fork
+(`.git/reference-repositories/uncertainty`), and what became of it. Paths under
+`USE-Uncertainty/src/main/` unless stated otherwise.
+
+| Historical | Current | Disposition |
+| --- | --- | --- |
+| `parser/ocl/ASTURealLiteral`, `ASTUIntegerLiteral`, `ASTUStringLiteral`, `ASTUBooleanLiteral`, `ASTSBooleanLiteral` | `parser/ocl/ASTUncertainLiteral` | REWRITE, 5 into 1 |
+| `uml/ocl/expr/ExpConstUReal`, `ExpConstUInteger`, `ExpConstUString`, `ExpConstUBoolean`, `ExpConstSBoolean` | `uml/ocl/expr/ExpConstUncertain` | REWRITE, 5 into 1 |
+| `parser/ocl/ASTSBooleanDefExpression` | — | OMIT, unreachable |
+| `uml/ocl/expr/ExpDefSBoolean` | — | OMIT, unreachable and its guard is inverted |
+| `uml/ocl/expr/ExpUSelect`, `ExpUSelectC` | same names | PORT |
+| `uml/ocl/expr/ExpQuery`, `ExpExists`, `ExpForAll` | same names | REWRITE, see below |
+| `parser/base/ParserHelper`, `parser/ocl/ASTQueryExpression` | same names | PORT |
+| `parser/base/OCLBase.gpart` | `resources/grammars/base/OCLBase.gpart` | PORT, relocated |
+| `uml/ocl/type/URealType`, `UIntegerType`, `UStringType`, `UBooleanType`, `SBooleanType`, `UncertainType` | same names | PORT |
+| `uml/ocl/type/UncertainBooleanType` | — | OMIT, carried no behaviour |
+| `uml/ocl/type/Type`, `TypeImpl`, `TypeFactory`, `BooleanType`, `IntegerType`, `RealType`, `StringType`, `VoidType` | same names | REWRITE, minimal |
+| `uml/ocl/value/URealValue`, `UIntegerValue`, `UStringValue`, `UBooleanValue`, `SBooleanValue`, `UncertainValue`, `UncertainBooleanValue` | same names | REWRITE, native |
+| `uml/ocl/expr/operations/StandardOperationsUReal`, `UInteger`, `UString`, `UBoolean`, `SBoolean` (3149 lines) | `StandardOperationsUncertainty` | REWRITE, 5 into 1 |
+| `uml/ocl/expr/operations/StandardOperationsAny`, `StandardOperationsCollection`, `StandardOperationsNumber` | same names | REWRITE, minimal |
+| `lib/atenearesearchgroup.uncertainty.jar`, `..._old.jar` (the `uDataTypes` library) | `uml/ocl/value/*` | REWRITE, no binary dependency |
+| `src/test/.../uncertainty/{UReal,UInteger,UBoolean}Expression.in`, `UCollectionOperations.in` | `use-core/src/test/resources/org/tzi/use/parser/uncertainty/` | PORT, verbatim |
+| `src/test/.../USECompilerUncertaintyTest` | `parser/UncertaintyCompilerCorpusTest` | REWRITE |
+| `src/test/.../{URealExpOpsTest, UIntegerExpOpsTest, UBooleanExpOpsTest, ExpQueryUncertaintyTest, URealValueTest, UIntegerValueTest, UBooleanValueTest}` | same names | PORT, JUnit 5 only |
+| `uDataTypes/.../SBooleanTest`, `SBooleanTest3` | `SBooleanHistoricalAlgebraTest` | PORT, oracle replay |
+| `uDataTypes` `UEnum`, `UUnlimitedNatural`, `Distribution`, `N_U*`, the case studies, and the MagicDraw, Python and OCLTypes libraries | — | OMIT, never registered in the historical USE fork |
+
+`ExpQuery` is the one rewrite worth calling out: the historical
+`exists`/`forAll` accumulate by building an `ExpStdOp` for `or`/`and` on every
+iteration and evaluating it. The port folds `UBooleanValue` directly. It also
+declares the result type `UBoolean` when the predicate is uncertain, where the
+historical constructors always declared `Boolean` while `eval` could return a
+`UBooleanValue`.
+
+## Changes to ordinary OCL
+
+Two of the historical fork's changes reach expressions with no uncertain
+operand at all, and both are ported deliberately:
+
+- `equals` is registered on `OclAny` as the certain counterpart of `=`, so
+  `1.equals(1)` now compiles. Upstream USE has no such operation; the historical
+  fork does (`StandardOperationsAny.Op_identical`) and the corpus uses it.
+- `Boolean`, `Integer`, `Real` and `String` gain their uncertain counterparts as
+  supertypes. Least-common-supertype results for pairs of certain types are
+  unaffected -- `Integer` and `Real` still meet at `Real`, because `Real`
+  conforms to `UReal` and not the other way round.
+
 ## Omitted historical classes
 
 `ExpDefSBoolean` and `ASTSBooleanDefExpression` are not ported. No grammar
@@ -154,3 +203,41 @@ would depart from the historical implementation rather than restore it:
   in the sixth decimal. Only the comparisons that historically broke ties on the
   rounded value — `min`, `max` and `minimumBeliefFusion` — round for that
   purpose.
+- The fourth `SBoolean` literal argument is the base rate, but the historical
+  diagnostic for a wrongly typed one calls it `Agent`. The message is kept
+  verbatim so the diagnostics stay recognisable, even though the name is
+  misleading; the coordinate is named `baseRate` everywhere in the code.
+- A fusion or `discount` argument whose element type is not kind of `SBoolean`
+  is a compile error, where the historical matcher accepted any collection and
+  failed in the evaluator. This also rejects the empty literal `Set{}`, whose
+  element type is `OclVoid`.
+
+## Ordering of uncertain values
+
+`uEquals` is the uncertain equality that OCL `=` evaluates: it asks whether two
+distributions overlap, and it is unchanged. It cannot also serve as the ordering
+used to sort a collection, because overlap is not transitive — `UReal(0,3)`
+overlaps `UReal(3,3)` and `UReal(3,3)` overlaps `UReal(6,3)`, but `UReal(0,3)`
+and `UReal(6,3)` do not.
+
+Every collection rendering goes through `CollectionValue.getSortedElements()`,
+which calls `Collections.sort`, so an intransitive `compareTo` made TimSort
+throw `IllegalArgumentException: Comparison method violates its general
+contract!` — reachable from an expression as ordinary as
+`Sequence{...}->asSet()` over enough uncertain values. `UBoolean` had the same
+defect against plain `Boolean`, by ordering on truth where `BooleanValue`
+orders on rendering.
+
+`compareTo` therefore orders by representation:
+
+- `UReal` and `UInteger` order together with `Real` and `Integer`, by value and
+  then by uncertainty, a certain number counting as uncertainty 0. `RealValue`
+  and `IntegerValue` delegate to that side for an uncertain operand so both
+  directions agree.
+- `UBoolean` orders by probability; `UString` by spelling.
+- `SBoolean` ties with every other opinion, which is a valid comparator and
+  leaves opinions in place rather than inventing an order for them.
+
+One historical corpus rendering is not reproducible under any valid comparator
+and is recorded in `known-divergences.txt`; the set contents agree, only the
+order differs. `UncertainValueOrderingTest` pins the contract for every kind.
