@@ -34,14 +34,14 @@ replays the historical `USECompilerUncertaintyTest` corpus — all 1427 entries 
 `UCollectionOperations.in` — through the current compiler and evaluator and
 compares the rendered result with the historical expectation.
 
-1421 of the 1427 entries reproduce the historical behaviour. The six that do not
-are listed, with their causes, in `known-divergences.txt` next to the corpus;
-the test treats that list as an exact contract in both directions, so a new
-divergence fails as a regression and an entry that starts agreeing has to be
-removed. All six have been traced to causes outside the uncertainty semantics
-(collect-shorthand expansion of `.equals` on a collection receiver, and
-multi-variable `exists` being broken in the USE baseline for ordinary Boolean
-queries too), and the behaviour each was asserting is covered directly by
+1422 of the 1427 entries reproduce the historical behaviour. The five that do
+not are listed, with their causes, in `known-divergences.txt` next to the
+corpus; the test treats that list as an exact contract in both directions, so a
+new divergence fails as a regression and an entry that starts agreeing has to be
+removed. All five state a collection identity through `.equals` on a collection
+receiver, which the compiler expands to the collect shorthand, so they could not
+yield the single Boolean they expect in the historical build either. The
+identities themselves are asserted with `=` in
 `UncertaintyQueryEvaluationTest`.
 
 Two historical renderings are deliberately not reproduced because they belong to
@@ -54,6 +54,16 @@ traced against the historical registrations in `StandardOperationsUString` and
 receiver-plus-collection shape of the fusion operations — are asserted by
 `UncertaintyOperationRegistrationTest`, with the algebra itself covered by
 `SBooleanValueTest` and `UncertainScalarOperationsTest`.
+
+## Test execution
+
+The project runs the JUnit 5 platform with no vintage engine, so the JUnit 3 and
+4 classes the port inherited were never executing; `USECompilerTest`, which owns
+the `test_expr.in` corpus, was among them. They are all migrated, and 51 test
+classes with 337 tests now run. `TypeTest.testSupertype` carries the historical
+uncertainty branch's own expectations for the widened type lattice, in which
+`Boolean` gains `UBoolean` and `SBoolean` as supertypes and `Integer` gains
+`UInteger` and `UReal`.
 
 One historical declaration is deliberately corrected: the historical `indexOf`
 and `toString` on `UString` declare a `UString` result while returning an
