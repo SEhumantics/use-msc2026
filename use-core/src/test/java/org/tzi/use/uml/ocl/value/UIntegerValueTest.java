@@ -77,4 +77,38 @@ class UIntegerValueTest {
         assertTrue ( uiv.isUInteger(),"UInteger.isUInteger");
     }
 
+    /**
+     * The historical library divides in int arithmetic before flooring, so the
+     * uncertain quotient truncates towards zero like the scalar branches. Flooring
+     * the real quotient instead shifted every negative result by one.
+     */
+    @Test
+    public void testUncertainDivTruncatesTowardsZero() {
+        assertEquals(-1, new UIntegerValue(5,1.13).div(new UIntegerValue(-3,2.84)).value(),
+                "5 div -3 with uncertainty on both sides");
+        assertEquals(1, new UIntegerValue(5,1.13).div(new UIntegerValue(3,2.84)).value());
+        assertEquals(-1, new UIntegerValue(-5,1.13).div(new UIntegerValue(3,2.84)).value());
+        // the scalar branches were already truncating
+        assertEquals(-1, new UIntegerValue(5,1.13).div(new UIntegerValue(-3,0)).value());
+    }
+
+    /**
+     * Ordering has to stay antisymmetric across the two uncertain numeric kinds,
+     * otherwise sortedBy over a mixed collection silently mis-orders.
+     */
+    @Test
+    public void testOrderingAgainstURealIsAntisymmetric() {
+        UIntegerValue small = new UIntegerValue(1,0), large = new UIntegerValue(9,0);
+        URealValue middle = new URealValue(5.0,0);
+
+        assertEquals(-1, Integer.signum(small.compareTo(middle)));
+        assertEquals( 1, Integer.signum(middle.compareTo(small)));
+        assertEquals( 1, Integer.signum(large.compareTo(middle)));
+        assertEquals(-1, Integer.signum(middle.compareTo(large)));
+
+        java.util.List<Value> mixed = new java.util.ArrayList<>(
+                java.util.List.of(large, middle, small));
+        java.util.Collections.sort(mixed);
+        assertEquals(java.util.List.of(small, middle, large), mixed, "mixed UInteger/UReal ordering");
+    }
 }

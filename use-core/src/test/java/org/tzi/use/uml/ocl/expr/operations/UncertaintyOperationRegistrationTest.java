@@ -79,4 +79,44 @@ class UncertaintyOperationRegistrationTest {
         assertTrue(result instanceof IntegerValue);
         assertEquals(0,((IntegerValue)result).value());
     }
+
+    /**
+     * The historical subjective operations accept operands that are <em>kind of</em>
+     * SBoolean, so a plain or uncertain Boolean embeds as an opinion. Narrowing
+     * them to type-of SBoolean made these historically legal expressions
+     * un-compilable and left the value-level coercion unreachable.
+     */
+    @Test void subjectiveOperandsAcceptKindOfSBoolean() {
+        Type sBoolean=TypeFactory.mkSBoolean(), uBoolean=TypeFactory.mkUBoolean(), bool=TypeFactory.mkBoolean();
+        Type opinions=TypeFactory.mkSequence(sBoolean);
+        for(String name:new String[]{"min","max","projectiveDistance","conjunctiveCertainty","degreeOfConflict"}) {
+            assertTrue(ExpStdOp.exists(name,new Type[]{uBoolean,sBoolean}),name+"(UBoolean, SBoolean)");
+            assertTrue(ExpStdOp.exists(name,new Type[]{sBoolean,uBoolean}),name+"(SBoolean, UBoolean)");
+            assertTrue(ExpStdOp.exists(name,new Type[]{bool,sBoolean}),name+"(Boolean, SBoolean)");
+            // two ordinary Booleans must still not reach the subjective operator
+            assertFalse(ExpStdOp.exists(name,new Type[]{bool,bool}),name+"(Boolean, Boolean)");
+        }
+        assertTrue(ExpStdOp.exists("deduceY",new Type[]{uBoolean,sBoolean,sBoolean}));
+        assertTrue(ExpStdOp.exists("deduceY",new Type[]{bool,sBoolean,sBoolean}));
+        assertFalse(ExpStdOp.exists("deduceY",new Type[]{bool,bool,bool}));
+        assertTrue(ExpStdOp.exists("applyOn",new Type[]{uBoolean,uBoolean}));
+        assertTrue(ExpStdOp.exists("minimumBeliefFusion",new Type[]{uBoolean,opinions}));
+        assertTrue(ExpStdOp.exists("discount",new Type[]{bool,opinions}));
+    }
+
+    /**
+     * A fusion argument whose elements cannot become opinions has to be rejected
+     * while compiling; it used to type-check and then escape the evaluator as a
+     * ClassCastException.
+     */
+    @Test void fusionRejectsCollectionsOfUnrelatedElements() {
+        Type sBoolean=TypeFactory.mkSBoolean();
+        for(String name:new String[]{"minimumBeliefFusion","averageBeliefFusion","weightedBeliefFusion",
+                "consensusAndCompromiseFusion","discount"}) {
+            assertFalse(ExpStdOp.exists(name,new Type[]{sBoolean,TypeFactory.mkSequence(TypeFactory.mkInteger())}),name+" over Sequence(Integer)");
+            assertFalse(ExpStdOp.exists(name,new Type[]{sBoolean,TypeFactory.mkSequence(TypeFactory.mkUString())}),name+" over Sequence(UString)");
+            assertTrue(ExpStdOp.exists(name,new Type[]{sBoolean,TypeFactory.mkSequence(sBoolean)}),name+" over Sequence(SBoolean)");
+            assertTrue(ExpStdOp.exists(name,new Type[]{sBoolean,TypeFactory.mkSequence(TypeFactory.mkUBoolean())}),name+" over Sequence(UBoolean)");
+        }
+    }
 }

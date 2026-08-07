@@ -92,4 +92,57 @@ class SBooleanValueTest {
         assertEquals(0,result.disbelief(),EPS);
         assertEquals(.5,result.uncertainty(),EPS);
     }
+
+    /**
+     * Case III of the deduction ({@code yGivenX.belief <= yGivenNotX.belief} and
+     * {@code yGivenX.disbelief > yGivenNotX.disbelief}) does not use a single
+     * span: III.A.1 keeps the case-II span while the other three use the
+     * mirrored one, and where they disagree no case fires. Collapsing them onto
+     * one span produced a completely different opinion here. The expectation is
+     * the historical uDataTypes result, which the Python library reproduces too.
+     */
+    @Test void deductionCaseThreeUsesBothHistoricalSpans() {
+        var y=new SBooleanValue(.08,.11,.81,.79).deduceY(
+                new SBooleanValue(.03,.87,.10,.28), new SBooleanValue(.80,.10,.10,.65));
+        assertEquals(.246,y.belief(),1e-3);
+        assertEquals(.654,y.disbelief(),1e-3);
+        assertEquals(.100,y.uncertainty(),1e-3);
+        assertEquals(.213,y.baseRate(),1e-3);
+    }
+    /**
+     * Coordinates are clamped within {@link SBooleanValue#COORDINATE_TOLERANCE},
+     * so a derived coordinate that lands a few ulps outside [0,1] still yields an
+     * opinion. Without the clamp each of these produced an undefined value.
+     */
+    @Test void driftInDerivedCoordinatesDoesNotInvalidateAnOpinion() {
+        assertEquals(-2.7755575615628914E-17, 1-Math.min(.6*.8/.5,1-.1)-.1, 0,
+                "the drift this pins is real");
+        var applied=new SBooleanValue(.8,.1,.1,.5).applyOn(UBooleanValue.probability(true,.6));
+        assertEquals(.9,applied.belief(),EPS); assertEquals(0,applied.disbelief(),EPS);
+        assertEquals(.1,applied.uncertainty(),EPS); assertEquals(.6,applied.baseRate(),EPS);
+
+        var maximized=new SBooleanValue(.4,.2,.4,.25).uncertaintyMaximized();
+        assertEquals(1,maximized.belief()+maximized.disbelief()+maximized.uncertainty(),1e-9);
+
+        var epistemic=SBooleanValue.epistemicCumulativeBeliefFusion(java.util.List.of(
+                new SBooleanValue(.34,.45,.21,.32), new SBooleanValue(.93,.05,.02,.32),
+                new SBooleanValue(.26,.01,.73,.32)));
+        assertEquals(.855022,epistemic.belief(),1e-3);
+
+        var constrained=SBooleanValue.beliefConstraintFusion(java.util.List.of(
+                new SBooleanValue(1,0,0,.05), new SBooleanValue(.59,.29,.12,.05),
+                new SBooleanValue(.31,.55,.14,.05)));
+        assertEquals(1,constrained.belief(),1e-3);
+
+        var weighted=SBooleanValue.weightedBeliefFusion(java.util.List.of(
+                new SBooleanValue(.15,.58,.27,1), new SBooleanValue(.48,.34,.18,1),
+                new SBooleanValue(.47,.09,.44,1)));
+        assertEquals(.373934,weighted.belief(),1e-3);
+    }
+    /** A genuinely invalid coordinate is still rejected. */
+    @Test void coordinatesWellOutsideTheUnitIntervalAreStillRejected() {
+        assertThrows(IllegalArgumentException.class,()->new SBooleanValue(-.01,.5,.51,.5));
+        assertThrows(IllegalArgumentException.class,()->new SBooleanValue(.5,.5,0,1.01));
+        assertThrows(IllegalArgumentException.class,()->new SBooleanValue(.4,.4,.4,.5));
+    }
 }

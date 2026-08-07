@@ -130,5 +130,47 @@ class UncertaintyQueryEvaluationTest {
         assertEquals(.5, ((URealValue)eval("UReal(2, -0.5)")).uncertainty(), EPS);
         assertEquals(5, ((UIntegerValue)eval("UInteger(2, -5)")).uncertainty(), EPS);
     }
+    /**
+     * A collection whose element type is UReal may hold both UInteger and UReal
+     * values, so their mutual ordering has to be consistent or sortedBy silently
+     * returns an unsorted sequence.
+     */
+    @Test void mixedUncertainNumericCollectionsSortConsistently() {
+        assertEquals("Sequence{UInteger(1, 0.0),UReal(5.0, 0.0),UInteger(9, 0.0)}",
+            eval("Sequence{UInteger(9, 0.0), UReal(5.0, 0.0), UInteger(1, 0.0)}->sortedBy(e | e)").toString());
+        assertEquals("Sequence{UInteger(1, 0.0),UReal(5.0, 0.0),UInteger(9, 0.0)}",
+            eval("Sequence{UReal(5.0, 0.0), UInteger(9, 0.0), UInteger(1, 0.0)}->sortedBy(e | e)").toString());
+    }
+
+    /**
+     * Subjective operations reached through a Boolean or UBoolean receiver, which
+     * the historical signatures allow and the value-level coercion supports.
+     */
+    @Test void subjectiveOperationsAcceptEmbeddedBooleanOperands() {
+        assertEquals("SBoolean(0.5, 0.3, 0.2, 0.5)",
+            eval("UBoolean(true, 0.7).min(SBoolean(0.5, 0.3, 0.2, 0.5))").toString());
+        assertEquals("SBoolean(0.5, 0.3, 0.2, 0.5)",
+            eval("UBoolean(true, 0.7)->minimumBeliefFusion(Sequence{SBoolean(0.5, 0.3, 0.2, 0.5)})").toString());
+        assertTrue(eval("true.deduceY(SBoolean(0.5, 0.3, 0.2, 0.5), SBoolean(0.4, 0.4, 0.2, 0.5))") instanceof SBooleanValue);
+        assertTrue(eval("SBoolean(0.5, 0.3, 0.2, 0.5).applyOn(true)") instanceof SBooleanValue);
+    }
+
+    /** Operations whose historical results the strict range check used to discard. */
+    @Test void derivedOpinionsStayDefined() {
+        assertEquals("SBoolean(0.9, 0.0, 0.1, 0.6)",
+            eval("SBoolean(0.8, 0.1, 0.1, 0.5).applyOn(UBoolean(true, 0.6))").toString());
+        assertEquals("SBoolean(0.855, 0.0, 0.145, 0.32)",
+            eval("SBoolean(0.34, 0.45, 0.21, 0.32)->epistemicCumulativeBeliefFusion("
+               + "Sequence{SBoolean(0.93, 0.05, 0.02, 0.32), SBoolean(0.26, 0.01, 0.73, 0.32)})").toString());
+        assertEquals("SBoolean(0.374, 0.379, 0.247, 1.0)",
+            eval("SBoolean(0.15, 0.58, 0.27, 1.0)->weightedBeliefFusion("
+               + "Sequence{SBoolean(0.48, 0.34, 0.18, 1.0), SBoolean(0.47, 0.09, 0.44, 1.0)})").toString());
+    }
+
+    /** The uncertain integer quotient truncates towards zero, as historically. */
+    @Test void uncertainIntegerDivisionTruncates() {
+        assertEquals(-1,((UIntegerValue)eval("UInteger(5, 1.13) div UInteger(-3, 2.84)")).value());
+    }
+
     private Expression op(String name,Expression... args) throws Exception { return ExpStdOp.create(name,args); }
 }
