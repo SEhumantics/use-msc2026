@@ -209,8 +209,8 @@ would depart from the historical implementation rather than restore it:
   misleading; the coordinate is named `baseRate` everywhere in the code.
 - A fusion or `discount` argument whose element type is not kind of `SBoolean`
   is a compile error, where the historical matcher accepted any collection and
-  failed in the evaluator. This also rejects the empty literal `Set{}`, whose
-  element type is `OclVoid`.
+  failed in the evaluator. The empty literal `Set{}` is still accepted, as it was
+  historically, and the fusion reports an undefined result.
 
 ## Ordering of uncertain values
 
@@ -235,9 +235,22 @@ orders on rendering.
   and `IntegerValue` delegate to that side for an uncertain operand so both
   directions agree.
 - `UBoolean` orders by probability; `UString` by spelling.
-- `SBoolean` ties with every other opinion, which is a valid comparator and
-  leaves opinions in place rather than inventing an order for them.
+- Two `SBoolean`s tie, leaving opinions in place rather than inventing an order
+  for them. Against any other kind an opinion orders by rendering, like the rest
+  of the hierarchy. Tying there as well would not be antisymmetric, because the
+  other kinds do not tie back.
+
+That gives every kind a total order among its own values, but not across kinds:
+the numeric kinds compare by value, so `UReal(1,0)` ties with `1` although the
+two render differently, and against a third kind — which every kind falls back
+to comparing by rendering — the two then disagree. A collection typed `OclAny`
+can hold such a mixture, so `getSortedElements()` groups by kind before ordering
+within a group, with the numeric kinds forming one group so that certain and
+uncertain numbers stay interleaved in numeric order. That is total whatever the
+collection holds, and a collection whose elements are all of one kind — every
+ordinary one — sorts exactly as `compareTo` alone would.
 
 One historical corpus rendering is not reproducible under any valid comparator
 and is recorded in `known-divergences.txt`; the set contents agree, only the
-order differs. `UncertainValueOrderingTest` pins the contract for every kind.
+order differs. `UncertainValueOrderingTest` pins the contract per kind, across
+kinds, and for the mixed-kind rendering path.

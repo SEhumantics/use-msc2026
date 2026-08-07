@@ -782,8 +782,11 @@ public final class StandardOperationsUncertainty {
                         || !x[1].isKindOfCollection(Type.VoidHandling.EXCLUDE_VOID)) {
                     return null;
                 }
+                // INCLUDE_VOID admits the empty literal Set{}, whose element type
+                // is OclVoid: the historical matcher accepted it and the fusion
+                // then reported an undefined result, which is still what happens.
                 Type elem = ((CollectionType) x[1]).elemType();
-                if (!elem.isKindOfSBoolean(Type.VoidHandling.EXCLUDE_VOID)) return null;
+                if (!elem.isKindOfSBoolean(Type.VoidHandling.INCLUDE_VOID)) return null;
                 return x[0].isTypeOfSBoolean() || elem.isTypeOfSBoolean() ? r : null;
             }
         });

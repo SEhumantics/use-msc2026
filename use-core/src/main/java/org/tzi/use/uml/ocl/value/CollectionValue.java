@@ -246,8 +246,35 @@ public abstract class CollectionValue extends Value implements Iterable<Value> {
      */
     public List<Value> getSortedElements() {
     	List<Value> result = new ArrayList<Value>(collection());
-    	Collections.sort(result);
+    	result.sort(RENDERING_ORDER);
     	return result;
+    }
+
+    /**
+     * A collection typed <code>OclAny</code> may hold values of unrelated kinds,
+     * and <code>compareTo</code> alone does not order those transitively: the
+     * numeric kinds compare by value, so <code>UReal(1,0)</code> ties with
+     * <code>1</code> although the two render differently, and against a third
+     * kind -- which every kind falls back to comparing by rendering -- they then
+     * disagree. TimSort rejects that once a collection is long enough to notice,
+     * which turned rendering such a collection into an
+     * <code>IllegalArgumentException</code>.
+     *
+     * <p>Sorting therefore groups by kind first and only orders within a group,
+     * which is total whatever the collection holds. The numeric kinds form one
+     * group so that certain and uncertain numbers stay interleaved in numeric
+     * order, which is what the historical rendering shows; every other kind is
+     * its own group. A collection whose elements are all of one kind -- every
+     * ordinary one -- sorts exactly as it did before.
+     */
+    private static final Comparator<Value> RENDERING_ORDER =
+            Comparator.comparing(CollectionValue::sortGroup)
+                    .thenComparing(Comparator.<Value>naturalOrder());
+
+    private static String sortGroup(Value v) {
+        return v instanceof IntegerValue || v instanceof RealValue
+                || v instanceof UIntegerValue || v instanceof URealValue
+                ? "" : v.getClass().getName();
     }
     
     public BagValue asBag() {

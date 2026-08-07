@@ -716,14 +716,22 @@ public final class SBooleanValue extends UncertainBooleanValue {
     }
 
     /**
-     * Subjective opinions have no defined total ordering, so every pair ties.
-     * That is still a valid comparator -- it is transitive and antisymmetric --
-     * so sorting a collection of opinions is well defined, it simply leaves them
-     * in place. Set membership goes by {@link #equals}, not by this.
+     * Subjective opinions have no defined total ordering, so any two opinions
+     * tie and sorting leaves them in place. Set membership goes by
+     * {@link #equals}, not by this.
+     *
+     * <p>Every other kind is ordered by rendering, as the rest of the value
+     * hierarchy does. Tying with those as well would break antisymmetry, since
+     * they do not tie back: {@code UReal(1,0).compareTo(anOpinion)} is non-zero,
+     * so returning 0 here made {@code Collections.sort} throw over a collection
+     * holding an opinion next to any other kind.
      */
     @Override
     public int compareTo(Value o) {
-        return o instanceof UndefinedValue ? 1 : 0;
+        if (o == this) return 0;
+        if (o instanceof UndefinedValue) return 1;
+        if (o instanceof SBooleanValue) return 0;
+        return toString().compareTo(o.toString());
     }
 
     @Override
