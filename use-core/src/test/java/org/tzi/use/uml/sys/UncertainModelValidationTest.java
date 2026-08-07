@@ -73,4 +73,30 @@ class UncertainModelValidationTest {
         assertTrue(!system.state().check(new PrintWriter(failing), false, false, false, List.of()),
                 failing.toString());
     }
+
+    /** Uncertain values survive a round trip through a SOIL statement. */
+    @Test void soilStatementsAssignUncertainAttributes() throws Exception {
+        MSystem system = compile();
+        for (String statement : new String[] {
+                "s1 := new Sensor('s1')",
+                "s1.reading := UReal(4, 0.5)",
+                "s1.trusted := SBoolean(0.7, 0.1, 0.2, 0.5)",
+                "s1.label := UString('probe', 0.8)" }) {
+            StringWriter err = new StringWriter();
+            org.tzi.use.uml.sys.soil.MStatement compiled =
+                org.tzi.use.parser.soil.SoilCompiler.compileStatement(system.model(), system.state(),
+                    system.getVariableEnvironment(), statement, "<soil>", new PrintWriter(err), true);
+            assertNotNull(compiled, statement + "\n" + err);
+            system.execute(compiled);
+        }
+        MClass sensor = system.model().getClass("Sensor");
+        MObject object = system.state().objectByName("s1");
+        assertNotNull(object, "object created");
+        assertEquals("UReal(4.0, 0.5)",
+            object.state(system.state()).attributeValue(sensor.attribute("reading", true)).toString());
+        assertEquals("SBoolean(0.7, 0.1, 0.2, 0.5)",
+            object.state(system.state()).attributeValue(sensor.attribute("trusted", true)).toString());
+        assertEquals("UString('probe', 0.8)",
+            object.state(system.state()).attributeValue(sensor.attribute("label", true)).toString());
+    }
 }

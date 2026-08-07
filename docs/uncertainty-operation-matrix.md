@@ -48,19 +48,42 @@ Two historical renderings are deliberately not reproduced because they belong to
 the modern USE baseline rather than to uncertainty: the undefined value renders
 as `null` rather than `Undefined`, and compiler diagnostics use current wording.
 
-The corpus does not reach `UString` or `SBoolean`. Those two families were
-traced against the historical registrations in `StandardOperationsUString` and
-`StandardOperationsSBoolean` instead, and their signatures — including the
-receiver-plus-collection shape of the fusion operations — are asserted by
-`UncertaintyOperationRegistrationTest`, with the algebra itself covered by
-`SBooleanValueTest` and `UncertainScalarOperationsTest`.
+The corpus does not reach `UString` or `SBoolean`. Their signatures — including
+the receiver-plus-collection shape of the fusion operations — are asserted by
+`UncertaintyOperationRegistrationTest`, and their behaviour by the replayed
+oracles below.
+
+## Historical unit-test oracles
+
+Beyond the corpus, the historical JUnit oracles are replayed too, ported with
+their expectations untouched — only the JUnit 3 scaffolding and the per-kind
+literal constructors the port replaced with one `ExpConstUncertain` were
+rewritten:
+
+| Oracle | Assertions |
+| --- | --- |
+| `URealExpOpsTest`, `UIntegerExpOpsTest`, `UBooleanExpOpsTest` | 898 |
+| `URealValueTest`, `UIntegerValueTest`, `UBooleanValueTest` | 45 |
+| `UCollectionExpOpTest`, `ExpQueryUncertaintyTest` | 22 |
+| `SBooleanHistoricalAlgebraTest`, from uDataTypes `SBooleanTest`/`SBooleanTest3` | 9 tests |
+
+They found three defects, all in operations the corpus never reaches: `implies`
+absorbing from either side, `toBooleanC` yielding undefined for a confidence
+outside [0,1], and `equalsC` accepting a plain Boolean second operand.
+`UncertaintyUncoveredOperationsTest` additionally pins `equalsC`,
+`setConfidence`, `implies` and the UString surface, none of which the corpus
+exercises.
+
+Uncertain values are also exercised through the model and SOIL paths by
+`UncertainModelValidationTest`: uncertain attribute types, assignment by SOIL
+statement, and Boolean invariants over uncertain attributes.
 
 ## Test execution
 
 The project runs the JUnit 5 platform with no vintage engine, so the JUnit 3 and
 4 classes the port inherited were never executing; `USECompilerTest`, which owns
-the `test_expr.in` corpus, was among them. They are all migrated, and 51 test
-classes with 337 tests now run. `TypeTest.testSupertype` carries the historical
+the `test_expr.in` corpus, was among them. They are all migrated, and 61 test
+classes with 488 tests now run. `TypeTest.testSupertype` carries the historical
 uncertainty branch's own expectations for the widened type lattice, in which
 `Boolean` gains `UBoolean` and `SBoolean` as supertypes and `Integer` gains
 `UInteger` and `UReal`.
