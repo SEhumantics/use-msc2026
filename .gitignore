@@ -117,3 +117,7 @@ fabric.properties
 /use-assembly/target
 
 **/.DS_Store
+
+# ArchUnit writes these on every test run
+use-gui/*_cyclic_dependencies_*_results.csv
+docs/archunit-results/*-current-failure-report.txt
