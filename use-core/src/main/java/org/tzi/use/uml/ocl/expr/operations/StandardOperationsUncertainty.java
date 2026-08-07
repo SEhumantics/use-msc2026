@@ -176,20 +176,50 @@ public final class StandardOperationsUncertainty {
         unary(map,"isDogmatic", Type::isTypeOfSBoolean, TypeFactory.mkBoolean(), a->BooleanValue.get(sb(a[0]).isDogmatic()));
         unary(map,"isMaximizedUncertainty", Type::isTypeOfSBoolean, TypeFactory.mkBoolean(), a->BooleanValue.get(sb(a[0]).isMaximizedUncertainty()));
         sbinary(map,"and",(x,y)->x.and(y)); sbinary(map,"or",(x,y)->x.or(y)); sbinary(map,"xor",(x,y)->x.xor(y)); sbinary(map,"equivalent",(x,y)->x.equivalent(y)); sbinary(map,"implies",(x,y)->x.implies(y));
-        binary(map,"projectiveDistance",(t,h)->t.isTypeOfSBoolean(),(t,h)->t.isTypeOfSBoolean(),TypeFactory.mkReal(),a->new RealValue(sb(a[0]).projectiveDistance(sb(a[1]))),false);
-        binary(map,"conjunctiveCertainty",(t,h)->t.isTypeOfSBoolean(),(t,h)->t.isTypeOfSBoolean(),TypeFactory.mkReal(),a->new RealValue(sb(a[0]).conjunctiveCertainty(sb(a[1]))),false);
-        binary(map,"degreeOfConflict",(t,h)->t.isTypeOfSBoolean(),(t,h)->t.isTypeOfSBoolean(),TypeFactory.mkReal(),a->new RealValue(sb(a[0]).degreeOfConflict(sb(a[1]))),false);
-        binary(map,"min",(t,h)->t.isTypeOfSBoolean(),(t,h)->t.isTypeOfSBoolean(),TypeFactory.mkSBoolean(),a->sb(a[0]).min(sb(a[1])),false);
-        binary(map,"max",(t,h)->t.isTypeOfSBoolean(),(t,h)->t.isTypeOfSBoolean(),TypeFactory.mkSBoolean(),a->sb(a[0]).max(sb(a[1])),false);
-        binary(map,"applyOn",(t,h)->t.isTypeOfSBoolean(),(t,h)->t.isTypeOfUBoolean(),TypeFactory.mkSBoolean(),a->sb(a[0]).applyOn((UBooleanValue)a[1]),false);
-        ternary(map,"deduceY",(t,h)->t.isTypeOfSBoolean(),(t,h)->t.isTypeOfSBoolean(),(t,h)->t.isTypeOfSBoolean(),TypeFactory.mkSBoolean(),a->sb(a[0]).deduceY(sb(a[1]),sb(a[2])));
+        sBinary(map,"projectiveDistance",TypeFactory.mkReal(),a->new RealValue(sb(a[0]).projectiveDistance(sb(a[1]))));
+        sBinary(map,"conjunctiveCertainty",TypeFactory.mkReal(),a->new RealValue(sb(a[0]).conjunctiveCertainty(sb(a[1]))));
+        sBinary(map,"degreeOfConflict",TypeFactory.mkReal(),a->new RealValue(sb(a[0]).degreeOfConflict(sb(a[1]))));
+        sBinary(map,"min",TypeFactory.mkSBoolean(),a->sb(a[0]).min(sb(a[1])));
+        sBinary(map,"max",TypeFactory.mkSBoolean(),a->sb(a[0]).max(sb(a[1])));
+        binary(map,"applyOn",(t,h)->t.isKindOfSBoolean(Type.VoidHandling.EXCLUDE_VOID),(t,h)->t.isKindOfUBoolean(Type.VoidHandling.EXCLUDE_VOID),TypeFactory.mkSBoolean(),a->sb(a[0]).applyOn(ub(a[1])),false);
+        sTernary(map,"deduceY",TypeFactory.mkSBoolean(),a->sb(a[0]).deduceY(sb(a[1]),sb(a[2])));
         fusion(map,"minimumBeliefFusion",SBooleanValue::minimumBeliefFusion); fusion(map,"majorityBeliefFusion",SBooleanValue::majorityBeliefFusion);
         fusion(map,"beliefConstraintFusion",SBooleanValue::beliefConstraintFusion); fusion(map,"averageBeliefFusion",SBooleanValue::averageBeliefFusion);
         fusion(map,"aleatoryCumulativeBeliefFusion",SBooleanValue::aleatoryCumulativeBeliefFusion); fusion(map,"epistemicCumulativeBeliefFusion",SBooleanValue::epistemicCumulativeBeliefFusion);
         fusion(map,"weightedBeliefFusion",SBooleanValue::weightedBeliefFusion); fusion(map,"consensusAndCompromiseFusion",SBooleanValue::consensusAndCompromiseFusion);
         fusion(map,"discount", opinions -> { SBooleanValue first=opinions.iterator().next(); return first.discount(new ArrayList<>(opinions).subList(1,opinions.size())); });
     }
-    private static void fusion(Multimap<String,OpGeneric> m,String n,Function<Collection<SBooleanValue>,SBooleanValue> f){ binary(m,n,(t,h)->t.isTypeOfSBoolean(),(t,h)->t.isKindOfCollection(h),TypeFactory.mkSBoolean(),a->{List<SBooleanValue>x=new ArrayList<>();x.add(sb(a[0]));for(Value v:(CollectionValue)a[1])x.add(sb(v));return f.apply(x);},false); }
+    /**
+     * A fusion takes the receiver plus a collection of further opinions. Both the
+     * receiver and the element type follow the historical kind-of-SBoolean rule,
+     * so plain and uncertain Booleans embed as opinions; constraining the element
+     * type also turns a wrongly typed collection into a compile error instead of
+     * a cast failure escaping the evaluator.
+     */
+    private static void fusion(Multimap<String,OpGeneric> m,String n,Function<Collection<SBooleanValue>,SBooleanValue> f){
+        m.put(n,new Base(n,TypeFactory.mkSBoolean(),a->{List<SBooleanValue>x=new ArrayList<>();x.add(sb(a[0]));for(Value v:(CollectionValue)a[1])x.add(sb(v));return f.apply(x);},false){
+            public Type matches(Type[] x){
+                if(x.length!=2||!x[0].isKindOfSBoolean(Type.VoidHandling.EXCLUDE_VOID)||!x[1].isKindOfCollection(Type.VoidHandling.EXCLUDE_VOID))return null;
+                Type elem=((org.tzi.use.uml.ocl.type.CollectionType)x[1]).elemType();
+                if(!elem.isKindOfSBoolean(Type.VoidHandling.EXCLUDE_VOID))return null;
+                return x[0].isTypeOfSBoolean()||elem.isTypeOfSBoolean()?r:null;
+            }});
+    }
+    /**
+     * Historical shape of the binary subjective operations: both operands are
+     * kind of SBoolean, and at least one is genuinely SBoolean so that the plain
+     * Boolean operators still win for two ordinary Booleans.
+     */
+    private static void sBinary(Multimap<String,OpGeneric> m,String n,Type r,Function<Value[],Value> f){
+        m.put(n,new Base(n,r,f,false){public Type matches(Type[] x){
+            return x.length==2&&x[0].isKindOfSBoolean(Type.VoidHandling.EXCLUDE_VOID)&&x[1].isKindOfSBoolean(Type.VoidHandling.EXCLUDE_VOID)
+                &&(x[0].isTypeOfSBoolean()||x[1].isTypeOfSBoolean())?r:null;}});
+    }
+    private static void sTernary(Multimap<String,OpGeneric> m,String n,Type r,Function<Value[],Value> f){
+        m.put(n,new Base(n,r,f,false){public Type matches(Type[] x){
+            return x.length==3&&x[0].isKindOfSBoolean(Type.VoidHandling.EXCLUDE_VOID)&&x[1].isKindOfSBoolean(Type.VoidHandling.EXCLUDE_VOID)&&x[2].isKindOfSBoolean(Type.VoidHandling.EXCLUDE_VOID)
+                &&(x[0].isTypeOfSBoolean()||x[1].isTypeOfSBoolean()||x[2].isTypeOfSBoolean())?r:null;}});
+    }
     private interface TypeTest { boolean test(Type t, Type.VoidHandling h); }
     private static void unary(Multimap<String,OpGeneric> m,String n,java.util.function.Predicate<Type> p,Type r,Function<Value[],Value> f){ m.put(n,new Base(n,r,f,false){public Type matches(Type[] x){return x.length==1&&p.test(x[0])?r:null;}}); }
     private static void prefix(Multimap<String,OpGeneric> m,String n,java.util.function.Predicate<Type> p,Type r,Function<Value[],Value> f){ m.put(n,new Base(n,r,f,true){public Type matches(Type[] x){return x.length==1&&p.test(x[0])?r:null;}}); }

@@ -223,6 +223,20 @@ public abstract class AbstractCoverageVisitor implements ExpressionVisitor {
 	}
 
 	@Override
+	public void visitUncertainConstant(org.tzi.use.uml.ocl.expr.Expression exp) {
+	}
+
+	@Override
+	public void visitUSelect(org.tzi.use.uml.ocl.expr.ExpUSelect exp) {
+		visitQuery(exp);
+	}
+
+	@Override
+	public void visitUSelectC(org.tzi.use.uml.ocl.expr.ExpUSelectC exp) {
+		visitQuery(exp);
+	}
+
+	@Override
 	public void visitQuery(ExpQuery exp) {
 		exp.getRangeExpression().processWithVisitor(this);
 		exp.getQueryExpression().processWithVisitor(this);

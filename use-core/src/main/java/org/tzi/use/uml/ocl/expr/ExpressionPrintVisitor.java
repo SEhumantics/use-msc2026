@@ -392,6 +392,21 @@ public class ExpressionPrintVisitor implements ExpressionVisitor {
 	}
 	
 	@Override
+	public void visitUncertainConstant(Expression exp) {
+		writer.write(literal(exp.toString(), exp));
+	}
+
+	@Override
+	public void visitUSelect(ExpUSelect exp) {
+		visitQuery(exp);
+	}
+
+	@Override
+	public void visitUSelectC(ExpUSelectC exp) {
+		visitQuery(exp);
+	}
+
+	@Override
 	public void visitQuery(ExpQuery exp) {
 		visitQuery(exp, null);
 	}
