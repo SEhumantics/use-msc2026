@@ -2,60 +2,180 @@ package org.tzi.use.uml.ocl.value;
 
 import org.tzi.use.uml.ocl.type.TypeFactory;
 
-/** A Boolean proposition represented by its projected probability of truth. */
+/**
+ * A Boolean proposition represented by its projected probability of truth.
+ *
+ * <p>Historical uncertain Booleans are kept in canonical form: the carried
+ * Boolean is always {@code true} and the confidence is the probability that it
+ * holds, so {@code UBoolean(false, 0.9)} is stored as {@code UBoolean(true,
+ * 0.1)}. That is the normal form of the historical {@code uDataTypes.UBoolean},
+ * which applies it in every constructor and getter.
+ */
 public final class UBooleanValue extends UncertainBooleanValue {
+
     public static final UBooleanValue TRUE = new UBooleanValue(1.0);
     public static final UBooleanValue FALSE = new UBooleanValue(0.0);
+
     private final double probability;
-    private UBooleanValue(double probability) { super(TypeFactory.mkUBoolean()); this.probability = probability; }
-    public static UBooleanValue probability(boolean value, double confidence) { return probability(value ? confidence : 1-confidence); }
+
+    private UBooleanValue(double probability) {
+        super(TypeFactory.mkUBoolean());
+        this.probability = probability;
+    }
+
+    public static UBooleanValue probability(boolean value, double confidence) {
+        return probability(value ? confidence : 1 - confidence);
+    }
+
     public static UBooleanValue probability(double probability) {
-        if (!Double.isFinite(probability) || probability < 0 || probability > 1) throw new IllegalArgumentException("UBoolean probability must be in [0,1]");
+        if (!Double.isFinite(probability) || probability < 0 || probability > 1) {
+            throw new IllegalArgumentException("UBoolean probability must be in [0,1]");
+        }
         return probability == 1 ? TRUE : probability == 0 ? FALSE : new UBooleanValue(probability);
     }
-    public static UBooleanValue valueOf(boolean value) { return value ? TRUE : FALSE; }
-    public double probability() { return probability; }
-    /** Historical uncertain Booleans are kept in canonical form: the carried
-     *  Boolean is always {@code true} and the confidence is the probability
-     *  that it holds. {@link #toBoolean()} is what decides the actual truth. */
-    public boolean value() { return true; }
-    public double confidence() { return probability; }
-    public UBooleanValue withValue(boolean value) { return value ? this : probability(1-probability); }
-    public UBooleanValue withConfidence(double confidence) { return probability(confidence); }
-    @Override public boolean isUBoolean() { return true; }
-    public BooleanValue toBoolean() { return BooleanValue.get(probability >= .5); }
-    public BooleanValue toBooleanC(double threshold) { return BooleanValue.get(probability >= threshold); }
-    @Override public UBooleanValue not() { return probability(1-probability); }
-    @Override public UBooleanValue toUBoolean() { return this; }
-    public UBooleanValue and(UBooleanValue o) { return probability *o.probability == 0 ? FALSE : probability(probability*o.probability); }
-    public UBooleanValue or(UBooleanValue o) { return probability(1-(1-probability)*(1-o.probability)); }
-    /** Historical xor is the distance between the two confidences, not the
-     *  probabilistic exclusive or. */
-    public UBooleanValue xor(UBooleanValue o) { return probability(Math.abs(probability-o.probability)); }
-    public UBooleanValue equivalent(UBooleanValue o) { return xor(o).not(); }
-    public UBooleanValue implies(UBooleanValue o) { return not().or(o); }
-    public BooleanValue equalsC(UBooleanValue other,double threshold) { if(threshold<0||threshold>1) throw new IllegalArgumentException("threshold must be in [0,1]"); return BooleanValue.get(Math.abs(probability-other.probability) <= 1-threshold); }
-    @Override public UBooleanValue uEquals(Value o) { if (o instanceof BooleanValue b) return probability(b.value() ? probability : 1-probability); if (o instanceof UBooleanValue b) return equivalent(b); return FALSE; }
-    /** Historical USE equality: ten decimal places, with only certain UBooleans
-     * equal to their corresponding ordinary Boolean values. */
-    @Override public boolean equals(Object o) {
+
+    public static UBooleanValue valueOf(boolean value) {
+        return value ? TRUE : FALSE;
+    }
+
+    public double probability() {
+        return probability;
+    }
+
+    /** Always {@code true}; {@link #toBoolean()} is what decides the actual truth. */
+    public boolean value() {
+        return true;
+    }
+
+    public double confidence() {
+        return probability;
+    }
+
+    public UBooleanValue withValue(boolean value) {
+        return value ? this : probability(1 - probability);
+    }
+
+    public UBooleanValue withConfidence(double confidence) {
+        return probability(confidence);
+    }
+
+    @Override
+    public boolean isUBoolean() {
+        return true;
+    }
+
+    public BooleanValue toBoolean() {
+        return BooleanValue.get(probability >= .5);
+    }
+
+    public BooleanValue toBooleanC(double threshold) {
+        return BooleanValue.get(probability >= threshold);
+    }
+
+    @Override
+    public UBooleanValue toUBoolean() {
+        return this;
+    }
+
+    // ------------------------------------------------------------------- algebra
+
+    @Override
+    public UBooleanValue not() {
+        return probability(1 - probability);
+    }
+
+    public UBooleanValue and(UBooleanValue o) {
+        return probability * o.probability == 0 ? FALSE : probability(probability * o.probability);
+    }
+
+    public UBooleanValue or(UBooleanValue o) {
+        return probability(1 - (1 - probability) * (1 - o.probability));
+    }
+
+    /**
+     * Historical xor is the distance between the two confidences, not the
+     * probabilistic exclusive or.
+     */
+    public UBooleanValue xor(UBooleanValue o) {
+        return probability(Math.abs(probability - o.probability));
+    }
+
+    public UBooleanValue equivalent(UBooleanValue o) {
+        return xor(o).not();
+    }
+
+    public UBooleanValue implies(UBooleanValue o) {
+        return not().or(o);
+    }
+
+    /** Two propositions agree if their probabilities differ by at most 1-threshold. */
+    public BooleanValue equalsC(UBooleanValue other, double threshold) {
+        if (threshold < 0 || threshold > 1) {
+            throw new IllegalArgumentException("threshold must be in [0,1]");
+        }
+        return BooleanValue.get(Math.abs(probability - other.probability) <= 1 - threshold);
+    }
+
+    // ---------------------------------------------------------- equality, order
+
+    @Override
+    public UBooleanValue uEquals(Value o) {
+        if (o instanceof BooleanValue b) {
+            return probability(b.value() ? probability : 1 - probability);
+        }
+        if (o instanceof UBooleanValue b) return equivalent(b);
+        return FALSE;
+    }
+
+    /**
+     * Historical USE equality: ten decimal places, with only certain UBooleans
+     * equal to their corresponding ordinary Boolean values.
+     */
+    @Override
+    public boolean equals(Object o) {
         if (o == this) return true;
         // Historical asymmetry: because the carried Boolean is always true, an
         // uncertain Boolean can equal Boolean true but never Boolean false.
-        if (o instanceof BooleanValue b)
+        if (o instanceof BooleanValue b) {
             return b.value() ? probability == 1.0 && value() : probability == 0.0 && !value();
+        }
         return o instanceof UBooleanValue x
                 && value() == x.value()
                 && round(probability, 10) == round(x.probability, 10);
     }
-    @Override public int hashCode() { return 31 * Boolean.hashCode(value()) + Double.hashCode(round(probability, 10)); }
-    @Override public int compareTo(Value o) {
+
+    @Override
+    public int hashCode() {
+        return 31 * Boolean.hashCode(value()) + Double.hashCode(round(probability, 10));
+    }
+
+    /**
+     * Ordering among uncertain Booleans is by probability, which is consistent
+     * with {@link #equals}. Every other kind -- including plain Boolean -- falls
+     * back to comparing renderings, because that is the rule the ordinary values
+     * apply in the opposite direction. Ordering against a plain Boolean by truth
+     * instead disagreed with {@link BooleanValue#compareTo}, and the resulting
+     * asymmetry made {@code Collections.sort} throw for a collection holding both
+     * kinds; see {@link URealValue#compareTo} for the same contract note.
+     */
+    @Override
+    public int compareTo(Value o) {
         if (o == this) return 0;
         if (o instanceof UndefinedValue) return 1;
-        if (!(o instanceof BooleanValue || o instanceof UBooleanValue)) return toString().compareTo(o.toString());
-        boolean other = o instanceof BooleanValue b ? b.value() : ((UBooleanValue) o).value();
-        return toBoolean().value() == other ? 0 : toBoolean().value() ? 1 : -1;
+        if (o instanceof UBooleanValue x) {
+            return Double.compare(round(probability, 10), round(x.probability, 10));
+        }
+        return toString().compareTo(o.toString());
     }
-    @Override public StringBuilder toString(StringBuilder b) { return b.append("UBoolean(").append(value()).append(", ").append(round(probability,10)).append(')'); }
-    private static double round(double value,int places){double scale=Math.pow(10,places);return Math.round(value*scale)/scale;}
+
+    @Override
+    public StringBuilder toString(StringBuilder b) {
+        return b.append("UBoolean(").append(value())
+                .append(", ").append(round(probability, 10)).append(')');
+    }
+
+    private static double round(double value, int places) {
+        double scale = Math.pow(10, places);
+        return Math.round(value * scale) / scale;
+    }
 }

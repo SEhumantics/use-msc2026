@@ -87,6 +87,10 @@ public final class IntegerValue extends Value {
             return ( fValue < val2 ? -1 : ( fValue == val2 ? 0 : +1) );
         } else if (o instanceof UndefinedValue ) {
             return +1;
+        } else if (o instanceof URealValue || o instanceof UIntegerValue ) {
+            // Uncertain numbers order together with certain ones; let that side
+            // decide so both directions agree and sorting stays well defined.
+            return -o.compareTo(this);
         } else
             return toString().compareTo(o.toString());
     }

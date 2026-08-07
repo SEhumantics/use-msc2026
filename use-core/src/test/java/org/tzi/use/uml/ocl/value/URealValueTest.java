@@ -138,23 +138,39 @@ class URealValueTest {
                 0,
                 a.compareTo(b),"UReal(0, 2) = UReal(0, 2)");
 
+        // The historical oracle asserted compareTo == 0 for the three pairs
+        // below, because the historical comparison asked whether the two
+        // distributions overlap. That relation is not transitive -- UReal(0,2)
+        // overlaps both UReal(1,1) and UReal(-1,1), which do not overlap each
+        // other -- so it cannot order a collection: Collections.sort threw
+        // IllegalArgumentException once TimSort noticed, and every rendering of
+        // a set or bag goes through it. compareTo now orders by value and then
+        // by uncertainty. The historical overlap semantics is unchanged and is
+        // what OCL `=' still evaluates, so each pair is asserted on uEquals,
+        // which is where it is observable. See UncertainValueOrderingTest.
         a = new URealValue(0, 2);
         b = new URealValue(0, 1);
+        assertTrue(
+                a.uEquals(b).toBoolean().value(),"UReal(0, 2) overlaps UReal(0, 1)");
         assertEquals(
-                0,
-                a.compareTo(b),"UReal(0, 2) = UReal(0, 1)");
+                1,
+                a.compareTo(b),"UReal(0, 2) orders after UReal(0, 1)");
 
         a = new URealValue(0, 2);
         b = new URealValue(1, 1);
+        assertTrue(
+                a.uEquals(b).toBoolean().value(),"UReal(0, 2) overlaps UReal(1, 1)");
         assertEquals(
-                0,
-                a.compareTo(b),"UReal(0, 2) = UReal(1, 1)");
+                -1,
+                a.compareTo(b),"UReal(0, 2) orders before UReal(1, 1)");
 
         a = new URealValue(0, 2);
         b = new URealValue(-1, 1);
+        assertTrue(
+                a.uEquals(b).toBoolean().value(),"UReal(0, 2) overlaps UReal(-1, 1)");
         assertEquals(
-                0,
-                a.compareTo(b),"UReal(0, 2) = UReal(-1, 1)");
+                1,
+                a.compareTo(b),"UReal(0, 2) orders after UReal(-1, 1)");
 
         a = new URealValue(0, 2);
         b = new URealValue(5, 2);

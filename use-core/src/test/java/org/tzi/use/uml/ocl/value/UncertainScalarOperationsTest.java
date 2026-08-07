@@ -8,7 +8,11 @@ class UncertainScalarOperationsTest {
         var left=new URealValue(0,1); var right=new URealValue(0,1);
         assertEquals(0,left.lessThan(right).probability(),.01);
         assertTrue(left.uEquals(right).probability()>0.99);
-        assertEquals(0,new URealValue(0,2).compareTo(new URealValue(1,1)));
+        // Overlap is what OCL `=' evaluates; compareTo instead orders by value
+        // then uncertainty, because overlap is not transitive and cannot sort a
+        // collection. See UncertainValueOrderingTest.
+        assertTrue(new URealValue(0,2).uEquals(new URealValue(1,1)).toBoolean().value());
+        assertEquals(-1,new URealValue(0,2).compareTo(new URealValue(1,1)));
         assertEquals(0,new URealValue(0,0).compareTo(new RealValue(0)));
         assertEquals("UReal(1.2345678901, 0.123456789)",new URealValue(1.234567890123,0.12345678901).toString());
         assertEquals(new URealValue(1.00000000001,.1),new URealValue(1.00000000002,.100000000001));

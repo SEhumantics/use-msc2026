@@ -20,3 +20,21 @@ UCollectionOperations.in:149  # `.equals' on a collection expands to collect sho
 UCollectionOperations.in:153  # `.equals' on a collection expands to collect shorthand
 UCollectionOperations.in:168  # `.equals' on a collection expands to collect shorthand
 UCollectionOperations.in:172  # `.equals' on a collection expands to collect shorthand
+
+# Rendering order only -- the set contents agree element for element.
+#
+# The expected order is 2.5, UReal(3.0, 0.25), 3.2, UReal(2.0, 0.5): the
+# smallest element renders last, so it is not sorted by value, by uncertainty,
+# or by rendering. It is what the old comparator produced by accident. That
+# comparator called two overlapping distributions equal, which is not
+# transitive, so `Collections.sort' left whole runs of elements in hash order --
+# and for lists of 32 elements or more TimSort detected the contradiction and
+# threw IllegalArgumentException instead, which `Sequence{...}->asSet()' over
+# enough uncertain values did reach. Ordering now goes by value and then by
+# uncertainty, which is a total order, so this entry renders sorted:
+# UReal(2.0, 0.5), 2.5, UReal(3.0, 0.25), 3.2.
+#
+# No valid comparator can reproduce the historical order here, so this is not
+# recoverable. Line 139 of the same file, which the historical build does render
+# in numeric order, is reproduced exactly.
+UCollectionOperations.in:160  # rendering order of an unsorted historical expectation; see above

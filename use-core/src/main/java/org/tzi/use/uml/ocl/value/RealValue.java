@@ -80,6 +80,10 @@ public final class RealValue extends Value {
             return Double.valueOf(fValue).compareTo(Double.valueOf(val2));
         } else if (o instanceof UndefinedValue ) {
             return +1;
+        } else if (o instanceof URealValue || o instanceof UIntegerValue ) {
+            // Uncertain numbers order together with certain ones; let that side
+            // decide so both directions agree and sorting stays well defined.
+            return -o.compareTo(this);
         } else
             return toString().compareTo(o.toString());
     }
