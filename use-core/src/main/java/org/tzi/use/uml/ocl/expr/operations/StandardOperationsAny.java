@@ -68,7 +68,7 @@ final class Op_equal extends OpGeneric {
 	}
 
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
-		if (UncertainComparison.isUncertainComparison(args))
+		if (UncertainComparison.isUncertainComparison(resultType, args))
 			return UncertainComparison.operand(args).uEquals(UncertainComparison.other(args));
 
 		if (args[0].isUndefined())
@@ -146,7 +146,17 @@ final class UncertainComparison {
 				? TypeFactory.mkSBoolean() : TypeFactory.mkUBoolean();
 	}
 
-	static boolean isUncertainComparison(Value[] args) {
+	/**
+	 * The result type was fixed when the expression was checked, so an uncertain
+	 * result may only be produced when that type asks for one. A statically
+	 * certain expression that happens to hold an uncertain value stays certain.
+	 */
+	static boolean isUncertainComparison(Type resultType, Value[] args) {
+		if (!(resultType instanceof UncertainType || resultType instanceof SBooleanType)) return false;
+		return isUncertainComparison(args);
+	}
+
+	private static boolean isUncertainComparison(Value[] args) {
 		return (args[0] instanceof UncertainValue || args[1] instanceof UncertainValue)
 				&& !args[0].isUndefined() && !args[1].isUndefined();
 	}
@@ -192,7 +202,7 @@ final class Op_notequal extends OpGeneric {
 	}
 
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
-		if (UncertainComparison.isUncertainComparison(args))
+		if (UncertainComparison.isUncertainComparison(resultType, args))
 			return UncertainComparison.operand(args).uDistinct(UncertainComparison.other(args));
 
 		if (args[0].isUndefined())

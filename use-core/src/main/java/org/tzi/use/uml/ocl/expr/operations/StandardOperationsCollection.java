@@ -17,6 +17,7 @@ import org.tzi.use.uml.ocl.value.IntegerValue;
 import org.tzi.use.uml.ocl.value.RealValue;
 import org.tzi.use.uml.ocl.value.UIntegerValue;
 import org.tzi.use.uml.ocl.value.URealValue;
+import org.tzi.use.uml.ocl.value.UBooleanValue;
 import org.tzi.use.uml.ocl.value.UndefinedValue;
 import org.tzi.use.uml.ocl.value.Value;
 import org.tzi.use.util.Log;
@@ -116,7 +117,7 @@ final class Op_collection_includes extends OpGeneric {
 
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
 		if (args[0].isUndefined())
-			return BooleanValue.FALSE;
+			return resultType.isTypeOfUBoolean() ? UBooleanValue.FALSE : BooleanValue.FALSE;
 		
 		CollectionValue coll = (CollectionValue) args[0];
 		if (resultType.isTypeOfUBoolean()) return coll.uIncludes(args[1]);
@@ -168,7 +169,7 @@ final class Op_collection_excludes extends OpGeneric {
 
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
 		if (args[0].isUndefined())
-			return BooleanValue.FALSE;
+			return resultType.isTypeOfUBoolean() ? UBooleanValue.FALSE : BooleanValue.FALSE;
 		CollectionValue coll = (CollectionValue) args[0];
 		if (resultType.isTypeOfUBoolean()) return coll.uExcludes(args[1]);
 		boolean res = !coll.includes(args[1]);
@@ -831,7 +832,11 @@ final class Op_collection_uCount extends OpGeneric {
 final class Op_collection_uCountC extends OpGeneric {
     public String name(){return "uCountC";} public int kind(){return SPECIAL;} public boolean isInfixOrPrefix(){return false;}
     public Type matches(Type[] p){return p.length==3&&p[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)&&p[2].isKindOfReal(VoidHandling.EXCLUDE_VOID)?TypeFactory.mkInteger():null;}
-    public Value eval(EvalContext c,Value[] a,Type r){double t=a[2] instanceof IntegerValue i?i.value():((RealValue)a[2]).value();if(t<0||t>1)throw new IllegalArgumentException("uCountC confidence must be between 0 and 1");return a[0].isUndefined()?IntegerValue.valueOf(0):IntegerValue.valueOf(((CollectionValue)a[0]).uCountC(a[1],t));}
+    public Value eval(EvalContext c,Value[] a,Type r){
+        if(a[2].isUndefined())return UndefinedValue.instance;
+        double t=a[2] instanceof IntegerValue i?i.value():((RealValue)a[2]).value();
+        if(t<0||t>1)return UndefinedValue.instance;
+        return a[0].isUndefined()?IntegerValue.valueOf(0):IntegerValue.valueOf(((CollectionValue)a[0]).uCountC(a[1],t));}
 }
 final class Op_collection_uIncludes extends OpGeneric {
     public String name(){return "uIncludes";} public int kind(){return OPERATION;} public boolean isInfixOrPrefix(){return false;}

@@ -78,7 +78,7 @@ abstract class ArithOperation extends OpGeneric {
 	 * Uncertain numbers are numbers too, but their arithmetic is registered
 	 * separately and must not be narrowed to a certain result here.
 	 */
-	private static boolean isCertainNumber(Type type) {
+	static boolean isCertainNumber(Type type) {
 		return type.isKindOfNumber(VoidHandling.INCLUDE_VOID) && !(type instanceof UncertainType);
 	}
 }
@@ -831,9 +831,11 @@ final class Op_number_pow extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
+		// The uncertain algebra registers `power', never `pow', so claiming an
+		// uncertain operand here would select this certain implementation.
 		return (params.length == 2 &&
-				params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID) &&
-				params[1].isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? TypeFactory.mkReal() : null;
+				ArithOperation.isCertainNumber(params[0]) &&
+				ArithOperation.isCertainNumber(params[1])) ? TypeFactory.mkReal() : null;
 	}
 
 	@Override

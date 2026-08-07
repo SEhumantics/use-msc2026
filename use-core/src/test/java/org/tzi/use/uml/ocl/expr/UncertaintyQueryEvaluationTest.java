@@ -66,7 +66,12 @@ class UncertaintyQueryEvaluationTest {
     @Test void uncertainSelectExistsForAllEvaluateWithThresholds() {
         var selected=eval("Sequence{UBoolean(true, 0.9), UBoolean(false, 0.9)}->uSelect(x | x)");
         assertEquals(1,((CollectionValue)selected).size());
-        assertEquals(1,((CollectionValue)eval("Sequence{UBoolean(true, 0.9), UBoolean(false, 0.9)}->select(x | x)")).size());
+        // select, reject, any and one keep requiring a certain Boolean, as they
+        // do historically; only exists, forAll and the uSelect family take an
+        // uncertain predicate
+        assertNull(OCLCompiler.compileExpression(model,
+            "Sequence{UBoolean(true, 0.9)}->select(x | x)", "<uncertainty-eval>",
+            new PrintWriter(new StringWriter()), new VarBindings()));
         assertEquals(1,((CollectionValue)eval("Sequence{UBoolean(true, 0.9), UBoolean(false, 0.9)}->uSelectC(x | x, 0.8)")).size());
         var exists=eval("Sequence{UBoolean(false, 0.8), UBoolean(true, 0.7)}->exists(x | x)");
         assertTrue(exists instanceof UBooleanValue); assertTrue(((UBooleanValue)exists).probability()>.5);

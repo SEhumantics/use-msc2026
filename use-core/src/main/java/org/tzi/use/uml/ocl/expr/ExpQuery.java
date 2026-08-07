@@ -93,9 +93,22 @@ public abstract class ExpQuery extends Expression {
 	
     protected void assertBooleanQuery() throws ExpInvalidException {
         // queryExp must be a boolean expression
-        if (!fQueryExp.type().isTypeOfBoolean() && !fQueryExp.type().isKindOfUBoolean(VoidHandling.EXCLUDE_VOID))
+        if (!fQueryExp.type().isTypeOfBoolean())
             throw new ExpInvalidException("Argument expression of `" + name()
                     + "' must have boolean type, found `" + fQueryExp.type()
+                    + "'.");
+    }
+
+    /**
+     * Only the queries that know how to combine uncertain truth values accept an
+     * uncertain predicate: exists, forAll and the uSelect family. select, reject,
+     * any and one keep requiring a certain Boolean, as they do historically,
+     * because their evaluation has no uncertain counterpart to fall back on.
+     */
+    protected void assertKindOfUBooleanQuery() throws ExpInvalidException {
+        if (!fQueryExp.type().isKindOfUBoolean(VoidHandling.EXCLUDE_VOID))
+            throw new ExpInvalidException("Argument expression of `" + name()
+                    + "' must be kind of UBoolean type, found `" + fQueryExp.type()
                     + "'.");
     }
 

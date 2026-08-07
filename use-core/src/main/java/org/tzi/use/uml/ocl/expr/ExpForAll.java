@@ -41,7 +41,7 @@ public class ExpForAll extends ExpQuery {
         super(queryExp.type().isTypeOfUBoolean() ? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean(), elemVarDecls, rangeExp, queryExp);
     
         // queryExp must be a boolean expression
-        assertBooleanQuery();
+        assertKindOfUBooleanQuery();
     }
 
     /**

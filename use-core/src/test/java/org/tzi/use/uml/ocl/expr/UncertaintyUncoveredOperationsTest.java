@@ -2,6 +2,7 @@ package org.tzi.use.uml.ocl.expr;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.PrintWriter;
@@ -97,5 +98,52 @@ class UncertaintyUncoveredOperationsTest {
         assertEquals(1 - 0.5 * 0.8, probability("UString('a', 0.5) > UString('b', 0.8)"), EPS);
         assertEquals(0.5 * 0.8, probability("UString('a', 0.5) <= UString('b', 0.8)"), EPS);
         assertEquals(1 - 0.5 * 0.8, probability("UString('a', 0.5) >= UString('b', 0.8)"), EPS);
+    }
+
+    /**
+     * Defects found by the code review of the port. Each one let a type-level
+     * promise disagree with the value produced at evaluation, which surfaced as
+     * a ClassCastException escaping the evaluator.
+     */
+    @Test void queriesWithoutAnUncertainCounterpartRejectUncertainPredicates() {
+        for (String query : new String[] { "select", "reject", "any", "one" }) {
+            StringWriter err = new StringWriter();
+            assertNull(OCLCompiler.compileExpression(model,
+                    "Sequence{UBoolean(true, 0.9)}->" + query + "(x | x)", "<uncovered>",
+                    new PrintWriter(err), new VarBindings()),
+                query + " must reject an uncertain predicate");
+        }
+    }
+
+    @Test void powDoesNotClaimUncertainOperands() {
+        // the uncertain algebra registers `power', so `pow' must stay certain
+        assertNull(OCLCompiler.compileExpression(model, "UReal(2.0, 0.1).pow(2)", "<uncovered>",
+                new PrintWriter(new StringWriter()), new VarBindings()));
+        assertEquals(4.0, ((RealValue) eval("2.0.pow(2)")).value(), EPS);
+    }
+
+    @Test void equalityStaysCertainWhenItsTypeSaysSo() {
+        // the operands are statically OclAny, so the result was checked as Boolean
+        Value v = eval("Sequence{UReal(1.0, 0.1), 'x'}->at(1) = Sequence{UReal(1.0, 0.1), 'x'}->at(2)");
+        assertTrue(v instanceof BooleanValue, "expected a certain Boolean, got " + v);
+    }
+
+    @Test void includesOnAnUndefinedCollectionKeepsItsDeclaredType() {
+        Value v = eval("let s : Set(UInteger) = oclUndefined(Set(UInteger)) in s->includes(UInteger(1, 0))");
+        assertTrue(v instanceof UBooleanValue, "expected a UBoolean, got " + v);
+        assertEquals(0.0, ((UBooleanValue) v).probability(), EPS);
+    }
+
+    @Test void uCountCYieldsUndefinedRatherThanThrowing() {
+        assertTrue(eval("Sequence{UString('a', 1)}->uCountC(UString('a', 1), 1.5)").isUndefined());
+        assertTrue(eval("Sequence{UString('a', 1)}->uCountC(UString('a', 1), oclUndefined(Real))").isUndefined());
+    }
+
+    @Test void uncertainIntegerArithmeticDoesNotOverflowItsUncertainty() {
+        // the squares in the propagation must be taken in double arithmetic
+        Value v = eval("UInteger(50000, 1) * UInteger(50000, 1)");
+        assertTrue(v instanceof org.tzi.use.uml.ocl.value.UIntegerValue, "expected a UInteger, got " + v);
+        assertEquals(Math.sqrt(2) * 50000,
+                ((org.tzi.use.uml.ocl.value.UIntegerValue) v).uncertainty(), 1e-6);
     }
 }
