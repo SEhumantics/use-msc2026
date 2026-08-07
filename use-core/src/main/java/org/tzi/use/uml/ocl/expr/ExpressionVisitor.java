@@ -25,9 +25,15 @@ package org.tzi.use.uml.ocl.expr;
  *
  */
 public interface ExpressionVisitor {
-	void visitUncertainConstant(Expression exp);
-	void visitUSelect(ExpUSelect exp);
-	void visitUSelectC(ExpUSelectC exp);
+	/**
+	 * Defaulted, not abstract: plugins shipped against upstream USE implement
+	 * this interface without knowing the uncertainty nodes, and turning these
+	 * into abstract methods makes such a plugin fail with AbstractMethodError
+	 * as soon as it visits one. The visitors in this project override them.
+	 */
+	default void visitUncertainConstant(Expression exp) { }
+	default void visitUSelect(ExpUSelect exp) { }
+	default void visitUSelectC(ExpUSelectC exp) { }
 	void visitAllInstances (ExpAllInstances exp);
 	void visitAny (ExpAny exp);
 	void visitAsType (ExpAsType exp);
