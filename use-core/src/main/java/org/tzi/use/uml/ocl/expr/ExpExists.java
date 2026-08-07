@@ -37,8 +37,8 @@ public class ExpExists extends ExpQuery {
                      Expression queryExp) 
         throws ExpInvalidException
     {
-        // result is of boolean type
-        super(queryExp.type().isKindOfUBoolean(org.tzi.use.uml.ocl.type.Type.VoidHandling.EXCLUDE_VOID) ? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean(), elemVarDecls, rangeExp, queryExp);
+        // result is of boolean type, or uncertain when the query itself is
+        super(queryExp.type().isTypeOfUBoolean() ? TypeFactory.mkUBoolean() : TypeFactory.mkBoolean(), elemVarDecls, rangeExp, queryExp);
     
         // queryExp must be a boolean expression
         assertBooleanQuery();

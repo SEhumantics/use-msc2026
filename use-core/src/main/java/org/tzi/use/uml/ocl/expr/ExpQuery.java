@@ -174,26 +174,53 @@ public abstract class ExpQuery extends Expression {
 
         // we need recursion for the permutation of assignments of
         // range values to all element variables.
-        if (fQueryExp.type().isKindOfUBoolean(VoidHandling.EXCLUDE_VOID))
-            return evalUncertainExistsOrForAll(ctx, rangeVal, doExists);
+        // Only a query that is itself uncertain produces an uncertain result:
+        // an ordinary Boolean query is a kind of UBoolean, so testing for that
+        // would capture every query and turn plain OCL results uncertain.
+        if (fQueryExp.type().isTypeOfUBoolean())
+            return evalUncertainExistsOrForAll(0, rangeVal, ctx, doExists);
         boolean res = evalExistsOrForAll0(0, rangeVal, ctx, doExists);
         return BooleanValue.get(res);
     }
 
-    private Value evalUncertainExistsOrForAll(EvalContext ctx, CollectionValue rangeVal, boolean doExists) {
-        UBooleanValue result = doExists ? UBooleanValue.FALSE : UBooleanValue.TRUE;
-        if (!fElemVarDecls.isEmpty()) ctx.pushVarBinding(fElemVarDecls.varDecl(0).name(), null);
-        for (Value elem : rangeVal) {
-            if (!fElemVarDecls.isEmpty()) ctx.varBindings().setPeekValue(elem);
-            Value q=fQueryExp.eval(ctx);
-            UBooleanValue uq;
-            if (q.isUndefined()) uq=UBooleanValue.FALSE;
-            else if (q instanceof UBooleanValue u) uq=u;
-            else uq=UBooleanValue.valueOf(((BooleanValue)q).value());
-            result=doExists?result.or(uq):result.and(uq);
+    /**
+     * Accumulate an uncertain exists or forAll. Unlike the certain case there is
+     * nothing to short-circuit on, since every element contributes to the
+     * resulting probability. The recursion over the element variables mirrors
+     * {@link #evalExistsOrForAll0}.
+     */
+    private UBooleanValue evalUncertainExistsOrForAll(int nesting,
+            CollectionValue rangeVal, EvalContext ctx, boolean doExists) {
+        UBooleanValue res = doExists ? UBooleanValue.FALSE : UBooleanValue.TRUE;
+
+        for (Value elemVal : rangeVal) {
+
+            // bind element variable to range element, if variable was declared
+            if (!fElemVarDecls.isEmpty())
+                ctx.pushVarBinding(fElemVarDecls.varDecl(nesting).name(), elemVal);
+
+            UBooleanValue contribution;
+            if (!fElemVarDecls.isEmpty() && nesting < fElemVarDecls.size() - 1) {
+                contribution = evalUncertainExistsOrForAll(nesting + 1, rangeVal, ctx, doExists);
+            } else {
+                Value queryVal = fQueryExp.eval(ctx);
+
+                // undefined query values default to false
+                if (queryVal.isUndefined())
+                    contribution = UBooleanValue.FALSE;
+                else if (queryVal instanceof UBooleanValue uncertain)
+                    contribution = uncertain;
+                else
+                    contribution = UBooleanValue.valueOf(((BooleanValue) queryVal).value());
+            }
+
+            res = doExists ? res.or(contribution) : res.and(contribution);
+
+            if (!fElemVarDecls.isEmpty())
+                ctx.popVarBinding();
         }
-        if (!fElemVarDecls.isEmpty()) ctx.popVarBinding();
-        return result;
+
+        return res;
     }
 
     private final boolean evalExistsOrForAll0(int nesting,

@@ -22,7 +22,11 @@
  */
 package org.tzi.use.parser;
 
-import junit.framework.TestCase;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import org.junit.jupiter.api.Test;
 import org.tzi.use.config.Options;
 import org.tzi.use.parser.ocl.OCLCompiler;
 import org.tzi.use.parser.use.USECompiler;
@@ -63,7 +67,7 @@ import java.util.stream.Stream;
  * @author     Mark Richters
  */
 
-public class USECompilerTest extends TestCase {
+public class USECompilerTest {
     // Set this to true to see more details about what is tested.
     private static final boolean VERBOSE = false;
     private static final int EXPECTED = 49;
@@ -107,6 +111,7 @@ public class USECompilerTest extends TestCase {
     }
 
 
+    @Test
     public void testSpecification() {
         Options.explicitVariableDeclarations = false;
 
@@ -149,6 +154,7 @@ public class USECompilerTest extends TestCase {
         }
     }
 
+    @Test
     public void testExpression() throws IOException {
         MModel model = new ModelFactory().createModel("Test");
         // read expressions and expected results from file
@@ -201,12 +207,13 @@ public class USECompilerTest extends TestCase {
                             TEST_EXPR_FILE.toString(),
                             new PrintWriter(System.err),
                             new VarBindings());
-            assertNotNull(expr + " compiles", expr);
+            assertNotNull(expr, () -> "does not compile: " + expStr);
 
             MSystemState systemState = new MSystem(model).state();
 
             Value val = new Evaluator().eval(expr, systemState);
-            assertEquals(TEST_EXPR_FILE + ":" + lineNr + " evaluate: " + expStr, resultStr, val.toStringWithType());
+            assertEquals(resultStr, val.toStringWithType(),
+                    TEST_EXPR_FILE + ":" + lineNr + " evaluate: " + expStr);
         }
 
         in.close();
@@ -295,10 +302,10 @@ public class USECompilerTest extends TestCase {
 
         // make sure we don't silently miss the input files
         assertEquals(
-                "make sure that all test files can be found "
-                        + " (or update expected number if you have added test files)",
                 expected,
-                fileList.size());
+                fileList.size(),
+                "make sure that all test files can be found "
+                        + " (or update expected number if you have added test files)");
 
         return fileList;
     }

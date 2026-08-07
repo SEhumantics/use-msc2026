@@ -5,7 +5,7 @@
 # and an entry that starts agreeing must be deleted from this file. The list is
 # the honest record of what is left.
 #
-# All six remaining entries have been traced to causes outside the uncertainty
+# All five remaining entries have been traced to causes outside the uncertainty
 # semantics, and the behaviour each of them was asserting is covered directly by
 # UncertaintyQueryEvaluationTest.
 
@@ -20,9 +20,3 @@ UCollectionOperations.in:149  # `.equals' on a collection expands to collect sho
 UCollectionOperations.in:153  # `.equals' on a collection expands to collect shorthand
 UCollectionOperations.in:168  # `.equals' on a collection expands to collect shorthand
 UCollectionOperations.in:172  # `.equals' on a collection expands to collect shorthand
-
-# exists/forAll with more than one iterator variable reports `unbound variable'
-# in the current USE baseline for ordinary Boolean queries too, in code the
-# uncertainty port does not touch, so the uncertain and the certain paths behave
-# alike here.
-UCollectionOperations.in:39  # multi-variable exists is broken in the USE baseline
