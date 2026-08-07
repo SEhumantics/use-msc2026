@@ -166,8 +166,13 @@ public abstract class ExpQuery extends Expression {
         for(Value element:collection){
             if(!fElemVarDecls.isEmpty())ctx.varBindings().setPeekValue(element);
             Value q=fQueryExp.eval(ctx); if(q.isUndefined())continue;
-            double p=q instanceof UBooleanValue u?u.probability():((BooleanValue)q).value()?1:0;
-            if(p>=threshold)result.add(element);
+            // A certain Boolean is selected on its truth alone; only an uncertain
+            // one is measured against the threshold. Mapping true/false onto 1/0
+            // and comparing would select a false predicate at a threshold of 0.
+            boolean selected = q instanceof UBooleanValue u
+                    ? u.probability() >= threshold
+                    : ((BooleanValue) q).value();
+            if(selected)result.add(element);
         }
         if(!fElemVarDecls.isEmpty())ctx.popVarBinding();
         return ((CollectionType)collection.type()).createCollectionValue(result);

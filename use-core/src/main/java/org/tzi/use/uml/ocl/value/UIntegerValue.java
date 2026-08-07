@@ -50,9 +50,9 @@ public final class UIntegerValue extends UncertainValue {
         if (uncertainty == 0) return new UIntegerValue(value/o.value, o.uncertainty/((double)o.value*o.value));
         double c=Math.abs((uncertainty*uncertainty)/o.value);
         double d=((double)value*value*o.uncertainty*o.uncertainty)/(Math.pow(o.value,4));
-        // The historical library floors the uncertain quotient (the scalar
-        // branches retain Java integer division semantics).
-        return new UIntegerValue((int)Math.floor((double)value/o.value),Math.sqrt(c+d));
+        // The historical library divides in int arithmetic before flooring, so
+        // the flooring is a no-op and the quotient truncates towards zero.
+        return new UIntegerValue(value/o.value,Math.sqrt(c+d));
     }
     public UIntegerValue abs() { return new UIntegerValue(Math.abs(value),uncertainty); }
     public UIntegerValue negate() { return new UIntegerValue(-value,uncertainty); }
@@ -68,7 +68,8 @@ public final class UIntegerValue extends UncertainValue {
     @Override public int hashCode() { return java.util.Objects.hash(value, round(uncertainty,10)); }
     @Override public int compareTo(Value o) {
         if (o instanceof UndefinedValue) return 1;
-        if (o instanceof URealValue) return o.compareTo(this);
+        // Negated, so that ordering stays antisymmetric across the two kinds.
+        if (o instanceof URealValue) return -o.compareTo(this);
         if (o instanceof UIntegerValue || o instanceof IntegerValue || o instanceof RealValue)
             return toUReal().compareTo(o instanceof UIntegerValue x ? x.toUReal() : o);
         return 0;

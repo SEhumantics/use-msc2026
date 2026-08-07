@@ -17,13 +17,28 @@ public final class SBooleanValue extends UncertainBooleanValue {
     }
     public SBooleanValue(double belief,double disbelief,double uncertainty,double baseRate,double relativeWeight){
         super(TypeFactory.mkSBoolean());
-        checkUnit(belief,"belief"); checkUnit(disbelief,"disbelief"); checkUnit(uncertainty,"uncertainty"); checkUnit(baseRate,"base rate");
+        belief=clampUnit(belief,"belief"); disbelief=clampUnit(disbelief,"disbelief");
+        uncertainty=clampUnit(uncertainty,"uncertainty"); baseRate=clampUnit(baseRate,"base rate");
         if (Math.abs(belief+disbelief+uncertainty-1) > MASS_TOLERANCE) throw new IllegalArgumentException("belief + disbelief + uncertainty must equal 1 within " + MASS_TOLERANCE);
         if(!Double.isFinite(relativeWeight)||relativeWeight<0)throw new IllegalArgumentException("relative weight must be non-negative");
         this.belief=belief; this.disbelief=disbelief; this.uncertainty=uncertainty; this.baseRate=baseRate;
         this.relativeWeight=relativeWeight;
     }
-    private static void checkUnit(double x, String name) { if (!Double.isFinite(x) || x < 0 || x > 1) throw new IllegalArgumentException(name+" must be in [0,1]"); }
+    /**
+     * A coordinate this far outside [0,1] is floating-point drift rather than an
+     * invalid opinion, so it is accepted and clamped. The historical library got
+     * the same effect implicitly by rounding every coordinate to six decimals
+     * before checking it; without this, results such as {@code 1-b-u} yielding
+     * -2.8e-17 would turn a perfectly valid opinion into an undefined value.
+     * The mass check stays exact: only the individual coordinates are clamped.
+     */
+    public static final double COORDINATE_TOLERANCE = 1e-9;
+    private static double clampUnit(double x, String name) {
+        if (!Double.isFinite(x) || x < -COORDINATE_TOLERANCE || x > 1 + COORDINATE_TOLERANCE)
+            throw new IllegalArgumentException(name+" must be in [0,1]");
+        return Math.min(1, Math.max(0, x));
+    }
+    private static void checkUnit(double x, String name) { clampUnit(x, name); }
     public double belief() { return belief; } public double disbelief() { return disbelief; }
     public double uncertainty() { return uncertainty; } public double baseRate() { return baseRate; }
     public double projection() { return belief + baseRate*uncertainty; }
@@ -71,8 +86,15 @@ public final class SBooleanValue extends UncertainBooleanValue {
         return new SBooleanValue(p-baseRate*u,1-p-(1-baseRate)*u,u,baseRate,relativeWeight);
     }
     public SBooleanValue uncertainOpinion() { return uncertaintyMaximized(); }
-    public SBooleanValue min(SBooleanValue o) { return projection() <= o.projection() ? this : o; }
-    public SBooleanValue max(SBooleanValue o) { return projection() >= o.projection() ? this : o; }
+    /**
+     * Ordering by projection uses the historical six-decimal precision, so two
+     * opinions whose projections differ only by float noise still tie and the
+     * receiver wins, as it does historically. The projection accessor itself
+     * keeps full precision.
+     */
+    private double comparableProjection() { return round(projection(),6); }
+    public SBooleanValue min(SBooleanValue o) { return comparableProjection() <= o.comparableProjection() ? this : o; }
+    public SBooleanValue max(SBooleanValue o) { return comparableProjection() >= o.comparableProjection() ? this : o; }
     /** Historical probability-sensitive trust discounting. */
     public SBooleanValue discount(SBooleanValue trust) {
         if (trust == null) throw new IllegalArgumentException("discount requires a trust opinion");
@@ -102,28 +124,37 @@ public final class SBooleanValue extends UncertainBooleanValue {
         double bIy=belief*yGivenX.belief+disbelief*yGivenNotX.belief+uncertainty*(yGivenX.belief*baseRate+yGivenNotX.belief*(1-baseRate));
         double dIy=belief*yGivenX.disbelief+disbelief*yGivenNotX.disbelief+uncertainty*(yGivenX.disbelief*baseRate+yGivenNotX.disbelief*(1-baseRate));
         double uIy=belief*yGivenX.uncertainty+disbelief*yGivenNotX.uncertainty+uncertainty*(yGivenX.uncertainty*baseRate+yGivenNotX.uncertainty*(1-baseRate));
+        // The eight historical cases are tested independently rather than as a
+        // decision tree, because case III does not use one span: III.A.1 keeps
+        // the case-II span while the other three use the mirrored one. Where the
+        // two disagree no case fires and k stays 0, which a tree cannot express.
+        boolean caseII  = yGivenX.belief >  yGivenNotX.belief && yGivenX.disbelief <= yGivenNotX.disbelief;
+        boolean caseIII = yGivenX.belief <= yGivenNotX.belief && yGivenX.disbelief >  yGivenNotX.disbelief;
+        double spanII    = yGivenNotX.belief + a*(1-yGivenNotX.belief-yGivenX.disbelief);
+        double spanIIIa1 = yGivenX.belief    + a*(1-yGivenNotX.belief-yGivenX.disbelief);
+        double spanIII   = yGivenX.belief    + a*(1-yGivenX.belief-yGivenNotX.disbelief);
         double k=0;
-        if(yGivenX.belief>yGivenNotX.belief&&yGivenX.disbelief<=yGivenNotX.disbelief){
-            if(pyxhat<=yGivenNotX.belief+a*(1-yGivenNotX.belief-yGivenX.disbelief)){
-                if(px<=baseRate)k=baseRate*uncertainty*(bIy-yGivenNotX.belief)/((belief+baseRate*uncertainty)*a);
-                else k=baseRate*uncertainty*(dIy-yGivenX.disbelief)*(yGivenX.belief-yGivenNotX.belief)/((disbelief+(1-baseRate)*uncertainty)*a*(yGivenNotX.disbelief-yGivenX.disbelief));
-            } else {
-                if(px<=baseRate)k=(1-baseRate)*uncertainty*(bIy-yGivenNotX.belief)*(yGivenNotX.disbelief-yGivenX.disbelief)/((belief+baseRate*uncertainty)*(1-a)*(yGivenX.belief-yGivenNotX.belief));
-                else k=(1-baseRate)*uncertainty*(dIy-yGivenX.disbelief)/((disbelief+(1-baseRate)*uncertainty)*(1-a));
-            }
-        } else if(yGivenX.belief<=yGivenNotX.belief&&yGivenX.disbelief>yGivenNotX.disbelief){
-            if(pyxhat<=yGivenX.belief+a*(1-yGivenX.belief-yGivenNotX.disbelief)){
-                if(px<=baseRate)k=(1-baseRate)*uncertainty*(dIy-yGivenNotX.disbelief)*(yGivenNotX.belief-yGivenX.belief)/((belief+baseRate*uncertainty)*a*(yGivenX.disbelief-yGivenNotX.disbelief));
-                else k=(1-baseRate)*uncertainty*(bIy-yGivenX.disbelief)/((disbelief+(1-baseRate)*uncertainty)*a);
-            } else {
-                if(px<=baseRate)k=baseRate*uncertainty*(dIy-yGivenNotX.belief)/((belief+baseRate*uncertainty)*(1-a));
-                else k=baseRate*uncertainty*(bIy-yGivenX.belief)*(yGivenX.disbelief-yGivenNotX.disbelief)/((disbelief+(1-baseRate)*uncertainty)*(1-a)*(yGivenNotX.belief-yGivenX.belief));
-            }
-        }
+        if(caseII && pyxhat<=spanII && px<=baseRate)
+            k=baseRate*uncertainty*(bIy-yGivenNotX.belief)/((belief+baseRate*uncertainty)*a);
+        if(caseII && pyxhat<=spanII && px>baseRate)
+            k=baseRate*uncertainty*(dIy-yGivenX.disbelief)*(yGivenX.belief-yGivenNotX.belief)/((disbelief+(1-baseRate)*uncertainty)*a*(yGivenNotX.disbelief-yGivenX.disbelief));
+        if(caseII && pyxhat>spanII && px<=baseRate)
+            k=(1-baseRate)*uncertainty*(bIy-yGivenNotX.belief)*(yGivenNotX.disbelief-yGivenX.disbelief)/((belief+baseRate*uncertainty)*(1-a)*(yGivenX.belief-yGivenNotX.belief));
+        if(caseII && pyxhat>spanII && px>baseRate)
+            k=(1-baseRate)*uncertainty*(dIy-yGivenX.disbelief)/((disbelief+(1-baseRate)*uncertainty)*(1-a));
+        if(caseIII && pyxhat<=spanIIIa1 && px<=baseRate)
+            k=(1-baseRate)*uncertainty*(dIy-yGivenNotX.disbelief)*(yGivenNotX.belief-yGivenX.belief)/((belief+baseRate*uncertainty)*a*(yGivenX.disbelief-yGivenNotX.disbelief));
+        if(caseIII && pyxhat<=spanIII && px>baseRate)
+            k=(1-baseRate)*uncertainty*(bIy-yGivenX.disbelief)/((disbelief+(1-baseRate)*uncertainty)*a);
+        if(caseIII && pyxhat>spanIII && px<=baseRate)
+            k=baseRate*uncertainty*(dIy-yGivenNotX.belief)/((belief+baseRate*uncertainty)*(1-a));
+        if(caseIII && pyxhat>spanIII && px>baseRate)
+            k=baseRate*uncertainty*(bIy-yGivenX.belief)*(yGivenX.disbelief-yGivenNotX.disbelief)/((disbelief+(1-baseRate)*uncertainty)*(1-a)*(yGivenNotX.belief-yGivenX.belief));
         return new SBooleanValue(bIy-a*k,dIy-(1-a)*k,uIy+k,a);
     }
     public static SBooleanValue minimumBeliefFusion(Collection<SBooleanValue> opinions) {
-        requireTwo(opinions,"minimum fusion"); return opinions.stream().min(Comparator.comparingDouble(SBooleanValue::projection)).orElseThrow();
+        requireTwo(opinions,"minimum fusion");
+        SBooleanValue result=null; for(SBooleanValue o:opinions) result=result==null?o:result.min(o); return result;
     }
     public static SBooleanValue majorityBeliefFusion(Collection<SBooleanValue> opinions) {
         requireTwo(opinions,"majority fusion"); int positive=0,negative=0; for(var o:opinions) { if(o.projection()>o.baseRate) positive++; else if(o.projection()<o.baseRate) negative++; }
