@@ -93,3 +93,20 @@ and `toString` on `UString` declare a `UString` result while returning an
 `Integer` and a `String` respectively. The port declares the type the operation
 actually returns, since the historical declaration would mistype every
 expression built on those results.
+
+## Known departures kept deliberately
+
+A high-effort code review of the port confirmed ten findings. Six were port
+defects and are fixed; four are left alone because changing them would depart
+from the historical implementation rather than restore it:
+
+- `Boolean`/`Integer`/`Real`/`String` conform to their uncertain counterparts,
+  so a certain value can be stored into an uncertain-typed attribute with no
+  conversion. The historical type lattice has the same hole.
+- The five uncertain built-in names are grammar keywords and so cannot be used
+  as ordinary identifiers. The historical grammar is identical.
+- `uIncludesAll` short-circuits to false when the argument holds more elements
+  than the receiver, which is wrong for arguments with duplicates. Byte-for-byte
+  the historical implementation.
+- `UString::indexOf` is 0-based while `String::indexOf` is 1-based. Historical,
+  and pinned by the replayed historical assertions.
