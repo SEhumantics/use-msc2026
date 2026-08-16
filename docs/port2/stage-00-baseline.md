@@ -109,36 +109,129 @@ grep -rhc '@Test' $(grep -rl 'import org\.junit\.Test' use-core/src/test use-gui
 
 Order of magnitude: **a few hundred upstream test methods exist and none of them run.**
 
+### What the previous port did about it — measured, not assumed
+
+An earlier draft of this section asserted that the previous port's green suite was green *because*
+these files never ran. **That is wrong, and the correction matters**, because it changes the
+diagnosis.
+
+`origin/main` **migrated the upstream tests from JUnit 3 to Jupiter**, which made them execute:
+
+```bash
+for f in org/tzi/use/uml/ocl/type/TypeTest org/tzi/use/uml/ocl/value/ValueTest \
+         org/tzi/use/uml/ocl/expr/ExpStdOpTest org/tzi/use/parser/USECompilerTest; do
+  echo "$f  junit.framework=$(git show origin/main:use-core/src/test/java/$f.java | grep -c 'junit\.framework')" \
+       " jupiter=$(git show origin/main:use-core/src/test/java/$f.java | grep -c 'org\.junit\.jupiter')"
+done
+```
+```
+TypeTest         junit.framework=0  jupiter=3
+ValueTest        junit.framework=0  jupiter=2
+ExpStdOpTest     junit.framework=0  jupiter=3
+USECompilerTest  junit.framework=0  jupiter=4
+```
+
+`origin/main` adds no `junit-vintage-engine` either, so the migration was the *only* way those
+tests could run — and it did make them run. The previous port's suite was therefore **not** empty.
+
+The blind spot is real but its mechanism is different, and worse: **the oracle was re-authored by
+the same change that it was supposed to judge.** `TypeTest.java` at +1172/−1096 is a hand-rewrite of
+upstream USE's own type-conformance oracle, performed as part of the port. Once the assertions
+themselves have been re-typed by hand, "green" stops meaning "still behaves like upstream USE" and
+starts meaning "agrees with what the porter wrote down". That is why rule 3 exists, and it is why a
+migration-based revival is not an acceptable fix here.
+
 ### Why this matters to the port
 
-1. **"Full suite green" is close to a vacuous acceptance gate.** It is named as the acceptance
-   criterion for S3 and for each of S4–S7. On this baseline it asserts that 13 methods, 11 of which
-   are ArchUnit dependency-cycle checks, still pass.
+1. **"Full suite green" is close to a vacuous acceptance gate on *this* branch.** It is named as
+   the acceptance criterion for S3 and for each of S4–S7. On this baseline it asserts that 13
+   methods, 11 of which are ArchUnit dependency-cycle checks, still pass.
 
-2. **It is the mechanism behind the previous port's blind spot.** The earlier port modified 41
-   upstream test files — including `TypeTest.java` at +1172/−1096 — and still reported a green
-   suite. It reported green because those files are not executed. The edits could not have produced
-   a failure regardless of what they changed.
-
-3. **Rule 3 is currently unenforceable by testing.** "Never edit an upstream test to make ported
+2. **Rule 3 is currently unenforceable by testing.** "Never edit an upstream test to make ported
    code pass" has no automatic signal behind it: an edit to a dormant test changes nothing
-   observable. Rule 3 has to be enforced by diff review (`git diff --stat upstream-main -- '*/src/test/*'`),
-   not by the suite.
+   observable. On this branch rule 3 has to be enforced by diff review
+   (`git diff --stat upstream-main -- '*/src/test/*'`), not by the suite.
 
-4. **S10's non-regression step is vacuous as written.** "Run upstream-main's test tree unmodified
+3. **S10's non-regression step is vacuous as written.** "Run upstream-main's test tree unmodified
    against the ported `use-core` and report the delta" yields a 13-method delta unless the dormant
-   tree is actually made to execute.
+   tree is actually made to execute — *without* being rewritten first.
+
+## 4. The dormant tree is not rotten — it is green. Measured.
+
+Before proposing anything, the obvious question was measured: if those tests were made to run
+against **clean upstream**, would they even pass? A throwaway `git worktree` was created at
+`b7aaa99c`, `junit-vintage-engine` 5.7.0 (test scope) was added to `use-core/pom.xml` and
+`use-gui/pom.xml` — **one dependency block each, no test file touched** — and the reactor was run:
+
+```bash
+git worktree add --detach /tmp/probe port-uncertainty-2
+# add junit-vintage-engine 5.7.0, test scope, to use-core/pom.xml and use-gui/pom.xml
+mvn -B test
+```
+
+**`BUILD SUCCESS`. Zero failures, zero errors, zero skipped.**
+
+| | Baseline (Jupiter only) | With `junit-vintage-engine` |
+|---|---|---|
+| distinct test classes | 3 | **43** |
+| distinct test methods | 13 | **300** |
+| failures / errors | 0 / 0 | **0 / 0** |
+
+Per module, deduplicated (surefire's raw `use-core` headline is `Tests run: 871`, inflated by the 14
+`AllTests` aggregators re-running their member classes; the distinct figure is the meaningful one):
+
+| Module | distinct classes | distinct methods | failures | errors |
+|---|---|---|---|---|
+| `use-core` | 35 | 283 | 0 | 0 |
+| `use-gui` | 8 | 17 | 0 | 0 |
+
+Deduplication command, run over the probe's surefire XML:
+
+```bash
+python3 - <<'PY'
+import glob, xml.etree.ElementTree as ET
+for mod in ('use-core','use-gui'):
+    seen={}
+    for f in glob.glob(f'{mod}/target/surefire-reports/TEST-*.xml'):
+        r=ET.parse(f).getroot(); n=r.get('name'); t=int(r.get('tests'))
+        if n not in seen or t>seen[n][0]:
+            seen[n]=(t,int(r.get('failures')),int(r.get('errors')))
+    real={k:v for k,v in seen.items() if not k.endswith('AllTests')}
+    print(mod, len(real), sum(v[0] for v in real.values()),
+          sum(v[1] for v in real.values()), sum(v[2] for v in real.values()))
+PY
+```
+
+The largest revived oracles are exactly the ones the port must not break:
+`MImportedModelTest` 55, `TypeTest` 38, `ExpQueryTest` 13, `ExprNavigationTest` 12,
+`ValueTest` 11, `ExpStdOpTest` 11, `USECompilerTest` 2 (corpus-driven).
+
+The probe worktree was removed afterwards; the branch carries none of it.
 
 ### Proposed remedy (raised for decision — see the S0–S2 report)
 
-Revive the dormant upstream tree as an **out-of-tree verification oracle**: a separate,
-test-only harness that adds `junit-vintage-engine` and runs upstream-main's test sources
-*unmodified* against the ported `use-core` classes. This keeps all three constraints intact —
-upstream tests are not edited (rule 3), the product build keeps no vintage engine (target
-toolchain), and non-regression stops being vacuous. It is folded into S1 as a second oracle
-alongside the historical-jar differential harness.
+Add `junit-vintage-engine` at **test scope** to `use-core` (and `use-gui`) so that upstream's own
+test files execute **exactly as upstream wrote them**, and never migrate or edit them.
 
-## 4. Acceptance
+This is a one-line-per-module change with a measured outcome (300 green methods, zero failures) and
+it is strictly additive: it removes no Jupiter test and rewrites no assertion. It makes rule 3
+enforceable by the suite rather than by diff review, and it turns S10's non-regression step from a
+13-method formality into a 300-method check against assertions upstream authored.
+
+It does depart from the stated target toolchain ("JUnit 5 Jupiter, **no vintage engine**"), which is
+why it is a decision for the user and not a judgement call taken unilaterally. Two ways to take it:
+
+* **(a) In the product build** — simplest, and every stage's "suite green" gate becomes meaningful
+  immediately. Cost: the reactor carries a vintage engine, contradicting the target toolchain.
+* **(b) In a separate Maven profile or verification module** — the default build stays vintage-free
+  as specified; non-regression runs under `mvn -Pupstream-oracle test`. Cost: a little build
+  machinery, and the gate has to be run deliberately rather than by default.
+
+Recommendation: **(b)**, with the profile run as part of every stage's acceptance. It satisfies the
+toolchain constraint as written while still making the oracle real. Either way the upstream test
+files themselves stay byte-for-byte untouched, which is the property that actually matters.
+
+## 5. Acceptance
 
 | Criterion | Status |
 |---|---|
