@@ -15,6 +15,11 @@
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
+        <!-- Flipped to true ONLY by the upstream-oracle profile below.  The floor check
+             compares it against ${session.request.activeProfiles}, which is the reactor-wide
+             -P list from the command line and cannot be changed by editing this file: that is
+             how "profile requested but not effective in this module" becomes an error. -->
+        <use.upstreamOracle.effective>false</use.upstreamOracle.effective>
     </properties>
 
     <dependencies>
@@ -333,6 +338,57 @@
                     </tags>
                 </configuration>
             </plugin>
+            <!-- ==========================================================================
+                 THE ASSERTED FLOOR of the acceptance gate (static-review defect D-01).
+                 Declared in the DEFAULT build, not in the profile, so it runs on every
+                 `mvn verify` in both modes and cannot be removed by deleting a profile
+                 block.  <skip>false</skip> is pinned here so -Dexec.skip cannot silence it.
+                 Runs after maven-failsafe-plugin's `verify` goal (declared above), so both
+                 report tiers exist.  See scripts/UpstreamOracleFloor.java and
+                 docs/port2/upstream-oracle-profile.md sec. 5.
+                 ========================================================================== -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>upstream-oracle-floor-stamp</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <skip>false</skip>
+                            <executable>${java.home}/bin/java</executable>
+                            <arguments>
+                                <argument>${project.basedir}/../scripts/UpstreamOracleFloor.java</argument>
+                                <argument>--stamp=true</argument>
+                                <argument>--module-dir=${project.basedir}</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>upstream-oracle-floor</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <skip>false</skip>
+                            <executable>${java.home}/bin/java</executable>
+                            <arguments>
+                                <argument>${project.basedir}/../scripts/UpstreamOracleFloor.java</argument>
+                                <argument>--module=use-core</argument>
+                                <argument>--module-dir=${project.basedir}</argument>
+                                <argument>--reactor-root=${project.basedir}/..</argument>
+                                <argument>--requested=${session.request.activeProfiles}</argument>
+                                <argument>--effective=${use.upstreamOracle.effective}</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 
@@ -364,6 +420,9 @@
     <profiles>
         <profile>
             <id>upstream-oracle</id>
+            <properties>
+                <use.upstreamOracle.effective>true</use.upstreamOracle.effective>
+            </properties>
             <dependencies>
                 <dependency>
                     <groupId>org.junit.vintage</groupId>
