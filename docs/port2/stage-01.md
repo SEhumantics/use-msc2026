@@ -956,7 +956,7 @@ writer that refuses a report which answers zero.
 
 ---
 
-## 10.1 CURRENT VERDICT — `SOUND_WITH_DOCUMENTED_LIMITS`; round 6's refutation was `DEFECTIVE` and round 7 closed it
+## 10.1 CURRENT VERDICT — `SOUND_WITH_DOCUMENTED_LIMITS`; rounds 6 and 7 were both refuted on the *same* addition, and round 8 demoted it
 
 Both round-5 reviewers reached the standing verdict independently, one by running Maven and planting
 infidelities, one by reading the tree and recomputing the metric from the committed goldens.
@@ -1008,16 +1008,52 @@ and from `harness-contract.md` §7.
 > hashes; no refresh), `src/main` diff empty. Evidence: §10.8. Still open: **H13–H16 and H18**; **H20
 > is answered**.
 
+> **Round 7 was refuted, and round 8's answer is a demotion rather than a fourth attempt at the same
+> check.** The refuter of round 7 ([`stage-01-verification-round7.md`](stage-01-verification-round7.md))
+> confirmed the control, D-18, every probe and half (a) of D-43, and returned **`DEFECTIVE`** on half (b):
+> `declaredJavaType(referenceToken, "x")` took the **same planted wrong-class port** to a sweep
+> **byte-identical to the perfect-port control** — verdict tally, stage-pass set and per-operation refusal
+> map all equal — while the reason three documents said was "printed into the note of any row the
+> declaration moved" appeared in **0** rows, because the type note fires only when the two class names
+> differ and a laundering declaration makes them equal by construction. Two further constructions: the
+> note certified a **fabricated** observation as fact (1 618 rows, D-47), and the 3 445 signature was
+> shown to be an **absorbing state** — a defect-free port and a port carrying a real 401-row wrong-class
+> infidelity produced 19 083 of 19 083 rows byte-identical, notes included, through a non-attributing
+> adapter (D-48).
+>
+> **Round 8 (`066fe15c`) stopped patching the newest instance.** The root cause is that at S1 **there is
+> no ported implementation to observe** — no `org.tzi.use.uml.ocl.value.URealValue` exists in
+> `use-core/src/main`; writing it *is* stage S4 — so the ported token is unavoidably author-influenced and
+> the check was premature. So: `declaredJavaType` is **deleted** along with `TypeProvenance.DECLARED`, a
+> token is `OBSERVED` (off the object a side returned) or `ASSUMED` (the factory default) and an adapter
+> author chooses neither; and a **type-only** difference is scored `AGREE` and counted in
+> `Result.javaTypeMismatchCount()` / `# rows.javaTypeMismatch` / `# op.<key>.javaTypeMismatch` /
+> `stageStatement()` — **content differences are untouched**. `harness-contract.md` §7 carries a **dated
+> REQUIREMENT (2026-08-17)** that S4 routes through `observedFrom` and turns
+> `javaTypeMismatchCount() == 0` into a gate clause once the real ported classes exist. Measured, same
+> 285 operations / 19 083 rows: control `DIFFER 0 / MIXED 0 / 0 diverging / 74 passes / javaTypeMismatch
+> 0`; content-perfect port + **factory-typed** adapter `DIFFER 0 / 0 diverging / **74** passes /
+> javaTypeMismatch 3 445 / 3 445 notes say ASSUMED` — **the false-divergence mode and its 29 lost stage
+> passes are gone**; planted **wrong-class** port `DIFFER 0 / 74 passes / javaTypeMismatch 3 445 / 0 notes
+> say ASSUMED`; the same content-perfect port + **observing** adapter `0 / 74 / 0`. Every content probe
+> P1–P11 unchanged, blind-spot set still exactly `{P11 / URealValue.round()}`. Acceptance:
+> `BUILD SUCCESS`, **79 surefire + 130 failsafe = 209 methods, 0 failures**, twice, evidence blocks
+> byte-identical between runs; goldens refreshed **deliberately** — two header lines per file, both `0`,
+> no data row moved. Evidence: §10.9.
+
 > **Can S4–S7 rely on this harness to detect a real infidelity in a ported U-type?**
 >
 > **Yes — for a defect the corpora reach, on an operation the harness can name, and provided the
 > stage quotes numbers rather than a boolean.** Round 5 planted eleven infidelities on top of a
 > second, independently loaded `HistoricalOracle` playing a perfect port, and round 6 added a twelfth.
 > Nine of the twelve diverged; eight of those on **every** operation they touched, each costing the
-> affected operations their stage pass. The twelfth, the wrong-Java-class probe, measured what the
-> *adapter declared* rather than what the port returned (D-43) — **since round 7 it measures what the
-> port's object actually was, and the figure a factory-typed adapter would have produced instead is
-> pinned as the test next to it, so the two can no longer be confused.**
+> affected operations their stage pass. **The twelfth — the wrong-Java-class probe — is the one that did
+> not survive scrutiny, and it is now reported in its own dimension rather than as a divergence.** It
+> measured what the *adapter declared* rather than what the port returned (D-43); round 7 made the
+> declaration cost a written reason and that was refuted too; round 8 removed the declaration API and
+> demoted the finding to `javaTypeMismatchCount()`, where the port defect and the adapter defect still
+> produce the same **3 445** and are told apart only by the row note. **So the eleven content probes are
+> the detection power; the type probe is a published measurement whose attribution waits on S4.**
 > `Math.hypot(ua,ub)` was separated from `sqrt(ua*ua+ub*ub)` at **one ULP** —
 > `UINTEGER(696,0.3144000993956586)` against `UINTEGER(696,0.31440009939565855)` — because
 > `UValue.canonical()` compares `Double.toString` exactly. Two deliberate concealment attacks
@@ -1035,10 +1071,17 @@ and from `harness-contract.md` §7.
 **What that means for a reader of an S4–S7 number, in one line each:**
 
 * A `DIFFER` / `MIXED` / `BOTH_THREW` / `throwClassMismatch` count is **trustworthy**, and always was.
-  Round 6 opened one exception and round 7 closed it: a `DIFFER` whose note reads "java type mismatch …
-  the content is IDENTICAL" is a statement about the port **when both classes were observed**, and the
-  note now says which — a row reading "the subject's class was ASSUMED, not observed" is a finding about
-  the adapter (D-43).
+  Round 6 opened one exception and round 8 closed it by moving the population out of `DIFFER`: a type-only
+  difference is now an `AGREE` row counted in `javaTypeMismatch`, so no `DIFFER` count contains an
+  unattributable row.
+* A **`javaTypeMismatch` count is a measurement, not an attribution** (D-43). Non-zero means the two sides
+  named different classes for identical content. Whether that is the port or the adapter is in the row
+  note's provenance clause and nowhere else: an adapter that does not attribute produces the same **3 445**
+  whether its port is perfect or carries a real wrong-class infidelity. From S4 it becomes a gate clause —
+  `harness-contract.md` §7, dated requirement.
+* **An `AGREE` row may be an agreement on the payload alone**, and the only figure that says so is
+  `javaTypeMismatch`. Quote it beside every agreement figure; `stageStatement()` prints it unconditionally
+  so that no one has to remember.
 * An `AGREE` count is trustworthy **exactly to the extent that `distinctReferenceValues() >= 2`** for
   that operation — now computed, published per operation and enforced by the gate.
 * A **stage pass is not a fidelity certificate.** It certifies "no divergence over the inputs we
@@ -1181,7 +1224,13 @@ its report (e.g. *static-review-round4 `D-17`*, *static-review-round5 `R5-2`*); 
 | **D-29** | **MAJOR** | **open** | **The stage gate is not satisfiable by fidelity.** Clause 2 counts `BOTH_THREW`, `HARNESS_ERROR`, `UNSUPPORTED` and `UNMEASURABLE` as disagreements. A **perfect** port reaches `isStagePass(1, none())` on **74 of 285**: 119 refused by clause 3 (D-15, by design), **92 refused by clause 2** for rows a faithful port cannot avoid, and the only route out is **154** hand-authored `AcceptedThrowPairs` entries keyed on both messages verbatim. Two consequences: the incentive to fall back on the still-public `isClean()` (which says yes to 193 of 285 for the same port) is a **119-operation gap**; and on those 92 operations an infidelity leaves the pass bit **unchanged** — measured on 10 (defect, operation) pairs, the whole off-by-one probe among them, whose rows go from `{AGREE=37, BOTH_THREW=99}` to `{DIFFER=26, MIXED=26, BOTH_THREW=84}` while `requireStagePass` says `false` before and after. |
 | **D-30** | **MAJOR** | **open — re-measured in round 6, unchanged: `{AGREE=17199, BOTH_THREW=910, HARNESS_ERROR=883, UNMEASURABLE=91}`, 0 `DIFFER`, 74 of 285 stage passes, i.e. identical to the perfect-port control including a full pass on `URealValue.add(value)`, the operation carrying the defect** | **Detection is bounded by the input corpus and no domain-coverage figure is computed, published or gated.** `distinctReferenceValues()` made the *codomain* an enforced quantity; its dual is measured nowhere. A real arithmetic defect at receiver `42.0` is stage-pass-identical to a perfect port, with `[DISCRIMINATING]` printed beside the number — true, and completely uninformative about the input never tried. Same in miniature at `URealValue.round()` for `-0.0 → 0.0`, which *is* caught on `floor()`, `neg()` and `mult(value)`. Not a bug in `DifferentialSweep`; it is the boundary of what a fidelity claim from this instrument means, and the instrument does not state it. |
 | **D-18** | MAJOR | **CLOSED (round 6, `d13d4858`)** | **The primitive/boxed canonical collision was 193 of 285.** `UValue` now carries `javaType()` — the class a value was observed as — and `canonical()` renders its simple name, so `BOOLEAN(true)@Boolean` is not `BOOLEAN(true)@BooleanValue`; `fromHistorical` attributes every branch from `result.getClass().getName()`. It was **not** out of reach of a mutation experiment after all: the defect is expressible as a perfect port that round-trips every raw result through `toHistorical`/`fromHistorical`, so the payload is provably unchanged and only the class moves. Measured, 285 operations / 19 083 rows: **before** `{AGREE=17199, BOTH_THREW=910, HARNESS_ERROR=883, UNMEASURABLE=91}`, **0 `DIFFER`**, detected on **0 of 285**, stage passes **74 → 74**; **after** `{AGREE=13754, BOTH_THREW=910, DIFFER=3445, HARNESS_ERROR=883, UNMEASURABLE=91}`, **3 445 `DIFFER`**, detected on **182 of 285** (193 is the static return-type count, 182 the operations the corpora drive to a value), stage passes **74 → 45**. The perfect-port control still yields 0 `DIFFER` / 0 `MIXED` / 0 diverging operations, and **no operation answers with two different runtime classes (0 of 285, measured)** — that measurement holds, though the *reason* the test gives for it is false for 84 of 285 declared return types (**D-45**), so the premise is a corpus fact and inherits D-30. A `Kind` difference (`URealValue` vs `UIntegerValue`, `IntegerValue` vs `UIntegerValue`) was always caught and is now pinned. **The before/after was reproduced independently at `90404528` (three byte-identical tallies, 0 `DIFFER`, 74 stage passes), so the closure is confirmed — but the claim "the fix has no false-divergence mode" is WITHDRAWN: see D-43.** Evidence: `stage-01-round6-fixes.md` §1, `stage-01-verification-round6.md` §2.2. |
-| **D-43** | MAJOR | **CLOSED (round 7, `4bb5b6fe`)** | **The Java type was *observed* on the reference side and merely *declared* on the ported side, so a type-fidelity figure was a property of the adapter, not of the port.** Found by round 6's refutation (`3de8203e`; that report's local `D-37`). `HistoricalOracle.fromHistorical` derived `javaType` from `result.getClass().getName()` on every branch and **there was no counterpart for the ported side**, where the public `UValue.asJavaType(String)`, taking an arbitrary string, was the only source of the token. **(a) False divergence through the documented path.** An adapter returning `UValue.<factory>(content)` is factory-typed as the `Value` class of its kind, wrong for **182 of 285** operations. Measured on a **content-perfect** port: `rows 19 083, agreed 13 754, DIFFER 3 445, operations diverging 182 of 285, stage passes 74 -> 45; lost 29` — **byte-identical to P12's published detection power**, the 29 including `URealValue.value()`, `URealValue.uncertainty()`, `UIntegerValue.value()`, `UIntegerValue.uncertainty()`. **(b) One line erased the check:** a genuinely wrong-class port plus `.asJavaType(v.javaType())` went `DIFFER 3 445 -> 0`. **The fix (round 7), and it is a mechanism rather than a warning:** `UValue.observedFrom(Object)` reads the class off the object a side returned and is what `fromHistorical` now calls on all fourteen unwrapping branches; the one-argument `asJavaType(String)` is **deleted**, leaving `declaredJavaType(String, String)`, which **refuses a blank reason**; `UValue.typeProvenance()` (`OBSERVED`/`DECLARED`/`ASSUMED`/`NONE`) is written into the note of every type-mismatch row and into **neither `canonical()` nor any verdict**; `Candidate`'s Javadoc carries the obligation, the snippet and the incentive hazard; `StubCandidate` attributes through one named method and declares with a reason, because S1 has no ported object to observe. **Measured after the fix, one run, four subjects over the same 285 operations:** control `DIFFER 0 / 74 passes`; content-perfect + **factory-typed** adapter `DIFFER 3 445 / 182 ops / 45 passes / 3 445 rows say ASSUMED`; the **same port + observing** adapter `DIFFER 0 / 0 ops / 74 passes`, verdict tally identical to the control's; planted **wrong-class** port `DIFFER 3 445 / 182 ops / 45 passes / 0 rows say ASSUMED` — D-18 not regressed. Both readings are pinned as adjacent tests (`aWrongJavaTypeWithRightContentIsADivergence`, `aFactoryTypedAdapterMeasuresExactlyWhatThePlantedWrongTypeDoes`) so neither can be quoted alone. **Residual, and it is a limit rather than a defect:** the token is only as honest as the adapter's choice of object, and `declaredJavaType` believes what it is told — it now costs a sentence a reviewer reads and the row says which route was taken. Evidence: §10.8. |
+| **D-43** | MAJOR | **half (a) CLOSED (round 7, `4bb5b6fe`); half (b) CLOSED BY REMOVAL (round 8, `066fe15c`). The check is DEMOTED, and its promotion is a dated REQUIREMENT on S4** | **At S1 the ported side's Java type cannot be authentically observed, so a type-fidelity figure measured the adapter and not the port.** Found by round 6's refutation (`3de8203e`; that report's local `D-37`). `HistoricalOracle.fromHistorical` derived `javaType` from `result.getClass().getName()` on every branch and **there was no counterpart for the ported side**, where the public `UValue.asJavaType(String)`, taking an arbitrary string, was the only source of the token. **(a) False divergence through the documented path — CLOSED.** An adapter returning `UValue.<factory>(content)` is factory-typed as the `Value` class of its kind, wrong for **182 of 285** operations; measured on a **content-perfect** port, `rows 19 083, agreed 13 754, DIFFER 3 445, operations diverging 182 of 285, stage passes 74 -> 45; lost 29` — byte-identical to P12's published detection power, the 29 including `URealValue.value()`, `URealValue.uncertainty()`, `UIntegerValue.value()`, `UIntegerValue.uncertainty()`. Round 7 gave the ported side `UValue.observedFrom(Object)` (called by `fromHistorical` on all fourteen unwrapping branches), and the **same** port with an observing adapter measured `DIFFER 0 / 0 ops / 74 passes` with the control's exact verdict tally. That half was independently reproduced in round 7's refutation and is closed. **(b) One line erased the check — CLOSED IN ROUND 8, BY DELETING THE API, after round 7's fix was refuted.** Round 6: a wrong-class port plus `.asJavaType(v.javaType())` went `DIFFER 3 445 -> 0`. Round 7 deleted the one-argument form and required a written reason on `declaredJavaType(String, String)`, claiming in three documents that the reason "is printed into the note of any row the declaration moved". **Round 7's refuter measured that false:** `declaredJavaType(referenceToken, "x")` on the same planted wrong-class port produced a sweep **byte-identical to the perfect-port control** — verdict tally, stage-pass set and per-operation refusal map all equal — with the reason in **0 rows**, because the type note fires only when the two class names differ, which a laundering declaration makes false by construction. The disclosure fired when a declaration *created* a difference and was silent when it *erased* one. **Round 8's fix removes the class of defect rather than the instance.** The root cause is that at S1 **there is no ported implementation to observe** — no `org.tzi.use.uml.ocl.value.URealValue` exists in `use-core/src/main`; writing it *is* S4 — so every round invented a new way for the author to influence the token. So: **`declaredJavaType`, `TypeProvenance.DECLARED` and `typeDeclarationReason()` are deleted**; a token is `OBSERVED` (read off the object a side returned) or `ASSUMED` (the factory default), two states and an adapter author chooses neither; the only private setter is reachable from `observedFrom` alone; and a reflection test over `UValue`'s whole public surface pins that the only String-taking members are `uString`/`string`/`opaque`, whose String is **content** (`opaque`'s class name goes into `content()` too, so an untruthful `opaque` token is a content difference and stays a `DIFFER`). **And a type-only difference is no longer scored:** content identical + class different is `AGREE`, counted in `Result.javaTypeMismatchCount()` / `# rows.javaTypeMismatch` / `# op.<key>.javaTypeMismatch`, and printed unconditionally by `stageStatement()`. **Content differences are unaffected.** **Measured after the demotion, one run, four subjects over the same 285 operations / 19 083 rows:** control `DIFFER 0 / 0 divOps / 74 passes / javaTypeMismatch 0`; content-perfect + **factory-typed** adapter `DIFFER 0 / 0 divOps / **74** passes / javaTypeMismatch 3 445 / 3 445 notes say ASSUMED` (**was** `3 445 DIFFER / 182 ops / 45 passes` — the false-divergence mode and its 29 lost passes are gone); planted **wrong-class** port `DIFFER 0 / 74 passes / javaTypeMismatch 3 445 / 0 notes say ASSUMED`; the same content-perfect port + **observing** adapter `0 / 74 / 0`, tally identical to the control's. Both readings are pinned as adjacent tests (`aWrongJavaTypeWithRightContentIsCountedNotScored`, `aFactoryTypedAdapterCostsNoPassAndIsCountedNotScored`) so neither can be quoted alone, and the second cross-checks the harness's count against an independent recount of the same rows. **What is now a declared LIMIT rather than a closed defect, and the REQUIREMENT that closes it:** a non-attributing adapter produces the same **3 445** whether its port is perfect or carries a real wrong-class infidelity, so the *only* discriminator is the row note's provenance clause; a type-only infidelity therefore costs no stage pass at S1. `harness-contract.md` §7 carries the **dated obligation (2026-08-17)** that once real ported value classes exist in `use-core/src/main`, S4 routes its adapter through `observedFrom` and adds `javaTypeMismatchCount() == 0` as a gate clause. **Consequence recorded, not hidden:** `UnwrittenPortInvariantTest`'s receiver-echoing subject regains four discriminating fully-agreed operations (`BooleanValue.value()`, `BooleanValue.isTrue()`, `IntegerValue.value()`, `StringValue.value()`) plus `RealValue.value()` in the degenerate bucket — agreement 4 567 -> 4 951, `javaTypeMismatch` **384**, the +384 exactly the demoted rows — all five signed off with the reason, and every sign-off now has to **assert** that *all* of its agreement rows are java-type mismatches. Evidence: §10.8 (round 7), §10.9 (round 8).
+| **D-46** | **CRITICAL** | **CLOSED (round 8, `066fe15c`) — folded into D-43 half (b), by deleting the mechanism** | Round 7's refutation, §5.2. `declaredJavaType(referenceToken, "x")` took a wrong-class port to a sweep byte-identical to the perfect-port control and the mandated reason reached **0 rows**, while `harness-contract.md` §7 (twice) and §5, `stage-01.md` §10.4's D-43 row and `foundation-verdict.md` all asserted it was printed. **Closed by removing `declaredJavaType` entirely** — there is no route left by which an adapter supplies a type token, so there is no laundering route to disclose; and the false claim is removed from all four places with a note that round 7 refuted it, rather than silently edited. See D-43. |
+| **D-47** | MAJOR | **CLOSED (round 8, `066fe15c`) as an over-claim; the underlying uncheckability is now stated as a limit** | Round 7's refutation, §6. The note asserted "Both classes were OBSERVED from the objects the two sides returned, so this row is a statement about the two implementations" — 1 618 times, on a subject that fabricated the object it observed. `observedFrom` believes any object and the harness cannot check it. **The sentence is deleted.** The note now prints both provenances mechanically (`Provenance: reference OBSERVED, subject ASSUMED`) and, on an observed subject, says outright that "whether the object the subject observed is the one its implementation returned is not checkable by this harness". Asserted in `theTypeTokenIsObservedOrAssumedAndNoApiTakesOne`, which fails if the certification ever comes back. **The incentive is also gone:** fabricating an object was the *cheaper laundering route* only while a type-only difference was a `DIFFER`; since round 8 it buys nothing, because there is nothing to launder. |
+| **D-48** | MAJOR | **RECLASSIFIED (round 8, `066fe15c`): the absorbing state is real, is no longer a false-divergence trap, and is now a NAMED LIMIT with a dated REQUIREMENT that closes it** | Round 7's refutation, §7. Through a non-attributing adapter, a port with **no defect** and a port carrying a **real 401-row / 9-operation** wrong-class infidelity produced 19 083 of 19 083 rows byte-identical, notes included: the 3 445 signature absorbed the real defect, and a reader following the note's hedge discarded 401 genuine findings. **What round 8 changes and does not change.** It does not make the two distinguishable — that is impossible while the adapter does not observe, and the demotion makes the equality explicit rather than hiding it: both now measure `javaTypeMismatch 3 445`, `DIFFER 0`, 74 stage passes. What it removes is the part that misled: neither is reported as a divergence, so no reader has to decide whether to discard 401 rows on the strength of a hedge, and no faithful port loses 29 stage passes to its adapter. What replaces it is `harness-contract.md` §7's dated REQUIREMENT, whose argument **is** this measurement: attribution is what makes the number mean anything, so S4 must observe and then gate on `javaTypeMismatchCount() == 0`, at which point the real defect measures its own 401/9 and the defect-free port measures 0. **Stated as a limit until then, in the contract, in the register and on `javaTypeMismatchCount()`'s own Javadoc.** |
+| **D-49** | MAJOR | **PARTLY CLOSED (round 8, `066fe15c`); the residue is stated** | Round 7's refutation, §8. Full reports for a port defect and an adapter defect differed in exactly one header line — `# subject` — and neither golden carried a single provenance mention. **Closed for the aggregate:** the header now carries `# rows.javaTypeMismatch` and `# op.<key>.javaTypeMismatch`, so the population that was visible only in row prose has a number at file level *and* per operation (the D-21 shape), and `stageStatement()` prints it unconditionally. **Not closed, and honestly so:** the *provenance* — `OBSERVED` versus `ASSUMED` — still reaches only the row note, so two reports whose type-mismatch counts are equal are still distinguished only by reading rows. That is the same fact as D-48 and it is closed by the same requirement. **The goldens still contain 0 provenance mentions, and that is now a true statement rather than a hidden one:** S1's stub is `ASSUMED` with the *right* token, so `# rows.javaTypeMismatch 0` in both files, and there is no type-mismatch row to caption. |
+| **D-50** | MINOR | **open, unchanged** | Round 7's refutation, §9. D-44's "197 rows across 17 operations" and D-45's "84 declare an interface or a non-final class" are stated in Javadoc and in an assertion *message*; no assertion computes either figure. Round 8 did not touch it, and the honest state is: **stated, not measured.** Both should be either asserted or marked as quoted-from-a-one-off run. |
+| **D-51** | MINOR | **CLOSED (round 8, `066fe15c`)** | Round 7's refutation, §9. The worked snippet an adapter is told to copy tested only for `null`, so a literal copy would answer `nullValue()` on the 8 `void` mutators where the reference answers `voidValue()` (`Method.invoke` returns `null` for a `void` method). Both snippets — `UValue.observedFrom`'s and `Candidate`'s — now begin with the `getReturnType() == void.class` branch and name the defect. Consequence was nil either way, since `DifferentialSweep` routes two non-observations to `UNMEASURABLE`; it was documentation incompleteness in the one place a copy is invited. |
 | **D-44** | MINOR | **CLOSED as a documentation defect (round 7, `4bb5b6fe`)** | **The package-insensitivity rationale is contradicted on the `OPAQUE` branch.** `UValue`'s class comment justifies comparing the class's *simple* name on the ground that a fully-qualified comparison "would make every row of a port that relocated the package a false divergence", pinned by `theTypeTokenIsPackageInsensitiveOnPurpose` — which exercises only `Kind.UREAL`, whose content carries no class name. But `UValue.opaque(className, repr)` puts the **fully-qualified** name into the compared content, and `HistoricalOracle.opaqueRepresentation` adds the FQNs of every field's declaring class, so a relocated port **is** a divergence on every `OPAQUE` row: **197 rows across 17 operations** (`type()` / `getRuntimeType()` × 16, `UIntegerValue.getuInteger()` × 1). Not a scoring error and not new — it is the pre-existing `OPAQUE` limit — but round 6 rests a design decision on a rationale its own numbers contradict on 197 rows, and `harness-contract.md` §5 understated it as "a port need only reproduce a string". **Fixed by measuring it rather than by re-wording it:** `UValue`'s class comment now states the two costs of comparing the simple name — the collision (unreachable on today's census, a corpus fact, inherits D-30; the earlier "not a shape any port of this API can take" is withdrawn as an overclaim) and the OPAQUE branch — and `theTypeTokenIsPackageInsensitiveOnPurpose` now **asserts** that two `opaque()` values differing only in package have the same `typeToken()` and different `canonical()`. So package-insensitivity is a property of the **token**, never of the row. `harness-contract.md` §5 carries the 197/17 figure. The underlying OPAQUE limit is unchanged and stays a declared limit. |
 | **D-45** | MINOR | **CLOSED as a documentation defect (round 7, `4bb5b6fe`)** | **`noOperationAnswersWithTwoRuntimeClasses`'s stated reason is false for 84 of 285 operations.** Its Javadoc (`PortedInfidelityDetectionPowerTest.java:857-892`) argues "a historical operation's declared return type is one class, so for any single operation there is exactly one right answer". Measured through the isolated loader over all 285 enumerated operations: **84 declare an interface or a non-final class**, so more than one runtime class is legal by the API for each. Sharpest case: the nine `UncertainBooleanValue`-declared operations return the `UBooleanValue` subclass through a superclass-declared signature, so a port returning the **declared** type — a defensible reading of the same API — reads as divergence on every driven row. The conclusion still holds over the shipped corpora, because the test measures it at **0 of 285**; what is false is the reason, and the reason is what a reader carries into S4. Same corpus boundary as D-30, now with a number. **The Javadoc now states the measured fact instead of the false reason:** the 84 are enumerated by declared type (16 `Type`, 21 `URealValue`, 19 `UBooleanValue`, 12 `UIntegerValue`, 9 `UncertainBooleanValue`, 5 `UStringValue`, 1 `SequenceValue`, 1 `uDataTypes.UInteger`), the `UncertainBooleanValue` case is named, and the premise is labelled a **corpus fact, not a language fact**, inheriting D-30, with the instruction not to repeat "a declared return type is one class" in a stage document. The assertion itself is unchanged and still measures 0 of 285 on every run. |
 | D-20 | MAJOR | open | `everyKindIsEitherAnObservationOrUnmeasurable` is **tautological**: it branches on `carriesAnObservation()` and asserts the verdict `classify` derives from that same predicate. Add a `Kind`, forget to widen the predicate, add the sample: the test stays green and D-10 returns. Non-circular criterion, still unwritten: a value-carrying kind has at least two distinguishable inhabitants. |
@@ -1225,9 +1274,12 @@ D-30's unmeasured input domain), one attribution loss a subject can force on its
 one tautological test (D-20). D-18 was the last false-*agreement* claim on the list: the harness
 compared the payload and called it the value, on 193 of 285 operations of a port whose entire subject
 is four new value classes. Its successor, D-43, was the mirror image — a `DIFFER` a faithful port
-earned by following the documented adapter example — and it is closed by making the ported side's
-class a measurement rather than a claim, not by softening the check: the planted wrong-class port
-still measures 3 445 `DIFFER` on 182 operations after the fix.
+earned by following the documented adapter example. Two rounds tried to close it by making the ported
+side's token a *claim the author had to justify*; both claims could be false, and both were measured
+false. Round 8 closed it by removing the claim: the token is observed or assumed, and a difference
+between the two sides' classes alone is **measured and published but not scored**, because at S1 the
+harness cannot attribute it. That is a deliberate, dated reduction in what the instrument asserts, and
+`harness-contract.md` §7 carries the requirement that reverses it at S4.
 
 ---
 
@@ -1284,9 +1336,10 @@ rewritten, and a bare `D-37`/`D-38`/`D-39` anywhere in `docs/port2/` still means
 §10.4. The fixes themselves closed D-18, D-34, D-35 and D-36 and added measured numbers to D-17/D-32
 and D-30. The probe id `P12-boxed-primitive` belongs to the
 `PortedInfidelityDetectionPowerTest` probe space, not to this register; the detection test that
-carries it is `aWrongJavaTypeWithRightContentIsADivergence`, which is a separate method rather than an
-entry in `probes()`, so the round-5 blind-spot set and corpus-sensitivity table stay directly
-comparable with round 5's.
+carries it is `aWrongJavaTypeWithRightContentIsCountedNotScored` (named
+`aWrongJavaTypeWithRightContentIsADivergence` until round 8 demoted the finding), which is a separate
+method rather than an entry in `probes()`, so the round-5 blind-spot set and corpus-sensitivity table
+stay directly comparable with round 5's.
 
 ---
 
@@ -1310,20 +1363,27 @@ should hold a stage document to.
    nearly free for a subject echoing one bit.
 6. **Name what the harness could not see**, per stage: void operations, `SBooleanValue`, collection
    receivers, the type layer, the 33 non-nameable operations (`equals(Object)` first among them), and
-   any operation the corpora leave single-valued. **No longer on that list since round 6:** a result
-   whose Java class is wrong — a `Kind` or runtime-class difference is a `DIFFER` with a note naming
-   both fully-qualified types (D-18, closed).
+   any operation the corpora leave single-valued. **A `Kind` difference is a `DIFFER`** (D-18, closed
+   since round 6). **Back on the list in a narrower form since round 8:** a *runtime-class* difference
+   with identical content is **measured and published but not scored** — `AGREE`, counted in
+   `javaTypeMismatch` — so **a type-only infidelity does not fail a gate at S1**, and a stage must say
+   so beside any agreement figure until the S4 requirement in `harness-contract.md` §7 is met (D-43).
 7. **A sign-off is a disclosure, not a pass.** Its rationale must say what a reader should *not*
    conclude, and it lands in the evidence file.
 8. **Attribute the Java class the port *returned*, not the one your factory chose — and say in the
-   stage document which you did** (D-43, closed in round 7). Call
-   `UValue.observedFrom(theObjectYourPortReturned)`; there is no one-argument `asJavaType` any more, and
-   the only stating route, `declaredJavaType(name, why)`, demands a written reason that lands in the row
-   note. A factory-typed adapter makes a **content-perfect** port diverge on **182 of 285** operations
-   and costs **29** stage passes — the same four numbers as the planted wrong-class defect — and
-   clearing those rows by naming a type makes a genuinely wrong-class port agree on all 3 445. **No
-   stage may quote a type-fidelity figure without stating how its adapter obtained the token**, and a
-   row whose note reads `the subject's class was ASSUMED, not observed` is a finding about the adapter.
+   stage document which you did** (D-43; half (a) closed round 7, half (b) closed round 8 by removing the
+   API). Call `UValue.observedFrom(theObjectYourPortReturned)`. There is **no API that takes a class name
+   from an adapter at all** any more: `asJavaType(String)` went in round 7 and
+   `declaredJavaType(String, String)` in round 8, after the second was measured doing exactly what the
+   first did. A token is `OBSERVED` or `ASSUMED`; you choose neither. A factory-typed adapter makes a
+   **content-perfect** port report **3 445** java-type mismatches across **182 of 285** operations — the
+   same figure as the planted wrong-class defect, and the only thing that tells them apart is the row
+   note's provenance. **No stage may quote a type-fidelity figure without stating how its adapter obtained
+   the token**, and a row whose note reads `subject ASSUMED` is a finding about the adapter.
+9. **S4 has one extra obligation, and it is dated (2026-08-17), not optional.** Once real ported value
+   classes exist in `use-core/src/main`, route the adapter through `observedFrom` and add
+   `assertEquals(0, result.javaTypeMismatchCount(), result.summary())` to the gate.
+   `harness-contract.md` §7 carries the requirement and the measurement that forces it.
 
 ---
 
@@ -1379,7 +1439,50 @@ Two questions the instrument now answers and one it does not:
 
 ---
 
-## 10.8 Round 7 — the closure of D-43, D-44 and D-45 (behaviour `4bb5b6fe`)
+
+> **The eighth round's lesson, and it is about fixes rather than about rows.** Rounds 6 and 7 both closed
+> the same defect by giving the author of the thing under test a way to *state* the fact the instrument
+> could not observe — first a string, then a string plus a reason. Both statements could be false, and both
+> were measured false, in the same construction, one round apart. The question the seventh round's own
+> §8 told the next reviewer to ask — *what does a perfect port measure under this rule, and is that
+> different from what a defective one measures?* — has a companion: **can the thing under test influence
+> what this rule measures? If it can, the rule is measuring the wrong side, and no amount of mandated
+> disclosure fixes that** — a disclosure only fires where the instrument already noticed something, and
+> laundering is precisely the case where it did not. The remedy is not a better guard on the statement; it
+> is to remove the statement and to measure what can actually be observed, saying plainly what is
+> therefore not yet measured, **with a dated obligation on the stage where it becomes observable.**
+
+## 10.8 Round 7 — the closure of D-44, D-45 and half of D-43 (behaviour `4bb5b6fe`)
+
+> **CORRECTION BOX, added with round 8 (`066fe15c`). Read this before believing any sentence below about
+> `declaredJavaType`.** This section was written as the evidence for round 7 and is preserved as written,
+> because a record that edits itself cannot be audited. **Two of its claims were refuted by round 7's
+> independent refuter** ([`stage-01-verification-round7.md`](stage-01-verification-round7.md)) and are
+> **withdrawn**:
+>
+> 1. **"`DifferentialSweep` prints the reason into the note of any row the declaration moved" — FALSE in
+>    the only direction that matters.** `declaredJavaType(referenceToken, "x")` on the planted wrong-class
+>    port produced a sweep **byte-identical to the perfect-port control** and the reason appeared in **0**
+>    rows: the type note fires only when the two class names *differ*, which a laundering declaration
+>    makes false by construction. So half (b) of D-43 — "one line erased the check" — was **not** closed by
+>    round 7. Everything below about a written reason making the stating route safe is withdrawn with it.
+> 2. **"Both classes were OBSERVED … so this row is a statement about the two implementations" — an
+>    assertion the harness cannot make** (D-47). `observedFrom` believes any object; 1 618 rows asserted a
+>    fabricated observation as fact.
+>
+> **What below still stands:** half (a) of D-43 (the false-divergence closure), independently reproduced;
+> the deletion of `asJavaType(String)`; `observedFrom` on all fourteen `fromHistorical` branches; D-44 and
+> D-45; and every acceptance and determinism figure. **Round 8's answer is in §10.9:**
+> `declaredJavaType` is deleted rather than guarded, and a type-only difference is counted rather than
+> scored. Where §10.8 and §10.9 disagree, **§10.9 is authoritative.**
+>
+> **Three method names below were changed in round 8 to say what they now measure**, so a grep for them in
+> today's tree finds nothing: `aWrongJavaTypeWithRightContentIsADivergence` →
+> `aWrongJavaTypeWithRightContentIsCountedNotScored`,
+> `aFactoryTypedAdapterMeasuresExactlyWhatThePlantedWrongTypeDoes` →
+> `aFactoryTypedAdapterCostsNoPassAndIsCountedNotScored`,
+> `theTypeTokenIsObservedOrDeclaredAndTheRowSaysWhich` → `theTypeTokenIsObservedOrAssumedAndNoApiTakesOne`.
+> The method count is unchanged; none was added or removed.
 
 **Written by the porter of round 7, who owned Maven for it and does not sign off on his own work.**
 Every number below is pasted from a run on this machine. Nothing here is a new finding: this section
@@ -1622,6 +1725,261 @@ No pom, no `module-info.java`, no `use-gui`, no `use-assembly`, no pre-existing 
 * **It does not make a type-fidelity figure self-attributing.** A stage must still state how its
   adapter obtained the token. The harness can now say "this row's subject class was never observed"; it
   cannot say "this adapter observed the right object".
+
+---
+
+## 10.9 Round 8 — the Java-runtime-type check is DEMOTED, and its promotion is S4's (behaviour `066fe15c`)
+
+### 10.9.1 Why a demotion and not a fourth patch
+
+Rounds 6 and 7 are both about one addition — the Java-runtime-type check — and neither converged.
+Round 6 closed the blindness and created a false-*divergence* mode (a content-perfect port with a
+factory-typed adapter: 3 445 `DIFFER` on 182 of 285 operations, 29 stage passes lost). Round 7 closed
+that and left an escape hatch: `declaredJavaType(referenceToken, "x")` took a **wrong-class** port to a
+sweep **byte-identical to the perfect-port control**, with the mandated reason in **0** rows, while three
+documents asserted the reason was printed.
+
+The pattern is the finding. The check compares the *ported side's* Java runtime class, and **at S1 there
+is no ported implementation to observe**: no `org.tzi.use.uml.ocl.value.URealValue` exists in
+`use-core/src/main`, and writing it is stage S4. The ported token is therefore author-influenced by
+construction, and each round produced a new way for the author to influence it — first a one-argument
+string, then a two-argument string with a reason nobody could be made to see. Patching the newest
+instance leaves the class of defect intact.
+
+So round 8 removes the ability to choose a token at all, and stops scoring a difference the harness
+cannot attribute. **It does not stop measuring it.**
+
+### 10.9.2 What changed, in four parts
+
+1. **No author-chosen token exists.** `UValue.declaredJavaType(String, String)`,
+   `TypeProvenance.DECLARED` and `typeDeclarationReason()` are **deleted**. A token is `OBSERVED` —
+   `observedFrom(Object)` reads `getClass().getName()` off the object a side returned — or `ASSUMED`, the
+   factory default for the kind. The only setter, `UValue#observed(String)`, is private and reachable
+   from `observedFrom` alone. `opaque(String, String)` still names a class, and is not a type-only
+   channel: the name goes into `content()` as well, so an untruthful `opaque` token is a **content**
+   difference and stays a `DIFFER`.
+2. **A type-only difference is `AGREE`, and counted.** `Result.javaTypeMismatchCount()`,
+   `# rows.javaTypeMismatch`, `# op.<key>.javaTypeMismatch`, and `, javaTypeMismatch=N` in `summary()` —
+   the same shape as `throwClassMismatchCount()`. The note still names both fully-qualified classes and
+   **both** provenances. Content differences are untouched.
+3. **S4 promotes it.** `stageStatement()` carries the figure unconditionally, so there is no way to
+   render an agreement figure from `Result` without it — the same mechanism-not-a-convention argument as
+   D-15's. `harness-contract.md` §7 carries the **dated REQUIREMENT (2026-08-17)** with its reason.
+4. **The record is corrected, not silently edited.** §7's "the reason is printed into the note of any
+   row the declaration moved" is quoted and marked refuted where it stood, in `harness-contract.md`,
+   here, and in `foundation-verdict.md`.
+
+### 10.9.3 The measurement — control, both readings, and the closure
+
+One run, four subjects, 285 operations, 19 083 rows, seed 20260817. Pasted:
+
+```
+=== detection power: control (a perfect port) =====================
+seed                 20260817
+operations           285  (stage-shaped domains)
+rows                 19083
+measured rows        17199
+agreement rows       17199
+verdict tally        {AGREE=17199, BOTH_THREW=910, HARNESS_ERROR=883, UNMEASURABLE=91}
+diverging operations 0   <- MUST be 0, or nothing below is attributable to a planted defect
+stage passes         74 of 285  (isStagePass(1, none()))
+why a PERFECT port is refused elsewhere:
+    0 PASS   74
+    2 refused: rows disagreed   41
+    3 refused on more than one clause   51
+    4 refused: not discriminating (D-15)   119
+distinct throw-pairs a PERFECT port produces  154
+===================================================================
+
+=== D-43: two readings of the same measurement ====================
+  subject                              DIFFER     divOps   passes   typeMism notes ASSUMED
+  P0-perfect                                0          0       74          0            0
+  P12-boxed-primitive                       0          0       74       3445            0
+  P13-factory-typed-adapter                 0          0       74       3445         3445
+  P14-observing-adapter                     0          0       74          0            0
+  stage passes the port with a DEFECT loses    0
+  stage passes the port with NO defect loses   0   <- was 29 before round 8; the false-divergence mode
+  operations carrying a java-type mismatch:
+      P12 182   P13 182   P14 0
+===================================================================
+```
+
+**Side by side, the number the brief asked for.** The content-perfect, factory-typed adapter — the
+false-divergence mode — measured `DIFFER 3 445 / 182 operations / 45 passes (29 lost)` before round 8 and
+measures **`DIFFER 0` / 0 diverging operations / 74 passes / `javaTypeMismatch` 3 445** after it. The
+3 445 rows did not disappear; they changed dimension. The perfect-port control is unmoved in both.
+
+And the row still carries everything it carried, including which side looked:
+
+```
+0  BooleanValue.compareTo(value)  BOOLEAN(true)@BooleanValue | BOOLEAN(true)@BooleanValue
+   INTEGER(0)@Integer  INTEGER(0)@IntegerValue  AGREE
+   java type mismatch: reference returned java.lang.Integer (INTEGER(0)@Integer) / subject returned
+   org.tzi.use.uml.ocl.value.IntegerValue (INTEGER(0)@IntegerValue); the content is IDENTICAL --
+   right content, wrong Java type (defect D-18). This row is scored AGREE and counted in
+   rows.javaTypeMismatch, not scored as a divergence: at S1 the ported side's class cannot be
+   authentically observed, because no ported value class exists to observe, so a type-only difference
+   measures the adapter and not the port (D-43). Provenance: reference OBSERVED, subject ASSUMED
+   (OBSERVED = read off the object that side returned; ASSUMED = the factory default for the kind,
+   which is wrong for 182 of 285 operations). The subject's adapter never looked at what its
+   implementation returned, so this difference is a finding about the ADAPTER and not about the port
+   (D-43); an adapter must attribute through UValue.observedFrom(Object).
+```
+
+The same row from **P12**, the genuinely wrong-class port, is identical except for the provenance
+clause — `subject OBSERVED`, no adapter hedge, and "whether the object the subject observed is the one
+its implementation returned is not checkable by this harness" in place of round 7's certification. **That
+clause is the only discriminator between the two 3 445s**, which is precisely the argument for §7's
+requirement rather than a reason to withhold it.
+
+### 10.9.4 The escape hatch is gone — the API, not a grep
+
+```
+$ grep -rn "declaredJavaType\|asJavaType\|TypeProvenance.DECLARED" \
+      use-core/src/test/java/org/tzi/use/uncertainty/differential/*.java
+   ... 11 hits, every one inside a comment or Javadoc recording the history. No call sites.
+```
+
+A grep is not a mechanism, so the property is asserted against the API instead, in
+`theTypeTokenIsObservedOrAssumedAndNoApiTakesOne`:
+
+```
+=== D-43: every public UValue member that accepts a String ========
+  opaque[class java.lang.String, class java.lang.String]
+  string[class java.lang.String]
+  uString[class java.lang.String, double]
+===================================================================
+```
+
+`assertEquals(Set.of("uString", "string", "opaque"), …)` — a new public `UValue` member taking a String
+fails this test. All three take **content**: `uString`/`string` take the payload, and `opaque`'s class
+name is written into `content()` as well as `javaType()`, asserted directly
+(`opaque("a.b.C","x").content() != opaque("d.e.C","x").content()`). The compile-level argument is
+therefore complete: the only route to an `OBSERVED` token is `observedFrom(Object)`, whose parameter is
+an object and not a name; the only other state is the factory's; `TypeProvenance` is asserted to have
+exactly `OBSERVED` / `ASSUMED` / `NONE`.
+
+### 10.9.5 Content detection — every probe intact
+
+Eleven content probes, re-measured; every figure equals round 7's.
+
+| probe | DIFFER | ops detected | stage passes (control 74) |
+|---|---|---|---|
+| P0-perfect (control) | 0 | 0 | 74 |
+| P1-off-by-one-index | 52 (+86 `MIXED`) | 3 | 74 |
+| P2-linear-uncertainty | 468 | 4 | 70 |
+| P3-hypot-uncertainty | 24 | 4 | 70 |
+| P4-le-for-lt | 280 | 6 | 70 |
+| P5-round-10dp | 428 | 7 | 67 |
+| P6-equals-ignores-uncertainty | 1119 | 4 | 72 |
+| P7-undefined-on-zero-divisor | 105 (+62 `MIXED`) | 6 | 71 |
+| P8-hides-behind-harness-error | 0 | 0 | 70 |
+| P9-hides-behind-unsupported | 0 | 0 | 70 |
+| P10-narrow-input-window | 0 | 0 | 74 |
+| P11-negative-zero-collapse | 59 | 3 | 71 |
+
+```
+=== planted defects the harness did NOT see =======================
+  ??? P11-negative-zero-collapse / URealValue.round()  [STAGE PASS]
+===================================================================
+```
+
+Rows are 19 083 for every probe. The blind-spot set is still exactly one entry. **No content probe
+regressed.** P12, the type probe, is the one that moved, by design, and is reported in §10.9.3.
+
+### 10.9.6 What the demotion cost, measured rather than argued
+
+`UnwrittenPortInvariantTest`'s receiver-echoing subject (`return args.get(0)`) hands back a factory-typed
+corpus value, so it is exactly a non-attributing adapter. Its numbers moved:
+
+```
+  measured after round 8, pasted:
+    verdict tally    {AGREE=4951, DIFFER=63045, HARNESS_ERROR=618462, MIXED=39880}
+    javaTypeMismatch 384  <- agreement rows on which only the Java class differed (D-43)
+```
+
+Round 7's refutation §9 records this subject's agreement rows as **4 567** (`f-echoes-receiver` 4567,
+`e-fixed-constant` 8240). `4 951 − 4 567 = 384`, which is exactly the `javaTypeMismatch` figure — so the
+whole of the change in this subject's agreement count is the demoted population and nothing else. (The
+4 567 is quoted from that report, not re-measured here; the 4 951 and the 384 are from the run above.)
+
+Five operations become fully agreed again — `BooleanValue.value()`, `BooleanValue.isTrue()`,
+`IntegerValue.value()`, `StringValue.value()` in the discriminating bucket and `RealValue.value()` in the
+degenerate one (single-valued, because the corpora hold exactly one `RealValue` — D-28). **All five are
+signed off with the reason, and the sign-off is not prose:** for every entry of either reviewed set the
+test now asserts that **all** of that operation's agreement rows are java-type mismatches, so if any part
+of the agreement ever stops being explained by the class difference the sign-off fails. The
+`e-fixed-constant` subject is unaffected (`AGREE=8240`, `javaTypeMismatch 0`), because a `UBOOLEAN`
+constant differs from a raw `boolean` in **content**.
+
+That is the honest cost: **verdict-level resolution against a non-attributing subject on five
+operations**, in exchange for a faithful port no longer losing 29 stage passes to its adapter, and it is
+what the S4 requirement reverses.
+
+### 10.9.7 Acceptance
+
+```
+$ pgrep -f '[m]vn|[m]aven'      # clear of the other session's loop before each run
+$ mvn -q clean && mvn -B verify -Djava.awt.headless=true
+[INFO] use ................................................ SUCCESS [  0.002 s]
+[INFO] use-core ........................................... SUCCESS [01:24 min]
+[INFO] use-gui ............................................ SUCCESS [ 31.127 s]
+[INFO] use-assembly ....................................... SUCCESS [  6.719 s]
+[INFO] BUILD SUCCESS
+```
+
+Aggregated from the surefire/failsafe XML, not from the console:
+
+```
+surefire: files=8 tests=79 failures=0 errors=0 skipped=0
+failsafe: files=2 tests=130 failures=0 errors=0 skipped=0
+```
+
+**79 + 130 = 209 methods, 0 failures.** Delta from round 7 is **0**: three test methods were renamed to
+say what they now measure (`aWrongJavaTypeWithRightContentIsCountedNotScored`,
+`aFactoryTypedAdapterCostsNoPassAndIsCountedNotScored`,
+`theTypeTokenIsObservedOrAssumedAndNoApiTakesOne`) and none was added or removed.
+
+Determinism, two full `verify` runs:
+
+```
+$ for f in verify1 verify2; do sed -n '/=== detection power: control/,/^ *====*$/p' $f.log | md5sum; done
+c724bd19dbed9071ffc8762675584107  -
+c724bd19dbed9071ffc8762675584107  -
+$ for f in verify1 verify2; do sed -n '/=== D-43: two readings/,/^ *====*$/p' $f.log | md5sum; done
+987f3210a74856c54ade76c9d70eceee  -
+987f3210a74856c54ade76c9d70eceee  -
+$ git diff --name-status 30d480db..HEAD -- '*/src/main/*'
+[EMPTY]
+```
+
+The control block's digest `c724bd19…` is **byte-identical to round 7's**, which is the strongest single
+statement that the control did not move.
+
+**Goldens refreshed deliberately.** Two header lines added per file, both `0`; not one data row changed,
+and the faulty-minus file's 558/226 split is unchanged:
+
+```
+$ git diff -- docs/port2/differential/
++# rows.javaTypeMismatch	0
++# op.URealValue.add(value).javaTypeMismatch	0
++# rows.javaTypeMismatch	0
++# op.URealValue.minus(value).javaTypeMismatch	0
+```
+
+### 10.9.8 What round 8 does NOT claim
+
+* **Not that the Java type does not matter.** It claims the harness cannot attribute a type-only
+  difference while the ported side has nothing to observe, and it makes that a dated obligation instead
+  of a permanent softening.
+* **Not that D-48 is dissolved.** A non-attributing adapter still produces the same 3 445 for a perfect
+  port and for a real wrong-class infidelity. What is removed is the part that misled a reader into
+  discarding real findings on the strength of a hedge; what remains is named as a limit in three places.
+* **Not that `observedFrom` is checkable.** It believes any object it is handed (D-47). The note now says
+  so instead of certifying the opposite, and the incentive to fabricate is gone because a type-only
+  difference no longer costs anything.
+* **Not that S1 measures type fidelity.** It measures and publishes a type-mismatch count. Whether that
+  count means anything about a port is S4's to establish, by observing.
 
 ---
 
