@@ -253,7 +253,40 @@ The largest revived oracles are exactly the ones the port must not break:
 `MImportedModelTest` 55, `TypeTest` 38, `ExpQueryTest` 13, `ExprNavigationTest` 12,
 `ValueTest` 11, `ExpStdOpTest` 11, `USECompilerTest` 2 (corpus-driven).
 
-The probe worktree was removed afterwards; the branch carries none of it.
+### Re-measured, because the first probe's evidence was destroyed
+
+The first probe's worktree was deleted immediately after measuring, so its surefire XML did not
+survive and an audit correctly graded the 43/300 figure **UNVERIFIABLE** — which mattered, because
+blocking decision **B3** is argued from it. It was therefore re-run at `8789e035`, this time with
+the surefire reports preserved outside the repository:
+
+```bash
+git worktree add --detach <scratch>/vintage2 HEAD
+# add junit-vintage-engine 5.7.0, test scope, to use-core/pom.xml and use-gui/pom.xml
+mvn -B test
+cp -r use-core/target/surefire-reports use-gui/target/surefire-reports <evidence-dir>/
+```
+
+**`BUILD SUCCESS`. 45 distinct test classes, 315 distinct test methods, 0 failures, 0 errors.**
+
+| Module | distinct classes | distinct methods | failures | errors |
+|---|---|---|---|---|
+| `use-core` | 37 | 298 | 0 | 0 |
+| `use-gui` | 8 | 17 | 0 | 0 |
+
+This **corroborates** the original figure rather than replacing it. The first probe ran at
+`b7aaa99c`, before S1; this one runs at `8789e035`, after S1 added `HistoricalOracleIsolationTest`
+(9) and `UncertaintyDifferentialSmokeTest` (6):
+
+```
+43 classes + 2 = 45        300 methods + 15 = 315
+```
+
+The delta is exactly S1's own tests, which is the expected result and is why the two numbers differ.
+
+Both probe worktrees were removed afterwards; the branch carries no vintage dependency. Note this
+probe used `mvn test`, so it does **not** include the 130 failsafe tests recorded above — reviving
+the dormant tree and running the integration tier are independent gains that add up.
 
 ### Proposed remedy (raised for decision — see the S0–S2 report)
 
