@@ -54,15 +54,28 @@ public final class UValue {
         STRING,
         /** {@code SequenceValue} and friends. */
         SEQUENCE,
-        /** A Java {@code null} came back. */
+        /**
+         * A Java {@code null} came back from a method that is not {@code void}.
+         *
+         * <p>Not an observation: see {@link UValue#carriesAnObservation()}. It is an outcome, and it
+         * is recorded, but "this side produced no value" is not a value, so two of them are not a
+         * shared value either.
+         */
         NULL,
         /**
          * The operation is declared {@code void}, so there is no result to compare.
          *
-         * <p>Distinct from {@link #NULL} on purpose. {@code Method.invoke} returns {@code null} for
-         * a {@code void} method, so before this constant existed every {@code void} operation
-         * unwrapped to {@code NULL} — and an empty-bodied ported mutator therefore agreed with the
-         * historical one on every row, forever.
+         * <p>Distinct from {@link #NULL} on purpose: {@code Method.invoke} returns {@code null} for
+         * a {@code void} method, so without this constant a {@code void} operation would be
+         * indistinguishable from an operation that genuinely returned {@code null}.
+         *
+         * <p><strong>The separation alone does not stop an empty-bodied mutator agreeing forever,
+         * and this comment used to claim that it did.</strong> It does not, and the claim was
+         * measured false: a subject whose every body is empty — returning {@link #voidValue()}, as
+         * {@link Candidate}'s own contract instructs — scored 444 agreement rows, every driven row
+         * of all six reachable {@code setTypeToRuntimeType()} operations, because {@code VOID} vs
+         * {@code VOID} compared equal. What stops it is {@link DiffVerdict#UNMEASURABLE}: a row on
+         * which neither side produced a value is not a measurement, so it can never be an agreement.
          */
         VOID,
         /**
@@ -157,6 +170,26 @@ public final class UValue {
 
     public Kind kind() {
         return kind;
+    }
+
+    /**
+     * Whether this instance is an <em>observation</em> — a value the harness can hold up against the
+     * other side — as opposed to one of the two kinds that stand for the absence of a result.
+     *
+     * <p>{@link Kind#VOID} and {@link Kind#NULL} both mean "this side produced no value". Everything
+     * else, {@link Kind#OPAQUE} included, carries content: {@code OPAQUE} is a class name plus a
+     * representation rebuilt from the object's declared fields, and two of those being equal is a
+     * real finding.
+     *
+     * <p>{@link DifferentialSweep} uses this to decide that a row is
+     * {@link DiffVerdict#UNMEASURABLE}: when <em>neither</em> side carries an observation there is
+     * nothing to compare, and a comparison that was never made must not be reported as one that
+     * succeeded. When only one side does, the sides demonstrably differ — one produced a value and
+     * the other did not — and that is a genuine measurement of divergence, so it stays
+     * {@link DiffVerdict#DIFFER} and keeps both canonical forms in its columns.
+     */
+    public boolean carriesAnObservation() {
+        return kind != Kind.VOID && kind != Kind.NULL;
     }
 
     /** The numeric payload of a UREAL/REAL/UINTEGER/INTEGER. */

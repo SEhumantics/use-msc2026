@@ -55,6 +55,7 @@ class UncertaintyDifferentialSmokeTest {
             DifferentialSweep.Result result = sweep.sweepBinary(add, corpus, corpus);
 
             System.out.println("rows                 " + result.rowCount());
+            System.out.println("measured             " + result.measurementCount());
             System.out.println("tally                " + result.summary());
             System.out.println("--- first 12 rows -------------------------------------------------");
             System.out.println(DiffRow.TSV_HEADER);
@@ -69,9 +70,16 @@ class UncertaintyDifferentialSmokeTest {
             assertEquals(corpus.size() * corpus.size(), result.rowCount(),
                     "the sweep must visit the full cartesian product");
             assertTrue(Files.isReadable(report), "the report must have been written to " + report);
-            assertEquals(List.of(), result.disagreements(),
-                    "the faithful stub reproduces the measured historical formula, so every row must agree");
+            // isClean(), not disagreements().isEmpty(): the second is also true of a sweep that
+            // compared nothing at all, and this test's whole job is to show the plumbing compares.
+            assertTrue(result.isClean(),
+                    "the faithful stub reproduces the measured historical formula, so every row must "
+                            + "agree -- and rows must have been measured for that to mean anything: "
+                            + result.summary());
+            assertEquals(result.rowCount(), result.measurementCount(),
+                    "every row of this sweep is a genuine comparison of two observed values");
             assertEquals(result.rowCount(), result.count(DiffVerdict.AGREE));
+            assertEquals(0, result.throwClassMismatchCount());
         }
     }
 
@@ -93,6 +101,7 @@ class UncertaintyDifferentialSmokeTest {
             System.out.println("seed                 " + generator.seed());
             System.out.println("subject              " + stub.name() + "  (minus uses |ua-ub|)");
             System.out.println("rows                 " + result.rowCount());
+            System.out.println("measured             " + result.measurementCount());
             System.out.println("tally                " + result.summary());
             System.out.println("--- first 5 disagreements -----------------------------------------");
             System.out.println(DiffRow.TSV_HEADER);
@@ -108,6 +117,10 @@ class UncertaintyDifferentialSmokeTest {
             assertFalse(disagreements.isEmpty(),
                     "an injected fault that was not reported means the harness cannot detect anything");
             assertTrue(result.count(DiffVerdict.DIFFER) > 0, "the fault must surface as DIFFER rows");
+            assertFalse(result.isClean(), "and the sweep must not read as a pass");
+            assertEquals(result.rowCount(), result.measurementCount(),
+                    "every row here is a comparison; the fault is in what was compared, not in "
+                            + "whether anything was");
         }
     }
 

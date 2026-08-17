@@ -24,11 +24,13 @@ import java.util.Map;
  * # subject            stub-ureal
  * # sha256.use.jar     80ac...
  * # sha256.atenea...   53b2...
- * # operations         URealValue.add(value)
- * # rows               484
- * # rows.agreement     484
- * # rows.disagreement  0
- * # verdict.AGREE      484
+ * # operations              URealValue.add(value)
+ * # rows                    484
+ * # rows.measured           484
+ * # rows.agreement          484
+ * # rows.disagreement       0
+ * # rows.throwClassMismatch 0
+ * # verdict.AGREE           484
  * index &lt;tab&gt; operation &lt;tab&gt; inputs &lt;tab&gt; historical &lt;tab&gt; ported &lt;tab&gt; verdict &lt;tab&gt; note
  * ...
  * </pre>
@@ -83,25 +85,51 @@ public final class DiffReportWriter {
     /**
      * Writes several sweeps into one report, in the order given.
      *
-     * @throws IllegalArgumentException if the report would contain no data rows. The guard is on the
-     *         total row count, not on {@code results.isEmpty()}: the old check tested the number of
-     *         {@link DifferentialSweep.Result} objects, which is not the property its own error
-     *         message claimed to enforce. {@link DifferentialSweep} produces a zero-row Result
-     *         whenever any input domain is empty — an easy accident, since
-     *         {@code buildTuples} yields nothing for an empty domain and reports it as a clean sweep
-     *         with no disagreements.
+     * <h2>Two guards, and why the second one had to be added</h2>
+     * The first rejects a report with no data rows. The guard is on the total row count, not on
+     * {@code results.isEmpty()}: the old check tested the number of
+     * {@link DifferentialSweep.Result} objects, which is not the property its own error message
+     * claimed to enforce. {@link DifferentialSweep} produces a zero-row Result whenever any input
+     * domain is empty — an easy accident, since {@code buildTuples} yields nothing for an empty
+     * domain and reports it as a clean sweep with no disagreements.
+     *
+     * <p>The second rejects a report with no <em>measurements</em>, and it exists because the first
+     * one turned out to be the same category of error it replaced. Rows are not comparisons. A sweep
+     * of the six reachable {@code setTypeToRuntimeType()} operations against an empty-bodied subject
+     * wrote a perfectly well-formed 75-row report whose own header said
+     * {@code # rows.agreement 72 / # rows.disagreement 3} over <em>zero</em> comparisons; the guard
+     * counted 75 and let it through. The property a report has to carry is "this file contains
+     * comparisons", and row count is not that property.
+     *
+     * @throws IllegalArgumentException if the report would contain no data rows, or no row in which
+     *         two observed values were compared
      */
     public static Path writeAll(String fileName, List<DifferentialSweep.Result> results,
                                 Map<String, String> jarDigests) {
         int rowTotal = 0;
+        int measuredTotal = 0;
         for (DifferentialSweep.Result r : results) {
             rowTotal += r.rowCount();
+            measuredTotal += r.measurementCount();
         }
         if (rowTotal == 0) {
             throw new IllegalArgumentException("refusing to write an empty differential report '"
                     + fileName + "': " + results.size() + " sweep result(s) contributing 0 rows in "
                     + "total. A report with no rows would read as agreement. The usual cause is an "
                     + "empty input domain, which makes the cartesian product empty.");
+        }
+        if (measuredTotal == 0) {
+            StringBuilder tallies = new StringBuilder();
+            for (DifferentialSweep.Result r : results) {
+                tallies.append("\n    ").append(r.summary());
+            }
+            throw new IllegalArgumentException("refusing to write a differential report '" + fileName
+                    + "' that contains no measurements: " + rowTotal + " row(s) across "
+                    + results.size() + " sweep result(s), and not one of them compared two observed "
+                    + "values. Every number this file would carry would describe an absence, and a "
+                    + "reader would see '# rows " + rowTotal + "' and a green-looking verdict tally. "
+                    + "The usual causes are a subject that throws on every row, a receiver type the "
+                    + "harness cannot marshal, and an operation that returns void." + tallies);
         }
         Path target = reportDir().resolve(fileName);
         try {
@@ -115,11 +143,15 @@ public final class DiffReportWriter {
         String subject = results.get(0).subjectName();
         int totalRows = 0;
         int agreementRows = 0;
+        int measuredRows = 0;
+        int throwClassMismatches = 0;
         List<String> operations = new ArrayList<>();
         Map<DiffVerdict, Integer> tally = new LinkedHashMap<>();
         for (DifferentialSweep.Result r : results) {
             totalRows += r.rowCount();
             agreementRows += r.agreementCount();
+            measuredRows += r.measurementCount();
+            throwClassMismatches += r.throwClassMismatchCount();
             operations.add(r.op().key());
             for (DiffVerdict v : DiffVerdict.values()) {
                 int c = r.count(v);
@@ -142,8 +174,18 @@ public final class DiffReportWriter {
             // Stated outright rather than left for the reader to derive from the verdict names,
             // because deriving it wrongly is this harness's recurring defect: a reader who saw
             // "verdict.AGREE_THROWN 169" scored a sweep green in which nothing was ever compared.
+            //
+            // rows.measured is first among the three because it is the one that says how much of
+            // this file is evidence. A report can have rows.agreement == rows and rows.measured == 0
+            // -- that is precisely what an empty-bodied port over void operations produced -- and a
+            // reader who has only the agreement count is being told a true number about a
+            // population that does not exist.
+            header(out, "rows.measured", Integer.toString(measuredRows));
             header(out, "rows.agreement", Integer.toString(agreementRows));
             header(out, "rows.disagreement", Integer.toString(totalRows - agreementRows));
+            // A port that fails on the right rows with the wrong exception class changes no other
+            // aggregate in this header. See DifferentialSweep.Result#throwClassMismatchCount().
+            header(out, "rows.throwClassMismatch", Integer.toString(throwClassMismatches));
             for (Map.Entry<DiffVerdict, Integer> e : tally.entrySet()) {
                 header(out, "verdict." + e.getKey().name(), Integer.toString(e.getValue()));
             }
@@ -206,13 +248,22 @@ public final class DiffReportWriter {
      * {@code -D{@value #GOLDEN_REFRESH_PROPERTY}=true}, which copies the new report over the golden
      * so the change arrives as a reviewable diff rather than as an unnoticed overwrite.
      *
+     * <h2>It really is bytes</h2>
+     * This used to compare {@code Files.readAllLines} to {@code Files.readAllLines} while its own
+     * first sentence said "byte for byte". That comparison is blind to line terminators and to a
+     * missing final newline — {@code "a\nb\n"} and {@code "a\nb"} both read back as {@code [a, b]} —
+     * so two files that differ in bytes compared equal, in a method whose product is evidence. The
+     * comparison below is {@link java.util.Arrays#equals(byte[], byte[])} on the file contents; the
+     * line-by-line walk exists only to build a readable message once a difference is known to be
+     * there, and reports a whitespace-only difference as such rather than printing two lines that
+     * look identical.
+     *
      * @param written   the report just produced, normally under {@link #reportDir()}
      * @param fileName  bare golden file name under {@link #goldenDir()}
      * @return the golden path that was compared against (or refreshed)
      */
     public static Path assertMatchesGolden(Path written, String fileName) {
         Path golden = goldenDir().resolve(fileName);
-        List<String> actual = readLines(written);
         if (Boolean.getBoolean(GOLDEN_REFRESH_PROPERTY)) {
             try {
                 Files.createDirectories(golden.getParent());
@@ -227,6 +278,12 @@ public final class DiffReportWriter {
                     + " against. Create it with -D" + GOLDEN_REFRESH_PROPERTY + "=true and commit it, "
                     + "so that later runs have something to regress against.");
         }
+        if (java.util.Arrays.equals(readBytes(written), readBytes(golden))) {
+            return golden;
+        }
+
+        // Known different. Everything from here on only phrases the failure.
+        List<String> actual = readLines(written);
         List<String> expected = readLines(golden);
         int limit = Math.min(expected.size(), actual.size());
         for (int i = 0; i < limit; i++) {
@@ -245,12 +302,24 @@ public final class DiffReportWriter {
                     + "; the first " + limit + " agree. Re-record with -D" + GOLDEN_REFRESH_PROPERTY
                     + "=true once the change is understood.");
         }
-        return golden;
+        throw new AssertionError("differential report " + written + " differs from the committed "
+                + "golden " + golden + " in bytes but not in any line: the files disagree only about "
+                + "line terminators or a trailing newline. A line-based comparison would have called "
+                + "these two files equal. Re-record with -D" + GOLDEN_REFRESH_PROPERTY + "=true once "
+                + "the change is understood.");
     }
 
     private static List<String> readLines(Path path) {
         try {
             return Files.readAllLines(path, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException("cannot read differential report " + path, e);
+        }
+    }
+
+    private static byte[] readBytes(Path path) {
+        try {
+            return Files.readAllBytes(path);
         } catch (IOException e) {
             throw new UncheckedIOException("cannot read differential report " + path, e);
         }

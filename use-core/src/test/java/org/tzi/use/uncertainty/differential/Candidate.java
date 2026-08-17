@@ -45,6 +45,12 @@ public interface Candidate extends Closeable {
      * a contract violation and {@link DifferentialSweep} scores the row
      * {@link DiffVerdict#HARNESS_ERROR}.
      *
+     * <p>Returning {@link UValue#voidValue()} buys no credit. A row on which neither side produced a
+     * value is {@link DiffVerdict#UNMEASURABLE} — a non-agreement — because this harness does not
+     * re-read the receiver after a call and therefore observes nothing about a {@code void}
+     * operation on either side. Writing the documented boilerplate for every mutator does not make a
+     * port agree with anything; it used to.
+     *
      * @throws HarnessMarshallingException if <em>this adapter</em> could not drive the operation —
      *                                     see the invariant on the type comment. Not a behavioural
      *                                     difference, and never comparable with the other side.

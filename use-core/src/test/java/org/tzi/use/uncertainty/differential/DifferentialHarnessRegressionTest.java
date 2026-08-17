@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -418,22 +419,354 @@ class DifferentialHarnessRegressionTest {
 
     // ------------------------------------------------------------------ F6
 
+    /**
+     * The {@code VOID}/{@code NULL} separation, and <em>only</em> that. This test used to carry a
+     * comment claiming it pinned "the exact shape of the 'empty-bodied mutator agrees forever'
+     * defect". It never did: it asserts that two constants are different, which leaves
+     * {@code VOID} vs {@code VOID} free to score {@code AGREE}, and it did — 22 rows out of 22 for
+     * this very operation. {@link #d10VoidVersusVoidIsNotAgreement()} is the test that pins it.
+     */
     @Test
     @DisplayName("a void historical operation unwraps to VOID, never to NULL")
     void voidIsDistinctFromNull() throws Throwable {
         try (HistoricalOracle oracle = HistoricalOracle.open()) {
-            // Value.setTypeToRuntimeType() is public and void, and is inherited by URealValue: the
-            // exact shape of the "empty-bodied mutator agrees forever" defect.
+            // Value.setTypeToRuntimeType() is public and void, and is inherited by URealValue.
             UOp mutator = UOp.unary("URealValue", "setTypeToRuntimeType");
             assertTrue(oracle.supports(mutator));
             UValue produced = oracle.invoke(mutator, List.of(UValue.uReal(1.0, 0.25)));
 
             assertEquals(UValue.Kind.VOID, produced.kind(),
-                    "Method.invoke returns null for void; mapping that to NULL makes every void "
-                            + "operation agree with every other one");
+                    "Method.invoke returns null for void; mapping that to NULL would make a void "
+                            + "operation indistinguishable from one that returned null");
             assertEquals("VOID", produced.canonical());
             assertNotEquals(UValue.nullValue(), produced);
             assertNotEquals(UValue.nullValue().canonical(), produced.canonical());
+            assertFalse(produced.carriesAnObservation(),
+                    "VOID is the absence of a result, so it is not an observation");
+            assertFalse(UValue.nullValue().carriesAnObservation(),
+                    "nor is a null result: 'I produced no value' is not a value");
+            assertTrue(UValue.uReal(1.0, 0.25).carriesAnObservation());
+            assertTrue(UValue.opaque("x", "y").carriesAnObservation(),
+                    "an OPAQUE form is a class name plus field-derived content, which is content");
+        }
+    }
+
+    // ------------------------------------------------------------------ D-10
+
+    @Test
+    @DisplayName("D-10: two VOID results are UNMEASURABLE, not an agreement")
+    void d10VoidVersusVoidIsNotAgreement() {
+        UOp mutator = UOp.unary("URealValue", "setTypeToRuntimeType");
+        List<UValue> receivers = InputGenerator.uRealBoundaries();
+        try (HistoricalOracle oracle = HistoricalOracle.open();
+             Candidate doNothing = new ReturnsFixed("do-nothing-port", UValue.voidValue())) {
+
+            DifferentialSweep.Result result =
+                    new DifferentialSweep(oracle, doNothing, 20260817L).sweepUnary(mutator, receivers);
+
+            System.out.println("=== D-10 reproduction (VOID vs VOID) ==============================");
+            System.out.println("tally                " + result.summary());
+            System.out.println("measurements         " + result.measurementCount());
+            System.out.println("agreements           " + result.agreementCount());
+            System.out.println("row 0                " + result.rows().get(0).toTsv());
+            System.out.println("===================================================================");
+
+            assertEquals(receivers.size(), result.rowCount());
+            assertEquals(receivers.size(), result.count(DiffVerdict.UNMEASURABLE));
+            assertEquals(0, result.agreementCount(),
+                    "the harness observed nothing on either side: an empty-bodied mutator used to "
+                            + "score every one of these rows as agreement, forever");
+            assertEquals(0, result.measurementCount(), "and it measured nothing");
+            assertEquals(receivers.size(), result.disagreements().size(),
+                    "a row that was not measured belongs in disagreements(), like every other "
+                            + "non-agreement");
+            assertFalse(result.isClean(), "a sweep that compared nothing is not a pass");
+
+            DiffRow row = result.rows().get(0);
+            assertEquals("VOID", row.historical());
+            assertEquals("VOID", row.ported());
+            assertTrue(row.note().contains("declared void"), row.note());
+            assertTrue(row.note().contains("no post-state was observed on either side"), row.note());
+            assertTrue(row.note().contains("reference returned VOID"), row.note());
+            assertTrue(row.note().contains("subject returned VOID"), row.note());
+        }
+    }
+
+    @Test
+    @DisplayName("D-10: a value on ONE side only is still a difference, not 'unmeasurable'")
+    void oneSidedAbsenceIsADifferenceAndKeepsItsEvidence() {
+        UOp mutator = UOp.unary("URealValue", "setTypeToRuntimeType");
+        List<UValue> receivers = List.of(UValue.uReal(1.0, 0.25));
+        try (HistoricalOracle oracle = HistoricalOracle.open();
+             Candidate returnsValue = new ReturnsFixed("returns-a-value", UValue.uReal(7.0, 0.0))) {
+
+            // The historical side has no result (void); the subject invented one. The harness saw
+            // something distinguishing, so calling this "no measurement" would destroy evidence.
+            DiffRow row = new DifferentialSweep(oracle, returnsValue, 1L)
+                    .sweepUnary(mutator, receivers).rows().get(0);
+
+            assertEquals(DiffVerdict.DIFFER, row.verdict(), row.toTsv());
+            assertEquals("VOID", row.historical());
+            assertEquals("UREAL(7.0,0.0)", row.ported());
+        }
+    }
+
+    @Test
+    @DisplayName("two null RESULTS are unmeasurable, but a null against a value is a difference")
+    void twoNullValuesAreNotAgreementEither() {
+        UOp op = UOp.binary("URealValue", "add");
+        List<UValue> domain = List.of(UValue.uReal(1.0, 0.5), UValue.uReal(2.0, 0.5));
+        try (Candidate a = new ReturnsFixed("null-a", UValue.nullValue());
+             Candidate b = new ReturnsFixed("null-b", UValue.nullValue())) {
+
+            DifferentialSweep.Result both = new DifferentialSweep(a, b, 1L).sweepBinary(op, domain, domain);
+            assertEquals(4, both.count(DiffVerdict.UNMEASURABLE));
+            assertEquals(0, both.agreementCount(),
+                    "two sides that each produced no value did not produce the same value");
+            assertEquals(0, both.measurementCount());
+            assertTrue(both.rows().get(0).note().contains("not a shared value"),
+                    both.rows().get(0).note());
+        }
+        try (Candidate a = new ReturnsFixed("null-a", UValue.nullValue());
+             StubCandidate stub = StubCandidate.faithful()) {
+
+            DifferentialSweep.Result mixed = new DifferentialSweep(stub, a, 1L)
+                    .sweepBinary(op, domain, domain);
+            assertEquals(4, mixed.count(DiffVerdict.DIFFER),
+                    "a null result where the other side produced a value is a real divergence");
+            assertEquals(4, mixed.measurementCount());
+        }
+    }
+
+    /**
+     * The audit behind D-10, mechanised so it cannot go stale: <strong>every</strong>
+     * {@link UValue.Kind} is either an observation, in which case a candidate that produces it on
+     * both sides genuinely agrees, or it is not, in which case both sides producing it is
+     * {@link DiffVerdict#UNMEASURABLE}. There is no third option and no kind is unclassified.
+     *
+     * <p>D-10 was one kind — {@code VOID} — falling into the first bucket while meaning the second.
+     * Naming {@code VOID} in a test would pin that instance; iterating {@code Kind.values()} pins the
+     * property, so a kind added later that carries no value cannot quietly become a route to
+     * {@code AGREE}. The expected membership of the "carries nothing" set is asserted outright as
+     * well, so re-classifying a kind is a decision someone has to make in this file.
+     */
+    @Test
+    @DisplayName("no Kind that carries no value can pair with itself into an agreement")
+    void everyKindIsEitherAnObservationOrUnmeasurable() {
+        Map<UValue.Kind, UValue> samples = new java.util.EnumMap<>(UValue.Kind.class);
+        samples.put(UValue.Kind.UREAL, UValue.uReal(1.5, 0.25));
+        samples.put(UValue.Kind.UINTEGER, UValue.uInteger(3, 0.5));
+        samples.put(UValue.Kind.UBOOLEAN, UValue.uBoolean(true, 0.75));
+        samples.put(UValue.Kind.USTRING, UValue.uString("abc", 0.5));
+        samples.put(UValue.Kind.REAL, UValue.real(1.5));
+        samples.put(UValue.Kind.INTEGER, UValue.integer(3));
+        samples.put(UValue.Kind.BOOLEAN, UValue.bool(true));
+        samples.put(UValue.Kind.STRING, UValue.string("abc"));
+        samples.put(UValue.Kind.SEQUENCE, UValue.sequence(List.of(UValue.integer(1))));
+        samples.put(UValue.Kind.NULL, UValue.nullValue());
+        samples.put(UValue.Kind.VOID, UValue.voidValue());
+        samples.put(UValue.Kind.OPAQUE, UValue.opaque("uDataTypes.SBoolean", "t=1.0,f=0.0"));
+        assertEquals(UValue.Kind.values().length, samples.size(),
+                "every Kind needs a representative here, including any added since this was written");
+
+        java.util.Set<UValue.Kind> carriesNothing = new java.util.TreeSet<>();
+        UOp op = UOp.binary("URealValue", "add");
+        List<UValue> domain = List.of(UValue.uReal(1.0, 0.0));
+        for (Map.Entry<UValue.Kind, UValue> e : samples.entrySet()) {
+            UValue sample = e.getValue();
+            assertEquals(e.getKey(), sample.kind(), "sample mislabelled");
+            try (Candidate a = new ReturnsFixed("a", sample);
+                 Candidate b = new ReturnsFixed("b", sample)) {
+
+                DiffRow row = new DifferentialSweep(a, b, 1L).sweepBinary(op, domain, domain)
+                        .rows().get(0);
+                if (sample.carriesAnObservation()) {
+                    assertEquals(DiffVerdict.AGREE, row.verdict(),
+                            e.getKey() + " carries a value, so two of them really are the same value: "
+                                    + row.toTsv());
+                } else {
+                    carriesNothing.add(e.getKey());
+                    assertEquals(DiffVerdict.UNMEASURABLE, row.verdict(),
+                            e.getKey() + " carries no value, so two of them are not a shared value: "
+                                    + row.toTsv());
+                    assertFalse(row.verdict().isAgreement(), row.toTsv());
+                    assertFalse(row.verdict().isMeasurement(), row.toTsv());
+                }
+            }
+        }
+        assertEquals(java.util.Set.of(UValue.Kind.NULL, UValue.Kind.VOID), carriesNothing,
+                "exactly two kinds stand for the absence of a result. Changing this set changes what "
+                        + "the harness is willing to call an agreement, so it is asserted rather than "
+                        + "derived");
+    }
+
+    // ------------------------------------------------------------------ D-11 / D-12: measurements
+
+    @Test
+    @DisplayName("D-11: a report with rows but no measurements is refused")
+    void aReportWithNoMeasurementsIsRefused() {
+        UOp mutator = UOp.unary("URealValue", "setTypeToRuntimeType");
+        try (HistoricalOracle oracle = HistoricalOracle.open();
+             Candidate doNothing = new ReturnsFixed("do-nothing-port", UValue.voidValue())) {
+
+            DifferentialSweep.Result voidOnly = new DifferentialSweep(oracle, doNothing, 1L)
+                    .sweepUnary(mutator, InputGenerator.uRealBoundaries());
+
+            assertTrue(voidOnly.rowCount() > 0, "this is not the zero-row trap; there are rows");
+            assertEquals(0, voidOnly.measurementCount());
+
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                    () -> DiffReportWriter.writeAll("no-measurements.tsv", List.of(voidOnly), Map.of()),
+                    "the old guard counted rows, so a maximally green report over zero comparisons "
+                            + "was written happily");
+            System.out.println("=== D-11: writer refusal ==========================================");
+            System.out.println(e.getMessage());
+            System.out.println("===================================================================");
+            assertTrue(e.getMessage().contains("no measurements"), e.getMessage());
+            assertFalse(java.nio.file.Files.exists(
+                            DiffReportWriter.reportDir().resolve("no-measurements.tsv")),
+                    "the refused report must not have been created");
+        }
+    }
+
+    @Test
+    @DisplayName("D-12: 'no disagreements' is not a pass; isClean and requireMeasurements say so")
+    void zeroMeasurementSweepsCannotReadAsSuccess() {
+        UOp op = UOp.binary("URealValue", "add");
+        try (StubCandidate a = StubCandidate.faithful(); StubCandidate b = StubCandidate.faithful()) {
+
+            // (1) The zero-row trap: a stage that asserts only disagreements().isEmpty() passes.
+            DifferentialSweep.Result empty = new DifferentialSweep(a, b, 1L)
+                    .sweepBinary(op, List.of(), List.of(UValue.uReal(1.0, 0.0)));
+            assertEquals(List.of(), empty.disagreements(), "which is exactly the trap");
+            assertEquals(0, empty.measurementCount());
+            assertFalse(empty.isClean(), "a sweep that never ran is not a clean sweep");
+            IllegalStateException e = assertThrows(IllegalStateException.class,
+                    () -> empty.requireMeasurements(1));
+            assertTrue(e.getMessage().contains("measured 0 row(s)"), e.getMessage());
+
+            // (2) A sweep that ran and compared something is clean, and says so.
+            DifferentialSweep.Result real = new DifferentialSweep(a, b, 1L)
+                    .sweepBinary(op, List.of(UValue.uReal(1.0, 0.5)), List.of(UValue.uReal(2.0, 0.5)));
+            assertTrue(real.isClean());
+            assertEquals(1, real.measurementCount());
+            assertSame(real, real.requireMeasurements(1));
+        }
+
+        // (3) Rows that exist but were never comparisons: not clean either.
+        try (HistoricalOracle oracle = HistoricalOracle.open();
+             StubCandidate stub = StubCandidate.faithful()) {
+            DifferentialSweep.Result unmarshallable = new DifferentialSweep(oracle, stub, 1L)
+                    .sweepBinary(op, InputGenerator.uIntegerBoundaries(),
+                            InputGenerator.uIntegerBoundaries());
+            assertEquals(169, unmarshallable.rowCount());
+            assertEquals(0, unmarshallable.measurementCount());
+            assertFalse(unmarshallable.isClean());
+        }
+    }
+
+    // ------------------------------------------------------------------ D-13: wrong throw class
+
+    @Test
+    @DisplayName("D-13: a wrong exception class is visible in an aggregate, not only row by row")
+    void wrongThrowClassIsVisibleInAnAggregate() {
+        UOp op = UOp.of("UStringValue", "at", UOp.ParamKind.INT);
+        List<UValue> receivers = List.of(UValue.uString("abc", 0.5));
+        List<UValue> indices = List.of(UValue.integer(0), UValue.integer(99));
+
+        try (Candidate ref = new ThrowsIndexOutOfBounds("ref");
+             Candidate faithful = new ThrowsIndexOutOfBounds("sub");
+             Candidate wrongClass = new ThrowsIllegalState("sub-wrong-class")) {
+
+            DifferentialSweep.Result matched = new DifferentialSweep(ref, faithful, 1L)
+                    .sweepBinary(op, receivers, indices);
+            DifferentialSweep.Result mismatched = new DifferentialSweep(ref, wrongClass, 1L)
+                    .sweepBinary(op, receivers, indices);
+
+            System.out.println("=== D-13: wrong exception class ===================================");
+            System.out.println("same class  " + matched.summary());
+            System.out.println("wrong class " + mismatched.summary());
+            System.out.println("===================================================================");
+
+            // Every other aggregate is bit-identical between the two, which is the defect.
+            assertEquals(matched.tally(), mismatched.tally());
+            assertEquals(matched.rowCount(), mismatched.rowCount());
+            assertEquals(matched.agreementCount(), mismatched.agreementCount());
+            assertEquals(matched.disagreements().size(), mismatched.disagreements().size());
+
+            assertEquals(0, matched.throwClassMismatchCount(),
+                    "identical throwable classes on both sides: nothing to flag");
+            assertEquals(2, mismatched.throwClassMismatchCount(),
+                    "the right failure with the wrong exception class must be countable");
+            assertTrue(mismatched.summary().contains("throwClassMismatch=2"), mismatched.summary());
+            assertTrue(mismatched.rows().get(0).note().contains("java.lang.IllegalStateException"),
+                    mismatched.rows().get(0).note());
+        }
+    }
+
+    // ------------------------------------------------------------------ notes carry both sides
+
+    @Test
+    @DisplayName("a two-sided harness failure names BOTH failures, not just the reference's")
+    void harnessErrorNoteCarriesBothSides() {
+        UOp op = UOp.binary("URealValue", "add");
+        try (Candidate a = new MarshallingFailure("ref");
+             Candidate b = new MarshallingFailure("sub")) {
+
+            DiffRow row = new DifferentialSweep(a, b, 1L)
+                    .sweepBinary(op, List.of(UValue.uReal(1.0, 0.5)), List.of(UValue.uReal(2.0, 0.5)))
+                    .rows().get(0);
+
+            System.out.println("=== both-sided HARNESS_ERROR note =================================");
+            System.out.println(row.note());
+            System.out.println("===================================================================");
+
+            // Both columns read HARNESS_ERROR:...HarnessMarshallingException, so if the note does
+            // not carry both messages the subject's reason is recoverable from nowhere at all.
+            assertEquals(row.historical(), row.ported(), "sanity: the columns cannot tell them apart");
+            assertTrue(row.note().contains("either side"), row.note());
+            assertTrue(row.note().contains("reference could not be driven"), row.note());
+            assertTrue(row.note().contains("subject could not be driven"), row.note());
+            assertTrue(row.note().contains("cannot marshal UREAL(1.0,0.5) for URealValue.add(value) [ref]"),
+                    row.note());
+            assertTrue(row.note().contains("cannot marshal UREAL(1.0,0.5) for URealValue.add(value) [sub]"),
+                    row.note());
+        }
+    }
+
+    @Test
+    @DisplayName("a MIXED note says which side threw and what the other side returned")
+    void mixedNoteNamesBothSides() {
+        UOp op = UOp.binary("URealValue", "add");
+        List<UValue> domain = List.of(UValue.uReal(1.0, 0.5));
+        try (StubCandidate stub = StubCandidate.faithful();
+             Candidate thrower = new ThrowsRuntime("sub", "TODO: port URealValue.add(value)")) {
+
+            DiffRow row = new DifferentialSweep(stub, thrower, 1L)
+                    .sweepBinary(op, domain, domain).rows().get(0);
+
+            assertEquals(DiffVerdict.MIXED, row.verdict());
+            assertTrue(row.note().contains("reference returned UREAL(2.0,"), row.note());
+            assertTrue(row.note().contains("subject threw java.lang.RuntimeException: TODO: port"),
+                    row.note());
+        }
+    }
+
+    @Test
+    @DisplayName("an UNSUPPORTED note attributes each reason to the side it came from")
+    void unsupportedNoteAttributesEachSide() {
+        try (HistoricalOracle oracle = HistoricalOracle.open();
+             StubCandidate stub = StubCandidate.faithful()) {
+
+            DiffRow row = new DifferentialSweep(oracle, stub, 1L)
+                    .sweepBinary(UOp.binary("SBooleanValue", "and"),
+                            List.of(UValue.uBoolean(true, 0.5)), List.of(UValue.uBoolean(false, 0.5)))
+                    .rows().get(0);
+
+            assertTrue(row.note().startsWith("no measurement. reference: "), row.note());
+            assertTrue(row.note().contains(" / subject: "), row.note());
+            assertTrue(row.note().contains("cannot marshal a SBooleanValue receiver"), row.note());
+            assertTrue(row.note().contains("implements only"), row.note());
         }
     }
 
@@ -519,8 +852,11 @@ class DifferentialHarnessRegressionTest {
 
         @Override
         public UValue invoke(UOp op, List<UValue> args) {
+            // The name is in the message so that a two-sided failure has two distinguishable
+            // reasons; both columns render the same throwable class, so the note is the only place
+            // the difference can survive.
             throw new HarnessMarshallingException("cannot marshal " + args.get(0).canonical()
-                    + " for " + op.key());
+                    + " for " + op.key() + " [" + name + "]");
         }
 
         @Override
@@ -603,6 +939,96 @@ class DifferentialHarnessRegressionTest {
         @Override
         public UValue invoke(UOp op, List<UValue> args) {
             throw new ArithmeticException(message);
+        }
+
+        @Override
+        public boolean supports(UOp op) {
+            return true;
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+
+    /**
+     * A port that returns the same thing whatever it is asked: the several encodings of "no code
+     * here yet". {@code voidValue()} is the one the {@link Candidate} contract asks an adapter
+     * author to write for a {@code void} operation.
+     */
+    private static final class ReturnsFixed implements Candidate {
+        private final String name;
+        private final UValue fixed;
+
+        ReturnsFixed(String name, UValue fixed) {
+            this.name = name;
+            this.fixed = fixed;
+        }
+
+        @Override
+        public String name() {
+            return name;
+        }
+
+        @Override
+        public UValue invoke(UOp op, List<UValue> args) {
+            return fixed;
+        }
+
+        @Override
+        public boolean supports(UOp op) {
+            return true;
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+
+    /** The right failure for an out-of-range index: what the historical uDataTypes code raises. */
+    private static final class ThrowsIndexOutOfBounds implements Candidate {
+        private final String name;
+
+        ThrowsIndexOutOfBounds(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public String name() {
+            return name;
+        }
+
+        @Override
+        public UValue invoke(UOp op, List<UValue> args) {
+            throw new IndexOutOfBoundsException("idx = " + args.get(1).asInt());
+        }
+
+        @Override
+        public boolean supports(UOp op) {
+            return true;
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+
+    /** The right failure on the right rows, with the wrong exception class. The D-13 defect. */
+    private static final class ThrowsIllegalState implements Candidate {
+        private final String name;
+
+        ThrowsIllegalState(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public String name() {
+            return name;
+        }
+
+        @Override
+        public UValue invoke(UOp op, List<UValue> args) {
+            throw new IllegalStateException("index out of range: idx = " + args.get(1).asInt());
         }
 
         @Override

@@ -43,6 +43,22 @@ package org.tzi.use.uncertainty.differential;
  * skip: a differential run where half the operations were never exercised must not be readable as
  * agreement.
  *
+ * <h2>Why {@link #UNMEASURABLE} was added</h2>
+ * The same rule, applied to the third route that was found into {@link #AGREE}. A {@code void}
+ * operation has no result, so this harness — which does not re-read the receiver after a call —
+ * observes nothing on either side. It nevertheless compared the two "nothing"s, found them equal,
+ * and emitted {@code AGREE}. Measured against a subject whose every method body is empty, over every
+ * operation the harness can reach and every corpus it ships:
+ * <pre>
+ *   rows 471471   AGREE 444   -- every driven row of all six reachable setTypeToRuntimeType()
+ *                                operations, e.g. URealValue 144/144, UStringValue 102/102
+ * </pre>
+ * That is the same false statement as {@code AGREE_THROWN} made through a different door: green by
+ * construction rather than by measurement, since the reference side's {@code VOID} follows from
+ * {@code method.getReturnType() == void.class} and the subject's from the boilerplate
+ * {@link Candidate} tells an adapter author to write. Such rows are now {@link #UNMEASURABLE}, and
+ * the note says plainly that no post-state was observed.
+ *
  * <p>Test-scoped. Not part of the product.
  */
 public enum DiffVerdict {
@@ -77,6 +93,26 @@ public enum DiffVerdict {
     MIXED,
 
     /**
+     * Neither side produced a value, and neither side threw: there was nothing to compare.
+     *
+     * <p>Reached two ways, and the note says which.
+     * <ul>
+     *   <li>The operation is declared {@code void}. It has no result, and this harness never
+     *       re-reads the receiver after a call — a declared limit of the instrument — so it observes
+     *       <em>nothing on either side</em>. Scoring that {@link #AGREE} was a claim the harness
+     *       cannot support; 444 rows of it are quoted in the class comment.</li>
+     *   <li>Both sides returned {@link UValue#nullValue()}. "I produced no value" is an outcome, but
+     *       it is not a value, so two of them are not a shared value.</li>
+     * </ul>
+     *
+     * <p>Deliberately <strong>not</strong> raised when only one side lacks an observation. If the
+     * reference returned {@code UREAL(4.0,0.5)} and the subject returned {@code VOID}, the harness
+     * did see something distinguishing, and reporting "no measurement" would throw that evidence
+     * away. Those rows are {@link #DIFFER}, with both canonical forms in the columns.
+     */
+    UNMEASURABLE,
+
+    /**
      * At least one side could not be driven through the operation at all.
      *
      * <p>Two quite different facts land here, and the row's note says which: the candidate does not
@@ -108,5 +144,23 @@ public enum DiffVerdict {
      */
     public boolean isAgreement() {
         return this == AGREE || this == ACCEPTED_THROW;
+    }
+
+    /**
+     * True for the two verdicts that record a comparison actually performed: the harness held one
+     * observed value from each side against the other and either matched them ({@link #AGREE}) or
+     * did not ({@link #DIFFER}). Everything else is the absence of a comparison.
+     *
+     * <p>Note {@link #ACCEPTED_THROW} is an agreement and <em>not</em> a measurement. A human
+     * adjudicated two failures in writing; the harness measured nothing. A run consisting entirely
+     * of adjudicated throw-pairs has compared nothing, and
+     * {@link DifferentialSweep.Result#measurementCount()} says so.
+     *
+     * <p>This is the quantity a report is evidence about. Row count is not: a sweep can produce six
+     * figures of rows and zero measurements, which is exactly what a subject containing no code
+     * does.
+     */
+    public boolean isMeasurement() {
+        return this == AGREE || this == DIFFER;
     }
 }

@@ -6,8 +6,10 @@
 # sha256.atenearesearchgroup.uncertainty.jar	53b2a43feb0a0a39844a60278dd80a7d4b975ef324fb05c6db28831e835e59d0
 # operations	URealValue.minus(value)
 # rows	784
+# rows.measured	784
 # rows.agreement	558
 # rows.disagreement	226
+# rows.throwClassMismatch	0
 # verdict.AGREE	558
 # verdict.DIFFER	226
 index	operation	inputs	historical	ported	verdict	note

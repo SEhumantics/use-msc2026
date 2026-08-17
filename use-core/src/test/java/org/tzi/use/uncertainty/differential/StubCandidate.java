@@ -81,11 +81,20 @@ public final class StubCandidate implements Candidate {
     }
 
     /**
-     * The three failure exits below raise {@link HarnessMarshallingException}, not
-     * {@link IllegalArgumentException}, because they are failures of <em>this adapter</em> and not
-     * of anything under comparison — see the invariant on {@link Candidate}. With the old type, two
-     * faithful stubs swept over a non-UREAL receiver corpus produced
-     * {@code 169 rows, disagreements 0} with neither side executing a line of arithmetic.
+     * All <strong>four</strong> failure exits below raise {@link HarnessMarshallingException}, not
+     * {@link IllegalArgumentException} and not {@link UnsupportedOperationException}, because they
+     * are failures of <em>this adapter</em> and not of anything under comparison — see the invariant
+     * on {@link Candidate}. With the old type, two faithful stubs swept over a non-UREAL receiver
+     * corpus produced {@code 169 rows, disagreements 0} with neither side executing a line of
+     * arithmetic.
+     *
+     * <p>The fourth, the {@code default} of the switch, was left as an
+     * {@code UnsupportedOperationException} when the other three were converted, and the comment
+     * here said "three". It is unreachable through a sweep today — {@link DifferentialSweep#run}
+     * consults {@link #supports(UOp)} first, and {@link #SUPPORTED} is exactly the set the switch
+     * handles — but the two lists are kept in sync by hand, and {@code SUPPORTED} is static, so a
+     * key added to one and not the other would send <em>both</em> shipped stub instances down this
+     * exit at once. That is the D-2 shape exactly.
      */
     @Override
     public UValue invoke(UOp op, List<UValue> args) {
@@ -114,7 +123,9 @@ public final class StubCandidate implements Candidate {
                 return UValue.uReal(a - rhs[0], uncertainty);
             }
             default:
-                throw new UnsupportedOperationException("stub does not implement " + op.key());
+                throw new HarnessMarshallingException("this stub adapter has no case for " + op.key()
+                        + ", although supports() claimed it; that is an adapter defect, not a "
+                        + "statement about any implementation under comparison");
         }
     }
 

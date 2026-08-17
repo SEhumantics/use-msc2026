@@ -527,9 +527,15 @@ public final class HistoricalOracle implements Candidate {
             throw new HarnessMarshallingException("cannot reflectively call historical " + op.key(), e);
         }
         if (method.getReturnType() == void.class) {
-            // Method.invoke returns null for void, and fromHistorical maps null to Kind.NULL. Without
-            // this branch every void operation compares equal to every other void operation forever,
-            // so an empty-bodied ported mutator would agree on every row.
+            // Method.invoke returns null for void, and fromHistorical maps null to Kind.NULL. This
+            // branch keeps "the operation has no result" apart from "the operation returned null",
+            // which is a real distinction and all it is.
+            //
+            // It does NOT stop an empty-bodied ported mutator agreeing on every row, and this
+            // comment used to say that it did. Before the branch both sides rendered NULL and
+            // agreed unconditionally; after it both sides render VOID and agree unconditionally.
+            // What stops it is DiffVerdict.UNMEASURABLE: two absences of a result are not a shared
+            // result. Measured: 444 agreement rows against a do-nothing subject, now 0.
             return UValue.voidValue();
         }
         return fromHistorical(raw);
