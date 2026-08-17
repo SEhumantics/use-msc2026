@@ -108,6 +108,18 @@ public final class HistoricalOracle implements Candidate {
      */
     public static final String JAR_DIR_PROPERTY = "use.historical.jars.dir";
 
+    /**
+     * The only package this oracle can address, and therefore a declared scope boundary of the whole
+     * harness.
+     *
+     * <p>{@link #load(String)} resolves every historical class as {@code VALUE_PKG + simpleName}.
+     * Consequently {@code org.tzi.use.uml.ocl.type.*} (the {@code Type} hierarchy) and
+     * {@code uDataTypes.*} (the underlying uncertainty library) are <em>unreachable by design</em>:
+     * they are isolated by {@link IsolatedJarClassLoader} so that they resolve correctly when the
+     * value classes reference them, but no operation can be named on them and none is
+     * isolation-checked. Widening the harness to those packages is a change to {@link #load(String)},
+     * not a configuration knob.
+     */
     private static final String VALUE_PKG = "org.tzi.use.uml.ocl.value.";
 
     /**
@@ -144,8 +156,9 @@ public final class HistoricalOracle implements Candidate {
         this.uncertaintyJar = uncertaintyJar;
         this.temporaries = temporaries;
         this.valueClass = load("Value");
-        // Resolve, and isolation-check, every class the harness depends on. Doing this eagerly
-        // means a delegation leak is caught at open() rather than in the middle of a sweep.
+        // Resolve, and isolation-check, a fixed sample of org.tzi.use.uml.ocl.value classes. Doing
+        // this eagerly means a delegation leak is caught at open() rather than in the middle of a
+        // sweep. It is a sample, not an inventory -- see assertIsolated for exactly what it covers.
         for (String simple : new String[] {
                 "Value", "URealValue", "UIntegerValue", "UBooleanValue", "UStringValue",
                 "UncertainValue", "UncertainBooleanValue",
@@ -338,6 +351,22 @@ public final class HistoricalOracle implements Candidate {
      * Guarantees the class really came out of the isolated loader and not from the application
      * class loader. Once a port exists, a regression here is exactly the self-comparison failure
      * this harness exists to prevent, so it is checked at open() and not merely in a test.
+     *
+     * <h2>What this actually covers, and what it does not</h2>
+     * It is applied to the twelve simple names listed in the constructor and to nothing else. Every
+     * one of them is resolved through {@link #VALUE_PKG}, so:
+     * <ul>
+     *   <li>no {@code uDataTypes.*} class is ever isolation-checked, even though the whole
+     *       uncertainty library lives there and {@link IsolatedJarClassLoader} does isolate it;</li>
+     *   <li>no {@code org.tzi.use.uml.ocl.type.*} class is checked either;</li>
+     *   <li>{@code SBooleanValue} and the rest of {@link #VALUE_PKG} are not checked, because they
+     *       are not in the list.</li>
+     * </ul>
+     * The check is a <em>tripwire on the delegation policy</em>, not an inventory: if the loader
+     * were to start delegating {@code org.tzi.use.*} upwards, these twelve would catch it, because
+     * the policy in {@link IsolatedJarClassLoader#isIsolated(String)} is per-prefix and cannot fail
+     * for one class in a prefix while holding for another. Reading it as "every class the harness
+     * depends on is verified" would be an overstatement, and it was documented that way before.
      */
     private void assertIsolated(Class<?> historical) {
         if (historical.getClassLoader() != loader) {
