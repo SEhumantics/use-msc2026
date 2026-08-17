@@ -1,0 +1,13 @@
+# Java sources are always text, whatever bytes they happen to contain.
+#
+# A single raw NUL inside a character literal is legal Java (JLS 3.10.4) and compiles and behaves
+# correctly, but it makes git classify the whole file as binary: `git diff`, `git show -p`,
+# `git log -p` and every review UI built on them print "Binary files ... differ" instead of a diff,
+# and `git grep` prints "Binary file ... matches" instead of the matching line. That happened to
+# use-core/src/test/java/org/tzi/use/uncertainty/differential/AcceptedThrowPairs.java -- the one
+# class in the differential harness that can turn a pair of throws into an agreement, and whose only
+# safeguard is that a human reads the written sign-off.
+#
+# `diff` (without `text`) changes how git *renders* these paths and nothing about how it stores or
+# checks them out: no end-of-line normalisation is requested here, so no committed file changes.
+*.java diff
