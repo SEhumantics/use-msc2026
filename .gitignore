@@ -122,3 +122,6 @@ fabric.properties
 /docs/archunit-results/*-current-failure-report.txt
 /use-gui/*_cyclic_dependencies_*_results.csv
 /use-core/*_cyclic_dependencies_*_results.csv
+
+# Reactor-root build output
+/target
