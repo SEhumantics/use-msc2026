@@ -1221,15 +1221,15 @@ point. Logs are in the driver output; what follows is pasted from it.
 
 ### 7.4.1 THE GATE — `scripts/upstream-oracle-gate.sh`, both modes, one invocation
 
+Run at HEAD (`cdcbea54`, the behaviour commit) with a clean tree, 3 m 14 s wall. Verbatim and
+unfiltered, including the wrapper's own before/after `git status --porcelain`:
+
 ```
 [gate] =================================================================
 [gate] upstream-oracle acceptance gate — mode: both
 [gate] reactor root: /home/xoruser/msc-4/use-msc2026
 [gate] profile id (hard-coded here, not typed): upstream-oracle
 [gate] git status --porcelain BEFORE:
-[gate]    M scripts/UpstreamOracleFloor.java
-[gate]    M use-core/pom.xml
-[gate]    M use-gui/pom.xml
 [gate]   (nothing above == clean)
 [gate] =================================================================
 
@@ -1244,7 +1244,7 @@ point. Logs are in the driver output; what follows is pasted from it.
 [gate]   [floor] this module's upstream-oracle profile effective: false
 [gate]   [floor] mode: DEFAULT
 [gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
-[gate]   [floor] freshness stamp: 2026-08-17T16:19:07.290Z — reports older than this are stale and are NOT counted
+[gate]   [floor] freshness stamp: 2026-08-17T16:47:52.598Z — reports older than this are stale and are NOT counted
 [gate]   [floor] surefire  use-core  classes=8   (floor 8  )  methods=80   (floor 80  )  executions=80   failures=0 errors=0 skipped=0 stale-ignored=0
 [gate]   [floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
 [gate]   [floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: absent
@@ -1256,7 +1256,7 @@ point. Logs are in the driver output; what follows is pasted from it.
 [gate]   [floor] this module's upstream-oracle profile effective: false
 [gate]   [floor] mode: DEFAULT
 [gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
-[gate]   [floor] freshness stamp: 2026-08-17T16:20:04.490Z — reports older than this are stale and are NOT counted
+[gate]   [floor] freshness stamp: 2026-08-17T16:48:49.466Z — reports older than this are stale and are NOT counted
 [gate]   [floor] surefire  use-gui   classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
 [gate]   [floor] failsafe  use-gui   classes=1   (floor 1  )  methods=129  (floor 129 )  executions=129  failures=0 errors=0 skipped=0 stale-ignored=0
 [gate]   [floor] vintage-only sentinel org.tzi.use.gui.views.diagrams.util.DirectedLineTest: absent
@@ -1274,7 +1274,7 @@ point. Logs are in the driver output; what follows is pasted from it.
 [gate]   [floor] this module's upstream-oracle profile effective: true
 [gate]   [floor] mode: ORACLE
 [gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
-[gate]   [floor] freshness stamp: 2026-08-17T16:20:36.730Z — reports older than this are stale and are NOT counted
+[gate]   [floor] freshness stamp: 2026-08-17T16:49:21.514Z — reports older than this are stale and are NOT counted
 [gate]   [floor] surefire  use-core  classes=41  (floor 41 )  methods=351  (floor 351 )  executions=939  failures=0 errors=0 skipped=0 stale-ignored=0
 [gate]   [floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
 [gate]   [floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: collected
@@ -1286,7 +1286,7 @@ point. Logs are in the driver output; what follows is pasted from it.
 [gate]   [floor] this module's upstream-oracle profile effective: true
 [gate]   [floor] mode: ORACLE
 [gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
-[gate]   [floor] freshness stamp: 2026-08-17T16:21:39.334Z — reports older than this are stale and are NOT counted
+[gate]   [floor] freshness stamp: 2026-08-17T16:50:25.279Z — reports older than this are stale and are NOT counted
 [gate]   [floor] surefire  use-gui   classes=8   (floor 8  )  methods=17   (floor 17  )  executions=17   failures=0 errors=0 skipped=0 stale-ignored=0
 [gate]   [floor] failsafe  use-gui   classes=1   (floor 1  )  methods=129  (floor 129 )  executions=129  failures=0 errors=0 skipped=0 stale-ignored=0
 [gate]   [floor] vintage-only sentinel org.tzi.use.gui.views.diagrams.util.DirectedLineTest: collected
@@ -1295,12 +1295,20 @@ point. Logs are in the driver output; what follows is pasted from it.
 
 [gate] =================================================================
 [gate] git status --porcelain AFTER:
-[gate]    M scripts/UpstreamOracleFloor.java
-[gate]    M use-core/pom.xml
-[gate]    M use-gui/pom.xml
 [gate]   (nothing above == clean; report anything you did not write, never commit it)
 [gate] PASS — mode 'both': every check above held.
 [gate] =================================================================
+```
+
+Both floors met **exactly**, in both modes, for both modules and both tiers; both receipts written and
+verified on disk after Maven exited; `stale-ignored=0` everywhere; both vintage-only sentinels absent by
+default and collected under the profile. Headline executions, for the record: `939 + 17` surefire and
+`1 + 129` failsafe = **1086 executions for 498 distinct methods** under the profile. The default build is
+vintage-free from the resolved classpath, not merely from counts:
+
+```
+$ mvn -B -q dependency:list -Djava.awt.headless=true | grep -c vintage
+0
 ```
 
 ### 7.4.2 F-01 — `-Dexec.args=-version`, the command that used to silence everything
