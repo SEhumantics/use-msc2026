@@ -3,6 +3,16 @@
 **2026-08-17, branch `port-uncertainty-2`, behaviour commit `d13d4858`. Written by the porter.**
 Test-scoped throughout; `git diff --name-status 30d480db..HEAD -- '*/src/main/*'` is empty.
 
+> **Reviewed. This file is not the last word on this round.** An independent refuter re-measured all
+> four closures, reproduced the *before* state at `90404528`, confirmed **D-34**, **D-35**, **D-36** and
+> **D-18** and found no false green — and returned **`DEFECTIVE`** on one new MAJOR, canonical **D-43**:
+> the ported side's Java type is *declared* by the adapter and never *observed*, so §1.4's headline
+> figure is reproduced exactly by a **content-perfect** port with a factory-typed adapter, and erased by
+> one line of adapter code. Two MINORs came with it, **D-44** and **D-45**. Three claims in this file
+> are corrected in place below (§1.5 twice, §3.1 once); the measurements are untouched. Read
+> [`stage-01-verification-round6.md`](stage-01-verification-round6.md), and `stage-01.md` §10.4 for the
+> canonical register.
+
 Round 5 returned `SOUND_WITH_DOCUMENTED_LIMITS` from two independent reviewers and left four defects
 open that this round closes: three named preconditions on S4 quoting any number (**D-34**, **D-35**,
 **D-36**) and one detection hole that matters specifically for a port whose whole subject is the
@@ -224,6 +234,24 @@ representation choice. There is therefore no case in the shipped corpora where t
 false divergence, and the assertion fails loudly if a widened corpus ever creates one — at which
 point the justification above has to be re-read before the green is believed again.
 
+> **Two corrections annotated in place, from the round-6 refutation
+> (`stage-01-verification-round6.md` §4 and §5.2).** The **measurement** above stands — 0 of 285,
+> reproduced. Both sentences drawn from it do not.
+>
+> 1. **"There is therefore no case where this fix can raise a false divergence" is WITHDRAWN**
+>    (canonical **D-43**, MAJOR, open). This paragraph reasons about the *reference's* classes only. The
+>    ported side's class is never observed: it is whatever the adapter declares through
+>    `UValue.asJavaType(String)`. A **content-perfect** port whose adapter returns
+>    `UValue.<factory>(content)` — what `StubCandidate` does — measures `DIFFER 3 445, 182 of 285
+>    operations, stage passes 74 → 45, lost 29`, i.e. §1.4's numbers exactly; and the boxing defect plus
+>    `.asJavaType(v.javaType())` measures `DIFFER 0`. The fix has a false-divergence mode, reachable
+>    through the documented worked example.
+> 2. **"A historical operation's declared return type is a single class" is false for 84 of 285
+>    operations** (canonical **D-45**, MINOR, open): they declare an interface or a non-final class, the
+>    nine `UncertainBooleanValue`-declared ones returning `UBooleanValue` through a superclass-declared
+>    signature. The conclusion survives *because* the census measures 0 of 285, so it is a corpus fact
+>    and inherits D-30 — not a fact about the API.
+
 **The one legitimately-different representation that does exist is the package.** The historical
 classes are loaded from a vendored jar by an isolated class loader; a port that relocated
 `URealValue` into another package would, under a fully-qualified comparison, show *every row of
@@ -232,6 +260,16 @@ answered. So `canonical()` compares the **simple name**, and the fully-qualified
 `javaType()` and is what the row note prints. The cost is stated rather than hidden: two distinct
 classes sharing one simple name would compare equal, which is not a shape a port of this API takes.
 Pinned by `DifferentialHarnessRegressionTest.theTypeTokenIsPackageInsensitiveOnPurpose`.
+
+> **Correction annotated in place (canonical **D-44**, MINOR, open;
+> `stage-01-verification-round6.md` §5.1).** The rationale does not hold on the `OPAQUE` branch, and the
+> pinning test exercises only `Kind.UREAL`, whose content carries no class name. `UValue.opaque(className,
+> repr)` puts the **fully-qualified** name into the compared *content*, and
+> `HistoricalOracle.opaqueRepresentation` adds the FQNs of every field's declaring class, so a relocated
+> port **is** a divergence on every `OPAQUE` row — **197 rows across 17 operations** (`type()` /
+> `getRuntimeType()` × 16, `UIntegerValue.getuInteger()` × 1), the classes listed in the census above.
+> This is the pre-existing `OPAQUE` limit, not a scoring error; what is corrected is the claim that a
+> relocated port would be a false divergence *only* under a fully-qualified type token.
 
 ### 1.6 The goldens: what moved and why
 
@@ -372,7 +410,15 @@ nothing else, then run `UnwrittenPortInvariantTest#anUnwrittenPortAgreesWithNoth
           ==> expected: <[]> but was: <[RealValue.value()]>
 ```
 
-The same run that HEAD's own test **passes**. So, precisely:
+The same run that that tree's own test **passes**. So, precisely:
+
+> **Referent correction, annotated in place on the round-6 refuter's finding
+> (`stage-01-verification-round6.md` §3.2).** "HEAD" in this subsection and in this round's commit
+> message means **the tree at `90404528`**, which was HEAD when the work was done — *not* today's HEAD,
+> which contains the restored assertion with an empty expected set and passes. The refuter re-ran the
+> experiment on `90404528` and reproduced the failure verbatim (`expected: <[]> but was:
+> <[RealValue.value()]>`, 1 of 10 cases failing, the pre-existing assertion passing). Substance
+> confirmed; the referent as written was misleading, and these records exist to be re-run.
 
 | version | what it asserts | what it catches on that run |
 |---|---|---|

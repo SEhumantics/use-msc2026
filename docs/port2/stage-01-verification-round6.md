@@ -1,5 +1,11 @@
 # S1 round-6 empirical verification — DEFECTIVE (one new MAJOR, D-37)
 
+> **Id note, added when this report was folded into the record: the three ids below collided.**
+> `D-37`, `D-38` and `D-39` were already spent on round-5 static-review MINORs in the canonical
+> register. This report is not rewritten; its findings are canonically **D-43** (this report's `D-37`),
+> **D-44** (`D-38`) and **D-45** (`D-39`), mapped in [`stage-01.md`](stage-01.md) §10.5. A bare
+> `D-37`/`D-38`/`D-39` elsewhere in `docs/port2/` still means the round-5 MINORs.
+
 **Role.** Refuter. I did not write the round-6 fixes. I own Maven for this round.
 **Tree.** `port-uncertainty-2`, behaviour `d13d4858`, documentation `854abb83`.
 **Every number below is pasted from a run I made. Where I could not verify a claim I say so.**
