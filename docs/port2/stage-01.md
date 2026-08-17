@@ -20,6 +20,17 @@ was modified. `module-info.java` was NOT edited.**
 > **§1–§6 are left exactly as they were written.** They record what was believed on 2026-08-17
 > before the audit. **§7, appended below, is the correction and is authoritative where the two
 > disagree.** Do not read §5's "Acceptance" as a closed gate without reading §7.
+>
+> ---
+>
+> **UPDATE (later the same day) — the sentence above about D2 is superseded. Read §8, not this
+> banner, for the current verdict.** D2 was closed at the root in commit `e8b73e48`
+> (throw-agreement **deleted**, not tightened: `AGREE_THROWN` and `DIFFER_THROWN` no longer exist).
+> Two independent reviewers then found a **third** door of the same family — `VOID` vs `VOID` scored
+> `AGREE` — and **S1 is DEFECTIVE again**. Nothing in §1–§7 is deleted; §8 is authoritative over both.
+>
+> **Wherever §7 or an earlier `docs/port2/` file names `AGREE_THROWN` or `DIFFER_THROWN` as a live
+> verdict, it is describing the code as it was before `e8b73e48`. Those constants are gone.**
 
 ---
 
@@ -480,6 +491,12 @@ The figures in §5.5 are correct for what they measured and are not the whole ga
 
 ## 7.5 STILL OPEN — defect D2, same family, a door F1–F11 do not close
 
+> **SUPERSEDED — D2 was closed at the root in `e8b73e48`. See §8.1.** The section below is left
+> exactly as written; it records the state on the morning of 2026-08-17. The code it quotes no
+> longer exists: `AGREE_THROWN` and `DIFFER_THROWN` were **deleted** from `DiffVerdict`, and the
+> "minimum fix" this section proposes (compare messages too) was **rejected** as still leaving a
+> route to green without two observed values. §8 says what was done instead, and what is still open.
+
 **S1 is not "done". D2 is unfixed at the time of writing.**
 
 `DifferentialSweep.classify` decides throw-agreement on the throwable **class name alone**, and
@@ -563,3 +580,200 @@ agreeable at all. **A throw row's note should never be empty.**
   comparison happened) found by two different reviewers in two different code paths. Treat "a green
   differential run" as evidence only after asking *what the rows actually compared* — the summary
   line is not the evidence, the verdict distribution and the notes are.
+
+---
+
+# 8. AMENDMENT 2 (appended 2026-08-17, after §7)
+
+§1–§7 are unchanged. This section closes D2, records what replaced it, and states the **current**
+verdict, which is not "done".
+
+Provenance: commit `e8b73e48` (the fix); `docs/port2/stage-01-verification-round3.md` (empirical
+re-verification, commit `0af4e106`); `docs/port2/stage-01-static-review-round3.md` (an independent
+source-only review of the same commit, written by a second reviewer who never ran Maven). The two
+round-3 reviewers worked separately and **agreed on the headline finding**, which is why it is
+stated here as fact rather than as one reviewer's opinion.
+
+## 8.0 The story so far, in one place
+
+| # | Event | Instrument's claim | What was actually true |
+|---|---|---|---|
+| 1 | §1–§6: harness built, `dfc3c063` | "784 rows, AGREE=784" | true of *those* rows — but the instrument had never been asked what a green row meant |
+| 2 | **DEFECTIVE — D1**, audit `97f9f2c3` / `3cb92468` | `169 rows, AGREE_THROWN=169, disagreements 0` | **neither side ever entered `URealValue.add`.** The oracle's own marshalling failure was scored as the two implementations agreeing |
+| 3 | Fixed: F1–F11, `cf9d2f45` | D1 sweep now `169 rows, HARNESS_ERROR=169, disagreements 169` | correct, and independently reproduced (§7.4) |
+| 4 | **DEFECTIVE AGAIN — D2**, `0a3f4878` | `rows 43136, AGREE_THROWN 15081, disagreements 28055` | **15 081 of 43 136 rows (35 %) green against a `Candidate` containing no code** — every body `throw new RuntimeException("TODO: port …")`. The historical code raises bare `java.lang.RuntimeException`, and `AGREE_THROWN` matched on class name alone |
+| 5 | Throw-agreement removed **at the root**, `e8b73e48` | same sweep, widened to all 285 reachable operations: `rows 471471, agreement rows 0` | correct, and independently re-measured (§8.1) |
+| 6 | **DEFECTIVE AGAIN — the third door**, `0af4e106` + the round-3 static review | a `Candidate` whose every body is **empty** scores `AGREE=444` | **`VOID` vs `VOID` is scored as agreement.** See §8.2 |
+
+Steps 2, 4 and 6 are the same defect three times: *the absence of a measurement recorded as a
+measurement the two sides share*. Each was found by a different reviewer, in a different code path,
+after the previous one had been declared fixed.
+
+## 8.1 D2 is CLOSED — throw-agreement was deleted, not tightened
+
+§7.5 proposed a minimum fix (compare messages as well as class names). **That fix was rejected**,
+because a port could still be green on rows where nothing was compared. What landed instead:
+
+| | Fix in `e8b73e48` |
+|---|---|
+| **FIX 1** | **`AGREE_THROWN` and `DIFFER_THROWN` are deleted from `DiffVerdict`.** Both throw-outcomes collapse into one verdict `BOTH_THREW`, whose `isAgreement()` is `false`, so a throw-pair lands in `disagreements()` and can never accumulate into a green number. Its note is **never empty**: it always carries both throwable classes *and* both messages. The class-name comparison is not lost — both result columns already render `THROWN:<class>` per side — it is simply no longer disguised as a finding |
+| **FIX 1a** | `AcceptedThrowPairs` is the explicit, opt-in escape hatch: a throw-pair may be adjudicated an agreement only by an entry keyed on operation **+ both throwable classes + both messages verbatim**, which is refused without a written rationale, and that rationale is copied into the note of every row it adjudicates. Default is `AcceptedThrowPairs.none()` everywhere |
+| **FIX 2** | `UnwrittenPortInvariantTest` — a **standing invariant** rather than another per-route regression test: a `Candidate` that implements nothing must produce **zero** agreement rows. It enumerates operations by reflection from the historical jars and takes corpora from `InputGenerator`'s own accessors, so it widens by itself as the harness widens |
+| **D-1** | Two `Candidate`s returning Java `null` both raised `NullPointerException` — matching class names. A `null` return is now a `HarnessMarshallingException` → `HARNESS_ERROR` |
+| **D-2** | The marshalling invariant was stated on `HistoricalOracle` only, so two `StubCandidate`s reproduced the D1 tally verbatim. The invariant moved onto the `Candidate` interface and the shipped stub obeys it |
+| **D-3** | The `UNSUPPORTED` note asserted "historical does not implement `SBooleanValue.and(value)`" — `javap` on the loaded jar shows it does. New `Candidate.unsupportedReason(UOp)`; the oracle now says "this harness cannot marshal a `SBooleanValue` receiver … a limit of the instrument" |
+| **D-4** | `supportsSwallowsOnlyAMissingMethod` was a tautology (§7.5). Rewritten around a **closed** oracle, and verified to fail on both pre-fix variants |
+
+**Re-measured independently by the round-3 empirical verifier, not taken on trust** — probes compiled
+and run with `java` directly, from outside the repository, against the built test classes:
+
+```
+### SUBJECT: A. every body throws (the porter's subject)  (unwritten-port)
+    rows            471471
+    agreement rows  0
+    verdict tally   {BOTH_THREW=30580, HARNESS_ERROR=388695, MIXED=52196}
+    INVARIANT (agreement==0): HOLDS
+```
+
+`21816 + 8764 == 30580`: **no row changed population, only the claim made about it.** The static
+reviewer separately corroborated the pre-fix mechanism in bytecode — `javap -c` on the vendored jar
+shows historical `UIntegerValue.power` constructing a bare `java.lang.RuntimeException` with the
+exact quoted message that a `TODO: port …` stub matched on.
+
+Also confirmed by re-measurement: `AGREE_THROWN` / `DIFFER_THROWN` are absent from
+`DiffVerdict.values()`; `agreements().size() + disagreements().size() == rowCount()` on every probe
+run; a byte-perfect port (a second `HistoricalOracle`) yields **`DIFFER=0` over 471 471 rows**, so
+`UValue.canonical()`'s exact `Double.toString` comparison generates no spurious noise; four of five
+planted defects are reported as divergence; and `AcceptedThrowPairs` cannot be made over-broad —
+wildcard-shaped entries (`*`, `UIntegerValue.*`, `refMsg='*'`) all adjudicate **0** rows against a
+real 208-row sweep, because matching is exact string equality over all five discriminators.
+Re-greening the whole unwritten port through the allowlist would take **291 separately authored,
+separately reviewable entries covering 39 operations**. That is real, working friction.
+
+**Build state at `e8b73e48`, measured twice from `mvn -q clean`:**
+
+```
+mvn -B verify -Djava.awt.headless=true
+  surefire 46  (45 use-core + 1 use-gui)   failsafe 130  (1 use-core + 129 use-gui)   = 176
+  0 failures, 0 errors, 0 skipped
+```
+
+Delta `169 → 176` fully accounted: `DifferentialHarnessRegressionTest` 11→16 (+5),
+`UnwrittenPortInvariantTest` 0→2 (+2); smoke and isolation unchanged at 6 and 9. Two clean runs
+produced **byte-identical** reports (checked with `cmp`), both goldens match byte-for-byte, and
+`git diff --name-status 30d480db..HEAD -- '*/src/main/*'` is **EMPTY**.
+
+## 8.2 CURRENT VERDICT — **DEFECTIVE. A third door was found.**
+
+**S1 is not sound.** The harness can still report agreement where it observed no value at all — this
+time without any throw, any marshalling failure, or any `null`. It goes through `AGREE` itself.
+
+### D-10 (CRITICAL) — `VOID` vs `VOID` is scored `AGREE`
+
+`DifferentialSweep.classify` ends:
+
+```java
+// use-core/src/test/java/org/tzi/use/uncertainty/differential/DifferentialSweep.java:222
+boolean agree = ref.value.canonical().equals(sub.value.canonical());
+```
+
+`UValue.canonical()` renders `Kind.VOID` as the constant string `"VOID"` (`UValue.java:260-261`),
+and `isAgreement()` admits `AGREE` (`DiffVerdict.java:109-111`). `HistoricalOracle.invoke` returns
+`UValue.voidValue()` for any void-returning method **on the strength of
+`method.getReturnType() == void.class` alone, without inspecting any outcome** — and `Candidate`'s
+own contract Javadoc instructs the S4 adapter to "use `UValue.voidValue()` for a void operation".
+So **every void row is green by construction**, on both sides, for any subject that follows the
+documented contract.
+
+Measured over the same 285-operation / 471 471-row sweep the standing invariant runs:
+
+```
+### SUBJECT: C. every body EMPTY -> UValue.voidValue()  (do-nothing-port)
+    rows            471471
+    agreement rows  444
+    verdict tally   {AGREE=444, DIFFER=51752, HARNESS_ERROR=388695, MIXED=30580}
+    68	IntegerValue.setTypeToRuntimeType()	INTEGER(0)	VOID	VOID	AGREE
+    INVARIANT (agreement==0): *** VIOLATED ***
+```
+
+All 444 are *every* row of *every* void operation the harness can currently reach:
+
+```
+   144  URealValue.setTypeToRuntimeType()       54  UBooleanValue.setTypeToRuntimeType()
+   102  UStringValue.setTypeToRuntimeType()     48  IntegerValue.setTypeToRuntimeType()
+    90  UIntegerValue.setTypeToRuntimeType()     6  RealValue.setTypeToRuntimeType()
+```
+
+Eight void operations are reachable in total; `BooleanValue` / `StringValue.setTypeToRuntimeType()`
+land on `HARNESS_ERROR` today only because the shipped corpora contain no `BOOLEAN` or `STRING`
+receiver. **Widening `MARSHALLABLE_RECEIVERS` or the corpora widens this defect.**
+
+This is verbatim the rule `DiffVerdict` was rewritten in `e8b73e48` to enforce
+(`DiffVerdict.java:7-10`): *"A differential oracle may report agreement only where it observed two
+comparable values."* `UValue.java:59-67` defines `VOID` as *"there is no result to compare"*.
+`UNSUPPORTED` and `HARNESS_ERROR` were each carved out as distinct **non**-agreements for exactly
+this reason. `VOID` was not.
+
+**The aggravating detail.** `UValue.java:62-66` and `DifferentialHarnessRegressionTest.java:422-423`
+both name "an empty-bodied ported mutator agreed with the historical one on every row, forever" as
+the defect the `NULL` / `VOID` split closed. Measured, that consequence is still true: before the
+split both sides rendered `NULL` and agreed unconditionally; after it both render `VOID` and agree
+unconditionally. The split usefully separates a void result from a genuine `null` result — it buys
+nothing against the defect its own comment claims it fixed.
+
+**Why the standing invariant missed it.** `UnwrittenPortInvariantTest` instantiates **one** encoding
+of "implements nothing": a subject whose every body throws. A second, equally natural encoding —
+every body empty, which is literally what the `Candidate` Javadoc tells the S4 author to write —
+violates the invariant by 444 rows. The test's own Javadoc diagnoses this exactly: *"Pinning each
+route with its own regression test is chasing instances … The invariant closes the whole family."*
+It does not close the family; it pins one more instance.
+
+### The rest of what round 3 found
+
+| Finding | Sev | Where | Statement |
+|---|---|---|---|
+| **D-10** | CRITICAL | `DifferentialSweep.java:222` | above. **Reached independently by both round-3 reviewers.** |
+| **D-11a** | MAJOR | `UnwrittenPortInvariantTest.java:23` | The invariant's headline claim ("over every operation … and every input corpus it ships") is **false as written** — it quantifies over operations and corpora but not over *subjects*. Fix: run it over a list of degenerate candidates (throws / Java `null` / `nullValue()` / `voidValue()`) |
+| **D-11b** | MAJOR | `DiffReportWriter.java:96` | The zero-row guard counts **rows, not measurements**. `if (rowTotal == 0) throw …` refuses a report about nothing, but accepts a report with many rows and zero comparisons. A void-only sweep writes headers reading `# rows.agreement 72 / # rows.disagreement 0 / # verdict.AGREE 72` over zero comparisons. Round 2 added those headers so "a reader never has to infer greenness from verdict names again" — here the header states the misleading number outright, which is strictly worse |
+| **D-11c** | MAJOR | `DifferentialSweep.java:186-199` | The `HARNESS_ERROR` note says "no measurement on either side" and then quotes exactly **one** message — the reference's — unattributed; both columns carry the identical `HarnessMarshallingException` class name, so the subject's failure reason is unrecoverable from the report. This is the same evidence-destruction the sibling `BOTH_THREW` branch **ten lines below** was rewritten in this very commit to eliminate |
+| **D-12a** | MAJOR | `DifferentialSweep.java:334` | The zero-row trap is still open at the **`Result`** level; round 2 guarded only `DiffReportWriter`. There is no `measuredRowCount()`, no `assertMeasured()`, and `agreementCount() == 0` is equally consistent with "nothing ran" and "everything diverged". Not hypothetical framing: a byte-perfect port yields 419 275 non-agreement rows of 471 471 (88.9 %), so `disagreements().isEmpty()` is unreachable for any real sweep and its only surviving uses are the degenerate ones |
+| **D-12b** | MAJOR | `AcceptedThrowPairs.java` | **Committed as a binary file.** Six raw `NUL` bytes sit in `char` literals instead of the escape. Legal Java, correct behaviour — and `git show --stat e8b73e48` reports `Bin 0 -> 6884 bytes`, `git show -p` prints `Binary files … differ`, and `git grep` finds nothing in it. **Re-verified directly while writing this section.** The class it hides is the *only* remaining route by which a run can score green without two observed values, and the porter's own hand-off describes its safeguard as "social (a reviewed, written rationale per exact pair)". A safeguard enforced by human review has been committed in the one encoding that defeats human review. Fix: use the two-character escape, or a printable separator such as a pipe; the separator is internal to the map key |
+| **D-13a** | MINOR | `DiffVerdict.java:74` | Deleting `DIFFER_THROWN` removed the only **aggregated** signal for a wrong-exception-class defect. Right failure, wrong throwable type is now bit-identical to a correct port in `tally()`, `count()`, `rowCount()`, `agreementCount()`, `disagreements().size()` and every `# verdict.*` / `# rows.*` header. Visible at row level and caught by a golden byte-diff; **invisible to any sweep that tallies without a golden** — which includes the invariant sweep |
+| **D-13b** | MINOR | `StubCandidate.java:116-118` | Three exits were converted to `HarnessMarshallingException`; a **fourth** still raises `UnsupportedOperationException`, and the class comment added in the same commit says "the three failure exits below". Unreachable through a sweep today because `supports()` is consulted first, but the two are kept in sync by hand |
+| **D-14** | MINOR | `DiffReportWriter.java:94-162` | The report never records **which allowlist was in force**. `AcceptedThrowPairs.describe()` — whose Javadoc says it is "for a report header or a stage document" — is called from nowhere, and `# verdict.ACCEPTED_THROW` is emitted only when non-zero. A run with a non-empty allowlist that adjudicates zero rows is byte-indistinguishable from a run with `none()` |
+| **D-15** | MINOR | `DiffReportWriter.java:196` | = §7.5's "byte for byte" MINOR, re-confirmed unfixed. `assertMatchesGolden` compares `Files.readAllLines`, blind to line terminators and to a missing final newline. Both round-3 byte-identity claims deliberately use `sha256sum` / `cmp` instead of this method |
+| **D-16** | MINOR | `DifferentialSweep.java:215-221` | The `MIXED` note does not name **which** side threw. Recoverable from the columns, so far weaker than D-11c — but `MIXED` is 52 196 rows of the invariant sweep and the note could say "reference" / "subject" at no cost |
+
+*Numbering note.* The two round-3 reviewers both reached D-10 independently and then diverged in
+their numbering of the rest. The suffixed ids above are this document's; each row names the
+file:line, so there is no ambiguity about which finding is meant.
+
+## 8.3 What must be true before S4 may use this instrument
+
+1. **`VOID` must stop being an agreement.** Either a distinct non-agreement verdict — the shape
+   already used for `UNSUPPORTED` and `HARNESS_ERROR`, e.g. `NO_OBSERVABLE_RESULT` — or an explicit
+   `AcceptedVoidOperations` sign-off mirroring `AcceptedThrowPairs`. **Do not** fix it by excluding
+   void operations from the inventory: that hides the row instead of classifying it, which is the
+   mistake round 1 made.
+2. **The invariant must quantify over subjects, not name one.** Throws / returns Java `null` /
+   returns `nullValue()` / **returns `voidValue()`**, each asserted to zero agreement.
+3. **`Result` needs a measurement floor** — a `measuredRowCount()` counting only rows where two
+   values were observed, and a guard a stage can assert. Move the writer's guard onto that quantity
+   so an all-`VOID` report is refused.
+4. **Correct the two comments that claim the empty-mutator defect is closed** (`UValue.java:62-66`,
+   `DifferentialHarnessRegressionTest.java:422-423`). They are part of why the defect survived a
+   review: a reader who checks whether it was handled finds a sentence saying yes.
+5. **De-binarise `AcceptedThrowPairs.java`**, and consider a `.gitattributes` (`*.java text
+   diff=java`) so this cannot recur silently — the repository currently has none.
+
+## 8.4 The standing lesson, restated
+
+§7.6's closing note said the harness had had **two** defects of the identical shape. It has now had
+**three**, found by three different reviewers in three different code paths, each after the previous
+one had been declared fixed. The invariant introduced to end the pattern was itself an instance of
+the pattern.
+
+**No number this harness produces is evidence until you can name the two values that were compared
+to produce it.** For S4–S7 that means a stage may not report a fidelity figure from a tally alone.
+It must report, alongside it, how many rows were *measurements* — and until D-10 and D-12a are
+fixed, the harness cannot answer that question.
