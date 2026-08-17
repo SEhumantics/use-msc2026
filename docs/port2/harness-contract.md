@@ -59,6 +59,18 @@ of findings.**
 scripts/upstream-oracle-gate.sh          # THE acceptance gate. This, verbatim, is what a stage quotes.
 ```
 
+> **READ [`gate-threat-model.md`](gate-threat-model.md) BEFORE EXTENDING OR ARGUING WITH THIS GATE.**
+> *(Added 2026-08-18, round 12.)* That file is normative and it is short. It names, concretely, the
+> eight accidents this gate exists to catch and the mechanism and round for each; it states what the
+> gate deliberately does **not** defend against — an operator who injects `-D` properties to disable
+> their own acceptance check — and why declining that is the right call; and its §3 **lists every
+> known bypass**, so that "out of scope" can never be mistaken for "unknown". Its §4 is the rule for
+> S3–S10 and it repeats what follows here.
+>
+> Its central sentence, which this section is an instance of: **`scripts/upstream-oracle-gate.sh`
+> *is* the gate; the in-build binding is defence in depth against accidents; and a number produced
+> by any other invocation is not a gate result and may not be quoted as one.**
+
 > **ADDED 2026-08-17, round 11, defect F-02** (`upstream-oracle-floor-verification.md` §3.5). The gate
 > used to be two hand-typed commands. Maven only **warns** about an unknown `-P` id and then builds on,
 > and the floor cannot detect a request it never saw, so `mvn -B verify -Pupstream-oracle-typo` was
@@ -128,12 +140,35 @@ What a stage must know about the floor, because these are the ways a green build
 * **No command-line property can switch the floor off, and trying is a build failure.** *(round 11,
   F-01.)* `-Dexec.args=-version` used to produce `BUILD SUCCESS` with **zero** `[floor]` lines and a
   clean `git status`: `exec:exec`'s `commandlineArgs` parameter carries the user property `exec.args`
-  and *replaces* the configured argument list, so `java -version` ran instead of the checker. All seven
-  overridable parameters are now pinned in both poms, all eight `exec.*` user properties are handed back
+  and *replaces* the configured argument list, so `java -version` ran instead of the checker. Seven
+  overridable parameters are pinned in both poms, eight `exec.*` user properties are handed back
   to the checker and any one of them **fails** the build, and
   `use-core/src/test/java/org/tzi/use/uncertainty/gate/UpstreamOracleGateWiringTest.java` re-asserts that
   wiring from the `test` phase, where no `exec-maven-plugin` property reaches. A guard the guarded party
   can turn off is not a guard.
+  > **CORRECTED 2026-08-18, round 12.** Two claims in the bullet above were **false** as written and
+  > are now true.
+  > (a) *"seven **overridable** parameters"* / *"**all** eight `exec.*` user properties"* —
+  > `exec:exec` declares **22** parameters carrying a user-property expression (round 11 **G-03**;
+  > the refuter said 21 while pasting 22; **22** is the measured figure, `upstream-oracle-profile.md`
+  > §5.2.1). Seven are pinned, eight are detected, **fourteen are neither, deliberately**
+  > ([`gate-threat-model.md`](gate-threat-model.md) §3 R-3).
+  > (b) *"any one of them **fails** the build"* — round 11 **G-01** made that false on four routes:
+  > `-Dexec.args='x --stamp=true'`, `-Duse.floor.allowProfiles='x --stamp=true'`,
+  > `-Duse.upstreamOracle.effective='false --stamp=true'` and `-Dexec.outputFile='…${z}…'` were each
+  > green, exit 0, with **no receipt** or a `verdict=PASS` one. All four are closed
+  > (`upstream-oracle-profile.md` §5.2.6): the checker now validates its **entire argv** and matches
+  > it against an **exact option set** before choosing a mode, and tests set/unset by exact
+  > placeholder-equality rather than `contains("${")`. Each of the four is now `FATAL` exit 2 or
+  > `verdict=FAIL`, `BUILD FAILURE`.
+* **A truncated lifecycle no longer outruns the gate's profile check.** *(round 11, G-04.)*
+  `mvn -B test -Pupstream-oracle-typo` used to be `BUILD SUCCESS`, exit 0, with **no floor check at
+  all** — the whole gate bound at `verify`. The unactivatable-profile check is now **also bound at
+  `initialize`**, so it fires under `test`, `compile` and `package` too. **The count floors still
+  bind only at `verify`: `mvn test` remains not a gate**, and the wrapper remains the gate.
+* **The allow-set escape hatch leaves a trace.** *(round 11, G-05.)* `-Duse.floor.allowProfiles`
+  widens check B2; it is now echoed in the log and recorded in the receipt as `allow-profiles=…`, and
+  the wrapper **requires** `allow-profiles=(none)` on an acceptance run.
 * **A partial reactor never says `PASS`.** *(round 11, F-03.)* `-pl use-core -Pupstream-oracle` used to
   print an unqualified `PASS` for half a gate; it now prints `PARTIAL`, records `verdict=PARTIAL` in the
   receipt, and the wrapper rejects it. `-pl` is fine for iteration and is never acceptance.

@@ -713,9 +713,54 @@ Both are now red. What follows is the mechanism, then the measurement.
 
 ### 5.2.1 F-01 — three independent mechanisms, because one is a single point of failure
 
-`exec:exec` declares **eight** parameters with user properties that could silence or divert the floor.
-Pinning `<skip>false</skip>` closed one of the eight. The others include `commandlineArgs`
-(`exec.args`), which does not merely *configure* the argument list — it **replaces** it.
+> **CORRECTED 2026-08-18, round 11 defect G-03, and the refuter's own count corrected in turn.**
+> This section said `exec:exec` declares "**eight**" parameters with user properties. Round 11's
+> refuter said **21**, having pasted a list of 22. The measured number is **22**. Counted from the
+> descriptor, not recalled:
+>
+> ```
+> $ unzip -p ~/.m2/repository/org/codehaus/mojo/exec-maven-plugin/3.5.0/exec-maven-plugin-3.5.0.jar \
+>       META-INF/maven/plugin.xml    # mojo goal=exec; parameters whose <configuration> body holds a ${...}
+> total exprs: 22
+> editable (settable from -D): 22
+>    1. addOutputToClasspath           ${addOutputToClasspath}
+>    2. addResourcesToClasspath        ${addResourcesToClasspath}
+>    3. commandlineArgs                ${exec.args}
+>    4. async                          ${exec.async}
+>    5. asyncDestroyOnShutdown         ${exec.asyncDestroyOnShutdown}
+>    6. classpathScope                 ${exec.classpathScope}
+>    7. executable                     ${exec.executable}
+>    8. forceJava                      ${exec.forceJava}
+>    9. includePluginDependencies      ${exec.includePluginsDependencies}
+>   10. inheritIo                      ${exec.inheritIo}
+>   11. longClasspath                  ${exec.longClasspath}
+>   12. longModulepath                 ${exec.longModulepath}
+>   13. outputFile                     ${exec.outputFile}
+>   14. quietLogs                      ${exec.quietLogs}
+>   15. skip                           ${exec.skip}
+>   16. timeout                        ${exec.timeout}
+>   17. toolchain                      ${exec.toolchain}
+>   18. toolchainJavaHomeEnvName       ${exec.toolchainJavaHomeEnvName}
+>   19. useMavenLogger                 ${exec.useMavenLogger}
+>   20. workingDirectory               ${exec.workingdir}
+>   21. sourceRoot                     ${sourceRoot}
+>   22. testSourceRoot                 ${testSourceRoot}
+> read-only: 0 []
+> ```
+>
+> Twenty are `exec.*`; two are unprefixed. **Seven** are pinned, **eight** are handed to check A2,
+> **fourteen** are neither — and that residual is **deliberate and listed**, not overlooked. See
+> [`gate-threat-model.md`](gate-threat-model.md) §2 and §3: closing the other fourteen would defend
+> the in-build binding against an operator who hand-types a `-D` to disable their own acceptance
+> check, and that is not the adversary this gate exists for. The wrapper still fails such a run.
+>
+> The claim below that "**any** set property fails the build" was also refuted for a different
+> reason (G-01/G-02) and is **now true**, since 2026-08-18 — see §5.2.6.
+
+`exec:exec` declares **22** parameters with user properties, of which **eight** could silence or
+divert the floor and are handled here. Pinning `<skip>false</skip>` closed one of the eight. The
+others include `commandlineArgs` (`exec.args`), which does not merely *configure* the argument list —
+it **replaces** it.
 
 1. **Pin all seven pinnable parameters, in both executions of both poms** — `skip`, `commandlineArgs`,
    `async`, `timeout`, `quietLogs`, `executable`, `workingDirectory`. A POM `<configuration>` element
@@ -743,6 +788,25 @@ Pinning `<skip>false</skip>` closed one of the eight. The others include `comman
 and the eight `--exec-*` options — all required, no others accepted. An unknown option, a missing option,
 a duplicate, or a leading token that is not an option is **FATAL: exit 2, no receipt, build fails**.
 It cannot defend itself against not being invoked at all; that is what mechanisms 3 and 4 are for.
+
+### 5.2.6 G-01, G-02, G-04, G-05 — closed 2026-08-18 (round 12)
+
+Round 11's independent refutation (`upstream-oracle-gate-round11.md`) broke the *in-build* binding on
+four routes. All four are closed; the ordering defect that made them possible is closed structurally.
+
+| id | what it was | what closes it |
+|---|---|---|
+| **G-01** (CRITICAL) | `mvn -B verify -Dexec.args='x --stamp=true'` → **exit 0, BUILD SUCCESS**, four `[floor] wrote freshness stamp` lines and nothing else, **no receipt**. `exec:exec` splits `<commandlineArgs>` *after* Maven interpolates it, so an operator-set property contributed extra argv tokens; `main` tested `opt.containsKey("stamp")` **before** the argv was fully validated, so the verify-phase execution rewrote the stamp and returned 0, skipping checks A, A2, B, B2, the floors, the sentinel and the receipt. Reproduced identically through `use.floor.allowProfiles` and `use.upstreamOracle.effective`. | **Exact-set argv matching, and validation before dispatch.** `UpstreamOracleFloor.parseArgs` now parses only; `validateArgv` then (1) rejects any option *value* that itself parses as an option, (2) requires the option-name set to equal `STAMP_OPTIONS` or `CHECK_OPTIONS` **exactly**, (3) only then chooses a mode. `stamp` is simply not a legal name in a check argv. All three routes are now `FATAL`, exit 2, **no receipt**, `BUILD FAILURE`. |
+| **G-02** (MAJOR) | `-Dexec.outputFile='/tmp/floorhide${z}.txt'` → green, `verdict=PASS`, **zero** `TAMPERING` violations, `[floor]` absent from a 1463-line log. The set/unset test was `value.contains("${")`, so any value *containing* the opener read as *unset* — against the one exec parameter that cannot be pinned, for which detection is the whole defence. | The test is exact: unset means the value **is** the whole placeholder, `"${" + property + "}"`, end to end (`isSet`). The same run is now `verdict=FAIL`, one `TAMPERING` violation, `BUILD FAILURE`. |
+| **G-04** (MINOR, the realistic accident) | `mvn -B test -Pupstream-oracle-typo` → **BUILD SUCCESS, exit 0, no floor check at all**, the typo one `[WARNING]` in a 1393-line log. The whole gate bound at `verify`, which a truncated lifecycle outruns. | The unactivatable-profile check is **also bound at `initialize`** — the second phase of the default lifecycle, which every truncatable lifecycle still reaches. Both poms' `upstream-oracle-floor-stamp` execution now passes `--reactor-root`, `--requested` and `--allow-profiles`; `checkWiring` and `UpstreamOracleGateWiringTest` each require those three tokens **twice** per pom, so removing the initialize-phase copy fails the build. |
+| **G-05** (MINOR) | `-Duse.floor.allowProfiles` widens check B2 and was echoed **nowhere** — not the log, not the receipt — so a widened allow-set left no trace in a green run. | Echoed in the `initialize` line, in the check's own header, and recorded in the receipt as `allow-profiles=…`, with `<-- CHECK B2 WAS WIDENED BY THE COMMAND LINE` when non-empty. `scripts/upstream-oracle-gate.sh` now **requires** `allow-profiles=(none)` in each receipt, so forwarding that property through the wrapper fails the gate. |
+
+**G-03's factual half** is corrected in the box at the head of §5.2.1. Its *mechanism* half —
+`-Dexec.useMavenLogger=true` re-prefixing every line to `[INFO] [floor] …`, blinding the wrapper's
+two anchored greps — is **out of scope and listed as residual**
+([`gate-threat-model.md`](gate-threat-model.md) §3, R-3): the wrapper still fails such a run on its
+announce-count and receipt checks, and defeating it requires a hand-typed `-D` that no honest
+workflow produces.
 
 ### 5.2.2 F-02 — the gate is an invocation, not a command you type
 
