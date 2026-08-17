@@ -524,17 +524,37 @@ plus a second execution `upstream-oracle-floor-stamp` at phase `initialize`. It 
 **Why this design and not the two alternatives.**
 
 * *A Jupiter test using the JUnit Platform Launcher to discover upstream tests and assert the count*
-  was the most attractive option and it **cannot** enforce the `use-gui` floor. A test can only live in
-  `use-core/src/test` — **ground rule 2 forbids adding anything under `use-gui/src`** — and from there
-  it can see neither `use-gui`'s test classpath nor `use-gui`'s reports, which do not exist yet when
-  `use-core` runs. It also could not see the failsafe tier at all. And a new test class would change
-  the very counts being asserted: the default build must stay at **exactly 210** methods, so **no test
-  was added in this round** and the totals are unmoved.
+  cannot enforce the `use-gui` **counts**. A test can only live in `use-core/src/test` — **ground rule 2
+  forbids adding anything under `use-gui/src`** — and from there it can see neither `use-gui`'s test
+  classpath nor `use-gui`'s reports, which do not exist yet when `use-core` runs. It also could not see
+  the failsafe tier at all.
+
+  > **CORRECTED 2026-08-17 (round 11, defect F-01).** The rest of this bullet used to read *"a new test
+  > class would change the very counts being asserted: the default build must stay at **exactly 210**
+  > methods, so **no test was added in this round** and the totals are unmoved."* That reasoning was
+  > wrong, and it cost the gate its floor: with no test in the tree, the whole check hung off one
+  > `exec-maven-plugin` binding, and `-Dexec.args=-version` switched it off from the command line with
+  > no edit to any file. **Correctness beats a round number.** Round 11 adds
+  > `use-core/src/test/java/org/tzi/use/uncertainty/gate/UpstreamOracleGateWiringTest.java` — one class,
+  > **one** test method — and re-pins the floors in the same commit: `210 → 211` and `497 → 498`. A test
+  > cannot assert `use-gui`'s counts, and it does not try; it asserts **both poms' WIRING**, which is
+  > exactly the division of labour the gate needed, because wiring is the thing a command-line property
+  > can strip.
 * *A committed script that the gate is merely "defined as running"* re-creates the defect one level up:
-  a check a human must remember to run is a human-read number with extra steps.
-* **A build binding is the only shape that fails by itself.** The check runs because `mvn verify` runs
-  it, in the default build as well as under the profile, with `<skip>false</skip>` pinned in the POM so
-  `-Dexec.skip=true` cannot silence it (a POM configuration value overrides a user property).
+  a check a human must remember to run is a human-read number with extra steps — **so the script is not
+  a substitute for the build binding, and since round 11 it is not an alternative to it either but an
+  addition** (§5.2, defect F-02): the build binding cannot see a `-P` id Maven never accepted, and a
+  script is the only place the profile id can be written down once.
+* **A build binding is the shape that fails by itself** — necessary, and on its own **not sufficient**.
+  The check runs because `mvn verify` runs it, in the default build as well as under the profile.
+
+  > **CORRECTED 2026-08-17 (round 11, defect F-01).** This bullet used to end *"with `<skip>false</skip>`
+  > pinned in the POM so `-Dexec.skip=true` cannot silence it (a POM configuration value overrides a user
+  > property)"*, and `use-core/pom.xml` carried the same sentence. Every word of it is true **of `skip`**
+  > and was false **of the check**: `exec:exec` has seven other overridable parameters, and
+  > `commandlineArgs` — user property `exec.args` — *replaces* the configured `<arguments>` list, so
+  > `mvn -B verify -Dexec.args=-version` ran `java -version` in place of the checker: `BUILD SUCCESS`,
+  > exit 0, **zero** `[floor]` lines, clean `git status`. See §5.2 for what replaced it.
 
 **How the `use-gui` floor is enforced despite ground rule 2 — the crux.** Two mechanisms, neither of
 which needs a file under `use-gui/src`:
@@ -555,8 +575,12 @@ shrink.
 
 | | `use-core` surefire | `use-gui` surefire | `use-core` failsafe | `use-gui` failsafe | total |
 |---|---|---|---|---|---|
-| DEFAULT mode | 7 classes / 79 methods | 1 / 1 | 1 / 1 | 1 / 129 | **10 / 210** |
-| ORACLE mode | 40 / 350 | 8 / 17 | 1 / 1 | 1 / 129 | **50 / 497** |
+| DEFAULT mode | 8 classes / 80 methods | 1 / 1 | 1 / 1 | 1 / 129 | **11 / 211** |
+| ORACLE mode | 41 / 351 | 8 / 17 | 1 / 1 | 1 / 129 | **51 / 498** |
+
+*(**RE-PINNED 2026-08-17, round 11.** Was `7/79` → `10/210` and `40/350` → `50/497`. The `+1/+1` in the
+`use-core` surefire cell is `UpstreamOracleGateWiringTest`, the F-01 fix — raised in the same commit that
+grew the suite, which is what §8 step 7 clause 1 requires. No floor was lowered.)*
 
 **Per module and per tier, because a reactor-wide total is not a floor:** `use-core`'s 350 dwarf
 `use-gui`'s 17, so one number would stay green through exactly the accident D-01 describes. Losing any
@@ -565,9 +589,24 @@ one of the four populations fails.
 * **A — WIRING** (both poms, every run, both modes). The `<profiles>` element and `<id>upstream-oracle</id>`
   exist; `junit-vintage-engine` is declared **inside** the profile and **nowhere else** (so the default
   build cannot inherit it); no profile is `activeByDefault`; the effectiveness property is set; both
-  floor executions are bound at the right phases; `<skip>false</skip>` is still pinned. Matching is done
-  on the pom text with XML comments stripped and whitespace removed, so reformatting does not fool it
-  and the pom's own prose cannot satisfy it.
+  floor executions are bound at the right phases; **all seven overridable `exec:exec` parameters are
+  pinned in both executions** (`skip`, `commandlineArgs`, `async`, `timeout`, `quietLogs`, `executable`,
+  `workingDirectory`); the verify execution passes every `exec.*` user property and the profile allow-set
+  back to the checker; and the two other halves of the gate exist on disk —
+  `use-core/src/test/.../UpstreamOracleGateWiringTest.java` and `scripts/upstream-oracle-gate.sh`
+  *(round 11, F-01/F-02)*. Matching is done on the pom text with XML comments stripped and whitespace
+  removed, so reformatting does not fool it and the pom's own prose cannot satisfy it.
+* **A2 — TAMPERING** *(round 11, F-01)*. `exec-maven-plugin` is bound in this reactor to the floor and to
+  nothing else, so **any** `-Dexec.*` on the command line is an attempt on the gate and is a violation in
+  its own right, even though the pins already make it inert. `exec.outputFile` is the one parameter with
+  no pinnable value, so for it detection is the whole defence. *Pinning makes an attack inert; A2 makes it
+  loud, and F-01 was a silence nobody noticed.*
+* **B2 — AN UNACTIVATABLE REQUESTED PROFILE** *(round 11, F-02)*. Every `<id>` declared inside a
+  `<profiles>` element of any reactor pom is collected — the same text parse check A already ran — and a
+  requested `-P` id matching none **fails the build**. Round 10 §3.5 item 3 said the earlier refusal to do
+  this ("the checker would have to know every legitimate profile id, which it cannot") was refutable, and
+  it was right. So even the hand-typed `mvn -Pupstream-oracle-typo` is now red. `-Duse.floor.allowProfiles=<id>`
+  widens the allow-set and nothing else, for a future machine that declares profiles outside this reactor.
 * **B — REQUESTED vs EFFECTIVE.** `--requested=${session.request.activeProfiles}` is the **reactor-wide
   `-P` list from the command line**, which no per-module pom edit can change; `--effective` comes from
   `use.upstreamOracle.effective`, which only a module's own profile block sets to `true`. **Requesting
@@ -597,18 +636,29 @@ are reported as `stale-ignored=N`. **A floor computed over stale evidence is not
 
 1. **It cannot tell a real assertion from a vacuous one.** It counts *collected methods*. §4.6 caveat 1
    stands unchanged: 21 of the revived 287 assert nothing, and the assertion-bearing figure is an upper
-   bound of **266**. A floor of 350 methods is a floor on *discovery*, not on *scrutiny*.
+   bound of **266**. A floor of 351 methods is a floor on *discovery*, not on *scrutiny*. **Whole-gate
+   asserting figures, added here 2026-08-17 (F-04): 199 of the default build's 211 methods and 465 of the
+   profile's 498 can fail** — the six ArchUnit classes call `.evaluate()` and never `.check()`, so 12 of
+   the default gate's methods and 33 of the profile's assert nothing
+   (`upstream-oracle-verification.md` **R-5**). `harness-contract.md` §0.1 carries the same figures and is
+   normative.
 2. **It cannot detect a test that is silently weakened in place.** Upstream tests are never edited
    (ground rule 3, verified against `upstream-main` in §6), so a weakening edit would show as a
    `git diff`, not as a count change — but the count floor is blind to it. The class/method count is
    the same whether an assertion passes or was deleted from a body.
-3. **It cannot survive the deletion of both bindings.** Removing the `<profiles>` block from either pom
-   fails, in both modes, from either module's run. Removing the **exec plugin executions from both
-   poms** disables the floor entirely, and nothing in the reactor then checks it. That is a two-file,
-   clearly visible edit rather than a plausible merge accident, and it is the residual hole: the floor
-   defends the profile, and the wiring check defends the floor, but nothing outside the poms defends the
-   wiring check. A pom-shape assertion in `use-core/src/test` would close it and was rejected only
-   because it would move the 210.
+3. ~~**It cannot survive the deletion of both bindings.**~~ **CLOSED 2026-08-17 (round 11).** This item
+   used to read: *"Removing the exec plugin executions from both poms disables the floor entirely, and
+   nothing in the reactor then checks it. … it is the residual hole: the floor defends the profile, and
+   the wiring check defends the floor, but nothing outside the poms defends the wiring check. A pom-shape
+   assertion in `use-core/src/test` would close it and was rejected only because it would move the 210."*
+   That assertion now exists — `UpstreamOracleGateWiringTest` — and the hole is measured closed:
+   deleting the `exec-maven-plugin` block from **both** poms was `BUILD SUCCESS`, exit 0 in round 10
+   (its break `(l)`); it is now `BUILD FAILURE` with **41** named violations, produced from the `test`
+   phase, with **0** `[floor]` lines because the exec binding really is gone. **The new residual is one
+   step further out:** deleting both exec blocks *and* the test file — a three-file, clearly visible edit
+   that also drops the default count from 80 to 79 methods with no checker left to notice. Nothing
+   outside the poms and that one test defends the gate, and the honest floor of this whole construction
+   is that a sufficiently deliberate edit to the tree can always remove a check from the tree.
 4. **It pins counts, not the plugin that produces them (D-10 is unchanged).** No pom declares
    `maven-surefire-plugin`; `3.5.4` is Maven 3.9.16's default binding, and the entire yield depends on
    surefire's default `<includes>` — the only reason the 14 `AllTests.java` files are collected at all.
@@ -618,7 +668,7 @@ are reported as `stale-ignored=N`. **A floor computed over stale evidence is not
 5. **It is per module and hard-codes two modules (D-14 is unchanged).** A third module gaining tests
    would have no floor. `use-assembly` has no `src/test` today
    (`find use-assembly -path "*src/test*" -name "*.java"` → empty).
-6. **It asserts a minimum, so it is silent about growth.** 497 methods becoming 600 passes. The
+6. **It asserts a minimum, so it is silent about growth.** 498 methods becoming 600 passes. The
    *distinct-method* figure is the meaningful one and a stage still has to read it; what the floor
    guarantees is that nobody reads a number that was never collected.
 7. **It says nothing about fidelity.** Every one of the 497 methods passing means the port still
@@ -641,7 +691,116 @@ afterwards. Full output is in §7.3.
 
 ---
 
+## 5.2 ROUND 11 — closing F-01, F-02 and F-03: a guard the guarded party can turn off is not a guard
+
+Round 10's independent refutation (`upstream-oracle-floor-verification.md`) returned **`DEFECTIVE`**. It
+confirmed the floor was real, correctly pinned before the run it validated, and unsatisfiable without the
+upstream tests actually running — and then defeated it twice **without editing a single tracked file**:
+
+```
+$ mvn -B verify -Djava.awt.headless=true -Dexec.args=-version       # F-01
+[driver] number of [floor] lines in the log: 0
+[INFO] BUILD SUCCESS
+
+$ mvn -B verify -Pupstream-oracle-typo -Djava.awt.headless=true     # F-02
+[WARNING] The requested profile "upstream-oracle-typo" could not be activated because it does not exist.
+[floor] mode: DEFAULT
+[floor] PASS — use-core met every pinned floor in DEFAULT mode.
+[INFO] BUILD SUCCESS                                                 EXIT=0
+```
+
+Both are now red. What follows is the mechanism, then the measurement.
+
+### 5.2.1 F-01 — three independent mechanisms, because one is a single point of failure
+
+`exec:exec` declares **eight** parameters with user properties that could silence or divert the floor.
+Pinning `<skip>false</skip>` closed one of the eight. The others include `commandlineArgs`
+(`exec.args`), which does not merely *configure* the argument list — it **replaces** it.
+
+1. **Pin all seven pinnable parameters, in both executions of both poms** — `skip`, `commandlineArgs`,
+   `async`, `timeout`, `quietLogs`, `executable`, `workingDirectory`. A POM `<configuration>` element
+   beats a `@Parameter(property=…)` default, which round 10's own break `(f)` proved on this tree when the
+   pinned `<executable>` held while the unpinned argument list was replaced. `async` mattered as much as
+   `args`: `-Dexec.async=true` would have detached the process and left its exit code unread.
+2. **Detect the attempt as well as blocking it (check A2).** Inert is not loud. Each pom now hands all
+   eight `exec.*` user properties back to the checker (`--exec-args=${exec.args}` and its siblings);
+   Maven interpolates one only if the operator set it, so a set property is detectable, and any set
+   property **fails the build**. This is also the only defence against `exec.outputFile`, the one
+   parameter with no pinnable value.
+3. **A Jupiter test no `exec` property can reach.**
+   `use-core/src/test/java/org/tzi/use/uncertainty/gate/UpstreamOracleGateWiringTest.java` — one method —
+   re-asserts both poms' wiring from the `test` phase, and adds the one thing text cannot check: at
+   runtime, the `initialize`-phase stamp must exist, and must not be older than the newest receipt on
+   disk (a receipt is written at `verify`, after its own build's stamp, so an inverted order proves the
+   stamp is a previous build's).
+4. **A receipt verified after Maven has exited.** The checker writes
+   `<module>/target/upstream-oracle-floor.receipt` — module, mode, verdict, partiality, counts — on FAIL
+   as well as PASS, and `scripts/upstream-oracle-gate.sh` requires it to exist, to be newer than that
+   run's start marker, and to say `verdict=PASS`. No Maven property reaches a check that runs after Maven.
+
+**The argv the checker now requires**, and what it does otherwise: exactly
+`--module --module-dir --reactor-root --effective --selected --resume-from --requested --allow-profiles`
+and the eight `--exec-*` options — all required, no others accepted. An unknown option, a missing option,
+a duplicate, or a leading token that is not an option is **FATAL: exit 2, no receipt, build fails**.
+It cannot defend itself against not being invoked at all; that is what mechanisms 3 and 4 are for.
+
+### 5.2.2 F-02 — the gate is an invocation, not a command you type
+
+The build cannot detect a request Maven never accepted, so the gate is now **defined as**
+`scripts/upstream-oracle-gate.sh`, which holds the profile id on one line and, after the build, fails on
+`could not be activated`, on a missing `[floor] PASS — <module> … in <MODE> mode.` for either module, and
+on a missing or stale receipt. `harness-contract.md` §0.1 says plainly that hand-typing `-P` is not the
+gate.
+
+Round 10 §3.5 item 3 also said the porter's reason for not enforcing this *inside* the build was
+refutable — and it was. Check **B2** now collects every profile `<id>` declared by any reactor pom (the
+same text parse check A already ran) and fails on a requested id matching none. **So the bare, hand-typed
+`mvn -Pupstream-oracle-typo` is red too.** The honest residual: a profile declared in a `settings.xml` or
+an ancestor pom outside this reactor would not be found. This machine has neither
+(`upstream-oracle-verification.md` §11), so the pom set is the complete authority here; a future machine
+that has one declares the id or passes `-Duse.floor.allowProfiles=<id>`.
+
+### 5.2.3 F-03 — a partial reactor is not a gate
+
+The checker reads `${session.request.selectedProjects}` and `${session.request.resumeFrom}` and prints
+`PARTIAL`, never `PASS`, when either is set, naming what was not checked. Exit stays `0` — `-pl` is a
+deliberate developer flag — but the receipt records `verdict=PARTIAL` and the wrapper rejects it.
+
+### 5.2.4 The measurement — round 10's two bypasses, its controls, and the residual hole
+
+Every row run on the committed tree, `mvn -q clean` first, tree restored and `git status --porcelain`
+checked after each. Full output in §7.4.
+
+| # | what was done | round 10 | round 11 | what the message names |
+|---|---|---|---|---|
+| B1 | `-Dexec.args=-version`, default command, tree intact | **PASS, exit 0, 0 `[floor]` lines** | **FAIL** exit 1, **16** `[floor]` lines | `TAMPERING: -Dexec.args=-version was set on the command line` |
+| B2 | same, under the profile | **PASS, exit 0** | **FAIL** exit 1 | idem, in ORACLE mode |
+| B3 | `-Dexec.outputFile=/dev/null` (unpinnable) | not tried | **FAIL** exit 1, 0 `[floor]` lines | Maven names the `upstream-oracle-floor` execution; the receipt on disk carries `verdict=FAIL` |
+| B4 | `-Dexec.async=true` | not tried | **FAIL** exit 1 | `TAMPERING: -Dexec.async=true` |
+| B5 | `-Dexec.skip=true`, tree intact | inert (green; needed a pom break to fail) | **FAIL** exit 1 | `TAMPERING: -Dexec.skip=true` |
+| B6 | **bare** `-Pupstream-oracle-typo` | **PASS, exit 0** | **FAIL** exit 1 | `PROFILE: -Pupstream-oracle-typo … NO pom in this reactor declares a profile with that id … Declared profile ids: [upstream-oracle]` |
+| B7 | `-pl use-core -Pupstream-oracle` | **unqualified `PASS`, exit 0** | **`PARTIAL`**, exit 0 | `THIS WAS A PARTIAL REACTOR (-pl/--projects [use-core]) … A partial reactor is NOT the acceptance gate` |
+| B8 | `<profiles>` deleted from `use-gui/pom.xml`, default command *(control)* | FAIL exit 1 | **FAIL** exit 1, now at the `test` phase | `use-gui/pom.xml HAS NO <profiles> ELEMENT … (D-01's merge accident)` |
+| B9 | `-DskipTests` under the profile *(control)* | FAIL exit 1, 7 violations | **FAIL** exit 1, 7 violations | `0 distinct test classes < floor 41`, `report directory does not exist`, SENTINEL |
+| B10 | the Jupiter test deleted | n/a | **FAIL** exit 1 | the missing file **and** `7 < 8` classes, `79 < 80` methods |
+| B11 | `<commandlineArgs>` unpinned (round-10 shape) **and** `-Dexec.args=-version` | **PASS, exit 0** | **FAIL** exit 1, 0 `[floor]` lines | mechanism 1 defeated; the test names `carries <commandlineArgs> 0 time(s), needs 2` and `RUNTIME: …stamp does not exist` |
+| B12 | `exec-maven-plugin` deleted from **both** poms — §5.1.3 item 3's residual hole | **PASS, exit 0** | **FAIL** exit 1, 41 violations | every stripped pin, both poms, by name |
+
+**B11 is the belt-and-braces result:** with the pin removed, `-Dexec.args=-version` still silences the
+exec binding exactly as it did in round 10 — and the build is red anyway, from the other mechanism, which
+names both the removed pin and the runtime consequence. **B12 is the closure of the documented residual
+hole.** B8's message now arrives from surefire rather than from `verify`, i.e. earlier; the floor check
+would have caught it too.
+
+---
+
 ## 6. The diff — what this round touched
+
+> **ROUND 11 adds three non-docs paths to the two below**, all of them permitted by ground rule 2
+> (the two poms, plus `scripts/` and `use-core/src/test`): `scripts/upstream-oracle-gate.sh` (new),
+> `use-core/src/test/java/org/tzi/use/uncertainty/gate/UpstreamOracleGateWiringTest.java` (new) and
+> `scripts/UpstreamOracleFloor.java` (modified). Still **no** `*/src/main/*` path, no `module-info.java`,
+> no `use-gui/src`, no `use-assembly/src`, and no upstream test edited.
 
 Ground rule 2 permits exactly two non-docs, non-differential-harness paths this round:
 `use-core/pom.xml` and `use-gui/pom.xml`. Verified:
@@ -781,7 +940,7 @@ Reading of the non-docs paths, against the ground rules:
 | default build stays vintage-free | met — **measured two ways**: 209/210 methods unchanged (§3.1, §3.3) and 0 vintage lines on the resolved classpath (§3.2) |
 | default build still 79 + 130 = 209 at pom-only state | met — §3.1, pasted |
 | default build 80 + 130 = 210 after H21, delta accounted | met — §3.3, the delta is the one new test |
-| profile counts reported as distinct classes/methods, deduplicated | met — §4.1, §4.2: 50 classes / 497 methods |
+| profile counts reported as distinct classes/methods, deduplicated | met — §4.1, §4.2: 50 classes / 497 methods *(round-9 figures; round 11 re-pinned them to 51 / 498 — §5.2)* |
 | profile deltas reconciled against both earlier probes | met — §4.3, every delta named |
 | failures and errors reported honestly | met — §4.5: 0/0/0, and §4.6's three caveats on what the 287 is worth |
 | no test file edited, migrated or renamed | met — §6; every `src/test` path in the diff is the port's own harness |
@@ -1050,3 +1209,241 @@ Each breakage was applied to the committed tree at `6702f06e`, run, and restored
   gate that passed.
 * **(e)** is the same defect attempted from the command line rather than the tree: `-Dtest=` narrowing
   under the profile collects 6 methods of 350 and fails.
+
+---
+
+## 7.4 Round-11 acceptance and break output, verbatim
+
+Every command below was run by me on `port-uncertainty-2` with the round-11 changes in the working
+tree, `pgrep -f '[c]lassworlds.launcher.Launcher'` empty before each, `mvn -q clean` before each build,
+and `git status --porcelain` captured before and after. No foreign modification was observed at any
+point. Logs are in the driver output; what follows is pasted from it.
+
+### 7.4.1 THE GATE — `scripts/upstream-oracle-gate.sh`, both modes, one invocation
+
+```
+[gate] =================================================================
+[gate] upstream-oracle acceptance gate — mode: both
+[gate] reactor root: /home/xoruser/msc-4/use-msc2026
+[gate] profile id (hard-coded here, not typed): upstream-oracle
+[gate] git status --porcelain BEFORE:
+[gate]    M scripts/UpstreamOracleFloor.java
+[gate]    M use-core/pom.xml
+[gate]    M use-gui/pom.xml
+[gate]   (nothing above == clean)
+[gate] =================================================================
+
+[gate] ----- default : expecting mode DEFAULT in every module -----
+[gate] mvn -q clean
+[gate] mvn -B verify -Djava.awt.headless=true
+[gate] mvn EXIT=0, log: /tmp/use-upstream-oracle-gate/default.log (1491 lines)
+[gate] the floor's own words for default:
+[gate]   [floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.stamp
+[gate]   [floor] ===== upstream-oracle floor check: use-core =====
+[gate]   [floor] requested profiles (reactor-wide, from the command line): (none)
+[gate]   [floor] this module's upstream-oracle profile effective: false
+[gate]   [floor] mode: DEFAULT
+[gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
+[gate]   [floor] freshness stamp: 2026-08-17T16:19:07.290Z — reports older than this are stale and are NOT counted
+[gate]   [floor] surefire  use-core  classes=8   (floor 8  )  methods=80   (floor 80  )  executions=80   failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: absent
+[gate]   [floor] wrote receipt /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.receipt (verdict=PASS)
+[gate]   [floor] PASS — use-core met every pinned floor in DEFAULT mode.
+[gate]   [floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.stamp
+[gate]   [floor] ===== upstream-oracle floor check: use-gui =====
+[gate]   [floor] requested profiles (reactor-wide, from the command line): (none)
+[gate]   [floor] this module's upstream-oracle profile effective: false
+[gate]   [floor] mode: DEFAULT
+[gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
+[gate]   [floor] freshness stamp: 2026-08-17T16:20:04.490Z — reports older than this are stale and are NOT counted
+[gate]   [floor] surefire  use-gui   classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] failsafe  use-gui   classes=1   (floor 1  )  methods=129  (floor 129 )  executions=129  failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] vintage-only sentinel org.tzi.use.gui.views.diagrams.util.DirectedLineTest: absent
+[gate]   [floor] wrote receipt /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.receipt (verdict=PASS)
+[gate]   [floor] PASS — use-gui met every pinned floor in DEFAULT mode.
+
+[gate] ----- oracle : expecting mode ORACLE in every module -----
+[gate] mvn -q clean
+[gate] mvn -B verify -Djava.awt.headless=true -Pupstream-oracle
+[gate] mvn EXIT=0, log: /tmp/use-upstream-oracle-gate/oracle.log (1819 lines)
+[gate] the floor's own words for oracle:
+[gate]   [floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.stamp
+[gate]   [floor] ===== upstream-oracle floor check: use-core =====
+[gate]   [floor] requested profiles (reactor-wide, from the command line): [upstream-oracle]
+[gate]   [floor] this module's upstream-oracle profile effective: true
+[gate]   [floor] mode: ORACLE
+[gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
+[gate]   [floor] freshness stamp: 2026-08-17T16:20:36.730Z — reports older than this are stale and are NOT counted
+[gate]   [floor] surefire  use-core  classes=41  (floor 41 )  methods=351  (floor 351 )  executions=939  failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: collected
+[gate]   [floor] wrote receipt /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.receipt (verdict=PASS)
+[gate]   [floor] PASS — use-core met every pinned floor in ORACLE mode.
+[gate]   [floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.stamp
+[gate]   [floor] ===== upstream-oracle floor check: use-gui =====
+[gate]   [floor] requested profiles (reactor-wide, from the command line): [upstream-oracle]
+[gate]   [floor] this module's upstream-oracle profile effective: true
+[gate]   [floor] mode: ORACLE
+[gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
+[gate]   [floor] freshness stamp: 2026-08-17T16:21:39.334Z — reports older than this are stale and are NOT counted
+[gate]   [floor] surefire  use-gui   classes=8   (floor 8  )  methods=17   (floor 17  )  executions=17   failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] failsafe  use-gui   classes=1   (floor 1  )  methods=129  (floor 129 )  executions=129  failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] vintage-only sentinel org.tzi.use.gui.views.diagrams.util.DirectedLineTest: collected
+[gate]   [floor] wrote receipt /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.receipt (verdict=PASS)
+[gate]   [floor] PASS — use-gui met every pinned floor in ORACLE mode.
+
+[gate] =================================================================
+[gate] git status --porcelain AFTER:
+[gate]    M scripts/UpstreamOracleFloor.java
+[gate]    M use-core/pom.xml
+[gate]    M use-gui/pom.xml
+[gate]   (nothing above == clean; report anything you did not write, never commit it)
+[gate] PASS — mode 'both': every check above held.
+[gate] =================================================================
+```
+
+### 7.4.2 F-01 — `-Dexec.args=-version`, the command that used to silence everything
+
+Round 10, §3.7: `[driver] number of [floor] lines in the log: 0` / `[INFO] BUILD SUCCESS`. Now:
+
+```
+----- b1-execargs-default : mvn -B verify -Djava.awt.headless=true -Dexec.args=-version : EXIT=1 -----
+[driver] number of [floor] lines in the log: 16
+[floor] FAIL — 1 floor violation(s) in use-core (DEFAULT mode):
+[floor]   1. TAMPERING: -Dexec.args=-version was set on the command line. That property belongs to the floor's own exec-maven-plugin execution, which is the ONLY exec-maven-plugin binding in this reactor, so there is no legitimate use for it here. It is inert — the pom pins the corresponding element — but an attempt to switch the gate off is a BUILD FAILURE, not a silent no-op. This is defect F-01 (docs/port2/upstream-oracle-floor-verification.md sec. 3.7), where -Dexec.args=-version produced BUILD SUCCESS with zero [floor] lines.
+[INFO] BUILD FAILURE
+[ERROR] Failed to execute goal org.codehaus.mojo:exec-maven-plugin:3.5.0:exec (upstream-oracle-floor) on project use-core: Command execution failed. Process exited with an error: 1 (Exit value: 1) -> [Help 1]
+```
+
+And under the profile, `b2`, identically — `FAIL — 1 floor violation(s) in use-core (ORACLE mode)`.
+The three siblings, all of which were untried or inert in round 10:
+
+```
+----- b4-execasync : -Dexec.async=true : EXIT=1 -----
+[floor]   1. TAMPERING: -Dexec.async=true was set on the command line. That property belongs to the floor's own exec-maven-plugin execution, which is 
+----- b5-execskip : -Dexec.skip=true (tree intact; round 10 needed a pom break to make this fail) : EXIT=1 -----
+[floor]   1. TAMPERING: -Dexec.skip=true was set on the command line. That property belongs to the floor's own exec-maven-plugin execution, which is t
+----- b3-execoutputfile : -Dexec.outputFile=/dev/null (the one parameter that CANNOT be pinned) : EXIT=1 -----
+[driver] number of [floor] lines in the log: 0   <- the words are in /dev/null, the failure is not
+[ERROR] Failed to execute goal org.codehaus.mojo:exec-maven-plugin:3.5.0:exec (upstream-oracle-floor) on project use-core: Command execution failed. Process exited with an error: 1 (Exit value: 1) -> [Help 1]
+```
+
+### 7.4.3 F-01, belt and braces — mechanism 1 removed, mechanism 2 holds
+
+`<commandlineArgs>` reverted to round 10's `<arguments>` shape in `use-core/pom.xml`, so `exec.args`
+wins again, plus the bypass. The exec binding really is silenced — **0** `[floor]` lines, exactly as in
+round 10 — and the build is red anyway:
+
+```
+----- b11-unpinned-plus-execargs : EXIT=1 -----
+[driver] number of [floor] lines in the log: 0
+The -Pupstream-oracle acceptance gate is not wired as the record claims — 2 violation(s). This test IS the gate's guard against being silenced; do not weaken it to make a build pass. See docs/port2/upstream-oracle-floor-verification.md F-01/F-02 and docs/port2/harness-contract.md sec. 0.
+  1. use-core/pom.xml carries <commandlineArgs> 0 time(s), needs 2 — one per floor execution. Unpinned, the user property -Dexec.args is honoured on the command line and the floor check can be silenced or diverted with no edit to any tracked file (F-01).
+  2. RUNTIME: target/upstream-oracle-floor.stamp does not exist in /home/xoruser/msc-4/use-msc2026/use-core. The `upstream-oracle-floor-stamp` execution did not run in THIS build, so the verify-phase check would have no way to tell this build's reports from an earlier -Pupstream-oracle run's. That is exactly what -Dexec.args=-version did (F-01).
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.4:test (default-test) on project use-core: There are test failures.
+```
+
+### 7.4.4 F-01 — §5.1.3 item 3's residual hole, closed
+
+`exec-maven-plugin` deleted from **both** poms. Round 10 break `(l)`: `BUILD SUCCESS`, exit 0. Now:
+
+```
+----- b12b-both-exec-deleted : mvn -B verify -Djava.awt.headless=true : EXIT=1 -----
+[driver] grep -c 'exec-maven-plugin' use-core/pom.xml use-gui/pom.xml -> 1, 1   (the checker's own comment reference only)
+[driver] number of [floor] lines in the log: 0
+The -Pupstream-oracle acceptance gate is not wired as the record claims — 41 violation(s). This test IS the gate's guard against being silenced; do not weaken it to make a build pass. See docs/port2/upstream-oracle-floor-verification.md F-01/F-02 and docs/port2/harness-contract.md sec. 0.
+  1. use-core/pom.xml no longer runs scripts/UpstreamOracleFloor.java; that module's counts would go unasserted — the D-01 defect itself.
+  2. use-core/pom.xml has no `upstream-oracle-floor` execution bound to the `verify` phase.
+  3. use-core/pom.xml has no `upstream-oracle-floor-stamp` execution bound to the `initialize` phase, so stale reports from an earlier -Pupstream-oracle run could be counted as this build's.
+  4. use-core/pom.xml's floor execution does not pass --module=use-core.
+  5. use-core/pom.xml carries <skip>false</skip> 0 time(s), needs 2 — one per floor execution. Unpinned, the user property -Dexec.skip is honoured on the command line and the floor check can be silenced or diverted with no edit to any tracked file (F-01).
+  6. use-core/pom.xml carries <commandlineArgs> 0 time(s), needs 2 — one per floor execution. Unpinned, the user property -Dexec.args is honoured on the command line and the floor check can be silenced or diverted with no edit to any tracked file (F-01).
+  7. use-core/pom.xml carries <async>false</async> 0 time(s), needs 2 — one per floor execution. Unpinned, the user property -Dexec.async is honoured on the command line and the floor check can be silenced or diverted with no edit to any tracked file (F-01).
+  8. use-core/pom.xml carries <timeout>0</timeout> 0 time(s), needs 2 — one per floor execution. Unpinned, the user property -Dexec.timeout is honoured on the command line and the floor check can be silenced or diverted with no edit to any tracked file (F-01).
+  9. use-core/pom.xml carries <quietLogs>false</quietLogs> 0 time(s), needs 2 — one per floor execution. Unpinned, the user property -Dexec.quietLogs is honoured on the command line and the floor check can be silenced or diverted with no edit to any tracked file (F-01).
+  10. use-core/pom.xml carries <executable>${java.home}/bin/java</executable> 0 time(s), needs 2 — one per floor execution. Unpinned, the user property -Dexec.executable is honoured on the command line and the floor check can be silenced or diverted with no edit to any tracked file (F-01).
+  ... (41 violations in total, every stripped pin in both poms named)
+```
+
+### 7.4.5 F-02 — the mistyped profile id, both ways
+
+The **bare, hand-typed** command. Round 10 break `(d)`: `BUILD SUCCESS`, exit 0, floor `PASS` in
+DEFAULT mode. Now:
+
+```
+----- b6-typo-bare : mvn -B verify -Pupstream-oracle-typo -Djava.awt.headless=true : EXIT=1 -----
+[driver] number of [floor] lines in the log: 16
+[floor] mode: DEFAULT
+[floor] FAIL — 1 floor violation(s) in use-core (DEFAULT mode):
+[floor]   1. PROFILE: -Pupstream-oracle-typo was requested on the command line but NO pom in this reactor declares a profile with that id. Maven only WARNS about that and then builds on, so the gate would have run the vacuous default-build counts and printed PASS while the operator believed they had asked for the upstream oracle — defect F-02 (docs/port2/upstream-oracle-floor-verification.md sec. 3.5). Declared profile ids in this reactor: [upstream-oracle]. The acceptance gate is scripts/upstream-oracle-gate.sh, which hard-codes the id; do not hand-type -P. If this id IS legitimate, declare it in a pom or pass -Duse.floor.allowProfiles=upstream-oracle-typo.
+[WARNING] The requested profile "upstream-oracle-typo" could not be activated because it does not exist.
+[INFO] BUILD FAILURE
+```
+
+And through the wrapper, which is what the record now calls the gate. Nine independent checks fail,
+and the first one that names the profile is the `could not be activated` grep F-02 asked for:
+
+```
+[gate] FAIL — default: Maven exited 1. Tail of the log:
+[gate] FAIL — default: no 'BUILD SUCCESS' in the log.
+[gate] FAIL — default: Maven could not activate a requested profile. THIS IS DEFECT F-02: without this check the build is green, the floor prints PASS in DEFAULT mode, and the revived upstream class
+[gate]   2:[WARNING] The requested profile "upstream-oracle-typo" could not be activated because it does not exist.
+[gate]   1412:[WARNING] The requested profile "upstream-oracle-typo" could not be activated because it does not exist.
+[gate] FAIL — default: expected exactly one line '[floor] PASS — use-core met every pinned floor in DEFAULT mode.' in the log, found 0. Every [floor] verdict line the log does have:
+[gate] FAIL — default: expected exactly one line '[floor] PASS — use-gui met every pinned floor in DEFAULT mode.' in the log, found 0. Every [floor] verdict line the log does have:
+[gate] FAIL — default: the floor check announced itself 1 time(s), expected 2.
+[gate] FAIL — default: the floor reported FAIL, FATAL or PARTIAL:
+[gate] FAIL — default: receipt /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.receipt does not carry the line 'verdict=PASS'. It says:
+[gate] FAIL — default: no receipt at /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.receipt. The verify-phase floor check did not run to completion in use-gui. A silenced exec 
+[gate] GATE FAILED — 9 check(s) failed in mode 'default'.
+```
+
+**What the bare command can and cannot be made to do — stated plainly.** `mvn -P<typo>` is now a
+build failure because check B2 reads the reactor's declared profile ids. What *cannot* be fixed from
+inside Maven is the class of causes B2 cannot see: a profile id that a `settings.xml` outside this
+reactor declares, a `-P` list mangled by `MAVEN_ARGS`, or any other route by which the profile is
+accepted by Maven and yet does nothing. For those, the only defence is that the acceptance gate is a
+committed invocation whose post-conditions are checked outside Maven — which is why the wrapper
+requires the receipt on disk and the exact `PASS` line per module, and why `harness-contract.md` §0.1
+says hand-typing `-P` is not the gate. Nothing stops an operator from typing `mvn` by hand; what the
+record can do is refuse to call that the gate, and make the common typo red anyway.
+
+### 7.4.6 F-03 — `-pl` no longer says `PASS`
+
+```
+----- b7-pl-usecore : mvn -B verify -pl use-core -Pupstream-oracle -Djava.awt.headless=true : EXIT=0 -----
+[floor] mode: ORACLE
+[floor] reactor: PARTIAL — selected projects [use-core], resume-from (none)
+[floor] PARTIAL — use-core met its own pinned floors in ORACLE mode, but THIS WAS A PARTIAL REACTOR (-pl/--projects [use-core]), so the other module's floors were NOT checked. A partial reactor is NOT the acceptance gate: run scripts/upstream-oracle-gate.sh. Do not quote this line as a green gate (F-03).
+[INFO] BUILD SUCCESS
+```
+
+Exit 0 on purpose: `-pl` is a deliberate developer flag, not a merge accident. The receipt records
+`verdict=PARTIAL`, and the wrapper requires `verdict=PASS` and `partial-reactor=false`, so a partial
+reactor can be used for iteration and can never be quoted as acceptance.
+
+### 7.4.7 The controls — round 10's tree-borne breakages must still fail, and do
+
+```
+----- b8-gui-profile-deleted : <profiles> removed from use-gui/pom.xml, DEFAULT command : EXIT=1 -----
+The -Pupstream-oracle acceptance gate is not wired as the record claims — 2 violation(s). This test IS the gate's guard against being silenced; do not weaken it to make a build pass. See docs/port2/upstream-oracle-floor-verification.md F-01/F-02 and docs/port2/harness-contract.md sec. 0.
+  1. use-gui/pom.xml HAS NO <profiles> ELEMENT — the upstream-oracle profile has been deleted, so -Pupstream-oracle would silently collect the default build's tests in this module (D-01's merge accident).
+  2. use-gui/pom.xml's upstream-oracle profile does not set use.upstreamOracle.effective=true, so the gate loses its requested-but-not-effective detector.
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.4:test (default-test) on project use-core: There are test failures.
+
+----- b9-skiptests-oracle : -DskipTests under the profile : EXIT=1 -----
+[floor] FAIL — 7 floor violation(s) in use-core (ORACLE mode):
+[floor]   1. FLOOR use-core/surefire: the report directory does not exist (/home/xoruser/msc-4/use-msc2026/use-core/target/surefire-reports). Nothing was collected. 0 is rejected outright (h
+[floor]   2. FLOOR use-core/surefire: 0 distinct test classes < floor 41. The upstream JUnit 3/4 tree was not collected: check that junit-vintage-engine is present at <scope>test</scope> ins
+
+----- b10-wiring-test-deleted : the Jupiter test removed : EXIT=1 -----
+[floor] FAIL — 3 floor violation(s) in use-core (DEFAULT mode):
+[floor]   1. WIRING: use-core/src/test/java/org/tzi/use/uncertainty/gate/UpstreamOracleGateWiringTest.java is missing. That Jupiter test is the half of the F-01 fix that cannot be silenced b
+[floor]   2. FLOOR use-core/surefire: 7 distinct test classes < floor 8. The default build lost tests it used to run.
+[floor]   3. FLOOR use-core/surefire: 79 distinct test methods < floor 80. The default build lost tests it used to run.
+```
+
+B8 now fails from the `test` phase rather than from `verify` — earlier, and the floor check would have
+caught it too. B10 shows the two halves guarding each other: the checker names the missing test file,
+and the count floor independently notices the method it stopped contributing.

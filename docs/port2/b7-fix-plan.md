@@ -1215,4 +1215,7 @@ Nothing about B7 itself — that is decided and not re-opened. Four narrower ite
 3. **Close B10** (§6.5). Recommendation: **drop `ExpDefSBoolean`**, and note that B7 strengthens that
    case rather than weakening it. If the answer is "port it", N in §5.3 becomes 11.
 4. **Reconcile B3's two measured figures** — 45 classes / 315 methods vs 50 classes / 497 distinct
-   methods (§7.4 item 7) — before either appears in the thesis.
+   methods (§7.4 item 7) — before either appears in the thesis. *(Update 2026-08-17: reconciled in
+   `upstream-oracle-profile.md` §4.3, and both are now historical — the current, build-asserted figures
+   are **51 classes / 498 distinct methods** under the profile and **11 / 211** by default, of which 465
+   and 199 can fail. `harness-contract.md` §0.1 is normative and is the only figure to quote.)*

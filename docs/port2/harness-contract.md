@@ -53,7 +53,22 @@ of findings.**
 > held to this file would have run the wrong gate and published the wrong coverage statement while
 > reporting a green build. Both are corrected here and in §5, §6 and §8.
 
-### 0.1 There are TWO acceptance commands, and both are floor-checked by the build
+### 0.1 THE GATE IS A SCRIPT. Hand-typing `-P` is not the gate.
+
+```bash
+scripts/upstream-oracle-gate.sh          # THE acceptance gate. This, verbatim, is what a stage quotes.
+```
+
+> **ADDED 2026-08-17, round 11, defect F-02** (`upstream-oracle-floor-verification.md` §3.5). The gate
+> used to be two hand-typed commands. Maven only **warns** about an unknown `-P` id and then builds on,
+> and the floor cannot detect a request it never saw, so `mvn -B verify -Pupstream-oracle-typo` was
+> `BUILD SUCCESS`, exit 0, with the floor printing **PASS in DEFAULT mode** and the 40 revived classes /
+> 287 revived methods silently uncollected — one `[WARNING]` in a 1487-line log as the only signal.
+> **One character made the gate vacuous and green.** So the gate is now *defined as* one committed
+> invocation with the profile id written down once, inside the script. A typo now fails to find a
+> script instead of silently degrading a gate.
+
+The two commands the script runs, for the record — **quote the script, not these**:
 
 ```bash
 mvn -q clean && mvn -B verify -Djava.awt.headless=true                     # default: vintage-free
@@ -62,19 +77,42 @@ mvn -q clean && mvn -B verify -Pupstream-oracle -Djava.awt.headless=true   # + u
 
 **A stage is not accepted until both are green, and a stage document that quotes only one of them has
 not stated its acceptance** (decision **B3**; `upstream-oracle-profile.md` §5). Neither is `mvn test`,
-which never runs the 130 failsafe methods.
+which never runs the 130 failsafe methods. `scripts/upstream-oracle-gate.sh default` and
+`... oracle` run one each, for iteration; only the two together are the gate.
 
-Both commands assert a **pinned, per-module, per-tier floor** — `scripts/UpstreamOracleFloor.java`,
+The script adds four things Maven cannot: it hard-codes the profile id; it **fails** on
+`could not be activated` anywhere in the log; it requires the floor to have printed an unqualified
+`PASS` naming **both modules** and the expected mode; and it verifies each module's
+`target/upstream-oracle-floor.receipt` **on disk after Maven has exited**, where no Maven property can
+reach it.
+
+Both commands also assert a **pinned, per-module, per-tier floor** — `scripts/UpstreamOracleFloor.java`,
 run by Maven at phase `verify` in `use-core` and `use-gui`. It is the same rule §8 step 2 imposes on a
 sweep, applied to the gate itself: *a floor chosen after the run is not a floor*, and `0` is rejected
 outright.
 
-| | `use-core` surefire | `use-gui` surefire | `use-core` failsafe | `use-gui` failsafe | total |
-|---|---|---|---|---|---|
-| default | 7 classes / 79 methods | 1 / 1 | 1 / 1 | 1 / 129 | **10 / 210** |
-| `-Pupstream-oracle` | 40 / 350 | 8 / 17 | 1 / 1 | 1 / 129 | **50 / 497** |
+| | `use-core` surefire | `use-gui` surefire | `use-core` failsafe | `use-gui` failsafe | total | of which **asserting** |
+|---|---|---|---|---|---|---|
+| default | 8 classes / 80 methods | 1 / 1 | 1 / 1 | 1 / 129 | **11 / 211** | **199 methods** |
+| `-Pupstream-oracle` | 41 / 351 | 8 / 17 | 1 / 1 | 1 / 129 | **51 / 498** | **465 methods** |
 
-What a stage must know about it, because these are the ways a green build is *not* a claim:
+**Quote the asserting figure whenever the number is used to argue scrutiny, and the total whenever it
+is used to argue collection.** They differ by **12** (default) and **33** (profile) because the **six**
+ArchUnit architecture classes cannot fail: each one calls ArchUnit's `.evaluate()` and never `.check()`,
+computes a violation count and `System.out.println`s it, so it reports zero real assertions
+(`MavenCyclicDependenciesCoreTest`: `.evaluate(` ×1, `.check(` ×0, `assert*` ×0) — measured in
+`upstream-oracle-verification.md` **R-5**. Twelve of those methods are in the default gate
+(`MavenCyclicDependenciesCoreTest` 11 + `MavenLayeredArchitectureTest` 1) and twenty-one more are among
+the revived 287.
+
+> **F-04, corrected here 2026-08-17.** R-5's figures were **198 of 210** and **464 of 497**, and they
+> reached exactly one line of the whole record and never this file — so a stage bound by §0.1 would have
+> quoted 497 as evidence of scrutiny when the record already knew it was 33 methods too strong. Round 11
+> then added **one asserting method** (`UpstreamOracleGateWiringTest`, the F-01 fix), which is why the
+> figures above are 199 of 211 and 465 of 498: `+1` in the total and `+1` in the asserting count, in one
+> cell of the table. The 12 and the 33 are unchanged.
+
+What a stage must know about the floor, because these are the ways a green build is *not* a claim:
 
 * Floors are **per module and per tier**. A reactor-wide total would stay green while `use-gui`'s 17
   methods vanished behind `use-core`'s 350.
@@ -82,10 +120,23 @@ What a stage must know about it, because these are the ways a green build is *no
   check compares the reactor-wide `-P` list against a property only each module's own profile block
   sets.
 * Counts are **distinct classes and distinct methods from the report XML**, never surefire's headline
-  — under the profile the 14 JUnit-3 `AllTests` aggregators inflate the headline to **1085**
-  executions for 497 methods.
+  — under the profile the 14 JUnit-3 `AllTests` aggregators inflate the headline to **1086**
+  executions for 498 methods (939 + 17 surefire, 1 + 129 failsafe).
 * **Do not lower a floor to make a run pass.** Same rule as §8 step 7 clause 1. If the suite legitimately
-  grows, raise it in the same commit that grows it.
+  grows, raise it in the same commit that grows it. Round 11 did exactly that: `+1/+1` in one cell,
+  for the test that makes the gate unsilenceable, re-pinned in the same commit.
+* **No command-line property can switch the floor off, and trying is a build failure.** *(round 11,
+  F-01.)* `-Dexec.args=-version` used to produce `BUILD SUCCESS` with **zero** `[floor]` lines and a
+  clean `git status`: `exec:exec`'s `commandlineArgs` parameter carries the user property `exec.args`
+  and *replaces* the configured argument list, so `java -version` ran instead of the checker. All seven
+  overridable parameters are now pinned in both poms, all eight `exec.*` user properties are handed back
+  to the checker and any one of them **fails** the build, and
+  `use-core/src/test/java/org/tzi/use/uncertainty/gate/UpstreamOracleGateWiringTest.java` re-asserts that
+  wiring from the `test` phase, where no `exec-maven-plugin` property reaches. A guard the guarded party
+  can turn off is not a guard.
+* **A partial reactor never says `PASS`.** *(round 11, F-03.)* `-pl use-core -Pupstream-oracle` used to
+  print an unqualified `PASS` for half a gate; it now prints `PARTIAL`, records `verdict=PARTIAL` in the
+  receipt, and the wrapper rejects it. `-pl` is fine for iteration and is never acceptance.
 * If an upstream test **fails** under the profile, that is a finding for the stage document, never an
   edit to the test. Ground rule 3 is absolute.
 
@@ -708,18 +759,25 @@ and its numbers — read all of them, not the first.
 invocation-seam shape of step 1, quoted per operation, and checked by a reviewer reading the adapter's
 shape rather than its prose.
 
-**8a. Accept the stage on BOTH commands, and quote both (§0.1, decision B3).**
+**8a. Accept the stage by running THE GATE, and quote it (§0.1, decision B3, defect F-02).**
 
 ```bash
-mvn -q clean && mvn -B verify -Djava.awt.headless=true                     # 10 classes / 210 methods
-mvn -q clean && mvn -B verify -Pupstream-oracle -Djava.awt.headless=true   # 50 classes / 497 methods
+scripts/upstream-oracle-gate.sh     # runs both commands; hand-typing -P is NOT the gate
+```
+
+What it runs, and the figures each side must reach:
+
+```bash
+mvn -q clean && mvn -B verify -Djava.awt.headless=true                     # 11 classes / 211 methods (199 asserting)
+mvn -q clean && mvn -B verify -Pupstream-oracle -Djava.awt.headless=true   # 51 classes / 498 methods (465 asserting)
 ```
 
 Quote, for each: `BUILD SUCCESS`, the deduplicated class and method counts, and
 failures/errors/skipped. The counts are **asserted by the build** — the `[floor]` lines in the log are
 the evidence, and a run below floor fails instead of printing a green summary over a shrunken suite.
 A stage document quoting only the first command **has not stated its acceptance**. Never quote
-surefire's headline as a method count under the profile (1085 executions ≠ 497 methods). If an upstream
+surefire's headline as a method count under the profile (1086 executions ≠ 498 methods), and quote the
+**asserting** figure (199 / 465, §0.1) whenever the number is used to argue scrutiny rather than collection. If an upstream
 test fails, that is a finding for this document plus, if licensed, a waiver in
 `upstream-test-waivers.md` — **never** an edit to the test.
 

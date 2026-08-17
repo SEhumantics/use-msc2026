@@ -74,13 +74,20 @@ already here; the heading contradicted it, which is how §9 came to restate the 
 > stage is not accepted until both are green:**
 >
 > ```bash
-> mvn -B verify -Djava.awt.headless=true                     # default: 10 classes / 210 methods today
+> scripts/upstream-oracle-gate.sh   # THE gate: runs both of the commands below and checks the floor
+> ```
+>
+> ```bash
+> mvn -B verify -Djava.awt.headless=true                     # default: 11 classes / 211 methods today
 > mvn -B verify -Pupstream-oracle -Djava.awt.headless=true    # + upstream's own JUnit 3/4 tree, unedited
 > ```
 >
+> *(Figures and wrapper updated 2026-08-17, round 11 — defects F-01/F-02/F-04; `harness-contract.md`
+> §0.1 is normative. Hand-typing `-P` is not the gate: Maven only warns on a mistyped id.)*
+>
 > The second is the one that makes ground rule 4 ("never edit an upstream test") enforceable by the
 > suite instead of by diff review, and it turns S10's non-regression step from a formality into a
-> **497**-method check against assertions upstream authored. Measured both ways, with the counting
+> **498**-method check against assertions upstream authored (**465** of which can fail — F-04). Measured both ways, with the counting
 > command and the raw output, in `upstream-oracle-profile.md`. Everything C1 says below about
 > `mvn test` versus `mvn verify` is unchanged and still applies to both invocations.
 
@@ -169,7 +176,7 @@ a reader must be able to see what was weighed.
 
 | # | Decided | Chosen | Recommendation that was NOT taken | Effect on scope |
 |---|---|---|---|---|
-| **B3** | 2026-08-17 | **(b)** — a `-Pupstream-oracle` Maven profile adding `junit-vintage-engine` 5.7.0 at test scope to `use-core` and `use-gui`, no test file touched. From S3 onward **every** stage's acceptance runs `mvn -B verify -Djava.awt.headless=true` **and** `mvn -B verify -Pupstream-oracle -Djava.awt.headless=true`. | — (the recommendation **was** taken) | Built and measured: `docs/port2/upstream-oracle-profile.md`. Default build 10 classes / **210** methods; under the profile 50 classes / **497** distinct methods, **0 failures, 0 errors**. |
+| **B3** | 2026-08-17 | **(b)** — a `-Pupstream-oracle` Maven profile adding `junit-vintage-engine` 5.7.0 at test scope to `use-core` and `use-gui`, no test file touched. From S3 onward **every** stage's acceptance runs `mvn -B verify -Djava.awt.headless=true` **and** `mvn -B verify -Pupstream-oracle -Djava.awt.headless=true`. | — (the recommendation **was** taken) | Built and measured: `docs/port2/upstream-oracle-profile.md`. Default build 11 classes / **211** methods; under the profile 51 classes / **498** distinct methods, **0 failures, 0 errors**. Since round 11 the gate is the committed invocation `scripts/upstream-oracle-gate.sh`, not a hand-typed `-P` (defect F-02). |
 | **B7** | 2026-08-17 | **FIX** the historical defects, documenting each one. | **Bug-for-bug reproduction was the recorded recommendation and was NOT taken.** | Expands scope. Each of the 33 behaviour-changing ledger rows in §7.2 now needs a fix, a written justification, and a recorded print-output delta where one exists. The differential harness's `AcceptedDegenerateOperations`/`AcceptedThrowPairs` sign-off mechanisms are how a deliberate deviation from the reference stays visible in the report. |
 | **B2** | 2026-08-17 | **3** — **FULL PORT of `SBoolean`, all 39 operations.** | **Option 2 (skeleton — keep `SBooleanType` only) was the recorded recommendation and was NOT taken.** | Expands scope. §2.5's 39-operation table becomes a port target rather than a reference, and `StandardOperationsSBoolean`'s 1502 lines enter the build. Note the standing fact that motivated the skeleton recommendation is unchanged and is now a *risk to be managed rather than avoided*: **zero** of those 1502 lines is covered by any fork test, so the 39 operations arrive with no upstream oracle behind them and the differential harness is the only instrument that can judge them. |
 
@@ -2591,8 +2598,9 @@ eight are still open. §0.0 is the authoritative record.
 > **There are TWO acceptance gate commands, and a stage is not accepted until both are green:**
 >
 > ```bash
-> mvn -q clean && mvn -B verify -Djava.awt.headless=true                     # 210 methods
-> mvn -q clean && mvn -B verify -Pupstream-oracle -Djava.awt.headless=true   # 50 classes / 497 methods
+> scripts/upstream-oracle-gate.sh    # THE gate (round 11, F-02); it runs both of these:
+> mvn -q clean && mvn -B verify -Djava.awt.headless=true                     # 11 classes / 211 methods
+> mvn -q clean && mvn -B verify -Pupstream-oracle -Djava.awt.headless=true   # 51 classes / 498 methods
 > ```
 >
 > Neither is `mvn test`. Both are **floor-checked by the build itself** —
@@ -2614,7 +2622,7 @@ eight are still open. §0.0 is the authoritative record.
 | **1** | How does `uDataTypes` reach the **product** classpath? | §4.6 | **A2** — vendor the 18 MIT-licensed 2023 source files, relocated to `org.tzi.use.uncertainty.udatatypes`; keep the oracle side on the already-committed jar |
 | **1a** | …and delete §15's refuted classloader justification from the record | §4.6, §0 B1a | keep A2 on **defence-in-depth** grounds, not on the refuted premise |
 | **2** | SBoolean scope: omit / skeleton / full port? | §8.2 | **DECIDED 2026-08-17 (B2) — option 3, FULL PORT of `SBoolean`, all 39 operations.** The recommendation was ~~**skeleton (option 2)**~~ and it was **NOT taken**; `19-open-questions.md` Q2 recommended option 1 and is also superseded. `isKindOfSBoolean` survives on `UBooleanType`/`BooleanType`. The full-port scope, its 10 work items and the new hard prerequisite (`SBooleanValue` marshalling in the harness, without which all 39 operations are `UNSUPPORTED`) are in **`b7-fix-plan.md` §6**, which supersedes §8.2's costing |
-| **3** | `junit-vintage-engine` in the product build, in a profile, or not at all? | §0 B3; C2; `stage-00-baseline.md` §3–§4; **`upstream-oracle-profile.md`** | **DECIDED 2026-08-17 (B3) — recommendation `(b)` TAKEN and BUILT:** a `-Pupstream-oracle` profile, run as part of every stage's acceptance, **on top of** `mvn -B verify`. Without it the S3–S7 unit-level gate is 13 surefire methods of which **12 contain no assertion at all** (`.evaluate()`, not `.check()` — 11 pass while the cycle report reads `Cycle count: 55`); the one that can fail is `ModelAPITest`. With it, **50 distinct classes / 497 distinct methods, 0 failures, 0 errors, 0 skipped** — *measured*, and the figure to quote. The ~~45 classes / 315 methods~~ recorded here was a throwaway probe at `8789e035`, superseded (`upstream-oracle-profile.md` §4.3 reconciles both deltas). Never quote surefire's headline as a method count under the profile: it counts method **executions** and the 14 JUnit-3 `AllTests` aggregators inflate it to 1085. The counts are **asserted by the build** — `scripts/UpstreamOracleFloor.java` |
+| **3** | `junit-vintage-engine` in the product build, in a profile, or not at all? | §0 B3; C2; `stage-00-baseline.md` §3–§4; **`upstream-oracle-profile.md`** | **DECIDED 2026-08-17 (B3) — recommendation `(b)` TAKEN and BUILT:** a `-Pupstream-oracle` profile, run as part of every stage's acceptance, **on top of** `mvn -B verify`. Without it the S3–S7 unit-level gate is 13 surefire methods of which **12 contain no assertion at all** (`.evaluate()`, not `.check()` — 11 pass while the cycle report reads `Cycle count: 55`); the one that can fail is `ModelAPITest`. With it, **51 distinct classes / 498 distinct methods, 0 failures, 0 errors, 0 skipped** — *measured*, and the figure to quote (**465** of them can fail; the six ArchUnit classes assert nothing — `harness-contract.md` §0.1, defect F-04. Was 50 / 497 before round 11 added the one test method that makes the gate unsilenceable; the gate itself is `scripts/upstream-oracle-gate.sh`, not a hand-typed `-P`). The ~~45 classes / 315 methods~~ recorded here was a throwaway probe at `8789e035`, superseded (`upstream-oracle-profile.md` §4.3 reconciles both deltas). Never quote surefire's headline as a method count under the profile: it counts method **executions** and the 14 JUnit-3 `AllTests` aggregators inflate it to 1086. The counts are **asserted by the build** — `scripts/UpstreamOracleFloor.java` |
 | **4** | Ship `'equals'` as a keyword, predicate it, or drop `identicalExpression`? | §5.5 | **drop it (1)**, else **predicate it (2)**. **Not (3)** — three upstream fixtures break |
 | **5** | Adopt the fork's lattice and accept the `testSupertype` breakage, or keep uncertain types out of the crisp supertype closure? | §3.2, §6.3 | **adopt the lattice (1)** — option 2 breaks `getLeastCommonSupertype`, which drives overload resolution |
 | **6** | `Undefined` vs `null`: normalise in the harness, rewrite 79 corpus lines, or revert `UndefinedValue`? | §4.1 | **normalise in the harness (1)** and record that "port prints `null` where the oracle prints `Undefined`" is a correct port |

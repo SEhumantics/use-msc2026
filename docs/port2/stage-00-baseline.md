@@ -97,9 +97,30 @@ oracle and were absent from every acceptance gate as originally written:
   `identicalExpression` rule makes `equals` a reserved token, **`ShellIT` is what catches it** —
   and only under `mvn verify`.
 
-**Consequence for every later stage: the acceptance command is `mvn verify`, not `mvn test`.**
-Every "suite green" claim in S3–S10 must be made against `mvn verify`. Stage S1's recorded counts
-were taken with `mvn test` and are correct as far as they go, but they are not the whole gate.
+**Consequence for every later stage: the acceptance gate is `mvn verify`, not `mvn test`** — and,
+since decision **B3**, it is **BOTH** `verify` commands, run through one committed script:
+
+```bash
+scripts/upstream-oracle-gate.sh          # THE gate: runs both commands and checks the floor
+```
+
+> **CORRECTED 2026-08-17 (defect F-05, `upstream-oracle-floor-verification.md` §6.2).** These two
+> lines used to issue a **single-command** acceptance directive to S3–S10 — `mvn verify` and nothing
+> else — which is D-07's shape: a stage held to this page would have run the vintage-free build only
+> and never collected the 40 classes / 287 methods the `-Pupstream-oracle` profile revives. The two
+> commands the wrapper runs are
+> ```bash
+> mvn -q clean && mvn -B verify -Djava.awt.headless=true                     # default: vintage-free
+> mvn -q clean && mvn -B verify -Pupstream-oracle -Djava.awt.headless=true   # + upstream's own tree
+> ```
+> **but hand-typing them is not the gate** (defect F-02: Maven only *warns* on a mistyped `-P` id, so
+> `-Pupstream-oracle-typo` used to be a green, vacuous run). Quote the script.
+> `harness-contract.md` §0.1 is normative for the floors and the figures; §3 of this page below —
+> "the upstream test tree is ~93% dormant", "**38 of the 41 never execute**" — describes the state
+> **before** the profile existed and is left as dated evidence, not as current fact.
+
+Stage S1's recorded counts were taken with `mvn test` and are correct as far as they go, but they are
+not the whole gate.
 
 Post-S1 state, for reference: `mvn verify` = 28 surefire + 130 failsafe = **158 methods, 0
 failures**, confirmed on a fresh `git clone` of the branch.

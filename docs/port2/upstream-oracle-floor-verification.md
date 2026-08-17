@@ -1,5 +1,21 @@
 # Independent refutation of the `-Pupstream-oracle` floor — round 10
 
+> **STATUS 2026-08-17 — ALL SIX DEFECTS ANSWERED IN ROUND 11. Nothing below is edited.** This file is the
+> refuter's record and stays as written, including the claims it refuted and the two commands that defeated
+> the gate. What each defect got is recorded elsewhere and is summarised here only as a pointer:
+>
+> | id | what round 11 did | where |
+> |---|---|---|
+> | **F-01** | all seven overridable `exec:exec` parameters pinned in both poms; all eight `exec.*` user properties handed back to the checker so that *setting one fails the build*; a Jupiter test (`UpstreamOracleGateWiringTest`) that no `exec` property can reach; a receipt verified after Maven exits. `-Dexec.args=-version` is now **`BUILD FAILURE`, exit 1, 16 `[floor]` lines**. §3.9's documented residual hole (both exec blocks deleted) is **also** closed. | `upstream-oracle-profile.md` §5.2, §7.4.2–7.4.4 |
+> | **F-02** | the gate is *defined as* `scripts/upstream-oracle-gate.sh`, which holds the profile id once and fails on `could not be activated`; **and** §3.5 item 3's argument was accepted — the checker now collects every profile `<id>` in the reactor, so the **bare** `mvn -Pupstream-oracle-typo` is red too | `harness-contract.md` §0.1; `upstream-oracle-profile.md` §5.2.2, §7.4.5 |
+> | **F-03** | a partial reactor prints `PARTIAL`, never `PASS`, and the wrapper rejects it | `upstream-oracle-profile.md` §5.2.3, §7.4.6 |
+> | **F-04** | the asserting figures are in the normative file, as **199 of 211** and **465 of 498** (the +1 each is F-01's test; R-5's 12 and 33 are unchanged) | `harness-contract.md` §0.1 |
+> | **F-05** | the single-command directive is replaced by the wrapper, with both commands beside it | `stage-00-baseline.md` §2 |
+> | **F-06** | the sentence is struck, marked `SUPERSEDED (B7)`, and the original left visible as history | `spec-parts/12-expressions.md` |
+>
+> The floors moved with the suite: `10 / 210` → **`11 / 211`** and `50 / 497` → **`51 / 498`**, re-pinned in
+> the same commit that grew them. The count in §1 of this file is therefore historical.
+
 **Verdict: `DEFECTIVE`.** Two MAJOR defects, four MINOR.
 
 **I owned Maven for this round.** 17 full `mvn verify` invocations (plus one `dependency:list` and a `mvn -q clean` before each), every one preceded by
