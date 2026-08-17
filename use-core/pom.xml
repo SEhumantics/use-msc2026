@@ -342,10 +342,46 @@
                  THE ASSERTED FLOOR of the acceptance gate (static-review defect D-01).
                  Declared in the DEFAULT build, not in the profile, so it runs on every
                  `mvn verify` in both modes and cannot be removed by deleting a profile
-                 block.  <skip>false</skip> is pinned here so -Dexec.skip cannot silence it.
-                 Runs after maven-failsafe-plugin's `verify` goal (declared above), so both
-                 report tiers exist.  See scripts/UpstreamOracleFloor.java and
+                 block.  Runs after maven-failsafe-plugin's `verify` goal (declared above),
+                 so both report tiers exist.  See scripts/UpstreamOracleFloor.java and
                  docs/port2/upstream-oracle-profile.md sec. 5.
+
+                 EVERY SILENCING PROPERTY IS PINNED (round 11, defect F-01 of
+                 docs/port2/upstream-oracle-floor-verification.md).  Pinning only
+                 <skip>false</skip> was NOT sufficient: exec:exec's `commandlineArgs`
+                 parameter carries the user property `exec.args` and REPLACES the
+                 <arguments> list, so `-Dexec.args=-version` ran `java -version` instead
+                 of the checker and produced a green build with zero [floor] lines.  A
+                 guard the guarded party can switch off is not a guard.  A POM
+                 <configuration> element beats a @Parameter(property=...) default, so each
+                 element below makes one -D inert:
+
+                   <skip>false</skip>                 -> exec.skip
+                   <commandlineArgs>                  -> exec.args        (F-01 itself)
+                   <async>false</async>               -> exec.async       (exit code ignored)
+                   <timeout>0</timeout>               -> exec.timeout     (killed mid-flight)
+                   <quietLogs>false</quietLogs>       -> exec.quietLogs   (lines to debug level)
+                   <executable>                       -> exec.executable
+                   <workingDirectory>                 -> exec.workingdir
+
+                 scripts/UpstreamOracleFloor.java asserts all seven, in BOTH executions of
+                 BOTH poms, on every run; and
+                 use-core/src/test/java/org/tzi/use/uncertainty/gate/
+                 UpstreamOracleGateWiringTest.java asserts them again from the test phase,
+                 where no exec-maven-plugin property can reach.  `outputFile` is the one
+                 parameter that cannot be pinned (no value means "the log"); it can hide the
+                 lines but not change the exit code or the receipt, and
+                 scripts/upstream-oracle-gate.sh requires both.
+
+                 <commandlineArgs> MUST STAY ON ONE LINE with single spaces: exec:exec splits
+                 it with CommandLineUtils.translateCommandline, whose delimiters are space,
+                 " and ' — a newline is NOT a delimiter.  The paths are RELATIVE and
+                 <workingDirectory> is pinned to ${project.basedir} for the same reason: no
+                 interpolated value may contain a space.  A Maven List still renders as
+                 "[a, b]"; the checker's argv contract joins a bare continuation token back
+                 onto the preceding option, which is how the "selected=[a, b]" option
+                 survives.  (An XML comment may not contain two adjacent dashes, which is
+                 why the option names in this comment are written without their prefix.)
                  ========================================================================== -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -360,12 +396,12 @@
                         </goals>
                         <configuration>
                             <skip>false</skip>
+                            <async>false</async>
+                            <timeout>0</timeout>
+                            <quietLogs>false</quietLogs>
                             <executable>${java.home}/bin/java</executable>
-                            <arguments>
-                                <argument>${project.basedir}/../scripts/UpstreamOracleFloor.java</argument>
-                                <argument>--stamp=true</argument>
-                                <argument>--module-dir=${project.basedir}</argument>
-                            </arguments>
+                            <workingDirectory>${project.basedir}</workingDirectory>
+                            <commandlineArgs>../scripts/UpstreamOracleFloor.java --stamp=true --module-dir=.</commandlineArgs>
                         </configuration>
                     </execution>
                     <execution>
@@ -376,15 +412,12 @@
                         </goals>
                         <configuration>
                             <skip>false</skip>
+                            <async>false</async>
+                            <timeout>0</timeout>
+                            <quietLogs>false</quietLogs>
                             <executable>${java.home}/bin/java</executable>
-                            <arguments>
-                                <argument>${project.basedir}/../scripts/UpstreamOracleFloor.java</argument>
-                                <argument>--module=use-core</argument>
-                                <argument>--module-dir=${project.basedir}</argument>
-                                <argument>--reactor-root=${project.basedir}/..</argument>
-                                <argument>--requested=${session.request.activeProfiles}</argument>
-                                <argument>--effective=${use.upstreamOracle.effective}</argument>
-                            </arguments>
+                            <workingDirectory>${project.basedir}</workingDirectory>
+                            <commandlineArgs>../scripts/UpstreamOracleFloor.java --module=use-core --module-dir=. --reactor-root=.. --effective=${use.upstreamOracle.effective} --selected=${session.request.selectedProjects} --resume-from=${session.request.resumeFrom} --requested=${session.request.activeProfiles} --allow-profiles=${use.floor.allowProfiles} --exec-args=${exec.args} --exec-skip=${exec.skip} --exec-async=${exec.async} --exec-timeout=${exec.timeout} --exec-executable=${exec.executable} --exec-outputfile=${exec.outputFile} --exec-quietlogs=${exec.quietLogs} --exec-workingdir=${exec.workingdir}</commandlineArgs>
                         </configuration>
                     </execution>
                 </executions>

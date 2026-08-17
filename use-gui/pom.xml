@@ -289,8 +289,21 @@
                  deletes, and ground rule 2 forbids adding a test under use-gui/src, so the
                  floor for THIS module is asserted from the build, by the same checker
                  use-core runs.  Declared in the DEFAULT build, not in the profile, so it
-                 runs in both modes; <skip>false</skip> is pinned so -Dexec.skip cannot
-                 silence it.  See scripts/UpstreamOracleFloor.java.
+                 runs in both modes.  See scripts/UpstreamOracleFloor.java.
+
+                 EVERY SILENCING PROPERTY IS PINNED (round 11, defect F-01 of
+                 docs/port2/upstream-oracle-floor-verification.md): <skip>false</skip> alone
+                 was not enough, because `-Dexec.args=-version` REPLACED the argument list
+                 and produced a green build with zero [floor] lines.  The seven pins below,
+                 the reason each one exists, and why <commandlineArgs> must stay on one line
+                 with relative paths, are documented in full in use-core/pom.xml — the two
+                 blocks are deliberately identical apart from the "module=" option value
+                 (an XML comment may not contain two adjacent dashes).  Both this pom and
+                 use-core's are asserted, on every run, by the checker itself AND by
+                 use-core/src/test/java/org/tzi/use/uncertainty/gate/
+                 UpstreamOracleGateWiringTest.java, which no exec-maven-plugin property can
+                 silence.  A test in use-core cannot see this module's classpath or reports,
+                 so it asserts this module's WIRING only; the counts stay with the build.
                  ========================================================================== -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -305,12 +318,12 @@
                         </goals>
                         <configuration>
                             <skip>false</skip>
+                            <async>false</async>
+                            <timeout>0</timeout>
+                            <quietLogs>false</quietLogs>
                             <executable>${java.home}/bin/java</executable>
-                            <arguments>
-                                <argument>${project.basedir}/../scripts/UpstreamOracleFloor.java</argument>
-                                <argument>--stamp=true</argument>
-                                <argument>--module-dir=${project.basedir}</argument>
-                            </arguments>
+                            <workingDirectory>${project.basedir}</workingDirectory>
+                            <commandlineArgs>../scripts/UpstreamOracleFloor.java --stamp=true --module-dir=.</commandlineArgs>
                         </configuration>
                     </execution>
                     <execution>
@@ -321,15 +334,12 @@
                         </goals>
                         <configuration>
                             <skip>false</skip>
+                            <async>false</async>
+                            <timeout>0</timeout>
+                            <quietLogs>false</quietLogs>
                             <executable>${java.home}/bin/java</executable>
-                            <arguments>
-                                <argument>${project.basedir}/../scripts/UpstreamOracleFloor.java</argument>
-                                <argument>--module=use-gui</argument>
-                                <argument>--module-dir=${project.basedir}</argument>
-                                <argument>--reactor-root=${project.basedir}/..</argument>
-                                <argument>--requested=${session.request.activeProfiles}</argument>
-                                <argument>--effective=${use.upstreamOracle.effective}</argument>
-                            </arguments>
+                            <workingDirectory>${project.basedir}</workingDirectory>
+                            <commandlineArgs>../scripts/UpstreamOracleFloor.java --module=use-gui --module-dir=. --reactor-root=.. --effective=${use.upstreamOracle.effective} --selected=${session.request.selectedProjects} --resume-from=${session.request.resumeFrom} --requested=${session.request.activeProfiles} --allow-profiles=${use.floor.allowProfiles} --exec-args=${exec.args} --exec-skip=${exec.skip} --exec-async=${exec.async} --exec-timeout=${exec.timeout} --exec-executable=${exec.executable} --exec-outputfile=${exec.outputFile} --exec-quietlogs=${exec.quietLogs} --exec-workingdir=${exec.workingdir}</commandlineArgs>
                         </configuration>
                     </execution>
                 </executions>

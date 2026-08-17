@@ -10,15 +10,78 @@
 // and holds the gate to harness-contract.md sec. 8 step 2: "A floor chosen after the run is
 // not a floor", "0 is rejected outright".
 //
+// ROUND 11 closes three defects of round 10
+// (docs/port2/upstream-oracle-floor-verification.md):
+//
+//   F-01  `-Dexec.args=-version` produced a green build with ZERO [floor] lines. exec:exec's
+//         `commandlineArgs` parameter carries the user property `exec.args` and REPLACES
+//         `<arguments>`, so the checker was never invoked. `<skip>false</skip>` was necessary
+//         and not sufficient. Closed by THREE independent mechanisms, so that defeating one
+//         leaves the others standing:
+//           (1) both poms now pin, in BOTH floor executions, every exec:exec parameter whose
+//               user property could silence or divert the check: <skip>false</skip>,
+//               <commandlineArgs>, <async>false</async>, <timeout>0</timeout>,
+//               <quietLogs>false</quietLogs>, <executable> and <workingDirectory>. POM
+//               <configuration> beats a @Parameter(property=...) default — proved on this tree
+//               by round 10 break (f), where the pinned <executable> held while the unpinned
+//               argument list was replaced by -Dexec.args. The one parameter that cannot be
+//               PINNED is `outputFile` (there is no value meaning "the log"), so instead every
+//               one of those user properties is handed BACK to this checker by both poms
+//               (--exec-args=${exec.args} and its seven siblings) and setting any of them is a
+//               BUILD FAILURE, check A2 below. Pinning makes an attack inert; A2 makes it loud,
+//               and a silence nobody notices is what F-01 actually was;
+//           (2) a Jupiter test, use-core/src/test/java/org/tzi/use/uncertainty/gate/
+//               UpstreamOracleGateWiringTest.java, re-asserts that wiring from inside the test
+//               phase, where no exec-maven-plugin property can reach it, and additionally
+//               proves at RUNTIME that the initialize-phase stamp execution really ran;
+//           (3) the receipt written by THIS file (see RECEIPT below), which
+//               scripts/upstream-oracle-gate.sh verifies on disk after Maven has exited.
+//         WHAT ARGV THIS CHECKER REQUIRES is stated under ARGV CONTRACT below, and what it
+//         does when it does not receive it: it exits 2 without writing a receipt, which fails
+//         the build. It cannot defend itself against not being invoked at all — that is
+//         precisely why (2) and (3) exist and why the gate is a script, not a typed command.
+//
+//   F-02  a mistyped `-P` id (`-Pupstream-oracle-typo`) was a green, vacuous gate: Maven only
+//         warns, and this checker never sees a request it was not given, so
+//         "requested-but-not-effective" cannot fire. Closed twice:
+//           (1) the gate is DEFINED as scripts/upstream-oracle-gate.sh, which hard-codes the
+//               profile id, greps the log for `could not be activated`, and requires this checker
+//               to have reported the expected mode and verdict for BOTH modules — so a typo now
+//               fails to find a script instead of silently degrading a gate;
+//           (2) check B2 below, which round 10 sec. 3.5 item 3 correctly said was available all
+//               along: every profile id declared by any reactor pom is collected by the same text
+//               parse this file already ran, and a requested id matching none FAILS the build. So
+//               even the HAND-TYPED `mvn -Pupstream-oracle-typo` is now red.
+//
+//   F-03  `-pl use-core -Pupstream-oracle` printed an unqualified `PASS` for half a gate. This
+//         checker now reads ${session.request.selectedProjects} and
+//         ${session.request.resumeFrom} and reports `PARTIAL`, never `PASS`, when the reactor
+//         was partial. Exit stays 0 — `-pl` is a deliberate developer flag, not a merge
+//         accident — but the receipt records verdict=PARTIAL and the wrapper rejects it, so a
+//         partial reactor can never be presented as the acceptance gate.
+//
 // RUN BY MAVEN, NOT BY A HUMAN. Bound in use-core/pom.xml and use-gui/pom.xml as
-// exec-maven-plugin execution `upstream-oracle-floor`, phase `verify`, <skip>false</skip>.
+// exec-maven-plugin executions `upstream-oracle-floor-stamp` (initialize) and
+// `upstream-oracle-floor` (verify), both with <skip>false</skip>, <async>false</async>,
+// <timeout>0</timeout> and a pinned <commandlineArgs>.
 // Java single-file source mode (JEP 330) — no dependency beyond the JDK that runs Maven, so
 // the gate cannot be disabled by an artifact failing to resolve.
 //
-// Usage:
-//   java scripts/UpstreamOracleFloor.java --stamp=true --module-dir=<dir>     (phase initialize)
-//   java scripts/UpstreamOracleFloor.java --module=use-core --module-dir=<dir>
-//        --reactor-root=<dir> --requested=<[profile,...]> --effective=<true|false>
+// ARGV CONTRACT. Exactly these options, all required, no others accepted:
+//   stamp mode  (phase initialize):
+//       --stamp=true --module-dir=<dir>
+//   check mode  (phase verify):
+//       --module=<use-core|use-gui> --module-dir=<dir> --reactor-root=<dir>
+//       --effective=<true|false> --selected=<maven list> --resume-from=<value>
+//       --requested=<maven list> --allow-profiles=<comma list>
+//       --exec-args=<v> --exec-skip=<v> --exec-async=<v> --exec-timeout=<v>
+//       --exec-executable=<v> --exec-outputfile=<v> --exec-quietlogs=<v> --exec-workingdir=<v>
+//   An unknown option, a missing option, or a first token that is not an option is FATAL:
+//   exit 2, no receipt written, build fails. Maven renders a List-valued expression as
+//   `[a, b]`, i.e. with a space, and exec:exec splits <commandlineArgs> on whitespace, so a
+//   bare token that follows an option is appended to that option's value — this is how
+//   `--selected=[use-core, use-gui]` survives the split. A `${...}` that Maven left
+//   uninterpolated (it does that for a null field such as resumeFrom) is read as "unset".
 //
 // STALENESS. Surefire does not empty target/surefire-reports: a report written by an earlier
 // -Pupstream-oracle run survives a later default run, so a checker that simply counted the
@@ -27,22 +90,33 @@
 // target/upstream-oracle-floor.stamp at phase `initialize`, and the verify-phase check counts
 // ONLY report files at least as new as that stamp. A missing stamp is a failure, never a pass.
 //
-// Exit 0 = every floor met. Exit 1 = at least one violation, ALL of them printed
-// (the shape of DifferentialSweep.requireStagePass: read all the clauses, not the first).
+// RECEIPT. The check writes target/upstream-oracle-floor.receipt in the module it checked,
+// recording module, mode, verdict, partiality, the counts and the stamp instant — on FAIL as
+// well as on PASS. It is written after the checks and before the exit, so its absence means
+// the check did not run to completion. Nothing inside the same build can read the receipt of
+// its own verify phase; scripts/upstream-oracle-gate.sh reads it after Maven exits, which is
+// the point: that check lives outside Maven, where no Maven property can reach it.
+//
+// Exit 0 = every floor met (verdict PASS, or PARTIAL on a partial reactor).
+// Exit 1 = at least one violation, ALL of them printed (the shape of
+//          DifferentialSweep.requireStagePass: read all the clauses, not the first).
+// Exit 2 = the argv contract was broken.
 //
 // FOUR CHECKS, in this order, none of them skippable:
 //
 //   A. WIRING (mode-independent, both poms, every run). Both use-core/pom.xml and
 //      use-gui/pom.xml must still carry the upstream-oracle profile, the vintage engine
-//      INSIDE it, and this floor execution. Every module's run checks BOTH poms, so
-//      deleting either module's profile block fails the build even in the DEFAULT build,
-//      and even in the module that was not touched. This is the merge accident of D-01.
+//      INSIDE it, and both floor executions with every silencing property pinned. Every
+//      module's run checks BOTH poms, so deleting either module's profile block fails the
+//      build even in the DEFAULT build, and even in the module that was not touched. This is
+//      the merge accident of D-01. The Jupiter wiring test and the gate wrapper are also
+//      asserted to exist, so removing either half of the F-01/F-02 fix fails the other half.
 //   B. REQUESTED vs EFFECTIVE. `--requested` is `${session.request.activeProfiles}`, the
 //      reactor-wide -P list from the command line, which a per-module pom edit CANNOT
 //      change; `--effective` is a property set to `true` only by this module's own profile
 //      block. Requested-but-not-effective is an ERROR, never a pass.
 //   C. PER-MODULE, PER-TIER COUNT FLOORS, pinned below as literals. Losing any one of the
-//      four populations fails. A reactor-wide total would not: use-core's 350 dwarf
+//      four populations fails. A reactor-wide total would not: use-core's 351 dwarf
 //      use-gui's 17.
 //   D. SENTINEL. One vintage-only class per module (junit.framework.TestCase, so no
 //      engine but vintage can collect it) MUST have produced a report under the profile and
@@ -78,16 +152,33 @@ public class UpstreamOracleFloor {
 
     static final String PROFILE_ID = "upstream-oracle";
     static final String STAMP_NAME = "upstream-oracle-floor.stamp";
+    static final String RECEIPT_NAME = "upstream-oracle-floor.receipt";
+
+    /** The other half of the F-01 fix; asserted to exist by check A. */
+    static final String WIRING_TEST =
+            "use-core/src/test/java/org/tzi/use/uncertainty/gate/UpstreamOracleGateWiringTest.java";
+    /** The F-02 fix: the gate IS this invocation. Asserted to exist by check A. */
+    static final String GATE_WRAPPER = "scripts/upstream-oracle-gate.sh";
 
     // -----------------------------------------------------------------------------------
-    // THE FLOORS. Literals, pinned 2026-08-17 BEFORE the run that accepted them, from the
-    // measured state recorded in docs/port2/upstream-oracle-profile.md:
+    // THE FLOORS. Literals, pinned BEFORE the run that accepts them, from the measured state
+    // recorded in docs/port2/upstream-oracle-profile.md:
     //   sec. 4.2 / the round-9 measurement  -> ORACLE: use-core surefire 40/350,
     //       use-gui surefire 8/17, use-core failsafe 1/1, use-gui failsafe 1/129
     //       (= 50 distinct classes / 497 distinct methods)
     //   sec. 3.1 + sec. 3.3                 -> DEFAULT: use-core surefire 7/79,
     //       use-gui surefire 1/1, use-core failsafe 1/1, use-gui failsafe 1/129
     //       (= 210 methods, 80 surefire + 130 failsafe)
+    //
+    // RE-PINNED 2026-08-17 (round 11, F-01). The F-01 fix adds ONE test class with ONE test
+    // method — UpstreamOracleGateWiringTest — to use-core/src/test, in both modes. So
+    // use-core/surefire goes 7/79 -> 8/80 (default) and 40/350 -> 41/351 (oracle), and the
+    // totals go 10/210 -> 11/211 and 50/497 -> 51/498. The floors are RAISED in the same
+    // commit that grows the suite, which is what harness-contract.md sec. 0.1 requires; they
+    // are not lowered, and the arithmetic is +1/+1 in exactly one cell of the table.
+    // Correctness beats a round number: 211 is the honest count of a gate that cannot be
+    // silenced, 210 was the count of one that could.
+    //
     // Floors are >= : the suite may GROW, it may never shrink. No floor is 0 and no floor
     // may be lowered to make a run pass — see harness-contract.md sec. 8 step 7 clause 1,
     // "Do not lower the floor."
@@ -95,13 +186,13 @@ public class UpstreamOracleFloor {
     record Floor(int classes, int methods) { }
 
     static final Map<String, Floor> ORACLE = Map.of(
-            "use-core/surefire", new Floor(40, 350),
+            "use-core/surefire", new Floor(41, 351),
             "use-gui/surefire", new Floor(8, 17),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
 
     static final Map<String, Floor> DEFAULT = Map.of(
-            "use-core/surefire", new Floor(7, 79),
+            "use-core/surefire", new Floor(8, 80),
             "use-gui/surefire", new Floor(1, 1),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
@@ -117,6 +208,44 @@ public class UpstreamOracleFloor {
     static final List<String> TIERS = List.of("surefire", "failsafe");
     static final List<String> POM_MODULES = List.of("use-core", "use-gui");
 
+    /**
+     * The exec-maven-plugin user properties the poms hand back to this checker so that an
+     * ATTEMPT to tamper with the floor execution is a build FAILURE and not merely inert.
+     * Each pom passes {@code --exec-<x>=${exec.<X>}}; Maven interpolates it when the operator
+     * set the property on the command line and leaves the literal {@code ${...}} when they did
+     * not, which is how "unset" is told from "set".
+     *
+     * <p>exec-maven-plugin is bound in this reactor to the floor executions and to nothing else,
+     * so there is no legitimate {@code -Dexec.*} on this build. {@code outputFile} is in this
+     * list because it is the one parameter that CANNOT be pinned in the POM (no value of it means
+     * "the Maven log"), so detection is the only defence against it.
+     */
+    static final Map<String, String> EXEC_PROPERTY_OF_OPTION = new LinkedHashMap<>(Map.of(
+            "exec-args", "exec.args",
+            "exec-skip", "exec.skip",
+            "exec-async", "exec.async",
+            "exec-timeout", "exec.timeout",
+            "exec-executable", "exec.executable",
+            "exec-outputfile", "exec.outputFile",
+            "exec-quietlogs", "exec.quietLogs",
+            "exec-workingdir", "exec.workingdir"));
+
+    /** The complete set of option names this program accepts. Anything else is FATAL. */
+    static final Set<String> KNOWN_OPTIONS;
+    static final List<String> REQUIRED_CHECK_OPTIONS;
+    static {
+        Set<String> known = new LinkedHashSet<>(List.of(
+                "stamp", "module", "module-dir", "reactor-root", "requested", "effective",
+                "selected", "resume-from", "allow-profiles"));
+        known.addAll(EXEC_PROPERTY_OF_OPTION.keySet());
+        KNOWN_OPTIONS = Set.copyOf(known);
+        List<String> required = new ArrayList<>(List.of(
+                "module", "module-dir", "reactor-root", "requested", "effective",
+                "selected", "resume-from", "allow-profiles"));
+        required.addAll(EXEC_PROPERTY_OF_OPTION.keySet());
+        REQUIRED_CHECK_OPTIONS = List.copyOf(required);
+    }
+
     static final List<String> violations = new ArrayList<>();
 
     static void fail(String message) {
@@ -124,15 +253,12 @@ public class UpstreamOracleFloor {
     }
 
     public static void main(String[] args) throws Exception {
-        Map<String, String> opt = new LinkedHashMap<>();
-        for (String a : args) {
-            int eq = a.indexOf('=');
-            if (!a.startsWith("--") || eq < 0) {
-                die("unparseable argument: " + a);
+        Map<String, String> opt = parseArgs(args);
+
+        if (opt.containsKey("stamp")) {
+            if (!"true".equals(opt.get("stamp"))) {
+                die("--stamp must be =true when present, got: " + opt.get("stamp"));
             }
-            opt.put(a.substring(2, eq), a.substring(eq + 1));
-        }
-        if ("true".equals(opt.get("stamp"))) {
             Path stamp = Path.of(require(opt, "module-dir")).toAbsolutePath().normalize()
                     .resolve("target").resolve(STAMP_NAME);
             Files.createDirectories(stamp.getParent());
@@ -143,24 +269,39 @@ public class UpstreamOracleFloor {
             return;
         }
 
-        String module = require(opt, "module");
-        Path moduleDir = Path.of(require(opt, "module-dir")).toAbsolutePath().normalize();
-        Path reactorRoot = Path.of(require(opt, "reactor-root")).toAbsolutePath().normalize();
-        String requestedRaw = require(opt, "requested");
-        String effectiveRaw = require(opt, "effective");
+        for (String required : REQUIRED_CHECK_OPTIONS) {
+            if (!opt.containsKey(required)) {
+                die("missing required argument --" + required + "=; got " + opt.keySet());
+            }
+        }
+
+        String module = opt.get("module");
+        Path moduleDir = Path.of(opt.get("module-dir")).toAbsolutePath().normalize();
+        Path reactorRoot = Path.of(opt.get("reactor-root")).toAbsolutePath().normalize();
+        String requestedRaw = opt.get("requested");
+        String effectiveRaw = opt.get("effective");
+        String selectedRaw = unsetIfUninterpolated(opt.get("selected"));
+        String resumeRaw = unsetIfUninterpolated(opt.get("resume-from"));
 
         if (!POM_MODULES.contains(module)) {
             die("--module must be one of " + POM_MODULES + ", got: " + module);
         }
 
-        Set<String> requested = parseProfileList(requestedRaw);
+        Set<String> requested = parseMavenList(requestedRaw);
         boolean oracleRequested = requested.contains(PROFILE_ID);
+        Set<String> selected = parseMavenList(selectedRaw);
+        boolean partial = !selected.isEmpty() || !resumeRaw.isBlank();
+        String mode = oracleRequested ? "ORACLE" : "DEFAULT";
 
         System.out.println("[floor] ===== upstream-oracle floor check: " + module + " =====");
         System.out.println("[floor] requested profiles (reactor-wide, from the command line): "
                 + (requested.isEmpty() ? "(none)" : requested));
         System.out.println("[floor] this module's upstream-oracle profile effective: " + effectiveRaw);
-        System.out.println("[floor] mode: " + (oracleRequested ? "ORACLE" : "DEFAULT"));
+        System.out.println("[floor] mode: " + mode);
+        System.out.println("[floor] reactor: " + (partial
+                ? "PARTIAL — selected projects " + (selected.isEmpty() ? "(none)" : selected)
+                  + ", resume-from " + (resumeRaw.isBlank() ? "(none)" : resumeRaw)
+                : "FULL (no -pl/--projects, no -rf/--resume-from)"));
 
         // ---- A. WIRING -----------------------------------------------------------------
         for (String m : POM_MODULES) {
@@ -169,6 +310,37 @@ public class UpstreamOracleFloor {
         Path self = reactorRoot.resolve("scripts").resolve("UpstreamOracleFloor.java");
         if (!Files.isRegularFile(self)) {
             fail("WIRING: the floor checker itself is missing at " + self);
+        }
+        if (!Files.isRegularFile(reactorRoot.resolve(WIRING_TEST))) {
+            fail("WIRING: " + WIRING_TEST + " is missing. That Jupiter test is the half of the"
+                    + " F-01 fix that cannot be silenced by an exec-maven-plugin user property;"
+                    + " without it, neutralising this exec binding would go unnoticed."
+                    + " See docs/port2/upstream-oracle-floor-verification.md F-01.");
+        }
+        if (!Files.isRegularFile(reactorRoot.resolve(GATE_WRAPPER))) {
+            fail("WIRING: " + GATE_WRAPPER + " is missing. The acceptance gate is DEFINED as that"
+                    + " invocation (F-02): it hard-codes the profile id, so a typo cannot degrade"
+                    + " the gate to a green default run. Hand-typing -P" + PROFILE_ID
+                    + " is not the gate.");
+        }
+
+        // ---- A2. TAMPERING (F-01) ------------------------------------------------------
+        // The pins in the poms make these properties INERT. Inert is not enough: an attempt to
+        // silence the gate must be loud, or the next reader of a green log cannot tell that one
+        // was made. So each -Dexec.* is a violation in its own right. `outputFile` is here
+        // because it is the only exec:exec parameter with no pinnable value.
+        for (Map.Entry<String, String> e : EXEC_PROPERTY_OF_OPTION.entrySet()) {
+            String value = unsetIfUninterpolated(opt.get(e.getKey()));
+            if (!value.isBlank()) {
+                fail("TAMPERING: -D" + e.getValue() + "=" + value + " was set on the command line."
+                        + " That property belongs to the floor's own exec-maven-plugin execution,"
+                        + " which is the ONLY exec-maven-plugin binding in this reactor, so there"
+                        + " is no legitimate use for it here. It is inert — the pom pins the"
+                        + " corresponding element — but an attempt to switch the gate off is a"
+                        + " BUILD FAILURE, not a silent no-op. This is defect F-01"
+                        + " (docs/port2/upstream-oracle-floor-verification.md sec. 3.7), where"
+                        + " -Dexec.args=-version produced BUILD SUCCESS with zero [floor] lines.");
+            }
         }
 
         // ---- B. REQUESTED vs EFFECTIVE -------------------------------------------------
@@ -193,9 +365,44 @@ public class UpstreamOracleFloor {
                     + " The default build must stay vintage-free.");
         }
 
+        // ---- B2. AN UNACTIVATABLE REQUESTED PROFILE (F-02) -----------------------------
+        // Round 10 sec. 3.5 item 3 called the earlier refusal to do this refutable, and it was
+        // right: "the checker would have to know every legitimate profile id, which it cannot"
+        // is false, because it already text-parses both poms for <id>upstream-oracle</id>.
+        // Collecting every <id> declared inside <profiles> in every reactor pom is the same
+        // parse. So `mvn -Pupstream-oracle-typo` now FAILS the build instead of quietly running
+        // the vacuous default gate. It over-collects rather than under-collects (any <id> inside
+        // a <profiles> element counts), because a false failure here would be worse than a
+        // slightly permissive allow-set.
+        //
+        // RESIDUAL, stated because a limit nobody writes down is a false claim: a profile
+        // declared in a settings.xml or in an ancestor pom outside this reactor would not be
+        // found. This machine has neither (upstream-oracle-verification.md sec. 11: no .mvn, no
+        // ~/.m2/settings.xml, empty MAVEN_OPTS/MAVEN_ARGS), so the pom set is the complete
+        // authority here. If a future machine has one, declare the id or pass
+        // -Duse.floor.allowProfiles=<id>[,<id>] — which widens THIS check and nothing else.
+        Set<String> declaredProfiles = declaredProfileIds(reactorRoot);
+        Set<String> allowedProfiles = parseMavenList(
+                unsetIfUninterpolated(opt.get("allow-profiles")));
+        for (String r : requested) {
+            if (!declaredProfiles.contains(r) && !allowedProfiles.contains(r)) {
+                fail("PROFILE: -P" + r + " was requested on the command line but NO pom in this"
+                        + " reactor declares a profile with that id. Maven only WARNS about that"
+                        + " and then builds on, so the gate would have run the vacuous"
+                        + " default-build counts and printed PASS while the operator believed"
+                        + " they had asked for the upstream oracle — defect F-02"
+                        + " (docs/port2/upstream-oracle-floor-verification.md sec. 3.5). Declared"
+                        + " profile ids in this reactor: " + declaredProfiles + ". The acceptance"
+                        + " gate is " + GATE_WRAPPER + ", which hard-codes the id; do not hand-type"
+                        + " -P. If this id IS legitimate, declare it in a pom or pass"
+                        + " -Duse.floor.allowProfiles=" + r + ".");
+            }
+        }
+
         // ---- C. COUNT FLOORS -----------------------------------------------------------
         Path stampFile = moduleDir.resolve("target").resolve(STAMP_NAME);
         long stampMillis = Long.MAX_VALUE;
+        String stampInstant = "(absent)";
         if (!Files.isRegularFile(stampFile)) {
             fail("FRESHNESS: no " + STAMP_NAME + " in " + moduleDir.resolve("target")
                     + ". The `upstream-oracle-floor-stamp` execution did not run, so this check"
@@ -204,11 +411,13 @@ public class UpstreamOracleFloor {
                     + " vacuous pass D-01 is about.");
         } else {
             stampMillis = Files.getLastModifiedTime(stampFile).toMillis();
-            System.out.println("[floor] freshness stamp: " + Instant.ofEpochMilli(stampMillis)
+            stampInstant = Instant.ofEpochMilli(stampMillis).toString();
+            System.out.println("[floor] freshness stamp: " + stampInstant
                     + " — reports older than this are stale and are NOT counted");
         }
 
         Map<String, Floor> floors = oracleRequested ? ORACLE : DEFAULT;
+        Map<String, Tally> tallies = new LinkedHashMap<>();
         for (String tier : TIERS) {
             String key = module + "/" + tier;
             Floor floor = floors.get(key);
@@ -217,6 +426,7 @@ public class UpstreamOracleFloor {
             }
             Path dir = moduleDir.resolve("target").resolve(tier + "-reports");
             Tally t = tally(dir, stampMillis);
+            tallies.put(tier, t);
             System.out.printf("[floor] %-9s %-9s classes=%-3d (floor %-3d)  methods=%-4d (floor %-4d)"
                             + "  executions=%-4d failures=%d errors=%d skipped=%d stale-ignored=%d%n",
                     tier, module, t.classes, floor.classes(), t.methods, floor.methods(),
@@ -246,7 +456,7 @@ public class UpstreamOracleFloor {
 
         // ---- D. SENTINEL ---------------------------------------------------------------
         String sentinel = SENTINEL.get(module);
-        Tally sure = tally(moduleDir.resolve("target").resolve("surefire-reports"), stampMillis);
+        Tally sure = tallies.get("surefire");
         boolean present = sure.classNames.contains(sentinel);
         System.out.println("[floor] vintage-only sentinel " + sentinel + ": "
                 + (present ? "collected" : "absent"));
@@ -263,15 +473,31 @@ public class UpstreamOracleFloor {
         }
 
         // ---- verdict -------------------------------------------------------------------
+        // F-03: a partial reactor never earns the word PASS. `-pl` is a legitimate developer
+        // flag, so this is not a build failure; it is a refusal to be quoted as the gate.
+        String verdict = !violations.isEmpty() ? "FAIL" : partial ? "PARTIAL" : "PASS";
+        writeReceipt(moduleDir, module, mode, verdict, partial, selected, resumeRaw, requested,
+                effectiveRaw, stampInstant, tallies);
+
         if (violations.isEmpty()) {
-            System.out.println("[floor] PASS — " + module + " met every pinned floor in "
-                    + (oracleRequested ? "ORACLE" : "DEFAULT") + " mode.");
+            if (partial) {
+                System.out.println("[floor] PARTIAL — " + module + " met its own pinned floors in "
+                        + mode + " mode, but THIS WAS A PARTIAL REACTOR"
+                        + (selected.isEmpty() ? "" : " (-pl/--projects " + selected + ")")
+                        + (resumeRaw.isBlank() ? "" : " (-rf/--resume-from " + resumeRaw + ")")
+                        + ", so the other module's floors were NOT checked. A partial reactor is"
+                        + " NOT the acceptance gate: run " + GATE_WRAPPER + ". Do not quote this"
+                        + " line as a green gate (F-03).");
+            } else {
+                System.out.println("[floor] PASS — " + module + " met every pinned floor in "
+                        + mode + " mode.");
+            }
             return;
         }
         System.out.println();
         System.out.println("[floor] ###############################################################");
         System.out.println("[floor] FAIL — " + violations.size() + " floor violation(s) in " + module
-                + " (" + (oracleRequested ? "ORACLE" : "DEFAULT") + " mode):");
+                + " (" + mode + " mode):");
         for (int i = 0; i < violations.size(); i++) {
             System.out.println("[floor]   " + (i + 1) + ". " + violations.get(i));
         }
@@ -290,13 +516,60 @@ public class UpstreamOracleFloor {
                 : "The default build lost tests it used to run.";
     }
 
+    // ---------------- the receipt (F-01 mechanism 3, F-02) ---------------------------------
+
+    /**
+     * Writes the machine-readable receipt scripts/upstream-oracle-gate.sh verifies after Maven
+     * has exited. Written on FAIL as well as PASS: its ABSENCE is the signal that the check did
+     * not run, which is the only thing a silenced exec binding leaves behind.
+     */
+    static void writeReceipt(Path moduleDir, String module, String mode, String verdict,
+            boolean partial, Set<String> selected, String resumeFrom, Set<String> requested,
+            String effective, String stampInstant, Map<String, Tally> tallies) {
+        Path receipt = moduleDir.resolve("target").resolve(RECEIPT_NAME);
+        StringBuilder sb = new StringBuilder();
+        sb.append("# upstream-oracle floor receipt — written by scripts/UpstreamOracleFloor.java\n");
+        sb.append("# Verified after the build by scripts/upstream-oracle-gate.sh. Its absence means\n");
+        sb.append("# the verify-phase floor check did not run to completion (F-01).\n");
+        sb.append("module=").append(module).append('\n');
+        sb.append("mode=").append(mode).append('\n');
+        sb.append("verdict=").append(verdict).append('\n');
+        sb.append("partial-reactor=").append(partial).append('\n');
+        sb.append("selected-projects=").append(selected.isEmpty() ? "(none)" : selected).append('\n');
+        sb.append("resume-from=").append(resumeFrom.isBlank() ? "(none)" : resumeFrom).append('\n');
+        sb.append("requested-profiles=").append(requested.isEmpty() ? "(none)" : requested).append('\n');
+        sb.append("effective=").append(effective).append('\n');
+        sb.append("stamp=").append(stampInstant).append('\n');
+        sb.append("violations=").append(violations.size()).append('\n');
+        for (String tier : TIERS) {
+            Tally t = tallies.get(tier);
+            if (t == null) {
+                continue;
+            }
+            sb.append(tier).append(".classes=").append(t.classes).append('\n');
+            sb.append(tier).append(".methods=").append(t.methods).append('\n');
+            sb.append(tier).append(".executions=").append(t.executions).append('\n');
+        }
+        sb.append("written=").append(Instant.now()).append('\n');
+        try {
+            Files.createDirectories(receipt.getParent());
+            Files.writeString(receipt, sb.toString(), StandardCharsets.UTF_8);
+            System.out.println("[floor] wrote receipt " + receipt + " (verdict=" + verdict + ")");
+        } catch (IOException e) {
+            // A receipt that cannot be written must not be silently absent.
+            System.out.println("[floor] FATAL — cannot write receipt " + receipt + ": " + e);
+            System.exit(2);
+        }
+    }
+
     // ---------------- A. wiring -----------------------------------------------------------
 
     /**
      * Asserts, from the pom text with XML comments stripped and all whitespace removed, that
-     * the module still carries the profile, the engine inside it, and this floor execution.
-     * Text rather than an effective-model query on purpose: this must hold for the OTHER
-     * module too, which the running Maven session does not expose.
+     * the module still carries the profile, the engine inside it, both floor executions, and
+     * every pin that keeps a command-line property from silencing them. Text rather than an
+     * effective-model query on purpose: this must hold for the OTHER module too, which the
+     * running Maven session does not expose.
      */
     static void checkWiring(Path pom, String module) {
         String raw;
@@ -356,13 +629,108 @@ public class UpstreamOracleFloor {
                     + " bound to the `initialize` phase, so stale reports from an earlier"
                     + " -P" + PROFILE_ID + " run could be counted as this build's.");
         }
-        if (!x.contains("<skip>false</skip>")) {
-            fail("WIRING: " + module + "/pom.xml no longer pins <skip>false</skip> on the floor"
-                    + " execution, so -Dexec.skip=true would silence the gate.");
-        }
         if (!x.contains("--module=" + module)) {
             fail("WIRING: " + module + "/pom.xml's floor execution does not pass --module="
                     + module + ".");
+        }
+        // ---- F-01: every exec:exec parameter that could silence the check, pinned ---------
+        // Both floor executions must pin all four. exec:exec resolves a @Parameter's user
+        // property ONLY when the POM leaves the element out, so a pinned element makes the
+        // corresponding -D inert. Verified on this tree: round 10 break (f) showed the pinned
+        // <executable> holding while the unpinned argument list was replaced by -Dexec.args.
+        pin(x, module, "<skip>false</skip>", "exec.skip",
+                "-Dexec.skip=true would skip the goal");
+        pin(x, module, "<commandlineArgs>", "exec.args",
+                "-Dexec.args=-version REPLACES the argument list, so `java -version` runs instead"
+                + " of the checker and the build stays green with zero [floor] lines (F-01)");
+        pin(x, module, "<async>false</async>", "exec.async",
+                "-Dexec.async=true detaches the process, so its exit code is never examined");
+        pin(x, module, "<timeout>0</timeout>", "exec.timeout",
+                "-Dexec.timeout=<n> could kill the checker mid-flight");
+        pin(x, module, "<quietLogs>false</quietLogs>", "exec.quietLogs",
+                "-Dexec.quietLogs=true demotes every [floor] line to debug level, so a reader"
+                + " sampling the log sees a green build and no gate");
+        pin(x, module, "<executable>${java.home}/bin/java</executable>", "exec.executable",
+                "-Dexec.executable=/bin/true would run something else entirely");
+        pin(x, module, "<workingDirectory>${project.basedir}</workingDirectory>", "exec.workingdir",
+                "-Dexec.workingdir=<elsewhere> would move the checker's cwd, and the floor"
+                + " executions pass RELATIVE paths (which is what keeps them immune to"
+                + " exec:exec's whitespace splitting of <commandlineArgs>)");
+        if (!x.contains("--allow-profiles=${use.floor.allowProfiles}")) {
+            fail("WIRING: " + module + "/pom.xml's floor execution does not pass"
+                    + " --allow-profiles=${use.floor.allowProfiles}, so the unactivatable-profile"
+                    + " check (F-02) has no allow-set and would reject a legitimately declared"
+                    + " future profile.");
+        }
+        // ...and the tamper detector: the verify execution must hand every one of those user
+        // properties back to this checker, so that setting one FAILS the build (check A2).
+        for (Map.Entry<String, String> e : EXEC_PROPERTY_OF_OPTION.entrySet()) {
+            String token = "--" + e.getKey() + "=${" + e.getValue() + "}";
+            if (!x.contains(token)) {
+                fail("WIRING: " + module + "/pom.xml's floor execution does not pass " + token
+                        + ", so a -D" + e.getValue() + " on the command line would go undetected"
+                        + " instead of failing the build (F-01, check A2).");
+            }
+        }
+    }
+
+    /**
+     * Every profile id declared by any pom in this reactor: the reactor root's pom and the
+     * {@code pom.xml} of every directory one level below it. Deliberately over-collecting — every
+     * {@code <id>...</id>} inside a {@code <profiles>} element is taken, without checking that it
+     * is a profile's own id rather than, say, an execution's — because the consequence of
+     * over-collecting is a marginally wider allow-set, and the consequence of under-collecting
+     * would be a build that fails on a legitimate profile.
+     */
+    static Set<String> declaredProfileIds(Path reactorRoot) {
+        Set<String> ids = new TreeSet<>();
+        List<Path> poms = new ArrayList<>();
+        poms.add(reactorRoot.resolve("pom.xml"));
+        try (Stream<Path> s = Files.list(reactorRoot)) {
+            s.filter(Files::isDirectory).map(d -> d.resolve("pom.xml"))
+                    .filter(Files::isRegularFile).sorted().forEach(poms::add);
+        } catch (IOException e) {
+            fail("PROFILE: cannot list the reactor root " + reactorRoot + " (" + e + "), so the"
+                    + " declared-profile check cannot run.");
+            return ids;
+        }
+        for (Path pom : poms) {
+            if (!Files.isRegularFile(pom)) {
+                continue;
+            }
+            String x;
+            try {
+                x = Files.readString(pom, StandardCharsets.UTF_8)
+                        .replaceAll("(?s)<!--.*?-->", "").replaceAll("\\s+", "");
+            } catch (IOException e) {
+                fail("PROFILE: cannot read " + pom + " (" + e + ").");
+                continue;
+            }
+            int p0 = x.indexOf("<profiles>");
+            int p1 = x.indexOf("</profiles>");
+            if (p0 < 0 || p1 < p0) {
+                continue;
+            }
+            String profiles = x.substring(p0, p1);
+            for (int i = profiles.indexOf("<id>"); i >= 0; i = profiles.indexOf("<id>", i + 1)) {
+                int end = profiles.indexOf("</id>", i);
+                if (end > i) {
+                    ids.add(profiles.substring(i + "<id>".length(), end));
+                }
+            }
+        }
+        return ids;
+    }
+
+    /** Both floor executions must carry {@code element}; two occurrences, no fewer. */
+    static void pin(String strippedPom, String module, String element, String property,
+            String consequence) {
+        int n = count(strippedPom, element);
+        if (n < 2) {
+            fail("WIRING: " + module + "/pom.xml carries " + element + " " + n + " time(s), needs 2"
+                    + " (one per floor execution). Without it the user property " + property
+                    + " is honoured and " + consequence + ". See F-01 in"
+                    + " docs/port2/upstream-oracle-floor-verification.md.");
         }
     }
 
@@ -453,9 +821,53 @@ public class UpstreamOracleFloor {
 
     // ---------------- helpers -------------------------------------------------------------
 
-    /** Parses Maven's {@code ${session.request.activeProfiles}}, e.g. {@code [upstream-oracle]}. */
-    static Set<String> parseProfileList(String raw) {
-        String s = raw.trim();
+    /**
+     * The ARGV CONTRACT (see the header). A token of the form {@code --name=value} starts an
+     * option; any other token is a continuation of the previous option's value, joined with a
+     * single space — that is how a Maven List rendered as {@code [a, b]} survives exec:exec's
+     * whitespace split. An unknown option name, a duplicate, or a continuation before any
+     * option is FATAL.
+     */
+    static Map<String, String> parseArgs(String[] args) {
+        Map<String, String> opt = new LinkedHashMap<>();
+        String current = null;
+        for (String a : args) {
+            int eq = a.indexOf('=');
+            if (a.startsWith("--") && eq > 2) {
+                String name = a.substring(2, eq);
+                if (!KNOWN_OPTIONS.contains(name)) {
+                    die("unknown option --" + name + "=; accepted options are "
+                            + new TreeSet<>(KNOWN_OPTIONS));
+                }
+                if (opt.containsKey(name)) {
+                    die("option --" + name + "= given twice");
+                }
+                opt.put(name, a.substring(eq + 1));
+                current = name;
+            } else if (current != null) {
+                opt.put(current, opt.get(current) + " " + a);
+            } else {
+                die("unparseable argument (expected --name=value): " + a);
+            }
+        }
+        if (opt.isEmpty()) {
+            die("no arguments. This program is run by Maven, not by hand; see the ARGV CONTRACT"
+                    + " in scripts/UpstreamOracleFloor.java.");
+        }
+        return opt;
+    }
+
+    /**
+     * Maven leaves {@code ${session.request.resumeFrom}} uninterpolated when the field is null,
+     * so the literal expression reaching us means "unset", not "a project called ${...}".
+     */
+    static String unsetIfUninterpolated(String value) {
+        return value == null || value.contains("${") ? "" : value;
+    }
+
+    /** Parses a Maven {@code List} rendering, e.g. {@code [upstream-oracle]} or {@code []}. */
+    static Set<String> parseMavenList(String raw) {
+        String s = raw == null ? "" : raw.trim();
         if (s.startsWith("[")) {
             s = s.substring(1);
         }
@@ -483,7 +895,9 @@ public class UpstreamOracleFloor {
     static void die(String message) {
         System.out.println("[floor] FATAL — " + message);
         System.out.println("[floor] usage: java scripts/UpstreamOracleFloor.java --module=<m>"
-                + " --module-dir=<dir> --reactor-root=<dir> --requested=<list> --effective=<bool>");
+                + " --module-dir=<dir> --reactor-root=<dir> --effective=<bool> --selected=<list>"
+                + " --resume-from=<value> --requested=<list>");
+        System.out.println("[floor] (or --stamp=true --module-dir=<dir> for the initialize phase)");
         System.exit(2);
     }
 
