@@ -29,7 +29,20 @@
 //               one of those user properties is handed BACK to this checker by both poms
 //               (--exec-args=${exec.args} and its seven siblings) and setting any of them is a
 //               BUILD FAILURE, check A2 below. Pinning makes an attack inert; A2 makes it loud,
-//               and a silence nobody notices is what F-01 actually was;
+//               and a silence nobody notices is what F-01 actually was.
+//               HOW MANY THERE ARE, corrected 2026-08-18 (round 11 defect G-03, and the
+//               refuter's own arithmetic corrected in turn — see the count below): goal
+//               `exec` of exec-maven-plugin 3.5.0 declares TWENTY-TWO parameters carrying a
+//               user-property expression, not "eight" and not "21". Measured, not recalled:
+//                 unzip -p exec-maven-plugin-3.5.0.jar META-INF/maven/plugin.xml
+//                 (mojo goal=exec; parameters whose <configuration> body holds a ${...})
+//               Twenty of the twenty-two are `exec.*`; two are unprefixed (`${sourceRoot}`,
+//               `${testSourceRoot}`). SEVEN are pinned in both poms, EIGHT are handed back to
+//               check A2, and the remaining FOURTEEN are neither. That residual is DELIBERATE
+//               and is written down in docs/port2/gate-threat-model.md sec. 3: defeating one
+//               of the fourteen (e.g. -Dexec.useMavenLogger=true) requires a hand-typed -D
+//               that no honest workflow produces, and the gate wrapper still fails such a run
+//               on its announce-count and receipt checks;
 //           (2) a Jupiter test, use-core/src/test/java/org/tzi/use/uncertainty/gate/
 //               UpstreamOracleGateWiringTest.java, re-asserts that wiring from inside the test
 //               phase, where no exec-maven-plugin property can reach it, and additionally
@@ -67,21 +80,50 @@
 // Java single-file source mode (JEP 330) — no dependency beyond the JDK that runs Maven, so
 // the gate cannot be disabled by an artifact failing to resolve.
 //
-// ARGV CONTRACT. Exactly these options, all required, no others accepted:
-//   stamp mode  (phase initialize):
-//       --stamp=true --module-dir=<dir>
-//   check mode  (phase verify):
+// ARGV CONTRACT — EXACT SET MATCHING, VALIDATED IN FULL BEFORE ANY OPTION IS ACTED ON.
+// (Rewritten 2026-08-18, round 12, defect G-01 of docs/port2/upstream-oracle-gate-round11.md.)
+//
+//   stamp mode  (phase initialize) — EXACTLY these five option names, no more, no fewer:
+//       --stamp=true --module-dir=<dir> --reactor-root=<dir>
+//       --requested=<maven list> --allow-profiles=<comma list>
+//   check mode  (phase verify) — EXACTLY these sixteen, no more, no fewer:
 //       --module=<use-core|use-gui> --module-dir=<dir> --reactor-root=<dir>
 //       --effective=<true|false> --selected=<maven list> --resume-from=<value>
 //       --requested=<maven list> --allow-profiles=<comma list>
 //       --exec-args=<v> --exec-skip=<v> --exec-async=<v> --exec-timeout=<v>
 //       --exec-executable=<v> --exec-outputfile=<v> --exec-quietlogs=<v> --exec-workingdir=<v>
-//   An unknown option, a missing option, or a first token that is not an option is FATAL:
-//   exit 2, no receipt written, build fails. Maven renders a List-valued expression as
-//   `[a, b]`, i.e. with a space, and exec:exec splits <commandlineArgs> on whitespace, so a
-//   bare token that follows an option is appended to that option's value — this is how
-//   `--selected=[use-core, use-gui]` survives the split. A `${...}` that Maven left
-//   uninterpolated (it does that for a null field such as resumeFrom) is read as "unset".
+//
+// THE ARGV IS PARSED AND VALIDATED COMPLETELY, AND ONLY THEN IS A MODE CHOSEN. Anything
+// else is FATAL: exit 2, no receipt written, build fails. Fatal means: an unknown option
+// name; an option given more than once; a token beginning with `--` that is not a
+// well-formed `--name=value`; a continuation token before any option; an option set that is
+// not EXACTLY one of the two above; and — see G-01 — any option VALUE that itself parses as
+// an option (`--name=...`), because an interpolated Maven property is data and can never be
+// argv.
+//
+// WHY EXACT-SET, AND NOT `if (opt.containsKey("stamp"))`. exec:exec splits
+// <commandlineArgs> with CommandLineUtils.translateCommandline AFTER Maven interpolates it,
+// so an operator-supplied property value containing a space contributes EXTRA ARGV TOKENS to
+// this program. Until 2026-08-18 the stamp branch was tested FIRST, before the argv was
+// fully validated, so `-Dexec.args='x --stamp=true'` (and the same payload through
+// `use.floor.allowProfiles` or `use.upstreamOracle.effective`) made the VERIFY-phase
+// execution rewrite the freshness stamp and return 0 — no wiring check, no tamper check, no
+// floors, no sentinel, NO RECEIPT, and BUILD SUCCESS. One injected token defeated three of
+// the four F-01 mechanisms at once. The exact-set rule closes it structurally: `stamp` is
+// simply not a legal option name in a check argv, and the sixteen check options are not
+// legal in a stamp argv. There is no ordering left to get wrong.
+//
+// CONTINUATIONS. Maven renders a List-valued expression as `[a, b]`, i.e. with a space, and
+// exec:exec splits on whitespace, so a bare token that follows an option is appended to that
+// option's value — this is how `--selected=[use-core, use-gui]` survives the split. A bare
+// continuation may not itself look like an option.
+//
+// SET vs UNSET (defect G-02, same round). A Maven property the operator did not set arrives
+// as its OWN PLACEHOLDER, ENTIRE: the value of `--exec-outputfile=${exec.outputFile}` is the
+// nine-plus characters `${exec.outputFile}` and nothing else. The test is therefore
+// `value.equals("${" + property + "}")` and NOT `value.contains("${")`, which read
+// `/tmp/floorhide${z}.txt` as "unset" and let `-Dexec.outputFile` divert every [floor] line
+// to a file with no TAMPERING violation raised.
 //
 // STALENESS. Surefire does not empty target/surefire-reports: a report written by an earlier
 // -Pupstream-oracle run survives a later default run, so a checker that simply counted the
@@ -230,20 +272,44 @@ public class UpstreamOracleFloor {
             "exec-quietlogs", "exec.quietLogs",
             "exec-workingdir", "exec.workingdir"));
 
+    /**
+     * Every option whose value is a Maven property expression, mapped to the property name.
+     * An option is "unset" IFF its value is EXACTLY {@code "${" + property + "}"} — see G-02
+     * in the header. {@code module}, {@code module-dir}, {@code reactor-root} and
+     * {@code stamp} are absent because the poms pass them as literals, never as a property.
+     */
+    static final Map<String, String> PROPERTY_OF_OPTION;
+    static {
+        Map<String, String> m = new LinkedHashMap<>();
+        m.put("effective", "use.upstreamOracle.effective");
+        m.put("selected", "session.request.selectedProjects");
+        m.put("resume-from", "session.request.resumeFrom");
+        m.put("requested", "session.request.activeProfiles");
+        m.put("allow-profiles", "use.floor.allowProfiles");
+        m.putAll(EXEC_PROPERTY_OF_OPTION);
+        PROPERTY_OF_OPTION = Map.copyOf(m);
+    }
+
+    /**
+     * THE TWO LEGAL ARGVs, as exact option-name sets. Mode is chosen by matching one of these
+     * EXACTLY — never by asking whether some option happens to be present. See the ARGV
+     * CONTRACT in the header, defect G-01.
+     */
+    static final Set<String> STAMP_OPTIONS = Set.of(
+            "stamp", "module-dir", "reactor-root", "requested", "allow-profiles");
+
+    static final Set<String> CHECK_OPTIONS;
     /** The complete set of option names this program accepts. Anything else is FATAL. */
     static final Set<String> KNOWN_OPTIONS;
-    static final List<String> REQUIRED_CHECK_OPTIONS;
     static {
-        Set<String> known = new LinkedHashSet<>(List.of(
-                "stamp", "module", "module-dir", "reactor-root", "requested", "effective",
-                "selected", "resume-from", "allow-profiles"));
-        known.addAll(EXEC_PROPERTY_OF_OPTION.keySet());
-        KNOWN_OPTIONS = Set.copyOf(known);
-        List<String> required = new ArrayList<>(List.of(
+        Set<String> check = new LinkedHashSet<>(List.of(
                 "module", "module-dir", "reactor-root", "requested", "effective",
                 "selected", "resume-from", "allow-profiles"));
-        required.addAll(EXEC_PROPERTY_OF_OPTION.keySet());
-        REQUIRED_CHECK_OPTIONS = List.copyOf(required);
+        check.addAll(EXEC_PROPERTY_OF_OPTION.keySet());
+        CHECK_OPTIONS = Set.copyOf(check);
+        Set<String> known = new LinkedHashSet<>(check);
+        known.addAll(STAMP_OPTIONS);
+        KNOWN_OPTIONS = Set.copyOf(known);
     }
 
     static final List<String> violations = new ArrayList<>();
@@ -253,26 +319,15 @@ public class UpstreamOracleFloor {
     }
 
     public static void main(String[] args) throws Exception {
+        // ---- G-01: PARSE, THEN VALIDATE THE WHOLE ARGV, THEN choose a mode. In that order,
+        // and never any other: an option must not be able to act before the argv it arrived in
+        // has been proved legal.
         Map<String, String> opt = parseArgs(args);
+        String argvMode = validateArgv(opt);
 
-        if (opt.containsKey("stamp")) {
-            if (!"true".equals(opt.get("stamp"))) {
-                die("--stamp must be =true when present, got: " + opt.get("stamp"));
-            }
-            Path stamp = Path.of(require(opt, "module-dir")).toAbsolutePath().normalize()
-                    .resolve("target").resolve(STAMP_NAME);
-            Files.createDirectories(stamp.getParent());
-            Files.writeString(stamp, "upstream-oracle floor stamp: reports older than this file\n"
-                    + "were not written by this build and are not counted.\n"
-                    + Instant.now() + "\n", StandardCharsets.UTF_8);
-            System.out.println("[floor] wrote freshness stamp " + stamp);
+        if ("stamp".equals(argvMode)) {
+            stampMode(opt);
             return;
-        }
-
-        for (String required : REQUIRED_CHECK_OPTIONS) {
-            if (!opt.containsKey(required)) {
-                die("missing required argument --" + required + "=; got " + opt.keySet());
-            }
         }
 
         String module = opt.get("module");
@@ -280,8 +335,9 @@ public class UpstreamOracleFloor {
         Path reactorRoot = Path.of(opt.get("reactor-root")).toAbsolutePath().normalize();
         String requestedRaw = opt.get("requested");
         String effectiveRaw = opt.get("effective");
-        String selectedRaw = unsetIfUninterpolated(opt.get("selected"));
-        String resumeRaw = unsetIfUninterpolated(opt.get("resume-from"));
+        String selectedRaw = unsetIfUninterpolated(opt, "selected");
+        String resumeRaw = unsetIfUninterpolated(opt, "resume-from");
+        String allowRaw = unsetIfUninterpolated(opt, "allow-profiles");
 
         if (!POM_MODULES.contains(module)) {
             die("--module must be one of " + POM_MODULES + ", got: " + module);
@@ -298,6 +354,11 @@ public class UpstreamOracleFloor {
                 + (requested.isEmpty() ? "(none)" : requested));
         System.out.println("[floor] this module's upstream-oracle profile effective: " + effectiveRaw);
         System.out.println("[floor] mode: " + mode);
+        // G-05: the allow-set is an escape hatch that WIDENS check B2. An escape hatch that
+        // leaves no trace in a green run is not auditable, so its value is printed here and
+        // recorded in the receipt, whether it was used or not.
+        System.out.println("[floor] allow-profiles (-Duse.floor.allowProfiles): "
+                + allowSetDescription(allowRaw));
         System.out.println("[floor] reactor: " + (partial
                 ? "PARTIAL — selected projects " + (selected.isEmpty() ? "(none)" : selected)
                   + ", resume-from " + (resumeRaw.isBlank() ? "(none)" : resumeRaw)
@@ -329,9 +390,16 @@ public class UpstreamOracleFloor {
         // silence the gate must be loud, or the next reader of a green log cannot tell that one
         // was made. So each -Dexec.* is a violation in its own right. `outputFile` is here
         // because it is the only exec:exec parameter with no pinnable value.
+        //
+        // G-02, 2026-08-18: the set/unset test used to be `value.contains("${")`, so ANY value
+        // merely CONTAINING the two-character placeholder opener read as UNSET. That is how
+        // `-Dexec.outputFile='/tmp/floorhide${z}.txt'` diverted every [floor] line to a file,
+        // in a green build, with zero TAMPERING violations — against the one exec parameter
+        // for which detection is the WHOLE defence, because it cannot be pinned. The test is
+        // now exact: unset means the value IS the whole placeholder, end to end.
         for (Map.Entry<String, String> e : EXEC_PROPERTY_OF_OPTION.entrySet()) {
-            String value = unsetIfUninterpolated(opt.get(e.getKey()));
-            if (!value.isBlank()) {
+            if (isSet(opt, e.getKey())) {
+                String value = opt.get(e.getKey());
                 fail("TAMPERING: -D" + e.getValue() + "=" + value + " was set on the command line."
                         + " That property belongs to the floor's own exec-maven-plugin execution,"
                         + " which is the ONLY exec-maven-plugin binding in this reactor, so there"
@@ -382,8 +450,7 @@ public class UpstreamOracleFloor {
         // authority here. If a future machine has one, declare the id or pass
         // -Duse.floor.allowProfiles=<id>[,<id>] — which widens THIS check and nothing else.
         Set<String> declaredProfiles = declaredProfileIds(reactorRoot);
-        Set<String> allowedProfiles = parseMavenList(
-                unsetIfUninterpolated(opt.get("allow-profiles")));
+        Set<String> allowedProfiles = parseMavenList(allowRaw);
         for (String r : requested) {
             if (!declaredProfiles.contains(r) && !allowedProfiles.contains(r)) {
                 fail("PROFILE: -P" + r + " was requested on the command line but NO pom in this"
@@ -477,7 +544,7 @@ public class UpstreamOracleFloor {
         // flag, so this is not a build failure; it is a refusal to be quoted as the gate.
         String verdict = !violations.isEmpty() ? "FAIL" : partial ? "PARTIAL" : "PASS";
         writeReceipt(moduleDir, module, mode, verdict, partial, selected, resumeRaw, requested,
-                effectiveRaw, stampInstant, tallies);
+                effectiveRaw, allowRaw, stampInstant, tallies);
 
         if (violations.isEmpty()) {
             if (partial) {
@@ -525,7 +592,8 @@ public class UpstreamOracleFloor {
      */
     static void writeReceipt(Path moduleDir, String module, String mode, String verdict,
             boolean partial, Set<String> selected, String resumeFrom, Set<String> requested,
-            String effective, String stampInstant, Map<String, Tally> tallies) {
+            String effective, String allowProfiles, String stampInstant,
+            Map<String, Tally> tallies) {
         Path receipt = moduleDir.resolve("target").resolve(RECEIPT_NAME);
         StringBuilder sb = new StringBuilder();
         sb.append("# upstream-oracle floor receipt — written by scripts/UpstreamOracleFloor.java\n");
@@ -539,6 +607,10 @@ public class UpstreamOracleFloor {
         sb.append("resume-from=").append(resumeFrom.isBlank() ? "(none)" : resumeFrom).append('\n');
         sb.append("requested-profiles=").append(requested.isEmpty() ? "(none)" : requested).append('\n');
         sb.append("effective=").append(effective).append('\n');
+        // G-05: the escape hatch is recorded in the receipt too, so that the ON-DISK evidence a
+        // stage quotes says whether check B2 was widened. scripts/upstream-oracle-gate.sh
+        // requires this line to read `(none)` on an acceptance run.
+        sb.append("allow-profiles=").append(allowSetDescription(allowProfiles)).append('\n');
         sb.append("stamp=").append(stampInstant).append('\n');
         sb.append("violations=").append(violations.size()).append('\n');
         for (String tier : TIERS) {
@@ -656,11 +728,24 @@ public class UpstreamOracleFloor {
                 "-Dexec.workingdir=<elsewhere> would move the checker's cwd, and the floor"
                 + " executions pass RELATIVE paths (which is what keeps them immune to"
                 + " exec:exec's whitespace splitting of <commandlineArgs>)");
-        if (!x.contains("--allow-profiles=${use.floor.allowProfiles}")) {
-            fail("WIRING: " + module + "/pom.xml's floor execution does not pass"
-                    + " --allow-profiles=${use.floor.allowProfiles}, so the unactivatable-profile"
-                    + " check (F-02) has no allow-set and would reject a legitimately declared"
-                    + " future profile.");
+        // ---- G-04: BOTH executions carry the unactivatable-profile check's inputs -----------
+        // The initialize-phase execution needs --reactor-root, --requested and --allow-profiles
+        // for the early profile guard, so each of these three must appear TWICE — once per
+        // execution. Two occurrences, not one: with only the verify-phase copy, `mvn test
+        // -Pupstream-oracle-typo` is green again with no gate in it (G-04).
+        for (String token : List.of("--reactor-root=..",
+                "--requested=${session.request.activeProfiles}",
+                "--allow-profiles=${use.floor.allowProfiles}")) {
+            int n = count(x, token);
+            if (n < 2) {
+                fail("WIRING: " + module + "/pom.xml passes " + token + " " + n + " time(s), needs"
+                        + " 2 — one in the `upstream-oracle-floor-stamp` execution (phase"
+                        + " initialize) and one in `upstream-oracle-floor` (phase verify). The"
+                        + " initialize-phase copy is what makes a mistyped -P id fail under a"
+                        + " TRUNCATED lifecycle such as `mvn test`, where the verify-phase floor"
+                        + " never runs at all (defect G-04,"
+                        + " docs/port2/upstream-oracle-gate-round11.md sec. 5).");
+            }
         }
         // ...and the tamper detector: the verify execution must hand every one of those user
         // properties back to this checker, so that setting one FAILS the build (check A2).
@@ -825,8 +910,11 @@ public class UpstreamOracleFloor {
      * The ARGV CONTRACT (see the header). A token of the form {@code --name=value} starts an
      * option; any other token is a continuation of the previous option's value, joined with a
      * single space — that is how a Maven List rendered as {@code [a, b]} survives exec:exec's
-     * whitespace split. An unknown option name, a duplicate, or a continuation before any
-     * option is FATAL.
+     * whitespace split. An unknown option name, a duplicate, a continuation before any option,
+     * or a {@code --}-prefixed token that is not a well-formed option is FATAL.
+     *
+     * <p>This method does NOT decide anything. It parses. {@link #validateArgv} decides, and
+     * nothing acts before it has run — that ordering IS the G-01 fix.
      */
     static Map<String, String> parseArgs(String[] args) {
         Map<String, String> opt = new LinkedHashMap<>();
@@ -840,10 +928,18 @@ public class UpstreamOracleFloor {
                             + new TreeSet<>(KNOWN_OPTIONS));
                 }
                 if (opt.containsKey(name)) {
-                    die("option --" + name + "= given twice");
+                    die("option --" + name + "= given twice. Every option is passed EXACTLY once"
+                            + " by the pom, so a second one arrived inside an interpolated"
+                            + " property value — that is a command-line injection into this"
+                            + " checker's argv (G-01), not a configuration mistake.");
                 }
                 opt.put(name, a.substring(eq + 1));
                 current = name;
+            } else if (a.startsWith("--")) {
+                die("malformed option-looking token '" + a + "' (expected --name=value). A token"
+                        + " that begins with -- is never accepted as a continuation, because"
+                        + " that is how an injected payload would hide inside a Maven property"
+                        + " value (G-01).");
             } else if (current != null) {
                 opt.put(current, opt.get(current) + " " + a);
             } else {
@@ -858,11 +954,134 @@ public class UpstreamOracleFloor {
     }
 
     /**
-     * Maven leaves {@code ${session.request.resumeFrom}} uninterpolated when the field is null,
-     * so the literal expression reaching us means "unset", not "a project called ${...}".
+     * Validates the ENTIRE argv and returns the mode it names — {@code "stamp"} or
+     * {@code "check"} — or exits 2. Nothing else in this program is allowed to run first.
+     *
+     * <p>Three rules, in this order:
+     * <ol>
+     *   <li>no option value may itself parse as an option. An interpolated Maven property is
+     *       DATA. If it looks like argv, someone put it there;</li>
+     *   <li>the option-name set must match {@link #STAMP_OPTIONS} or {@link #CHECK_OPTIONS}
+     *       EXACTLY — no extra name, no missing name. This is what makes an injected
+     *       {@code --stamp=true} in the verify-phase argv fatal instead of a green
+     *       short-circuit (G-01);</li>
+     *   <li>in stamp mode, {@code --stamp} must be {@code true}.</li>
+     * </ol>
      */
-    static String unsetIfUninterpolated(String value) {
-        return value == null || value.contains("${") ? "" : value;
+    static String validateArgv(Map<String, String> opt) {
+        for (Map.Entry<String, String> e : opt.entrySet()) {
+            for (String token : e.getValue().trim().split("\\s+")) {
+                if (token.startsWith("--") && token.indexOf('=') > 2) {
+                    die("ARGV INJECTION: the value of --" + e.getKey() + "= itself parses as an"
+                            + " option ('" + token + "'). That value comes from the Maven"
+                            + " property " + PROPERTY_OF_OPTION.getOrDefault(e.getKey(), "(a pom"
+                            + " literal)") + ", which is DATA and may never contribute argv to"
+                            + " this checker. See defect G-01,"
+                            + " docs/port2/upstream-oracle-gate-round11.md sec. 2.");
+                }
+            }
+        }
+        Set<String> given = new TreeSet<>(opt.keySet());
+        if (given.equals(new TreeSet<>(STAMP_OPTIONS))) {
+            if (!"true".equals(opt.get("stamp"))) {
+                die("--stamp must be =true, got: " + opt.get("stamp"));
+            }
+            return "stamp";
+        }
+        if (given.equals(new TreeSet<>(CHECK_OPTIONS))) {
+            return "check";
+        }
+        Set<String> unexpectedForCheck = new TreeSet<>(given);
+        unexpectedForCheck.removeAll(CHECK_OPTIONS);
+        Set<String> missingForCheck = new TreeSet<>(CHECK_OPTIONS);
+        missingForCheck.removeAll(given);
+        die("the argv is neither of the two legal shapes. Got " + given
+                + "; the stamp argv is EXACTLY " + new TreeSet<>(STAMP_OPTIONS)
+                + " and the check argv is EXACTLY " + new TreeSet<>(CHECK_OPTIONS)
+                + ". Relative to the check argv: unexpected " + unexpectedForCheck
+                + ", missing " + missingForCheck
+                + ". An option that arrived without the pom passing it came from an"
+                + " interpolated property value (G-01): exec:exec splits <commandlineArgs>"
+                + " AFTER Maven interpolates it, so a property value containing a space adds"
+                + " argv tokens. This is fatal, exit 2, and no receipt is written.");
+        return "unreachable";
+    }
+
+    /** The initialize-phase execution: freshness stamp, plus the G-04 early profile guard. */
+    static void stampMode(Map<String, String> opt) throws IOException {
+        Path moduleDir = Path.of(opt.get("module-dir")).toAbsolutePath().normalize();
+        Path reactorRoot = Path.of(opt.get("reactor-root")).toAbsolutePath().normalize();
+        String allowRaw = unsetIfUninterpolated(opt, "allow-profiles");
+
+        // ---- G-04: the unactivatable-profile check, ONE PHASE THAT EVERY LIFECYCLE REACHES --
+        // Until 2026-08-18 the whole gate hung off phase `verify`, so
+        //     mvn -B test -Pupstream-oracle-typo   ->  BUILD SUCCESS, exit 0, no floor check at
+        // all, the typo a [WARNING] in a 1393-line log. `mvn test` is disclaimed as a gate in
+        // four normative places, but typing it from habit is the one realistic ACCIDENT on this
+        // gate's list, and ground rule 4's sibling loop issues `mvn -B clean test` unattended.
+        // `initialize` is the second phase of the default lifecycle, so this fires for `test`,
+        // `compile`, `package`, `verify` and `install` alike. (It does NOT fire for `mvn clean`,
+        // which is a different lifecycle — that is correct: `mvn -q clean` is what the wrapper
+        // runs before each build, and it collects nothing to gate.)
+        Set<String> requested = parseMavenList(opt.get("requested"));
+        Set<String> declared = declaredProfileIds(reactorRoot);
+        Set<String> allowed = parseMavenList(allowRaw);
+        System.out.println("[floor] initialize: requested profiles "
+                + (requested.isEmpty() ? "(none)" : requested.toString())
+                + ", declared in this reactor " + declared
+                + ", allow-profiles (-Duse.floor.allowProfiles) " + allowSetDescription(allowRaw));
+        for (String r : requested) {
+            if (!declared.contains(r) && !allowed.contains(r)) {
+                die("PROFILE (initialize): -P" + r + " was requested on the command line but NO"
+                        + " pom in this reactor declares a profile with that id. Maven only WARNS"
+                        + " about that and builds on, so `mvn test -P" + r + "` would otherwise be"
+                        + " a green build with no gate in it at all (defect G-04,"
+                        + " docs/port2/upstream-oracle-gate-round11.md sec. 5). This check is"
+                        + " bound to `initialize` precisely so that a TRUNCATED LIFECYCLE cannot"
+                        + " outrun it. Declared profile ids: " + declared + ". The acceptance"
+                        + " gate is " + GATE_WRAPPER + ", which hard-codes the id; do not"
+                        + " hand-type -P. If this id IS legitimate, declare it in a pom or pass"
+                        + " -Duse.floor.allowProfiles=" + r + ".");
+            }
+        }
+
+        Path stamp = moduleDir.resolve("target").resolve(STAMP_NAME);
+        Files.createDirectories(stamp.getParent());
+        Files.writeString(stamp, "upstream-oracle floor stamp: reports older than this file\n"
+                + "were not written by this build and are not counted.\n"
+                + Instant.now() + "\n", StandardCharsets.UTF_8);
+        System.out.println("[floor] wrote freshness stamp " + stamp);
+    }
+
+    /**
+     * G-02. A Maven property the operator did not set arrives as its own placeholder ENTIRE:
+     * the value is {@code "${" + property + "}"} and nothing else. Anything else — including a
+     * value that merely CONTAINS a placeholder opener, and including the empty string — is SET.
+     *
+     * <p>The old test was {@code value.contains("${")}, which read
+     * {@code /tmp/floorhide${z}.txt} as unset and let {@code -Dexec.outputFile} divert every
+     * {@code [floor]} line with no violation raised.
+     */
+    static boolean isSet(Map<String, String> opt, String option) {
+        String value = opt.get(option);
+        if (value == null) {
+            return false;
+        }
+        String property = PROPERTY_OF_OPTION.get(option);
+        return property == null || !value.equals("${" + property + "}");
+    }
+
+    /** The option's value, or {@code ""} when the option is unset in the {@link #isSet} sense. */
+    static String unsetIfUninterpolated(Map<String, String> opt, String option) {
+        return isSet(opt, option) ? opt.get(option) : "";
+    }
+
+    /** G-05: how the allow-set is rendered in the log and in the receipt. */
+    static String allowSetDescription(String allowRaw) {
+        Set<String> allowed = parseMavenList(allowRaw);
+        return allowed.isEmpty()
+                ? "(none)"
+                : allowed + "  <-- CHECK B2 WAS WIDENED BY THE COMMAND LINE";
     }
 
     /** Parses a Maven {@code List} rendering, e.g. {@code [upstream-oracle]} or {@code []}. */
@@ -884,20 +1103,14 @@ public class UpstreamOracleFloor {
         return out;
     }
 
-    static String require(Map<String, String> opt, String key) {
-        String v = opt.get(key);
-        if (v == null) {
-            die("missing required argument --" + key + "=; got " + opt.keySet());
-        }
-        return v;
-    }
-
     static void die(String message) {
         System.out.println("[floor] FATAL — " + message);
-        System.out.println("[floor] usage: java scripts/UpstreamOracleFloor.java --module=<m>"
-                + " --module-dir=<dir> --reactor-root=<dir> --effective=<bool> --selected=<list>"
-                + " --resume-from=<value> --requested=<list>");
-        System.out.println("[floor] (or --stamp=true --module-dir=<dir> for the initialize phase)");
+        System.out.println("[floor] usage — the check argv is EXACTLY: "
+                + new TreeSet<>(CHECK_OPTIONS));
+        System.out.println("[floor] usage — the stamp argv is EXACTLY: "
+                + new TreeSet<>(STAMP_OPTIONS));
+        System.out.println("[floor] No other argv is accepted. See the ARGV CONTRACT in"
+                + " scripts/UpstreamOracleFloor.java and docs/port2/gate-threat-model.md.");
         System.exit(2);
     }
 

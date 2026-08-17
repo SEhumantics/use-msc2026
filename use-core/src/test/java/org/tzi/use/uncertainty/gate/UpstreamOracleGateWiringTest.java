@@ -97,10 +97,6 @@ class UpstreamOracleGateWiringTest {
      * cannot be pinned at all, so for it this is the whole defence.
      */
     private static final List<String> REQUIRED_TAMPER_TOKENS = List.of(
-            // not a tamper property: the allow-set for the unactivatable-profile check (F-02),
-            // which is what makes `mvn -Pupstream-oracle-typo` fail instead of running the
-            // vacuous default gate.
-            "--allow-profiles=${use.floor.allowProfiles}",
             "--exec-args=${exec.args}",
             "--exec-skip=${exec.skip}",
             "--exec-async=${exec.async}",
@@ -109,6 +105,33 @@ class UpstreamOracleGateWiringTest {
             "--exec-outputfile=${exec.outputFile}",
             "--exec-quietlogs=${exec.quietLogs}",
             "--exec-workingdir=${exec.workingdir}");
+
+    /**
+     * Tokens that must appear <b>twice</b> in each pom — once in the {@code initialize}-phase
+     * {@code upstream-oracle-floor-stamp} execution and once in the {@code verify}-phase
+     * {@code upstream-oracle-floor} execution.
+     *
+     * <p><b>Why the initialize-phase copy exists (round 12, defect G-04).</b> The whole gate
+     * used to bind at {@code verify}, so a truncated lifecycle simply outran it:
+     *
+     * <pre>
+     * $ mvn -B test -Pupstream-oracle-typo -Djava.awt.headless=true
+     * [WARNING] The requested profile "upstream-oracle-typo" could not be activated ...
+     * [INFO] BUILD SUCCESS      EXIT=0      no [floor] check at all, no receipt
+     * </pre>
+     *
+     * <p>{@code mvn test} is disclaimed as a gate in four normative places, but typing it from
+     * habit is the one realistic <i>accident</i> on this gate's threat list
+     * ({@code docs/port2/gate-threat-model.md} §1). {@code initialize} is the second phase of
+     * the default lifecycle, so every lifecycle a developer can truncate to still reaches it.
+     */
+    private static final List<String> REQUIRED_TWICE_TOKENS = List.of(
+            "--reactor-root=..",
+            "--requested=${session.request.activeProfiles}",
+            // the allow-set for the unactivatable-profile check (F-02 at verify, G-04 at
+            // initialize), which is what makes `mvn -Pupstream-oracle-typo` fail instead of
+            // running the vacuous default gate.
+            "--allow-profiles=${use.floor.allowProfiles}");
 
     private final List<String> violations = new ArrayList<>();
 
@@ -255,6 +278,16 @@ class UpstreamOracleGateWiringTest {
                 violations.add(module + "/pom.xml's floor execution does not pass " + token
                         + ", so that -D would go undetected instead of failing the build. An"
                         + " attempt to silence the gate must be loud, not merely inert (F-01).");
+            }
+        }
+        for (String token : REQUIRED_TWICE_TOKENS) {
+            int n = count(x, token);
+            if (n < 2) {
+                violations.add(module + "/pom.xml passes " + token + " " + n + " time(s), needs 2"
+                        + " — one per floor execution. Without the `initialize`-phase copy the"
+                        + " unactivatable-profile check binds only at `verify`, and a truncated"
+                        + " lifecycle (`mvn test -Pupstream-oracle-typo`) is BUILD SUCCESS with"
+                        + " no gate in it at all (G-04). See docs/port2/gate-threat-model.md.");
             }
         }
     }

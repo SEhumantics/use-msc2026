@@ -29,8 +29,13 @@
 #      PASS) and catches -Dexec.outputFile / -Dexec.quietLogs hiding the [floor] lines;
 #   4. each module's target/upstream-oracle-floor.receipt is verified ON DISK after Maven
 #      has exited: present, newer than this run's start marker, and recording the expected
-#      module, mode and verdict=PASS. No Maven property can reach a check that runs after
-#      Maven has exited. This is the third of the three independent F-01 mechanisms;
+#      module, mode, verdict=PASS and allow-profiles=(none). No Maven property can reach a
+#      check that runs after Maven has exited. This is the third of the three independent
+#      F-01 mechanisms, and round 11's independent refutation found it was the ONLY one of
+#      the four that held on all four of its bypass routes;
+#   4b. the initialize-phase profile guard must have announced itself once per module (G-04):
+#      the unactivatable-profile check is bound at `initialize` as well as at `verify`, so
+#      that a truncated lifecycle (`mvn test -Pupstream-oracle-typo`) cannot outrun it.
 #   5. `git status --porcelain` before and after, because another session shares this
 #      checkout (ground rule 4), and a refusal to start while another Maven is live.
 #
@@ -42,6 +47,13 @@
 #
 # DO NOT pass -P. If you do, it is forwarded and check 2 or check 3 will fail the gate:
 # that is deliberate, and it is what makes a mistyped id loud instead of silent.
+#
+# WHAT THIS GATE DOES *NOT* DEFEND AGAINST, and why that is the right line to draw:
+# docs/port2/gate-threat-model.md. Short version: this script IS the gate; the in-build
+# binding (scripts/UpstreamOracleFloor.java, UpstreamOracleGateWiringTest) is defence in
+# depth against ACCIDENTS; and a number produced by any other invocation is not a gate
+# result and may not be quoted as one. Every known bypass is listed in that file's sec. 3,
+# so "out of scope" never has to mean "unknown".
 #
 # Exit 0 = the gate passed. Any non-zero = the gate did NOT pass; read the [gate] lines.
 # =====================================================================================
@@ -168,6 +180,15 @@ run_one() {
   if [ "$n" -ne ${#MODULES[@]} ]; then
     bad "$label: the floor check announced itself $n time(s), expected ${#MODULES[@]}."
   fi
+  # G-04: the initialize-phase profile guard must also have announced itself once per module.
+  # That guard is what makes a mistyped -P id red under a TRUNCATED lifecycle (`mvn test`),
+  # where the verify-phase floor never runs; if it is gone, this gate must not stay green.
+  n=$(grep -cE '^\[floor\] initialize: requested profiles ' "$log")
+  if [ "$n" -ne ${#MODULES[@]} ]; then
+    bad "$label: the initialize-phase profile guard announced itself $n time(s), expected" \
+        "${#MODULES[@]}. Without it, `mvn test -Pupstream-oracle-typo` is a green build with" \
+        "no gate in it (defect G-04)."
+  fi
   if grep -qE '^\[floor\] (FAIL|FATAL|PARTIAL)' "$log"; then
     bad "$label: the floor reported FAIL, FATAL or PARTIAL:"
     grep -nE '^\[floor\] (FAIL|FATAL|PARTIAL)' "$log" | sed 's/^/[gate]   /'
@@ -187,7 +208,12 @@ run_one() {
       continue
     fi
     local want
-    for want in "module=$m" "mode=$expect" "verdict=PASS" "partial-reactor=false"; do
+    # G-05: `allow-profiles=(none)` is asserted here because -Duse.floor.allowProfiles WIDENS
+    # check B2, and an acceptance run may not have been widened. Before round 12 that property
+    # was echoed nowhere at all — not in the log, not in the receipt — so a widened allow-set
+    # left no trace in a green run.
+    for want in "module=$m" "mode=$expect" "verdict=PASS" "partial-reactor=false" \
+                "allow-profiles=(none)"; do
       if ! grep -qxF -- "$want" "$r"; then
         bad "$label: receipt $r does not carry the line '$want'. It says:"
         sed 's/^/[gate]   /' "$r"

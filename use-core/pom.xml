@@ -388,6 +388,20 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.5.0</version>
                 <executions>
+                    <!-- The initialize-phase execution does TWO things (round 12, defect
+                         G-04 of docs/port2/upstream-oracle-gate-round11.md sec. 5): it writes
+                         the freshness stamp, AND it fails the build on a requested -P id that
+                         no pom in this reactor declares.  The second one lives HERE, at
+                         `initialize`, and not only at `verify`, because a TRUNCATED LIFECYCLE
+                         outruns a verify-phase gate:
+                             mvn -B test -Pupstream-oracle-typo   ->  BUILD SUCCESS, exit 0,
+                         no floor check at all and the typo one [WARNING] in a 1393-line log.
+                         `initialize` is the second phase of the default lifecycle, so every
+                         lifecycle a developer can truncate to still reaches it.  That is why
+                         this execution now also carries reactor-root, requested and
+                         allow-profiles; scripts/UpstreamOracleFloor.java asserts, in check A,
+                         that each of those three appears TWICE in this pom.  See also
+                         docs/port2/gate-threat-model.md. -->
                     <execution>
                         <id>upstream-oracle-floor-stamp</id>
                         <phase>initialize</phase>
@@ -401,7 +415,7 @@
                             <quietLogs>false</quietLogs>
                             <executable>${java.home}/bin/java</executable>
                             <workingDirectory>${project.basedir}</workingDirectory>
-                            <commandlineArgs>../scripts/UpstreamOracleFloor.java --stamp=true --module-dir=.</commandlineArgs>
+                            <commandlineArgs>../scripts/UpstreamOracleFloor.java --stamp=true --module-dir=. --reactor-root=.. --requested=${session.request.activeProfiles} --allow-profiles=${use.floor.allowProfiles}</commandlineArgs>
                         </configuration>
                     </execution>
                     <execution>
