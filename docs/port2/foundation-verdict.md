@@ -239,10 +239,10 @@ text and are marked in place.
 
 | # | Chosen | Recommendation NOT taken | Status |
 |---|---|---|---|
-| **B3** | **(b)** a `-Pupstream-oracle` Maven profile: `junit-vintage-engine` 5.7.0, test scope, `use-core` + `use-gui`, **no test file touched**. Every stage from S3 runs both `mvn -B verify -Djava.awt.headless=true` and `mvn -B verify -Pupstream-oracle -Djava.awt.headless=true`. | — the recommendation **was** taken | **BUILT and MEASURED.** `upstream-oracle-profile.md`: default 10 classes / **210** distinct methods; profile **50 classes / 497 distinct methods, 0 failures, 0 errors**. No upstream test fails under it. |
-| **B7** | **FIX** the historical defects, documenting each. | **bug-for-bug reproduction** — the recorded recommendation, **not taken** | Open work for S4–S7. Each of the 33 behaviour-changing rows in `specification.md` §7.2 needs a fix, a written justification, and the print-output delta where one exists. |
-| **H14** | **BUILD an input-domain coverage measure** (D-30). | **prose-stated domains** in every stage document — the recorded position, **not taken** | Open work. This was "the one open question the instrument cannot answer for you, and the largest live risk"; the decision converts it from a caveat carried in prose into an instrument to be built. Everything that today reads "inherits D-30" — H17's corrected justification, D-45, D-55, D-56 — becomes measurable rather than argued. |
-| **B2** | **FULL PORT of `SBoolean`**, all 39 operations. | **skeleton** (keep `SBooleanType` only) — the recorded recommendation, **not taken** | Open work. `StandardOperationsSBoolean`'s 1502 lines enter the build with **zero** fork-test coverage behind them, so the differential harness is the only instrument that can judge the 39 operations. |
+| **B3** | **(b)** a `-Pupstream-oracle` Maven profile: `junit-vintage-engine` 5.7.0, test scope, `use-core` + `use-gui`, **no test file touched**. Every stage from S3 runs both `mvn -B verify -Djava.awt.headless=true` and `mvn -B verify -Pupstream-oracle -Djava.awt.headless=true`. | — the recommendation **was** taken | **BUILT and MEASURED, and the gate now ASSERTS its own floor.** `upstream-oracle-profile.md`: default 10 classes / **210** distinct methods; profile **50 classes / 497 distinct methods, 0 failures, 0 errors**. No upstream test fails under it. Static review D-01 found the counts human-read and the gate silently revertible to vacuity; `scripts/UpstreamOracleFloor.java` (`6702f06e`) now fails the build below a pinned per-module, per-tier floor, and §5.1/§7.3 of that document show it failing five deliberate breakages. |
+| **B7** | **FIX** the historical defects, documenting each. | **bug-for-bug reproduction** — the recorded recommendation, **not taken** | Open work for S4–S7. Each of the 33 behaviour-changing rows in `specification.md` §7.2 needs a fix, a written justification, and the print-output delta where one exists. **The per-row plan is [`b7-fix-plan.md`](b7-fix-plan.md)**, which supersedes every `DEFER` in `spec-parts/16-modernization-ledger.md` — D-06 found the ledger still instructing `DEFER` on 29 rows with that plan referenced from nowhere. |
+| **H14** | **BUILD an input-domain coverage measure** (D-30). | **prose-stated domains** in every stage document — the recorded position, **not taken** | Open work. This was "the one open question the instrument cannot answer for you, and the largest live risk"; the decision converts it from a caveat carried in prose into an instrument to be built. Everything that today reads "inherits D-30" — H17's corrected justification, D-45, D-55, D-56 — becomes measurable rather than argued. **The design is [`h14-coverage-design.md`](h14-coverage-design.md)** (design only, unimplemented); `harness-contract.md` §5 and §8 step 5 no longer mandate the prose-only position that was not taken (D-07). |
+| **B2** | **FULL PORT of `SBoolean`**, all 39 operations. | **skeleton** (keep `SBooleanType` only) — the recorded recommendation, **not taken** | Open work. `StandardOperationsSBoolean`'s 1502 lines enter the build with **zero** fork-test coverage behind them, so the differential harness is the only instrument that can judge the 39 operations — **and it declines `SBooleanValue` by name today, so marshalling it is a hard prerequisite, not a refinement** ([`b7-fix-plan.md`](b7-fix-plan.md) §6). `spec-parts/19-open-questions.md` Q2, which this decision reverses, is marked in place (D-05). |
 
 **H21 is DONE** (see the struck row below): the provenance aggregate was built in this round —
 `# rows.subjectTypeObserved` / `# rows.subjectTypeAssumed` and the per-operation equivalents, plus
@@ -341,12 +341,18 @@ where it did not.
   unaccompanied, D-53). **Hold S4–S7 documents to the harness's own standard: every claim names
   `file:line` or the command, and pastes real output.**
 * **The specification's risk is decision risk, not evidence risk.** No blocking decision was refuted and
-  four were independently re-derived. What remains is that **all twelve, plus H13–H16, H18, H21 and H22,
-  are unmade.**
+  four were independently re-derived. ~~What remains is that **all twelve, plus H13–H16, H18, H21 and H22,
+  are unmade.**~~ **CORRECTED 2026-08-17 (static-review defect D-12): that sentence is stale in the very
+  document whose §3.0 records the decisions.** What remains is that **eight of the twelve, plus H13,
+  H15, H16, H18 and H22, are unmade.** **B3, B7, B2 and H14 were decided on 2026-08-17** — see §3.0 —
+  and three of the four reversed the recorded recommendation, so a stage working from the older prose
+  does the wrong thing. **H21 is built** (`1ec7d59f`), and **B3 is built and its gate now asserts a
+  per-module floor** (`6702f06e`; `upstream-oracle-profile.md` §5.1).
 
 **Recommendation: S3 may start once B1–B12 and H13–H16 / H18 are answered.** (H21 is now built and no
-longer deferrable-or-not; B2, B3, B7 and H14 were decided on 2026-08-17 — see §3.0.) H21 and H22 may be deferred
-past S3 but not past S4. The foundation carries the weight. It does not carry an unqualified fidelity
+longer deferrable-or-not; B2, B3, B7 and H14 were decided on 2026-08-17 — see §3.0, and **B3 is built
+with an asserted floor**, `upstream-oracle-profile.md` §5.1.) ~~H21 and H22 may be deferred past S3 but
+not past S4.~~ — **H21 is built, so only H22 remains deferrable past S3 and not past S4** (D-12). The foundation carries the weight. It does not carry an unqualified fidelity
 claim, and the honest form of that claim is written into `harness-contract.md` §1, §4 and §8 so that a
 stage cannot make the stronger one by accident.
 

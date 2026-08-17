@@ -606,9 +606,15 @@ to anything, including itself — `a.equals(a)` is `false`, breaking reflexivity
 every `Set`/`Bag`/`Map` containing a `UStringValue`. There is **no `UStringValueTest`** in the
 fork (`FORKTEST/uml/ocl/value/` contains only `AllTests`, `UBooleanValueTest`,
 `UIntegerValueTest`, `URealValueTest`, `ValueTest`), which is why this was never caught.
-The port must decide: reproduce bug-for-bug, or fix to
+~~The port must decide: reproduce bug-for-bug, or fix to~~ **DECIDED 2026-08-17 (B7): FIX, and record
+the divergence.** The fix is
 `wrapper.equals(ustring.wrapper)` (the delegate's own `equals` at `UDT/UString.java:111` already
-compares both string and confidence). Recommend **fix**, and record the divergence.
+compares both string and confidence). ~~Recommend~~ — the recommendation here was **fix** and the
+decision agrees with it; what changed is that it is no longer a decision the port must make. The
+bug-for-bug policy was recommended *overall* and was **NOT taken** (`specification.md` §0 B7). This row
+is **M-11**, one of B7's `CRITICAL` five; its per-row entry is in
+[`b7-fix-plan.md`](../b7-fix-plan.md), which supersedes the `DEFER` in
+[`16-modernization-ledger.md`](16-modernization-ledger.md).
 
 **8.6.2 — `compareTo` compares a raw string against a decorated one.** At `:103`,
 `valueOf(o).toString()` returns `"UString('…', …)"` (via `:67`), so a `UStringValue` is ordered
@@ -951,7 +957,10 @@ silently.
 **Tier 2 — the value classes themselves:** copy the seven files, changing only
 
 1. the `@Override` on `isUBoolean`/`isUInteger`/`isUReal`/`isSBoolean` — valid once §10 lands;
-2. nothing else, if a bug-for-bug port is chosen.
+2. ~~nothing else, if a bug-for-bug port is chosen.~~ **SUPERSEDED 2026-08-17 (B7): a bug-for-bug port
+   was NOT chosen.** The tier-2 copy is not "changing only the `@Override`s" — every tier-3 row that
+   `b7-fix-plan.md` assigns to a value class is a change to these same files, and it is mandatory, with
+   a written justification and its print-output delta. Read tier 2 and tier 3 together.
 
 **Tier 3 — deliberate fixes, each needing an explicit decision recorded in the port log:**
 

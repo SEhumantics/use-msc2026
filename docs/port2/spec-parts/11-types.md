@@ -380,8 +380,13 @@ Bold cells are the ones set by an **edit to an upstream file** rather than by a 
    although `conformsTo` says `UnlimitedNatural ≤ UInteger`. Note the same shape of defect
    already exists upstream (`Integer.conformsTo(UnlimitedNatural)` is `true` while
    `UnlimitedNatural ∉ Integer.allSupertypes()`), so this is a *pre-existing* upstream pattern
-   the fork merely widened. **Port decision required:** reproduce the fork's behaviour bit-for-bit
-   (recommended, so the historical tests stay green), or fix it and record the deviation.
+   the fork merely widened. **Port decision required — this is B11 and it is STILL OPEN.** Reproduce the fork's behaviour
+   bit-for-bit (recommended, so the historical tests stay green), or fix it and record the deviation.
+   **Note 2026-08-17: B7 (= FIX the historical defects, documenting each) does NOT decide this row.**
+   B7 is the policy for the 33 behaviour-changing *modernization-ledger* rows; B11 is a separate
+   blocking decision whose recommendation is *reproduce plus a regression test pinning
+   `LCS(UnlimitedNatural, UInteger) == OclAny`* (`specification.md` §9 row 11). Do not read B7 as
+   licence to fix this one, and do not read this row's *reproduce* as licence to reproduce a B7 row.
 
 2. **`TypeImpl.conformsTo` is unbounded recursion** in *both* trees:
    `return this.conformsTo(other);` (fork `TypeImpl.java:75-78`, 7.5.0 `TypeImpl.java:78-81`).

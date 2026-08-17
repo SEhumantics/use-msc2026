@@ -397,9 +397,39 @@ spirit but wrong about *what* the four require. The four types require **zero** 
 *behaviour*. What the fork's boolean types require is a **type-lattice entry**, and that entry is
 what drags 28 operations into reach.
 
+> ## DECIDED 2026-08-17 — **B2 = option 3, FULL PORT of `SBoolean`, all 39 operations.**
+>
+> **Read this before the three options below.** This file is cited as the evidence for **B2**
+> (`specification.md:183`, "`19-open-questions.md` Q2"), and static-review defect **D-05**
+> (`upstream-oracle-static-review.md:258-270`) found it still telling the reader that the decided
+> option is unwarranted: `:402` "**Full omission (recommended)**", `:415` "**Only if** a thesis result
+> depends on subjective-logic operators. **Nothing in the corpora suggests it does**", `:418-420`
+> "Option 2 is the cheapest way…". A stage working from this section would have implemented option 1
+> or 2 against a decision for option 3.
+>
+> * **The recommendation was NOT taken.** It is kept below, verbatim and unedited, because the
+>   evidence for it is still the evidence — the corpora really do contain zero `SBoolean` tokens, and
+>   the fork really has no SBoolean test. **What changed is the decision, not the facts.** "Nothing in
+>   the corpora suggests a thesis result depends on it" remains true and is no longer decisive: the
+>   user chose the full port anyway.
+> * **This file recommends option 1; `specification.md` §0.0 and §8.2 record the recommendation as
+>   option 2** (§8.2's "⭐"). That disagreement is real, it is in the record as history, and it is
+>   noted here so the "recommendation NOT taken" bookkeeping cannot be read as pointing at one option.
+>   Neither was taken.
+> * **The plan a stage works from is [`b7-fix-plan.md`](../b7-fix-plan.md) §6** — the full-port scope,
+>   its ten work items, `consensusAndCompromiseFusion`'s `O(4ⁿ)` hazard, and the new hard
+>   prerequisite: `SBooleanValue` marshalling in the differential harness, without which all 39
+>   operations are `UNSUPPORTED` and the port has no evidence of any kind for them.
+> * `isKindOfSBoolean` **survives** on `UBooleanType`/`BooleanType`, so 2.4's removal lists below are
+>   **not** to be executed.
+> * Two rows that were `MOOT — do not port the class` under B10 (`ExpDefSBoolean`: **M-26**, **M-27**)
+>   are unaffected: **B10 is a separate decision and is still open.** Full port of `SBoolean` is not
+>   a decision to port `ExpDefSBoolean`.
+
 Three coherent options, all consistent with the evidence:
 
-1. **Full omission (recommended).** Drop `SBooleanType`, `SBooleanValue`,
+1. **Full omission (~~recommended~~ — recommended in this file, **NOT taken**; see the box above).**
+   Drop `SBooleanType`, `SBooleanValue`,
    `StandardOperationsSBoolean`, `ExpConstSBoolean`, `ASTSBooleanLiteral`, `ExpDefSBoolean`,
    `ASTSBooleanDefExpression`, the `'SBoolean'` grammar alternatives, and the `"SBoolean"` entry in
    `TypeFactory.buildInTypesMap` (`src/main/org/tzi/use/uml/ocl/type/TypeFactory.java:64`).
@@ -412,12 +442,17 @@ Three coherent options, all consistent with the evidence:
    `StandardOperationsAny` port verbatim, but skip `SBooleanValue` and the 1502-line registry.
    Cheap, and it preserves the type-conformance semantics that `TypeTest` asserts (see 2.5). This
    removes the 2.3(C) leak automatically, because the leak lives entirely in the registry.
-3. **Full port.** Only if a thesis result depends on subjective-logic operators. Nothing in the
-   corpora suggests it does.
+3. **Full port. ← DECIDED 2026-08-17 (B2). This is the plan.** ~~Only if a thesis result depends on
+   subjective-logic operators. Nothing in the corpora suggests it does.~~ — the condition this option
+   was gated on was **not** the reason it was chosen; the user chose it with the corpus evidence
+   unchanged. Scope, cost and the harness prerequisite: [`b7-fix-plan.md`](../b7-fix-plan.md) §6.
 
-Option 2 is the cheapest way to keep the fork's *type system* bit-identical while paying none of
+~~Option 2 is the cheapest way to keep the fork's *type system* bit-identical while paying none of
 the 1502-line cost. Option 1 is cheapest overall but is a deliberate, documentable behaviour
-change.
+change.~~ — **superseded 2026-08-17.** Both sentences are true as cost statements and both are moot as
+advice: option 3 was decided, so the 1502-line registry, `SBooleanValue`'s 476 lines, the grammar
+alternative and `RealValue.valueOf(Value)` (E26, which "disappeared entirely" under options 1 and 2)
+are all **in scope and mandatory**.
 
 ### 2.5 — What the tests say about SBoolean
 

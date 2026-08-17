@@ -206,10 +206,15 @@ Citations `[jt:N]` are lines of
 > The observable consequence is that `ExpStdOp.type()` for `u.value()` is `UInteger` while the
 > runtime value is `IntegerValue`, so downstream static typing of `u.value()` is wrong.
 >
-> **Port decision required.** Reproducing the bug preserves bug-for-bug fidelity with the oracle
+> ~~**Port decision required.**~~ **DECIDED 2026-08-17 (B7): FIX the historical defects, documenting
+> each. The policy call has been made and it is *fix*; ~~bug-for-bug reproduction~~ was the recorded
+> recommendation and was NOT taken** (`specification.md` §0 B7). Reproducing the bug preserves
+> bug-for-bug fidelity with the oracle
 > jar; fixing it (`mkInteger()`) changes the static type of `u.value()` and `u.toInteger()`
-> and could alter which overload is selected in enclosing expressions. This is a policy call for
-> the port owner, not something the sources decide. **UNVERIFIABLE**: whether any fork test or
+> and could alter which overload is selected in enclosing expressions. ~~This is a policy call for
+> the port owner, not something the sources decide.~~ Both consequences above are still exactly the
+> consequences — record them with the fix, per row, from
+> [`b7-fix-plan.md`](../b7-fix-plan.md). **UNVERIFIABLE**: whether any fork test or
 > example depends on the buggy static type — I found none, but I did not exhaustively evaluate
 > every enclosing-expression case.
 

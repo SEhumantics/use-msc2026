@@ -338,16 +338,33 @@ extractor's word: the counts were re-derived five times independently and the ci
    the rest are not. 40+ resolve in both trees with different content at the cited line. Resolve
    from context; where context does not settle it, treat as unverified.
 3. **Nothing in S2 was compiled or executed (R1).** Every compile-break claim and every behavioural
-   claim about fork code is a static reading. The first real `mvn -B verify -Djava.awt.headless=true`
-   of S3 is the first evidence. Budget for surprises there.
+   claim about fork code is a static reading. The first real acceptance run of S3 is the first
+   evidence. Budget for surprises there. **CORRECTED 2026-08-17 (decision B3; static-review defect
+   D-13):** that run is ~~`mvn -B verify -Djava.awt.headless=true`~~ alone no longer — **there are two
+   commands and a stage is accepted only on both**, the second being
+   `mvn -B verify -Pupstream-oracle -Djava.awt.headless=true`, and both assert a pinned per-module
+   floor (`upstream-oracle-profile.md` §5, §5.1).
 4. **No historical test was ever run (R2).** Whether the fork's 182 methods actually passed against
    `atenearesearchgroup.uncertainty.jar` is unknown. "The fork pins X" means "the fork *asserts* X".
 5. **`UString` has no behavioural oracle at all**, and §6.5 states which types are under-evidenced.
    The operation *counts* are solid; the operation *semantics* for `UString` and `SBoolean` rest on
    source reading alone.
-6. **The 12 blocking decisions are unanswered.** S2's job was to surface them, and it did. **S3 must
-   not start until all twelve have an owner and a recorded answer** — five of them (B1, B2, B5, B8,
-   B11) cannot be closed by any test the port currently owns.
+6. **~~The 12 blocking decisions are unanswered.~~ FOUR ARE ANSWERED (2026-08-17); eight are not.**
+   S2's job was to surface them, and it did. **S3 must not start until all twelve have an owner and a
+   recorded answer** — five of them (B1, B2, B5, B8, B11) cannot be closed by any test the port
+   currently owns.
+
+   > **PARTLY ANSWERED 2026-08-17 (static-review defect D-13). Four decisions are now recorded, and
+   > three of them REVERSED the recommendation this document was written against:** **B3** = the
+   > `-Pupstream-oracle` profile (recommendation taken); **B7** = **FIX** the historical defects,
+   > documenting each (~~bug-for-bug~~ not taken; plan in `b7-fix-plan.md`); **B2** = **FULL PORT** of
+   > `SBoolean`, all 39 operations (~~skeleton~~ not taken; scope in `b7-fix-plan.md` §6); **H14** =
+   > **BUILD** an input-domain coverage measure (~~prose-stated domains~~ not taken; design in
+   > `h14-coverage-design.md`). Eight of the twelve remain open, so the sentence above still binds —
+   > for those eight. The authoritative record is `specification.md` §0.0 and
+   > `foundation-verdict.md` §3.0. **B2 is still one of the five that no test the port owns can close,
+   > and under the full port it now needs `SBooleanValue` marshalling built into the differential
+   > harness before any SBoolean fidelity claim exists at all.**
 7. **The audit sampled 185 of 218 citations, not all of them.** 100 % coverage of §0, §1 and §7; the
    remaining 33 tokens in §2/§4/§6/§10 were sampled, not exhausted. The 94.6 % figure is a sample
    statistic.

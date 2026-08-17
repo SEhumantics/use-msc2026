@@ -26,8 +26,32 @@ corresponding stage is green. No file under
 
 Classification rule applied: a row is **BEHAVIOUR-PRESERVING** only where I can name the mechanism
 that makes it so. Everything else is **BEHAVIOUR-CHANGING**, including cases where the "change" is a
-bug fix I am recommending *against* during the fidelity port. For those rows the *proposed change*
-column reads **DEFER** — they are the rows a human must rule on.
+bug fix I am recommending *against* during the fidelity port. ~~For those rows the *proposed change*
+column reads **DEFER** — they are the rows a human must rule on.~~ **The human ruled on 2026-08-17 —
+see the box immediately below. Every `DEFER` in this file is a record, not an instruction.**
+
+> ## DECIDED 2026-08-17 — **B7 = FIX the historical defects, documenting each. EVERY `DEFER` BELOW IS SUPERSEDED.**
+>
+> **Read this before working a single row.** The human ruled. There are **29 `DEFER` occurrences** left
+> in this file and **not one of them is still an instruction**: they record the state of the question
+> *before* it was answered, which is why they are not deleted.
+>
+> * **The recommendation was bug-for-bug reproduction, and it was NOT taken.** `DEFER` meant "a human
+>   must rule on this"; the human ruled **fix**, per row, with a written justification and the
+>   print-output delta where one exists (`specification.md` §0 **B7**; `foundation-verdict.md` §3.0).
+> * **The per-row plan is [`b7-fix-plan.md`](../b7-fix-plan.md)** — it triages all 33
+>   behaviour-changing rows, names the fix, the owning stage (S3–S9) and the observable class of each
+>   change, and it **supersedes the `proposed change` column of every `DEFER` row in Tables A and B**.
+>   Static-review defect **D-06** (`upstream-oracle-static-review.md:272-286`) found that document
+>   referenced from nowhere while `specification.md:183` still sent stages here: *"an S4–S7 stage works
+>   its per-row list from `16-modernization-ledger.md` Tables A+B, reads `DEFER` on 29 rows, and
+>   reproduces the defects — i.e. implements bug-for-bug, the recommendation that was explicitly not
+>   taken."* That is the failure this box exists to stop.
+> * **A row still marked `DEFER` here that `b7-fix-plan.md` does not cover is an open question, not a
+>   licence to reproduce the defect.** Raise it; do not read silence as `DEFER`.
+> * The classification columns (`BEHAVIOUR-PRESERVING` / `BEHAVIOUR-CHANGING`, `CF-`/`M-`/`F-`
+>   prefixes, the float-sensitivity marking and every `file:line`) are **unaffected** and remain the
+>   evidence base. Only the *advice* moved.
 
 ---
 

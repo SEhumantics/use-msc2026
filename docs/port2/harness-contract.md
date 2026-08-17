@@ -43,6 +43,71 @@ of findings.**
 
 ---
 
+## 0. THE ACCEPTANCE COMMANDS, AND THE FOUR DECISIONS THIS FILE IS BOUND BY
+
+> **ADDED 2026-08-17, static-review defect D-07.** This file is normative and its §8 is the S4
+> checklist, and yet
+> `git grep -n -iE "acceptance|upstream-oracle|H14" -- docs/port2/harness-contract.md` returned **no
+> hit for any of the three**: the second acceptance command existed only in `specification.md` C1 and
+> `upstream-oracle-profile.md` §5, and §8 mandated the **H14 position that was not taken**. A stage
+> held to this file would have run the wrong gate and published the wrong coverage statement while
+> reporting a green build. Both are corrected here and in §5, §6 and §8.
+
+### 0.1 There are TWO acceptance commands, and both are floor-checked by the build
+
+```bash
+mvn -q clean && mvn -B verify -Djava.awt.headless=true                     # default: vintage-free
+mvn -q clean && mvn -B verify -Pupstream-oracle -Djava.awt.headless=true   # + upstream's own tree
+```
+
+**A stage is not accepted until both are green, and a stage document that quotes only one of them has
+not stated its acceptance** (decision **B3**; `upstream-oracle-profile.md` §5). Neither is `mvn test`,
+which never runs the 130 failsafe methods.
+
+Both commands assert a **pinned, per-module, per-tier floor** — `scripts/UpstreamOracleFloor.java`,
+run by Maven at phase `verify` in `use-core` and `use-gui`. It is the same rule §8 step 2 imposes on a
+sweep, applied to the gate itself: *a floor chosen after the run is not a floor*, and `0` is rejected
+outright.
+
+| | `use-core` surefire | `use-gui` surefire | `use-core` failsafe | `use-gui` failsafe | total |
+|---|---|---|---|---|---|
+| default | 7 classes / 79 methods | 1 / 1 | 1 / 1 | 1 / 129 | **10 / 210** |
+| `-Pupstream-oracle` | 40 / 350 | 8 / 17 | 1 / 1 | 1 / 129 | **50 / 497** |
+
+What a stage must know about it, because these are the ways a green build is *not* a claim:
+
+* Floors are **per module and per tier**. A reactor-wide total would stay green while `use-gui`'s 17
+  methods vanished behind `use-core`'s 350.
+* **Requesting `-Pupstream-oracle` and collecting default-build counts is an error, not a pass.** The
+  check compares the reactor-wide `-P` list against a property only each module's own profile block
+  sets.
+* Counts are **distinct classes and distinct methods from the report XML**, never surefire's headline
+  — under the profile the 14 JUnit-3 `AllTests` aggregators inflate the headline to **1085**
+  executions for 497 methods.
+* **Do not lower a floor to make a run pass.** Same rule as §8 step 7 clause 1. If the suite legitimately
+  grows, raise it in the same commit that grows it.
+* If an upstream test **fails** under the profile, that is a finding for the stage document, never an
+  edit to the test. Ground rule 3 is absolute.
+
+### 0.2 The four decisions of 2026-08-17, and where each one's plan now lives
+
+Recorded in `specification.md` §0.0 and `foundation-verdict.md` §3.0. Listed here because three of
+them **reversed the recorded recommendation**, and a stage that works from the older prose does the
+wrong thing while reporting a green gate.
+
+| Decision | What the user chose | The recommendation, **NOT taken** | The plan a stage works from |
+|---|---|---|---|
+| **B3** | the `-Pupstream-oracle` profile | — recommendation `(b)` **was** taken | `upstream-oracle-profile.md`; §0.1 above |
+| **B7** | **FIX** the historical defects, documenting each | ~~bug-for-bug reproduction~~, and ~~"decide one policy first"~~ | **[`b7-fix-plan.md`](b7-fix-plan.md)** — per-row triage of all 33 behaviour-changing rows. It **supersedes every `DEFER`** in `spec-parts/16-modernization-ledger.md` |
+| **H14** | **BUILD** an input-domain coverage measure | ~~prose-stated domains in every stage document~~ | **[`h14-coverage-design.md`](h14-coverage-design.md)** — design only; the implementing stage measures it. See §5 and §8 step 5 |
+| **B2** | **FULL PORT** of `SBoolean`, all 39 operations | ~~skeleton (option 2)~~; `spec-parts/19-open-questions.md` Q2 recommended ~~option 1, full omission~~ | **[`b7-fix-plan.md`](b7-fix-plan.md) §6**, including the new hard prerequisite: `SBooleanValue` marshalling in this harness, without which all 39 operations are `UNSUPPORTED` |
+
+**B2's consequence for this file:** §9's list of what the harness cannot see includes `SBooleanValue`
+because the harness declines it by name today. Under B2 that is no longer a costless limit — it is
+work S9 must do in the harness before any SBoolean fidelity claim exists.
+
+---
+
 ## 1. The principle
 
 > **A differential oracle may report agreement only where it observed two comparable,
@@ -264,9 +329,12 @@ assertEquals(0, r.javaTypeMismatchCount(), r.summary());              // clause 
 //                          0 java-type mismatch(es), 164 distinct reference value(s) [DISCRIMINATING]
 System.out.println(r.stageStatement(AcceptedDegenerateOperations.none()));
 
-// ...plus the fifth figure the harness does NOT compute (D-30): state, in prose, which inputs the
-// domain covered and which it did not. "24 uReal boundary receivers x 24 arguments; no value in
-// [1,100] other than 2 and 100; no denormals" is a sentence a reader can check. "576 agreed" is not.
+// ...plus the fifth figure the harness does NOT compute YET (D-30). Decision H14, 2026-08-17: BUILD
+// an input-domain coverage measure (h14-coverage-design.md); prose-stated domains were the recorded
+// recommendation and were NOT taken. Until the measure is built, state the domain in prose AND state
+// that the measure is not built: "24 uReal boundary receivers x 24 arguments; no value in [1,100]
+// other than 2 and 100; no denormals; coverage measure not yet implemented (H14)" is a sentence a
+// reader can check. "576 agreed" is not, and prose alone does not close H14.
 
 DiffReportWriter.assertMatchesGolden(
         DiffReportWriter.writeAll("s4-ureal-add.tsv", List.of(r), digests,
@@ -352,7 +420,7 @@ instrument and must say so rather than report a number.
 | **The demotion's cost at gate level (D-57, MINOR, record gap)** | **29** stage passes for a wrong-class or unattributed port; **4** for a subject that only echoes its receiver | Every operation that passes now with `javaTypeMismatch > 0` is a pass the demotion created; the 29 are recovered and named in `stage-01-verification-round8.md` §4.5. The four an echoing subject gains are all **discriminating** accessors (`BooleanValue.isTrue()`, `BooleanValue.value()`, `IntegerValue.value()`, `StringValue.value()`), so the D-15 clause does not catch them. Not a false green — for those four the receiver's payload genuinely is the answer, each is reviewed and signed off, and each sign-off asserts `per.agreed == per.javaTypeMismatch` — but a stage must not read "4 passes" as 4 measurements of a computation. |
 | **Single-valued operations (D-15, enforced)** | **159 of 285** against a perfect port (census 11 measured-nothing / 159 single-valued / 115 discriminating) | Agreement is decided before either implementation runs. The gate refuses them; a sign-off is per operation and per value. |
 | **Zero-measurement operations (D-19, closed as a gap, standing as a limit)** | **11 of 285** | The 8 void mutators plus `UIntegerValue.power(value)`, `UStringValue.toInteger()` and `UStringValue.toReal()`, which throw on every input the corpora hold. |
-| **Input-domain coverage (D-30, open, MAJOR)** | unmeasured everywhere | `distinctReferenceValues()` measures the **codomain**; its dual — how much of the input domain was reached — is computed nowhere, published nowhere, gated nowhere. Measured: P2's real arithmetic defect restricted to receiver `42.0` produced **0 `DIFFER` rows** and a byte-identical tally to a perfect port on all 19 083 rows, and all four affected operations reached a full stage pass. The same in miniature at `URealValue.round()` for a `-0.0 → 0.0` collapse that *is* caught on `floor()`, `neg()` and `mult(value)`. |
+| **Input-domain coverage (D-30, open, MAJOR — decision H14, 2026-08-17: BUILD the measure; prose-stated domains were recommended and NOT taken; design in [`h14-coverage-design.md`](h14-coverage-design.md), unimplemented)** | unmeasured everywhere | `distinctReferenceValues()` measures the **codomain**; its dual — how much of the input domain was reached — is computed nowhere, published nowhere, gated nowhere. Measured: P2's real arithmetic defect restricted to receiver `42.0` produced **0 `DIFFER` rows** and a byte-identical tally to a perfect port on all 19 083 rows, and all four affected operations reached a full stage pass. The same in miniature at `URealValue.round()` for a `-0.0 → 0.0` collapse that *is* caught on `floor()`, `neg()` and `mult(value)`. |
 | **Corpus depth decides the census (D-28 / D-31, open, MINOR)** | 23 `RealValue.*` operations; the string-index family | The corpora hold exactly one `RealValue` (`REAL(0.0)`), so all 23 of its operations are single-valued *by arithmetic*. `indexBoundaries()` was drawn for `at(int)`: `uSubstring(int,int)` is **17 measured rows of 432** against a perfect port. **"159 single-valued" is a joint fact about the implementation and the corpus.** |
 | **The gate is not satisfiable by fidelity (D-29, open, MAJOR)** | 92 of 285 | A perfect port reaches `isStagePass(1, none())` on **74 of 285**; 119 are refused by clause 3 (D-15, as designed) and **92 by clause 2**, for `BOTH_THREW` / `HARNESS_ERROR` / `UNMEASURABLE` rows a faithful port cannot avoid. The only route out is **154** hand-authored `AcceptedThrowPairs` entries keyed on both messages verbatim. On those 92, an infidelity changes the rows and the counts **but not the pass bit** — measured on 10 (defect, operation) pairs, the entire off-by-one probe among them. |
 
@@ -360,8 +428,10 @@ instrument and must say so rather than report a number.
 
 ## 6. The standing invariants, and which door each closes
 
-Run by `mvn -B verify -Djava.awt.headless=true`. If you change the harness these are what must still
-pass; if one starts failing, read it before you "fix" it.
+Run by **both** acceptance commands (§0 above; decision **B3**, 2026-08-17) —
+`mvn -B verify -Djava.awt.headless=true` and
+`mvn -B verify -Pupstream-oracle -Djava.awt.headless=true`. If you change the harness these are what
+must still pass; if one starts failing, read it before you "fix" it.
 
 | Invariant | The door it closes |
 |---|---|
@@ -537,7 +607,7 @@ pass; if one starts failing, read it before you "fix" it.
 ## 8. THE S4 CHECKLIST — imperative, copy-pasteable
 
 Work top to bottom. Every line exists because a round found the alternative. Nothing here is new: it is
-§1–§7 in the order you will need them.
+§0–§7 in the order you will need them.
 
 **1. Write the adapter with one invocation seam.**
 
@@ -593,7 +663,15 @@ infidelity is planted.
 | 3 | **java-type mismatch count**, per operation | `# op.<key>.javaTypeMismatch` |
 | 3a | **its provenance split** (H21), per operation — which half of the mismatch total is a statement about the port and which about your own adapter | `# op.<key>.subjectTypeObserved` / `# op.<key>.subjectTypeAssumed` |
 | 4 | the whole line, quoted verbatim | `stageStatement(acknowledged)` |
-| 5 | **the input domain, in prose** — what was covered and what was not | **you** (D-30) |
+| 5 | **the input domain — MEASURED, per decision H14 (2026-08-17), and in prose alongside it** | the coverage measure of [`h14-coverage-design.md`](h14-coverage-design.md); prose from **you** (D-30) |
+
+> **CORRECTED 2026-08-17 (decision H14; static-review defect D-07).** Figure 5 read
+> ~~"**the input domain, in prose** — what was covered and what was not | **you** (D-30)"~~. That is
+> the H14 option that was **NOT taken**, and it stood here as a mandatory instruction in the normative
+> contract. The user decided **BUILD an input-domain coverage measure**. Until the measure exists,
+> state the domain in prose **and say the measure is not built yet** — do not present prose as
+> satisfying H14, and do not treat this row as closed by a sentence. §5's D-30 row carries the same
+> correction.
 
 Quote per operation, never per file (`# rows.*` and `# verdict.*` are sums — D-21; and `# op.<key>.*` keys
 are not unique if one report holds several results for one operation — D-41). "576 agreed" is not a
@@ -629,6 +707,29 @@ and its numbers — read all of them, not the first.
 `javaTypeMismatchCount() == 0` is a **gate clause**, not a published figure — valid only under the
 invocation-seam shape of step 1, quoted per operation, and checked by a reviewer reading the adapter's
 shape rather than its prose.
+
+**8a. Accept the stage on BOTH commands, and quote both (§0.1, decision B3).**
+
+```bash
+mvn -q clean && mvn -B verify -Djava.awt.headless=true                     # 10 classes / 210 methods
+mvn -q clean && mvn -B verify -Pupstream-oracle -Djava.awt.headless=true   # 50 classes / 497 methods
+```
+
+Quote, for each: `BUILD SUCCESS`, the deduplicated class and method counts, and
+failures/errors/skipped. The counts are **asserted by the build** — the `[floor]` lines in the log are
+the evidence, and a run below floor fails instead of printing a green summary over a shrunken suite.
+A stage document quoting only the first command **has not stated its acceptance**. Never quote
+surefire's headline as a method count under the profile (1085 executions ≠ 497 methods). If an upstream
+test fails, that is a finding for this document plus, if licensed, a waiver in
+`upstream-test-waivers.md` — **never** an edit to the test.
+
+**8b. If you are fixing a historical defect, you are executing B7, so follow its plan.** The decision
+is **FIX and document each row**; ~~bug-for-bug~~ was recommended and not taken. The per-row list — the
+fix, the owning stage, and the observable class of the change — is
+[`b7-fix-plan.md`](b7-fix-plan.md), which supersedes every `DEFER` in
+`spec-parts/16-modernization-ledger.md`. A fix that lands without its row's written justification and
+its print-output delta is not B7-compliant, and a deliberate deviation from the reference stays visible
+only through `AcceptedDegenerateOperations` / `AcceptedThrowPairs`.
 
 **9. Before you quote anything, name what the harness could not see for this stage:** void operations
 (post-state is unmeasurable), `SBooleanValue`, collection receivers, the type layer, the **33 non-nameable
