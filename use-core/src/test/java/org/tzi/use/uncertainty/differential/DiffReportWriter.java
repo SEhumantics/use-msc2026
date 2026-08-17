@@ -26,6 +26,8 @@ import java.util.Map;
  * # sha256.atenea...   53b2...
  * # operations         URealValue.add(value)
  * # rows               484
+ * # rows.agreement     484
+ * # rows.disagreement  0
  * # verdict.AGREE      484
  * index &lt;tab&gt; operation &lt;tab&gt; inputs &lt;tab&gt; historical &lt;tab&gt; ported &lt;tab&gt; verdict &lt;tab&gt; note
  * ...
@@ -112,10 +114,12 @@ public final class DiffReportWriter {
         String reference = results.get(0).referenceName();
         String subject = results.get(0).subjectName();
         int totalRows = 0;
+        int agreementRows = 0;
         List<String> operations = new ArrayList<>();
         Map<DiffVerdict, Integer> tally = new LinkedHashMap<>();
         for (DifferentialSweep.Result r : results) {
             totalRows += r.rowCount();
+            agreementRows += r.agreementCount();
             operations.add(r.op().key());
             for (DiffVerdict v : DiffVerdict.values()) {
                 int c = r.count(v);
@@ -135,6 +139,11 @@ public final class DiffReportWriter {
             }
             header(out, "operations", String.join(",", operations));
             header(out, "rows", Integer.toString(totalRows));
+            // Stated outright rather than left for the reader to derive from the verdict names,
+            // because deriving it wrongly is this harness's recurring defect: a reader who saw
+            // "verdict.AGREE_THROWN 169" scored a sweep green in which nothing was ever compared.
+            header(out, "rows.agreement", Integer.toString(agreementRows));
+            header(out, "rows.disagreement", Integer.toString(totalRows - agreementRows));
             for (Map.Entry<DiffVerdict, Integer> e : tally.entrySet()) {
                 header(out, "verdict." + e.getKey().name(), Integer.toString(e.getValue()));
             }

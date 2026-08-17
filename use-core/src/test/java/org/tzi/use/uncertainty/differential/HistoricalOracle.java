@@ -387,6 +387,20 @@ public final class HistoricalOracle implements Candidate {
         return load(simpleName);
     }
 
+    /**
+     * The receiver simple names this oracle can marshal, i.e. exactly the receivers for which
+     * {@link #supports(UOp)} can ever return {@code true}. Sorted, so an enumeration built from it
+     * is replayable.
+     *
+     * <p>Exposed so that a test can enumerate <em>every reachable operation</em> from the jars
+     * themselves rather than from a hand-maintained list that silently stops widening.
+     */
+    public static List<String> marshallableReceiverTypes() {
+        List<String> out = new ArrayList<>(MARSHALLABLE_RECEIVERS);
+        java.util.Collections.sort(out);
+        return java.util.Collections.unmodifiableList(out);
+    }
+
     /** Absolute path of the {@code use.jar} actually loaded. */
     public Path useJarPath() {
         return useJar;
@@ -436,6 +450,15 @@ public final class HistoricalOracle implements Candidate {
      *       "this operation is not implemented" — a broken oracle rendered as ordinary
      *       {@code UNSUPPORTED} rows. That exception now escapes and fails the run.</li>
      * </ol>
+     *
+     * <p>{@link #resolve(UOp)} calls {@link #checkOpen()}, so a <em>closed</em> oracle raises
+     * {@link HarnessMarshallingException} out of this method rather than answering the question. It
+     * has to: the narrowed catch above is otherwise unobservable, because the constructor eagerly
+     * caches every class this method can look at and {@code getMethod} on a cached class cannot fail
+     * with anything but {@code NoSuchMethodException}. Under the old {@code catch (RuntimeException)}
+     * a closed oracle answered {@code false}, i.e. "the historical implementation does not have this
+     * operation" — a statement about the code under test, produced by an instrument that had been
+     * shut down.
      */
     @Override
     public boolean supports(UOp op) {
@@ -448,6 +471,24 @@ public final class HistoricalOracle implements Candidate {
         } catch (NoSuchHistoricalMethodException e) {
             return false;
         }
+    }
+
+    /**
+     * States which of the two reasons applies, so the {@link DiffVerdict#UNSUPPORTED} row carries a
+     * true sentence. See {@link Candidate#unsupportedReason(UOp)} for why this matters: the sweep
+     * used to write "historical does not implement SBooleanValue.and(value)" into the report, and
+     * {@code javap -p} on the very jar this oracle loads shows
+     * {@code public SBooleanValue and(Value)} declared on that class.
+     */
+    @Override
+    public String unsupportedReason(UOp op) {
+        if (!MARSHALLABLE_RECEIVERS.contains(op.receiverType())) {
+            return "this harness cannot marshal a " + op.receiverType() + " receiver, so it cannot "
+                    + "drive " + op.key() + "; this is a limit of the instrument and says nothing "
+                    + "about whether the historical implementation declares the operation";
+        }
+        return "the historical " + VALUE_PKG + op.receiverType() + " declares no method matching "
+                + op.key();
     }
 
     @Override
@@ -511,6 +552,9 @@ public final class HistoricalOracle implements Candidate {
     }
 
     private Method resolve(UOp op) {
+        // Before the cache lookup, not inside the mapping function: the constructor pre-populates
+        // the class cache, so a cached resolution would otherwise answer happily on a closed oracle.
+        checkOpen();
         return methods.computeIfAbsent(op.key(), key -> {
             Class<?> owner = load(op.receiverType());
             Class<?>[] paramTypes = new Class<?>[op.params().size()];
@@ -863,9 +907,15 @@ public final class HistoricalOracle implements Candidate {
 
     // ------------------------------------------------------------------ lifecycle
 
+    /**
+     * Using a closed oracle is a failure of the harness, not of the code under test, so it is
+     * signalled with {@link HarnessMarshallingException} like every other adapter failure. With a
+     * plain {@link IllegalStateException} it fell into the sweep's "the code under test threw"
+     * population instead.
+     */
     private void checkOpen() {
         if (closed) {
-            throw new IllegalStateException("HistoricalOracle has already been closed");
+            throw new HarnessMarshallingException("HistoricalOracle has already been closed");
         }
     }
 

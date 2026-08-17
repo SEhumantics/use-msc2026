@@ -11,9 +11,10 @@ import java.util.Objects;
  * Runs an operation on both candidates over a fixed, replayable list of argument tuples and turns
  * each application into a {@link DiffRow}.
  *
- * <p>The sweep never decides that a difference is acceptable. It records what each side did and
- * classifies it; whether a run is a pass is the caller's judgement, made against
- * {@link Result#disagreements()}.
+ * <p>The sweep never decides that a difference is acceptable, and — since the measurement recorded
+ * in {@link DiffVerdict} — it never decides that two failures are a similarity either. It records
+ * what each side did and classifies it; whether a run is a pass is the caller's judgement, made
+ * against {@link Result#disagreements()}.
  *
  * <p>Test-scoped. Not part of the product.
  */
@@ -22,16 +23,35 @@ public final class DifferentialSweep {
     private final Candidate reference;
     private final Candidate subject;
     private final long seed;
+    private final AcceptedThrowPairs acceptedThrowPairs;
 
     /**
+     * The ordinary constructor: no throw-pair is an agreement.
+     *
      * @param reference the historical side (its output populates the {@code historical} column)
      * @param subject   the ported side (its output populates the {@code ported} column)
      * @param seed      the seed that produced the inputs, recorded in the report header
      */
     public DifferentialSweep(Candidate reference, Candidate subject, long seed) {
+        this(reference, subject, seed, AcceptedThrowPairs.none());
+    }
+
+    /**
+     * As above, with an explicit allowlist of reviewed throw-pairs. Use this only for shared error
+     * paths that a stage has read and signed off in writing — see {@link AcceptedThrowPairs}.
+     */
+    public DifferentialSweep(Candidate reference, Candidate subject, long seed,
+                             AcceptedThrowPairs acceptedThrowPairs) {
         this.reference = reference;
         this.subject = subject;
         this.seed = seed;
+        this.acceptedThrowPairs = Objects.requireNonNull(acceptedThrowPairs,
+                "acceptedThrowPairs (use AcceptedThrowPairs.none())");
+    }
+
+    /** The reviewed throw-pairs this sweep will adjudicate; empty unless a caller supplied some. */
+    public AcceptedThrowPairs acceptedThrowPairs() {
+        return acceptedThrowPairs;
     }
 
     public long seed() {
@@ -97,9 +117,13 @@ public final class DifferentialSweep {
             }
 
             if (!refSupports || !subSupports) {
-                String note = (!refSupports ? reference.name() + " does not implement " + op.key() : "")
+                // The reason comes from the candidate, not from this class. "does not implement" was
+                // asserted here for both causes, and it is false for the commonest one: the
+                // historical jar does declare SBooleanValue.and(Value) -- it is this harness that
+                // cannot marshal an SBoolean receiver. See Candidate.unsupportedReason.
+                String note = (!refSupports ? reference.unsupportedReason(op) : "")
                         + (!refSupports && !subSupports ? "; " : "")
-                        + (!subSupports ? subject.name() + " does not implement " + op.key() : "");
+                        + (!subSupports ? subject.unsupportedReason(op) : "");
                 rows.add(new DiffRow(i, op.key(), inputs,
                         refSupports ? "" : "UNSUPPORTED", subSupports ? "" : "UNSUPPORTED",
                         DiffVerdict.UNSUPPORTED, note));
@@ -108,7 +132,7 @@ public final class DifferentialSweep {
 
             Outcome refOutcome = apply(reference, op, tuple);
             Outcome subOutcome = apply(subject, op, tuple);
-            rows.add(classify(i, op, inputs, refOutcome, subOutcome));
+            rows.add(classify(i, op, inputs, refOutcome, subOutcome, acceptedThrowPairs));
         }
         return new Result(op, seed, reference.name(), subject.name(), rows);
     }
@@ -118,12 +142,15 @@ public final class DifferentialSweep {
      * populations.
      *
      * <ul>
-     *   <li><b>returned</b> — including the null check, which is inside the {@code try} on purpose:
-     *       a {@link Candidate} that returns Java {@code null} (the natural mistake for a ported
-     *       operation whose result maps to {@code UndefinedValue}) used to NPE inside
-     *       {@code classify} and discard every row already computed. It is now a recorded throw.</li>
+     *   <li><b>returned</b> — a non-null {@link UValue}.</li>
      *   <li><b>harness error</b> — {@link HarnessMarshallingException} only, caught before
-     *       {@code Exception} so it can never be scored as a throw by the code under test.</li>
+     *       {@code Exception} so it can never be scored as a throw by the code under test. The null
+     *       check raises this type on purpose: a {@link Candidate} that returns Java {@code null}
+     *       (the natural mistake for a ported operation whose result maps to {@code UndefinedValue})
+     *       has broken its contract, and no comparable value exists. It used to raise
+     *       {@link NullPointerException} instead, which fell into the throw population — so two
+     *       candidates that both returned {@code null} scored as a matching throw, i.e. a contract
+     *       violation on both sides was reported as agreement.</li>
      *   <li><b>threw</b> — {@link Exception} and nothing wider. {@link Error} is re-thrown:
      *       {@code StackOverflowError}, {@code AssertionError} and {@code NoClassDefFoundError}
      *       describe a broken JVM or a broken build, not a behavioural difference, and turning them
@@ -133,9 +160,12 @@ public final class DifferentialSweep {
     private static Outcome apply(Candidate candidate, UOp op, List<UValue> tuple) {
         try {
             UValue produced = candidate.invoke(op, tuple);
-            Objects.requireNonNull(produced, () -> candidate.name() + " returned Java null from "
-                    + op.key() + "; a Candidate must return a UValue (use UValue.nullValue() for a "
-                    + "genuine null result)");
+            if (produced == null) {
+                throw new HarnessMarshallingException(candidate.name() + " returned Java null from "
+                        + op.key() + "; a Candidate must return a UValue (use UValue.nullValue() for "
+                        + "a genuine null result). No comparable value exists, so this row is not a "
+                        + "measurement.");
+            }
             return Outcome.returned(produced);
         } catch (HarnessMarshallingException e) {
             return Outcome.harnessError(e);
@@ -151,12 +181,13 @@ public final class DifferentialSweep {
         }
     }
 
-    private static DiffRow classify(int index, UOp op, List<String> inputs, Outcome ref, Outcome sub) {
+    private static DiffRow classify(int index, UOp op, List<String> inputs, Outcome ref, Outcome sub,
+                                    AcceptedThrowPairs accepted) {
         if (ref.harnessError != null || sub.harnessError != null) {
-            // Checked first and never merged with the throw populations below: a harness failure is
+            // Checked first and never merged with the throw population below: a harness failure is
             // the absence of a measurement, not a measurement that two sides happen to share.
             Throwable first = ref.harnessError != null ? ref.harnessError : sub.harnessError;
-            StringBuilder note = new StringBuilder("the harness could not drive ");
+            StringBuilder note = new StringBuilder("no measurement on ");
             if (ref.harnessError != null && sub.harnessError != null) {
                 note.append("either side");
             } else {
@@ -167,12 +198,19 @@ public final class DifferentialSweep {
                     DiffVerdict.HARNESS_ERROR, note.toString());
         }
         if (ref.thrown != null && sub.thrown != null) {
-            boolean same = ref.thrown.getClass().getName().equals(sub.thrown.getClass().getName());
-            String note = same ? "" : "reference message: " + safeMessage(ref.thrown)
-                    + " / subject message: " + safeMessage(sub.thrown);
+            // The note carries both classes AND both messages, always, whether or not the classes
+            // match. This class no longer forms an opinion about whether two failures are the same
+            // failure; it records what it saw and hands the reader the evidence. The only way out of
+            // BOTH_THREW is an entry a human wrote into AcceptedThrowPairs.
+            String evidence = "reference threw " + ref.thrown.getClass().getName() + ": "
+                    + safeMessage(ref.thrown)
+                    + " / subject threw " + sub.thrown.getClass().getName() + ": "
+                    + safeMessage(sub.thrown);
+            String rationale = accepted.rationaleFor(op, ref.thrown, sub.thrown);
             return new DiffRow(index, op.key(), inputs, DiffRow.thrown(ref.thrown),
-                    DiffRow.thrown(sub.thrown), same ? DiffVerdict.AGREE_THROWN : DiffVerdict.DIFFER_THROWN,
-                    note);
+                    DiffRow.thrown(sub.thrown),
+                    rationale == null ? DiffVerdict.BOTH_THREW : DiffVerdict.ACCEPTED_THROW,
+                    rationale == null ? evidence : "adjudicated: " + rationale + ". " + evidence);
         }
         if (ref.thrown != null || sub.thrown != null) {
             return new DiffRow(index, op.key(), inputs,
@@ -285,15 +323,46 @@ public final class DifferentialSweep {
             return tally.getOrDefault(verdict, 0);
         }
 
-        /** Every row whose verdict is not an agreement. An empty list is the only clean outcome. */
+        /**
+         * Every row whose verdict is not an agreement. An empty list is the only clean outcome.
+         *
+         * <p>Exactly complementary to {@link #agreements()} by construction — both delegate to
+         * {@link #partition(boolean)} against the single predicate {@link DiffVerdict#isAgreement()}.
+         * Two independently written accessors are how a verdict comes to be a non-agreement in one
+         * and invisible in the other, which is the same defect renamed.
+         */
         public List<DiffRow> disagreements() {
+            return partition(false);
+        }
+
+        /**
+         * Every row whose verdict <em>is</em> an agreement. Exposed so a caller can assert on the
+         * agreement population directly instead of inferring it from a tally, and so that
+         * {@code agreements().size() + disagreements().size() == rowCount()} is checkable.
+         */
+        public List<DiffRow> agreements() {
+            return partition(true);
+        }
+
+        private List<DiffRow> partition(boolean agreement) {
             List<DiffRow> out = new ArrayList<>();
             for (DiffRow row : rows) {
-                if (!row.verdict().isAgreement()) {
+                if (row.verdict().isAgreement() == agreement) {
                     out.add(row);
                 }
             }
             return out;
+        }
+
+        /** Number of rows in which two comparable values, or an adjudicated throw-pair, agreed. */
+        public int agreementCount() {
+            int n = 0;
+            for (DiffRow row : rows) {
+                if (row.verdict().isAgreement()) {
+                    n++;
+                }
+            }
+            return n;
         }
 
         /** One-line tally, e.g. {@code URealValue.add(value): 484 rows, AGREE=484}. */

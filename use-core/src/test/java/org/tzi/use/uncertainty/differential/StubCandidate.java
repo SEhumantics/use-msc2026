@@ -1,6 +1,5 @@
 package org.tzi.use.uncertainty.differential;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -39,7 +38,8 @@ public final class StubCandidate implements Candidate {
         FAULTY_MINUS
     }
 
-    private static final Set<String> SUPPORTED = new HashSet<>();
+    /** Sorted, so {@link #unsupportedReason(UOp)} renders identically on every run. */
+    private static final Set<String> SUPPORTED = new java.util.TreeSet<>();
 
     static {
         SUPPORTED.add(UOp.binary("URealValue", "add").key());
@@ -76,13 +76,25 @@ public final class StubCandidate implements Candidate {
     }
 
     @Override
+    public String unsupportedReason(UOp op) {
+        return name() + " implements only " + SUPPORTED + ", not " + op.key();
+    }
+
+    /**
+     * The three failure exits below raise {@link HarnessMarshallingException}, not
+     * {@link IllegalArgumentException}, because they are failures of <em>this adapter</em> and not
+     * of anything under comparison — see the invariant on {@link Candidate}. With the old type, two
+     * faithful stubs swept over a non-UREAL receiver corpus produced
+     * {@code 169 rows, disagreements 0} with neither side executing a line of arithmetic.
+     */
+    @Override
     public UValue invoke(UOp op, List<UValue> args) {
         if (args.size() != op.arity()) {
-            throw new IllegalArgumentException(op.key() + " needs " + op.arity() + " values, got " + args.size());
+            throw new HarnessMarshallingException(op.key() + " needs " + op.arity() + " values, got " + args.size());
         }
         UValue receiver = args.get(0);
         if (receiver.kind() != UValue.Kind.UREAL) {
-            throw new IllegalArgumentException(op.key() + " needs a UREAL receiver, got " + receiver.canonical());
+            throw new HarnessMarshallingException(op.key() + " needs a UREAL receiver, got " + receiver.canonical());
         }
         double a = receiver.asDouble();
         double ua = receiver.uncertainty();
@@ -117,7 +129,7 @@ public final class StubCandidate implements Candidate {
             case INTEGER:  return new double[] { v.asInt(), 0.0 };
             case UINTEGER: return new double[] { v.asInt(), v.uncertainty() };
             default:
-                throw new IllegalArgumentException(op.key() + " cannot take " + v.canonical());
+                throw new HarnessMarshallingException(op.key() + " cannot take " + v.canonical());
         }
     }
 
