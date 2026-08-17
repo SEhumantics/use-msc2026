@@ -787,7 +787,13 @@ class UnwrittenPortInvariantTest {
             // type, which is a DIFFER since D-18 was fixed. The subject of this test has to be a
             // port that is right about everything except discrimination, or the sweep it produces
             // is not the clean-but-degenerate sweep the sign-off route exists for.
-            literals.put(isUReal.key(), UValue.bool(true).asJavaType("java.lang.Boolean"));
+            //
+            // And the token is OBSERVED off a real java.lang.Boolean rather than written as a string
+            // literal (D-43): a boolean-returning operation answers with exactly the object autoboxing
+            // produces here, so this is the same attribution the reference makes, obtained the same
+            // way. The earlier revision of this line wrote asJavaType("java.lang.Boolean") -- correct,
+            // and the first instance in the tree of the habit that made D-43 unmeasurable.
+            literals.put(isUReal.key(), UValue.bool(true).observedFrom(Boolean.TRUE));
             try (Candidate port = new ConstantTablePort("constant-true", literals)) {
                 DifferentialSweep.Result result = new DifferentialSweep(oracle, port, generator.seed())
                         .run(isUReal, tuples(stageDomains(isUReal, corpora)));

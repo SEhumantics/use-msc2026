@@ -271,7 +271,50 @@ public final class DifferentialSweep {
                         + "type (defect D-18); this row is a divergence because a port of these "
                         + "classes must reproduce the declared result type, not only the payload"
                         : "different as well")
-                + ".";
+                + "." + provenanceClause(ref, sub);
+    }
+
+    /**
+     * <strong>Whether each side's class was observed or merely asserted — defect D-43.</strong>
+     *
+     * <p>A type-mismatch row has two possible causes and they are different findings: the
+     * implementation returned the wrong class, or the <em>adapter</em> never looked at what its
+     * implementation returned. Until {@link UValue#observedFrom(Object)} existed, only the reference
+     * side was ever observed, and a content-perfect port whose adapter took the factory default
+     * produced 3 445 rows that read exactly like the second cause dressed as the first.
+     *
+     * <p>The provenance is reported and never scored: the verdict is already {@code DIFFER} and stays
+     * {@code DIFFER}. A subject must not be able to talk its way out of a divergence by admitting that
+     * it guessed — that would be D-17's shape in a new costume. What this clause buys is attribution,
+     * which is the thing the round-6 measurement lacked.
+     */
+    private static String provenanceClause(UValue ref, UValue sub) {
+        StringBuilder sb = new StringBuilder();
+        appendProvenance(sb, "subject", sub);
+        appendProvenance(sb, "reference", ref);
+        if (sb.length() == 0) {
+            return " Both classes were OBSERVED from the objects the two sides returned, so this row "
+                    + "is a statement about the two implementations.";
+        }
+        return sb.toString();
+    }
+
+    private static void appendProvenance(StringBuilder sb, String side, UValue value) {
+        if (value.typeProvenance() == UValue.TypeProvenance.OBSERVED
+                || value.typeProvenance() == UValue.TypeProvenance.NONE) {
+            return;
+        }
+        sb.append(" The ").append(side).append("'s class was ").append(value.typeProvenance())
+                .append(", not observed");
+        if (value.typeProvenance() == UValue.TypeProvenance.ASSUMED) {
+            sb.append(" -- the factory default for kind ").append(value.kind())
+                    .append(", which is wrong for 182 of 285 operations: this row may be an adapter "
+                            + "defect and not a port defect (D-43), and an adapter must attribute "
+                            + "through UValue.observedFrom(Object)");
+        } else {
+            sb.append(", declared because: ").append(value.typeDeclarationReason());
+        }
+        sb.append('.');
     }
 
     private static String describeType(UValue value) {

@@ -493,6 +493,47 @@ public final class HistoricalOracle implements Candidate {
 
     @Override
     public UValue invoke(UOp op, List<UValue> args) throws Throwable {
+        Object raw = invokeRaw(op, args);
+        if (raw == VOID_RESULT) {
+            // Method.invoke returns null for void, and fromHistorical maps null to Kind.NULL. This
+            // branch keeps "the operation has no result" apart from "the operation returned null",
+            // which is a real distinction and all it is.
+            //
+            // It does NOT stop an empty-bodied ported mutator agreeing on every row, and this
+            // comment used to say that it did. Before the branch both sides rendered NULL and
+            // agreed unconditionally; after it both sides render VOID and agree unconditionally.
+            // What stops it is DiffVerdict.UNMEASURABLE: two absences of a result are not a shared
+            // result. Measured: 444 agreement rows against a do-nothing subject, now 0.
+            return UValue.voidValue();
+        }
+        return fromHistorical(raw);
+    }
+
+    /**
+     * What {@link #invokeRaw(UOp, List)} returns for an operation declared {@code void}, which is
+     * otherwise indistinguishable from an operation that returned {@code null}.
+     */
+    static final Object VOID_RESULT = new Object() {
+        @Override
+        public String toString() {
+            return "VOID_RESULT";
+        }
+    };
+
+    /**
+     * The object the operation returned, before any unwrapping — {@link #VOID_RESULT} for a
+     * {@code void} operation, possibly {@code null} for one that genuinely returned {@code null}.
+     *
+     * <p>Package-private and deliberately not on {@link Candidate}: it exists so a test can build an
+     * adapter that <strong>observes</strong> the class of the object its subject returned, the way an
+     * S4 adapter must (see {@link UValue#observedFrom(Object)} and defect D-43). Without it, a test
+     * standing an oracle up as a "ported" side could only get at the class through this class's own
+     * {@link #fromHistorical(Object)}, i.e. by copying the reference's attribution — which is exactly
+     * the move D-43 is about.
+     *
+     * <p>{@link #invoke(UOp, List)} is this method plus the unwrapping, so the two cannot drift.
+     */
+    Object invokeRaw(UOp op, List<UValue> args) throws Throwable {
         checkOpen();
         Objects.requireNonNull(op, "op");
         Objects.requireNonNull(args, "args");
@@ -526,19 +567,7 @@ public final class HistoricalOracle implements Candidate {
         } catch (IllegalAccessException | IllegalArgumentException e) {
             throw new HarnessMarshallingException("cannot reflectively call historical " + op.key(), e);
         }
-        if (method.getReturnType() == void.class) {
-            // Method.invoke returns null for void, and fromHistorical maps null to Kind.NULL. This
-            // branch keeps "the operation has no result" apart from "the operation returned null",
-            // which is a real distinction and all it is.
-            //
-            // It does NOT stop an empty-bodied ported mutator agreeing on every row, and this
-            // comment used to say that it did. Before the branch both sides rendered NULL and
-            // agreed unconditionally; after it both sides render VOID and agree unconditionally.
-            // What stops it is DiffVerdict.UNMEASURABLE: two absences of a result are not a shared
-            // result. Measured: 444 agreement rows against a do-nothing subject, now 0.
-            return UValue.voidValue();
-        }
-        return fromHistorical(raw);
+        return method.getReturnType() == void.class ? VOID_RESULT : raw;
     }
 
     /** Convenience for the common shape: receiver plus zero or more {@code Value} arguments. */
@@ -679,7 +708,7 @@ public final class HistoricalOracle implements Candidate {
      *
      * <h2>Every returned value is typed by what it actually was (defect D-18)</h2>
      * The kind is chosen as it always was — the shape of the content — and then
-     * {@link UValue#asJavaType(String)} records {@code result.getClass().getName()} verbatim. The two
+     * {@link UValue#observedFrom(Object)} records {@code result.getClass().getName()} verbatim. The two
      * are not the same question, and treating them as one was the defect: a raw {@code Boolean} and
      * an {@code org.tzi.use.uml.ocl.value.BooleanValue} both carry a boolean, so both are
      * {@link UValue.Kind#BOOLEAN}, and before this call they had the same canonical form. Nine of the
@@ -689,7 +718,10 @@ public final class HistoricalOracle implements Candidate {
      * <strong>not</strong> the {@code Value} class of its kind, and 193 of 285 operations return one.
      *
      * <p>Deliberately uniform: every branch attributes, so a branch added later cannot fall back to
-     * the factory's assumption by omission.
+     * the factory's assumption by omission. Every branch attributes through the same call an S4
+     * adapter must use, for the same reason and with the same meaning — that symmetry is the whole of
+     * the D-43 fix, and until {@code observedFrom} existed this side of the harness observed while the
+     * other side was merely believed.
      *
      * @throws HarnessMarshallingException if the object cannot be unwrapped exactly. Unwrapping is
      *         harness work performed after the operation returned, so a failure here is the absence
@@ -704,24 +736,24 @@ public final class HistoricalOracle implements Candidate {
             switch (className) {
                 case VALUE_PKG + "URealValue":
                     return UValue.uReal(d(result, "value"), d(result, "uncertainty"))
-                            .asJavaType(className);
+                            .observedFrom(result);
                 case VALUE_PKG + "UIntegerValue":
                     return UValue.uInteger(i(result, "value"), d(result, "uncertainty"))
-                            .asJavaType(className);
+                            .observedFrom(result);
                 case VALUE_PKG + "UBooleanValue":
                     return UValue.uBoolean(b(result, "value"), d(result, "probability"))
-                            .asJavaType(className);
+                            .observedFrom(result);
                 case VALUE_PKG + "UStringValue":
                     return UValue.uString(s(result, "value"), d(result, "confidence"))
-                            .asJavaType(className);
+                            .observedFrom(result);
                 case VALUE_PKG + "RealValue":
-                    return UValue.real(d(result, "value")).asJavaType(className);
+                    return UValue.real(d(result, "value")).observedFrom(result);
                 case VALUE_PKG + "IntegerValue":
-                    return UValue.integer(i(result, "value")).asJavaType(className);
+                    return UValue.integer(i(result, "value")).observedFrom(result);
                 case VALUE_PKG + "BooleanValue":
-                    return UValue.bool(b(result, "value")).asJavaType(className);
+                    return UValue.bool(b(result, "value")).observedFrom(result);
                 case VALUE_PKG + "StringValue":
-                    return UValue.string(s(result, "value")).asJavaType(className);
+                    return UValue.string(s(result, "value")).observedFrom(result);
                 case VALUE_PKG + "SequenceValue": {
                     List<UValue> items = new ArrayList<>();
                     Object it = result.getClass().getMethod("iterator").invoke(result);
@@ -729,22 +761,23 @@ public final class HistoricalOracle implements Candidate {
                     while (iterator.hasNext()) {
                         items.add(fromHistorical(iterator.next()));
                     }
-                    return UValue.sequence(items).asJavaType(className);
+                    return UValue.sequence(items).observedFrom(result);
                 }
                 default:
                     if (result instanceof Boolean) {
-                        return UValue.bool((Boolean) result).asJavaType(className);
+                        return UValue.bool((Boolean) result).observedFrom(result);
                     }
                     if (result instanceof Integer) {
-                        return UValue.integer((Integer) result).asJavaType(className);
+                        return UValue.integer((Integer) result).observedFrom(result);
                     }
                     if (result instanceof Double) {
-                        return UValue.real((Double) result).asJavaType(className);
+                        return UValue.real((Double) result).observedFrom(result);
                     }
                     if (result instanceof CharSequence) {
-                        return UValue.string(result.toString()).asJavaType(className);
+                        return UValue.string(result.toString()).observedFrom(result);
                     }
-                    return UValue.opaque(className, opaqueRepresentation(result));
+                    return UValue.opaque(className, opaqueRepresentation(result))
+                            .observedFrom(result);
             }
         } catch (InvocationTargetException e) {
             throw new HarnessMarshallingException(

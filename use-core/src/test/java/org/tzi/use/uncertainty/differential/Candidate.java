@@ -26,8 +26,53 @@ import java.util.List;
  * <p>This was stated on {@link HistoricalOracle} only, and the shipped {@link StubCandidate} broke
  * it: two faithful stubs swept over a receiver type they cannot take produced 169 rows of
  * "agreement" without either side executing anything. The invariant belongs here, on the interface,
- * because from S4 the <em>ported implementation</em> is the side being adapted, and
- * {@link StubCandidate} is the only worked example its adapter has to copy.
+ * because from S4 the <em>ported implementation</em> is the side being adapted.
+ *
+ * <h2>The second invariant: OBSERVE the Java class your port returned — never declare it</h2>
+ * <strong>A value is its content <em>together with its Java class</em> (defect D-18), and the class
+ * must be read off the object your port actually returned:</strong>
+ *
+ * <pre>
+ *   Object returned = portMethod.invoke(receiver, marshalledArgs);   // or a direct call
+ *   if (returned == null) {
+ *       return UValue.nullValue();                                   // no class to observe
+ *   }
+ *   return UValue.uReal(v, u).observedFrom(returned);                 // &lt;-- the whole obligation
+ * </pre>
+ *
+ * <p><strong>An adapter that does not route through {@link UValue#observedFrom(Object)} is
+ * declaring a type, not observing one — and a declared type makes the type check measure the
+ * adapter instead of the port.</strong> The reference side is observed:
+ * {@link HistoricalOracle#fromHistorical(Object)} derives the class from
+ * {@code result.getClass().getName()} on every branch. If your side is not observed too, the two
+ * halves of the comparison are not the same question. That asymmetry is defect <strong>D-43</strong>,
+ * and it does its damage in both directions:
+ * <ul>
+ *   <li><strong>False divergence, through the obvious code.</strong> {@code UValue.uReal(...)},
+ *       {@code UValue.bool(...)} and the other factories type a value as the
+ *       {@code org.tzi.use.uml.ocl.value} class of its kind — {@link UValue.TypeProvenance#ASSUMED} —
+ *       which is <strong>wrong for 182 of the 285 enumerated operations</strong>, because most of that
+ *       surface returns a raw {@code boolean} (140 declarations), {@code int} (18), {@code double} (6)
+ *       or {@code String} (18). Measured on a <em>content-perfect</em> port with such an adapter:
+ *       <strong>3 445 {@code DIFFER} rows across 182 of 285 operations and 29 stage passes lost</strong>,
+ *       {@code URealValue.value()}, {@code URealValue.uncertainty()}, {@code UIntegerValue.value()} and
+ *       {@code UIntegerValue.uncertainty()} among them — a measurement numerically
+ *       <em>indistinguishable</em> from the planted wrong-class defect it is not.
+ *       Both readings are pinned side by side in
+ *       {@code PortedInfidelityDetectionPowerTest.aWrongJavaTypeWithRightContentIsADivergence} and
+ *       {@code …aFactoryTypedAdapterMeasuresExactlyWhatThePlantedWrongTypeDoes}.</li>
+ *   <li><strong>False agreement, if you clear those rows the easy way.</strong> Answering the 3 445
+ *       rows by stating the class the reference reported — one line — took a genuinely wrong-class
+ *       port from 3 445 {@code DIFFER} to <strong>0</strong>. So do not silence a type row by naming a
+ *       type: find out what your port returned. {@link UValue#declaredJavaType(String, String)} is the
+ *       only stating route left and it demands a written reason for exactly this purpose; a row moved
+ *       by a declaration carries that reason into its note.</li>
+ * </ul>
+ *
+ * <p>{@link StubCandidate} is the only worked example an adapter has to copy, and on this point it
+ * <strong>cannot</strong> be copied: it computes in plain Java, has no port object in existence, and
+ * therefore declares its class with a written reason. It says so at the call site. Copy its
+ * {@link HarnessMarshallingException} discipline; for the class token copy the snippet above.
  *
  * <p>Test-scoped. Not part of the product.
  */
@@ -44,6 +89,11 @@ public interface Candidate extends Closeable {
      * result and {@link UValue#voidValue()} for a {@code void} operation. A {@code null} return is
      * a contract violation and {@link DifferentialSweep} scores the row
      * {@link DiffVerdict#HARNESS_ERROR}.
+     *
+     * <p>The returned {@link UValue} must carry the Java class the implementation answered with, read
+     * off the returned object by {@link UValue#observedFrom(Object)} — see "the second invariant" on
+     * the type comment. A factory-built value is typed by assumption, and the assumption is wrong for
+     * 182 of the 285 enumerated operations.
      *
      * <p>Returning {@link UValue#voidValue()} buys no credit. A row on which neither side produced a
      * value is {@link DiffVerdict#UNMEASURABLE} — a non-agreement — because this harness does not

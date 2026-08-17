@@ -459,6 +459,12 @@ class PortedInfidelityDetectionPowerTest {
         long rows;
         long measured;
         long agreed;
+        /**
+         * Rows whose note says the <em>subject's</em> Java class was never observed (D-43). This is
+         * what separates a factory-typed adapter's divergences from a genuinely wrong-class port's,
+         * which are numerically identical.
+         */
+        long notesSayingTheClassWasAssumed;
 
         ProbeResult(Probe probe) {
             this.probe = probe;
@@ -525,6 +531,9 @@ class PortedInfidelityDetectionPowerTest {
                     }
                     if (row.verdict() == DiffVerdict.BOTH_THREW) {
                         out.throwPairKeys.add(op.key() + " || " + row.note());
+                    }
+                    if (row.note().contains("subject's class was ASSUMED")) {
+                        out.notesSayingTheClassWasAssumed++;
                     }
                 }
             }
@@ -787,6 +796,15 @@ class PortedInfidelityDetectionPowerTest {
      * <p>Two things are asserted, and the second is as important as the first: the defect is seen,
      * <em>and</em> the identity control over the same inventory still diverges nowhere, so the
      * type-bearing canonical form has not turned an equivalent representation into a false alarm.
+     *
+     * <p><strong>Read the next method before quoting any number from this one.</strong> This subject's
+     * adapter <em>observes</em> the class of the object it returns — the boxing goes through
+     * {@code toHistorical}/{@code fromHistorical}, so the wrong class is a real object's real class —
+     * and that is what makes these 3 445 rows a statement about a port. A <em>content-perfect</em> port
+     * whose adapter merely takes the factory default produces the identical figure and is not defective
+     * at all (D-43), which is measured and asserted in
+     * {@link #aFactoryTypedAdapterMeasuresExactlyWhatThePlantedWrongTypeDoes()}. The two live next to
+     * each other so that neither can be read alone.
      */
     @Test
     @DisplayName("D-18: a port that boxes a raw result into its Value class is a DIVERGENCE, and "
@@ -855,6 +873,183 @@ class PortedInfidelityDetectionPowerTest {
     }
 
     /**
+     * <strong>D-43: the other reading of the same 3 445 rows — and why it is no longer the only one.</strong>
+     *
+     * <p>This test sits next to {@link #aWrongJavaTypeWithRightContentIsADivergence()} on purpose. That
+     * one measures a port that returns the <em>wrong Java class</em> with the right content and reports
+     * {@code DIFFER 3 445}, {@code 182 of 285} operations, {@code 74 → 45} stage passes. This one
+     * measures a port with <strong>no defect in it at all</strong> — bit-for-bit the historical content
+     * on every row — whose <em>adapter</em> returns {@code UValue.<factory>(content)} and never
+     * attributes. It reports the same four numbers. Round 6 published them as detection power; a
+     * faithful port reproduces them exactly, which is why round 6's refutation returned
+     * {@code DEFECTIVE} (D-43).
+     *
+     * <p>Both readings are asserted here, against each other, so that no later stage can quote one
+     * without the other being one screen away:
+     * <ol>
+     *   <li>the factory-typed adapter on a content-perfect port loses <strong>exactly 29</strong> stage
+     *       passes and produces <strong>exactly</strong> as many {@code DIFFER} rows as the planted
+     *       wrong-class defect;</li>
+     *   <li>the <em>same</em> content-perfect port with an adapter that routes through
+     *       {@link UValue#observedFrom(Object)} — reading the class off the object its port returned,
+     *       which is what an S4 adapter does — measures <strong>0 {@code DIFFER}</strong> and the
+     *       control's 74 stage passes. That is the defect closed;</li>
+     *   <li>and the two measurements are now <em>distinguishable in the evidence</em>: every one of the
+     *       factory-typed adapter's rows carries "{@code ASSUMED, not observed}" in its note, and none of
+     *       the planted defect's rows does. The number alone was ambiguous; the rows are not.</li>
+     * </ol>
+     *
+     * <p>The observing adapter is built from {@link HistoricalOracle#invokeRaw}, which hands back the
+     * object the operation returned before any unwrapping. It deliberately does <em>not</em> read the
+     * class from the reference's own {@code UValue}: copying the other side's attribution is precisely
+     * the move that made D-43 invisible, and a test that did it would be measuring nothing.
+     */
+    @Test
+    @DisplayName("D-43: a factory-typed adapter on a CONTENT-PERFECT port measures exactly what the "
+            + "planted wrong type does; an observing adapter measures 0")
+    void aFactoryTypedAdapterMeasuresExactlyWhatThePlantedWrongTypeDoes() {
+        Probe identity = new Probe("P0-perfect", "control", Set.of(),
+                (op, args, perfect) -> perfect.invoke(op, args));
+        Probe boxed = new Probe("P12-boxed-primitive",
+                "the planted defect: right content, wrong Java class, honestly observed",
+                Set.of(),
+                (op, args, perfect) -> boxIntoValueClass(perfect.invoke(op, args)));
+        Probe factoryTyped = new Probe("P13-factory-typed-adapter",
+                "NO defect at all: the content is the historical content on every row, and the "
+                        + "adapter returns UValue.<factory>(content) without attributing",
+                Set.of(),
+                (op, args, perfect) -> asAFactoryTypedAdapterWouldReturnIt(perfect.invoke(op, args)));
+        Probe observing = new Probe("P14-observing-adapter",
+                "the same content-perfect port, with an adapter that reads the class off the object "
+                        + "its port returned -- UValue.observedFrom(Object)",
+                Set.of(),
+                (op, args, perfect) -> observeWhatThePortReturned(op, args));
+
+        ProbeResult control = measure(identity);
+        ProbeResult plantedDefect = measure(boxed);
+        ProbeResult adapterDefect = measure(factoryTyped);
+        ProbeResult observed = measure(observing);
+
+        Set<String> lostToTheAdapter = new TreeSet<>(control.stagePasses);
+        lostToTheAdapter.removeAll(adapterDefect.stagePasses);
+        Set<String> lostToTheDefect = new TreeSet<>(control.stagePasses);
+        lostToTheDefect.removeAll(plantedDefect.stagePasses);
+
+        System.out.println("=== D-43: two readings of the same measurement ====================");
+        System.out.printf("  %-34s %8s %10s %8s %12s%n",
+                "subject", "DIFFER", "ops", "passes", "notes ASSUMED");
+        for (ProbeResult r : List.of(control, plantedDefect, adapterDefect, observed)) {
+            System.out.printf("  %-34s %8d %10d %8d %12d%n", r.probe.id,
+                    r.count(DiffVerdict.DIFFER), r.divergingOperations().size(),
+                    r.stagePasses.size(), countNotesSayingTheClassWasAssumed(r));
+        }
+        System.out.println("  the port with a DEFECT loses    " + lostToTheDefect.size()
+                + " stage passes");
+        System.out.println("  the port with NO defect loses   " + lostToTheAdapter.size()
+                + " stage passes, to its adapter alone");
+        System.out.println("  the 29 a faithful port loses to a factory-typed adapter:");
+        System.out.println("      " + lostToTheAdapter);
+        System.out.println("  first row of the ADAPTER defect, which reads like a port defect:");
+        adapterDefect.divergenceSamples.stream().limit(1)
+                .forEach(s -> System.out.println("      " + s));
+        System.out.println("===================================================================");
+
+        // (1) The control, first. Nothing below means anything if a perfect port diverges.
+        assertEquals(0L, control.count(DiffVerdict.DIFFER), control.verdicts.toString());
+        assertEquals(Set.of(), control.divergingOperations());
+
+        // (2) The two readings of one number. This is the whole of D-43, as an assertion.
+        assertEquals(plantedDefect.count(DiffVerdict.DIFFER), adapterDefect.count(DiffVerdict.DIFFER),
+                "a content-perfect port with a factory-typed adapter must produce the SAME number of "
+                        + "DIFFER rows as the planted wrong-class defect -- that identity is the defect "
+                        + "D-43 records, and if it ever stops holding the record is stale");
+        assertEquals(plantedDefect.divergingOperations(), adapterDefect.divergingOperations(),
+                "on the same operations, too");
+        assertEquals(lostToTheDefect, lostToTheAdapter,
+                "and costing the same stage passes: " + lostToTheAdapter);
+        assertEquals(29, lostToTheAdapter.size(),
+                "the measured figure the record quotes: 29 stage passes lost by a FAITHFUL port whose "
+                        + "adapter did not attribute. Got " + lostToTheAdapter.size() + ": "
+                        + lostToTheAdapter);
+        for (String accessor : List.of("URealValue.value()", "URealValue.uncertainty()",
+                "UIntegerValue.value()", "UIntegerValue.uncertainty()")) {
+            assertTrue(lostToTheAdapter.contains(accessor),
+                    accessor + " -- one of the four accessors the whole extension is about -- must be "
+                            + "among the stage passes a factory-typed adapter costs a perfect port");
+        }
+
+        // (3) The closure: the same port, attributing the way Candidate now requires, diverges nowhere.
+        assertEquals(0L, observed.count(DiffVerdict.DIFFER),
+                "an adapter that observes the class of the object its port returned must diverge "
+                        + "NOWHERE on a content-perfect port; that is D-43 closed. Got "
+                        + observed.verdicts);
+        assertEquals(0L, observed.count(DiffVerdict.MIXED), observed.verdicts.toString());
+        assertEquals(Set.of(), observed.divergingOperations());
+        assertEquals(control.stagePasses, observed.stagePasses,
+                "and it must reach exactly the control's stage passes, not merely as many");
+        assertEquals(control.verdicts, observed.verdicts,
+                "row for row, the observing adapter is indistinguishable from the reference itself");
+
+        // (4) And the two 3 445s are told apart in the evidence, not only in this Javadoc.
+        assertEquals(adapterDefect.count(DiffVerdict.DIFFER),
+                countNotesSayingTheClassWasAssumed(adapterDefect),
+                "every row the adapter's omission produced must say in its note that the subject's "
+                        + "class was ASSUMED, not observed");
+        assertEquals(0L, countNotesSayingTheClassWasAssumed(plantedDefect),
+                "and no row of the genuinely wrong-class port may say that: its adapter observed, so "
+                        + "its rows are a statement about the port. Hedging them would be the same "
+                        + "defect from the other side");
+        assertTrue(plantedDefect.count(DiffVerdict.DIFFER) > 0,
+                "D-18 must still be detected: " + plantedDefect.verdicts);
+    }
+
+    /**
+     * The adapter defect D-43 is about: a value rebuilt through the factory for its kind, so the content
+     * is untouched and the Java class is whatever the factory assumes — the
+     * {@code org.tzi.use.uml.ocl.value} class of the kind, which is right for a port of the U-types'
+     * own operations and wrong for every operation that returns a raw {@code boolean}, {@code int},
+     * {@code double} or {@code String}. This is what {@link StubCandidate} did before round 6R and what
+     * any adapter does by omission.
+     */
+    private static UValue asAFactoryTypedAdapterWouldReturnIt(UValue produced) {
+        switch (produced.kind()) {
+            case UREAL:    return UValue.uReal(produced.asDouble(), produced.uncertainty());
+            case UINTEGER: return UValue.uInteger(produced.asInt(), produced.uncertainty());
+            case UBOOLEAN: return UValue.uBoolean(produced.asBoolean(), produced.probability());
+            case USTRING:  return UValue.uString(produced.asString(), produced.confidence());
+            case REAL:     return UValue.real(produced.asDouble());
+            case INTEGER:  return UValue.integer(produced.asInt());
+            case BOOLEAN:  return UValue.bool(produced.asBoolean());
+            case STRING:   return UValue.string(produced.asString());
+            // SEQUENCE, OPAQUE, NULL and VOID have no primitive/boxed ambiguity to lose here.
+            default:       return produced;
+        }
+    }
+
+    /**
+     * The same adapter, written the way {@link Candidate} now requires: it takes the object its port
+     * returned and reads the class off <em>that</em>, with {@link UValue#observedFrom(Object)}. The
+     * content still goes through the factories, so the only difference from
+     * {@link #asAFactoryTypedAdapterWouldReturnIt} is the one line of attribution.
+     */
+    private static UValue observeWhatThePortReturned(UOp op, List<UValue> args) throws Throwable {
+        Object returned = perfectPort.invokeRaw(op, args);
+        if (returned == HistoricalOracle.VOID_RESULT) {
+            return UValue.voidValue();
+        }
+        if (returned == null) {
+            return UValue.nullValue();
+        }
+        return asAFactoryTypedAdapterWouldReturnIt(perfectPort.fromHistorical(returned))
+                .observedFrom(returned);
+    }
+
+    /** How many of a probe's rows say, in the note, that the subject's class was never observed. */
+    private static long countNotesSayingTheClassWasAssumed(ProbeResult r) {
+        return r.notesSayingTheClassWasAssumed;
+    }
+
+    /**
      * <strong>The premise of the D-18 fix, measured: no operation has two equivalent
      * representations.</strong>
      *
@@ -877,10 +1072,24 @@ class PortedInfidelityDetectionPowerTest {
      *     STRING   [java.lang.String,   ...value.StringValue]
      * </pre>
      * Four kinds are carried by two classes each — that <em>is</em> D-18 — but never within one
-     * operation. A historical operation's declared return type is one class, so for any single
-     * operation there is exactly one right answer and "the port used the other class" is a defect and
-     * not a representation choice. That is the whole of the distinction, and it is a measurement
-     * rather than an argument.
+     * operation, so over the shipped corpora "the port used the other class" is a defect and not a
+     * representation choice. That is the whole of the distinction, and it is a measurement rather than
+     * an argument.
+     *
+     * <p><strong>The measurement is 0 of 285; the reason this Javadoc used to give for it was false</strong>
+     * (defect <strong>D-45</strong>). It argued "a historical operation's declared return type is one
+     * class, so for any single operation there is exactly one right answer". Measured through the
+     * isolated loader over all 285 enumerated operations, <strong>84 declare an interface or a
+     * non-final class</strong> — 16 {@code Type}, 19 {@code UBooleanValue}, 21 {@code URealValue}, 12
+     * {@code UIntegerValue}, 9 {@code UncertainBooleanValue}, 5 {@code UStringValue}, 1
+     * {@code SequenceValue}, 1 {@code uDataTypes.UInteger} — so more than one runtime class is legal by
+     * the API for each of them. The nine {@code UncertainBooleanValue}-declared operations are the
+     * sharpest case: they answer with the {@code UBooleanValue} subclass through a superclass-declared
+     * signature, and a port that returned the <em>declared</em> class instead would read as divergence
+     * on every driven row while breaking no contract in the API. So the premise below is a
+     * <strong>corpus fact, not a language fact</strong>, it inherits D-30, and a stage document must not
+     * repeat "a declared return type is one class". What makes the assertion worth having is that it is
+     * measured on every run.
      *
      * <p>The one legitimately-different representation that does exist is the <em>package</em>: see
      * {@code DifferentialHarnessRegressionTest.theTypeTokenIsPackageInsensitiveOnPurpose}. The

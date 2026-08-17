@@ -981,8 +981,10 @@ class DifferentialHarnessRegressionTest {
         assertNotEquals(UValue.integer(3).canonical(), UValue.uInteger(3, 0.0).canonical());
         assertNotEquals(UValue.bool(true).canonical(), UValue.uBoolean(true, 0.0).canonical());
 
-        // (2) The runtime-class difference inside one kind. This is the defect.
-        UValue raw = UValue.integer(7).asJavaType("java.lang.Integer");
+        // (2) The runtime-class difference inside one kind. This is the defect. The raw side's class is
+        //     OBSERVED off the very object an int-returning operation answers with once reflection or
+        //     autoboxing has boxed it (D-43); the boxed side is the factory default, i.e. ASSUMED.
+        UValue raw = UValue.integer(7).observedFrom(Integer.valueOf(7));
         UValue boxed = UValue.integer(7);
         assertEquals("INTEGER(7)@Integer", raw.canonical());
         assertEquals("INTEGER(7)@IntegerValue", boxed.canonical());
@@ -1021,7 +1023,10 @@ class DifferentialHarnessRegressionTest {
         assertEquals("NULL", UValue.nullValue().canonical());
         assertEquals("VOID", UValue.voidValue().canonical());
         assertNull(UValue.nullValue().javaType());
-        assertThrows(IllegalStateException.class, () -> UValue.voidValue().asJavaType("whatever"));
+        assertEquals(UValue.TypeProvenance.NONE, UValue.nullValue().typeProvenance());
+        assertThrows(IllegalStateException.class, () -> UValue.voidValue().observedFrom("whatever"));
+        assertThrows(IllegalStateException.class,
+                () -> UValue.nullValue().declaredJavaType("whatever", "because"));
     }
 
     /**
@@ -1034,12 +1039,23 @@ class DifferentialHarnessRegressionTest {
      *
      * <p>Nothing is discarded: the fully-qualified name survives on {@link UValue#javaType()} and is
      * what {@link DifferentialSweep}'s type note prints.
+     *
+     * <p><strong>The rationale covers the type token and nothing else</strong> (defect
+     * <strong>D-44</strong>). This test exercises {@link UValue.Kind#UREAL}, whose content carries no
+     * class name. On the {@link UValue.Kind#OPAQUE} branch the fully-qualified name is part of the
+     * compared <em>content</em> — {@link UValue#opaque(String, String)} writes it in and
+     * {@link HistoricalOracle#opaqueRepresentation(Object)} adds the FQNs of every field's declaring
+     * class — so there a relocated port really is a divergence on every row: 197 rows across 17
+     * operations. Asserted below so the boundary is measured rather than assumed, and so nobody reads
+     * "the harness is package-insensitive" as a property of the row.
      */
     @Test
     @DisplayName("D-18: the compared type token is the simple name; the FQN survives for the note")
     void theTypeTokenIsPackageInsensitiveOnPurpose() {
         UValue here = UValue.uReal(1.0, 0.0);
-        UValue relocated = here.asJavaType("com.example.port.value.URealValue");
+        UValue relocated = here.declaredJavaType("com.example.port.value.URealValue",
+                "a synthetic relocated port: no such class exists to observe, and the point of the "
+                        + "test is that its package must not matter");
         assertEquals("URealValue", here.typeToken());
         assertEquals("URealValue", relocated.typeToken());
         assertEquals(here.canonical(), relocated.canonical(),
@@ -1051,6 +1067,111 @@ class DifferentialHarnessRegressionTest {
         assertEquals("Inner", UValue.simpleName("a.b.Outer$Inner"));
         assertEquals("Plain", UValue.simpleName("Plain"));
         assertNull(UValue.simpleName(null));
+
+        // D-44: and on the OPAQUE branch the package is NOT insensitive, because the FQN is content.
+        UValue opaqueHere = UValue.opaque("org.tzi.use.uml.ocl.type.URealType", "URealType{}");
+        UValue opaqueThere = UValue.opaque("com.example.port.type.URealType", "URealType{}");
+        assertEquals(opaqueHere.typeToken(), opaqueThere.typeToken(), "the TOKEN is insensitive");
+        assertNotEquals(opaqueHere.canonical(), opaqueThere.canonical(),
+                "but the ROW is not: opaque() puts the fully-qualified name into the compared content, "
+                        + "so a relocated port diverges on all 197 OPAQUE rows (D-44)");
+        assertNotEquals(opaqueHere.content(), opaqueThere.content());
+    }
+
+    /**
+     * <strong>D-43, at unit resolution: the class token is either OBSERVED off a returned object or
+     * asserted with a written reason, and the evidence says which.</strong>
+     *
+     * <p>The D-18 fix made a Java-class difference a divergence. What it did not do was make the two
+     * halves of that comparison the same kind of statement: {@link HistoricalOracle#fromHistorical}
+     * <em>observes</em> the reference's class, while the ported side's token was whatever an adapter
+     * passed to a one-argument {@code asJavaType(String)}. A content-perfect port whose adapter took the
+     * factory default therefore measured 3 445 {@code DIFFER} rows on 182 of 285 operations — pinned end
+     * to end in {@code PortedInfidelityDetectionPowerTest} — and one line of {@code asJavaType} took a
+     * genuinely wrong-class port to 0.
+     *
+     * <p>Three properties are asserted here, in the order that matters:
+     * <ol>
+     *   <li>{@link UValue#observedFrom(Object)} derives the token from {@code getClass().getName()},
+     *       and a boxed primitive is exactly what the reference observes for a raw return;</li>
+     *   <li>the factory default is {@link UValue.TypeProvenance#ASSUMED} and the only other route,
+     *       {@link UValue#declaredJavaType(String, String)}, <strong>refuses a blank reason</strong> —
+     *       there is no longer any way to state a class in one argument;</li>
+     *   <li>the provenance reaches the row note, and it does <em>not</em> reach the verdict or the
+     *       canonical form. A subject must not be able to excuse a divergence by admitting it guessed.</li>
+     * </ol>
+     */
+    @Test
+    @DisplayName("D-43: a class token is OBSERVED or DECLARED-with-a-reason, and the row note says "
+            + "which, without that changing any verdict")
+    void theTypeTokenIsObservedOrDeclaredAndTheRowSaysWhich() {
+        // (1) Observation reads the object's own class. A raw `boolean`/`int` return arrives boxed,
+        //     through Method.invoke or through autoboxing, and that is what the reference sees too.
+        UValue observedRawBoolean = UValue.bool(true).observedFrom(Boolean.TRUE);
+        assertEquals("java.lang.Boolean", observedRawBoolean.javaType());
+        assertEquals("BOOLEAN(true)@Boolean", observedRawBoolean.canonical());
+        assertEquals(UValue.TypeProvenance.OBSERVED, observedRawBoolean.typeProvenance());
+        assertNull(observedRawBoolean.typeDeclarationReason());
+        assertEquals("java.lang.Integer", UValue.integer(5).observedFrom(5).javaType());
+
+        // (2) The factory default is a guess, and the only stating route costs a sentence.
+        assertEquals(UValue.TypeProvenance.ASSUMED, UValue.bool(true).typeProvenance());
+        assertEquals("org.tzi.use.uml.ocl.value.BooleanValue", UValue.bool(true).javaType());
+        assertThrows(IllegalArgumentException.class,
+                () -> UValue.bool(true).declaredJavaType("java.lang.Boolean", "  "));
+        assertThrows(IllegalArgumentException.class,
+                () -> UValue.bool(true).declaredJavaType("java.lang.Boolean", null));
+        assertThrows(IllegalArgumentException.class, () -> UValue.bool(true).observedFrom(null),
+                "there is no class on a null result: that is nullValue(), not an observation");
+        UValue declared = UValue.bool(true).declaredJavaType("java.lang.Boolean",
+                "the port's method is declared `public boolean`; no object exists in this test");
+        assertEquals(UValue.TypeProvenance.DECLARED, declared.typeProvenance());
+        assertEquals(observedRawBoolean.canonical(), declared.canonical(),
+                "the two routes must produce the same canonical form -- the provenance is not compared");
+        assertEquals(observedRawBoolean, declared, "and UValue equality is canonical equality");
+        assertNotEquals(observedRawBoolean.typeProvenance(), declared.typeProvenance());
+
+        // (3) The note. Same content, same divergence, three different attributions of the subject's
+        //     class -- and the reader can tell them apart.
+        UOp op = UOp.unary("URealValue", "neg");
+        UValue referenceSide = UValue.integer(7).observedFrom(Integer.valueOf(7));   // a raw int
+        Map<String, UValue> subjects = new java.util.LinkedHashMap<>();
+        subjects.put("ASSUMED (factory default)", UValue.integer(7));
+        subjects.put("OBSERVED (off a real object of another class)",
+                UValue.integer(7).observedFrom(new java.util.concurrent.atomic.AtomicInteger(7)));
+        subjects.put("DECLARED (with a reason)", UValue.integer(7).declaredJavaType(
+                "org.tzi.use.uml.ocl.value.IntegerValue", "asserted by hand in a unit test"));
+
+        System.out.println("=== D-43: the same DIFFER row, three attributions of the subject ===");
+        Map<String, String> notes = new java.util.LinkedHashMap<>();
+        subjects.forEach((label, subjectValue) -> {
+            try (Candidate ref = new ReturnsFixed("ref", referenceSide);
+                 Candidate sub = new ReturnsFixed("sub", subjectValue)) {
+                DiffRow row = new DifferentialSweep(ref, sub, 1L)
+                        .sweepUnary(op, List.of(UValue.uReal(1.0, 0.0))).rows().get(0);
+                assertEquals(DiffVerdict.DIFFER, row.verdict(),
+                        "the provenance must not move the verdict: " + row.toTsv());
+                notes.put(label, row.note());
+                System.out.println("  " + label);
+                System.out.println("      " + row.note());
+            }
+        });
+        System.out.println("===================================================================");
+
+        assertTrue(notes.get("ASSUMED (factory default)").contains("ASSUMED, not observed"),
+                notes.get("ASSUMED (factory default)"));
+        assertTrue(notes.get("ASSUMED (factory default)").contains("D-43"),
+                "a row a stage might mistake for a port defect must name the defect that explains it");
+        assertTrue(notes.get("ASSUMED (factory default)").contains("observedFrom"),
+                "and must name the call that would have made it a measurement");
+        assertTrue(notes.get("OBSERVED (off a real object of another class)")
+                        .contains("Both classes were OBSERVED"),
+                notes.get("OBSERVED (off a real object of another class)"));
+        assertFalse(notes.get("OBSERVED (off a real object of another class)").contains("D-43"),
+                "an observed-vs-observed mismatch IS a port defect and must not be hedged");
+        assertTrue(notes.get("DECLARED (with a reason)")
+                        .contains("declared because: asserted by hand in a unit test"),
+                notes.get("DECLARED (with a reason)"));
     }
 
     // ------------------------------------------------------------------ golden byte comparison
