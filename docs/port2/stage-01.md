@@ -1173,3 +1173,454 @@ range over the corpora is `{true, false}` — a subject echoing one bit of its r
 those, and the census only counted singletons), and the **`OPAQUE`** branch, where
 `UncertainBooleanValue` (9 operations) and `uDataTypes.UInteger` (1) are rendered by field reflection
 and a port need only reproduce a string.
+
+---
+
+# 11. AMENDMENT 5 (appended 2026-08-17, after §10) — D-15 is closed by measurement, not by argument
+
+**This section supersedes every banner and every amendment above it, §10 included.** Where §10 and
+§11 disagree, §11 is authoritative. §10.5 ("what IS sound") is unchanged and still holds.
+
+Behaviour commit `0a93ad4f`, test-scoped. `git diff --name-status 30d480db..HEAD -- '*/src/main/*'`
+is empty.
+
+---
+
+## 11.0 The one-sentence change
+
+> The harness now **computes**, for every operation, how many distinct values the reference side
+> produced — and **refuses to call a sweep a pass** when that number is one, unless a human has
+> signed the operation off by name and by value with a written rationale that is copied into the
+> report. The rule that was written in `harness-contract.md` as discipline is now a mechanism.
+
+---
+
+## 11.1 The canonical defect register, and the ID collision that made one necessary
+
+Round 4 produced two independent reports which both used `D-16`…`D-19` for different defects, and
+`D-15` denoted **both** a round-3 MINOR (the golden comparison was line-based, not byte-based) and
+the round-4 CRITICAL (degenerate codomain). Two defects sharing a key is how evidence gets orphaned.
+
+**The rule from here on.** A bare `D-nn` always means the canonical register in §11.2. A
+report-local id must be cited with its report, e.g. *static-review-round4 `D-17`*. Nothing in any
+round report was rewritten; the mapping below is how they are read.
+
+### Mapping — every historical id to its canonical key
+
+| Source | local id | canonical | defect |
+|---|---|---|---|
+| `stage-01.md` §8.2 (round 3) | `D-15` | **D-26** | `assertMatchesGolden` compared lines, not bytes |
+| `stage-01.md` §8.2 (round 3) | `D-16` | **D-27** | the `MIXED` note did not name which side threw |
+| `stage-01.md` §8.2 (round 3) | `D-10`…`D-14`, `D-11a/b/c`, `D-12a/b`, `D-13a/b` | unchanged | — |
+| `stage-01-verification-round4.md` | `D-15` | **D-15** | degenerate codomain scored as fidelity |
+| `stage-01-verification-round4.md` | `D-16` | **D-16** | `isClean()` has no coverage floor |
+| `stage-01-verification-round4.md` | `D-17` | **D-17** | a subject controls its own denominator |
+| `stage-01-verification-round4.md` | `D-18` | **D-18** | the canonical-form collision, 193 of 285 |
+| `stage-01-verification-round4.md` | `D-19` | **D-19** | coverage: 61 operations measure nothing |
+| `stage-01-static-review-round4.md` | `D-15` | **D-15** | same defect, static route (91 constant-`false` ops) |
+| `stage-01-static-review-round4.md` | `D-16` | **D-20** | `everyKindIsEither…` is tautological |
+| `stage-01-static-review-round4.md` | `D-17` | **D-21** | writer guard and headers are file-level totals |
+| `stage-01-static-review-round4.md` | `D-18` | **D-22** | `UNSUPPORTED` note asserts "could be driven" |
+| `stage-01-static-review-round4.md` | `D-19` | **D-23** | `unmeasurableNote` void-ness from a disjunction |
+| `stage-01-static-review-round4.md` | `D-20` | **D-24** | §5.2 pasted a superseded header |
+| `stage-01-static-review-round4.md` | `D-21` | **D-25** | `AcceptedThrowPairs` "plain ASCII" comment |
+| this section | — | **D-28** | the corpora contain exactly one `RealValue` |
+
+`D-26` and `D-27` are the two round-3 MINORs given fresh keys at the end of the register rather than
+left colliding with round-4's. Both are now **closed** (§11.5). `D-28` is new and is **open**
+(§11.6).
+
+---
+
+## 11.2 Register — state after this amendment
+
+| Key | Sev | State | Defect and what changed |
+|---|---|---|---|
+| **D-15** | CRITICAL | **CLOSED** | A degenerate codomain scored as fidelity. `Result.distinctReferenceValues()` computes it, the report header publishes it per operation, and `Result.requireStagePass` refuses it. §11.3, §11.4. |
+| D-16 | MAJOR | **CLOSED for the stage gate** | `isClean()` still has no floor and is unchanged — deliberately, the regression tests need exactly that question. `isStagePass(int, …)` takes a mandatory floor and **rejects a floor of zero**, so the stage-facing predicate cannot be satisfied by one row unless the caller writes "1" down. `isClean()`'s Javadoc now states it is not a pass predicate. |
+| D-17 | MAJOR | **open** | A subject that raises `HarnessMarshallingException` everywhere shrinks its own `driven` denominator. Not addressed here. **Partly mitigated, not fixed:** the stage gate's discrimination clause is computed from measured rows, so a subject hiding behind `HARNESS_ERROR` now also drives `distinctReferenceValues()` to 0 and fails clause 3 as well as clause 1. The *per-operation invariant predicate* is still vulnerable. |
+| D-18 | MAJOR | **open, and larger than it was** | The primitive/boxed canonical collision. Widening the corpora made three more instances visible and they are now on the reviewed allowlist with written reasons: `BooleanValue.value()`, `BooleanValue.isTrue()`, `StringValue.value()`. The 193-of-285 figure stands. |
+| D-19 | MINOR | **CLOSED** | 61 operations measured nothing; now **11**, and all 11 are declared limits rather than gaps. §11.4. |
+| D-20 | MAJOR | **open** | `everyKindIsEitherAnObservationOrUnmeasurable` is tautological. Not addressed. The non-circular criterion the static reviewer proposed — a value-carrying kind has at least two distinguishable inhabitants — is still the right fix and is still unwritten. |
+| D-21 | MAJOR | **CLOSED for the header, open for the guard** | Every `# rows.*` line is still a sum, and `writeAll`'s measurement guard is still a total. But the header now carries a per-operation block, so no number in the file is unattributable. The guard remains file-level. |
+| D-22 | MINOR | **open** | `UNSUPPORTED` note's "could be driven". Latent until S4. |
+| D-23 | MINOR | **open** | `unmeasurableNote` derives void-ness from a disjunction. Latent. |
+| D-24 | MINOR | annotated | §5.2's superseded header, corrected in place. |
+| D-25 | MINOR | **open** | `AcceptedThrowPairs` says "plain ASCII" and holds fifteen non-ASCII bytes. **`AcceptedDegenerateOperations`, added by this amendment, does not repeat the claim** — its separator is an escape and its comment says only that, which is true. |
+| D-26 | MINOR | **was already fixed, now PINNED** | §11.5. |
+| D-27 | MINOR | **CLOSED** | §11.5. |
+| D-28 | MINOR | **open, new** | §11.6. |
+| D-14 | MINOR | **open for `AcceptedThrowPairs`** | No `# accepted.*` header for throw-pairs. The new `AcceptedDegenerateOperations` does emit `# accepted.degenerateOperations` **even when zero**, so the same hole was not dug twice; `AcceptedThrowPairs` still has it. |
+| D-9 | MINOR | declared boundary | Coverage: `SBooleanValue`, collections, `ocl.type.*`, `uDataTypes.*`. |
+
+---
+
+## 11.3 What was built (D-15)
+
+### 11.3.1 The quantity — `DifferentialSweep.Result`
+
+```java
+public java.util.SortedSet<String> referenceValues()   // reference's canonical forms, MEASURED rows
+public int     distinctReferenceValues()               // its size
+public String  soleReferenceValue()                    // the one value, or null
+public boolean isDiscriminating()                      // >= DISCRIMINATING_MINIMUM (2)
+```
+
+Counted over `measurements()` — `AGREE` + `DIFFER` — because those are exactly the rows an agreement
+figure can come from. `summary()` carries the number, so `30 rows, 30 measured, AGREE=30` is no
+longer expressible; it now reads `30 rows, 30 measured, 1 distinct ref, AGREE=30`.
+
+Pinned by `distinctReferenceValuesCountsTheReferenceOverMeasuredRows`, which asserts the two
+mistakes that would make the statistic useless are not made: counting the **subject's** column, and
+counting over **all** rows (169 `HARNESS_ERROR` rows carry distinct marker strings and would have
+looked richly discriminating — measured as `0`).
+
+### 11.3.2 The gate — a mechanism, not a convention
+
+```java
+public boolean isStagePass(int minimumMeasurements, AcceptedDegenerateOperations acknowledged)
+public Result  requireStagePass(int minimumMeasurements, AcceptedDegenerateOperations acknowledged)
+public List<String> stageGateFailures(int, AcceptedDegenerateOperations)   // every failing clause
+public String  stageStatement(AcceptedDegenerateOperations)                // the line a stage prints
+```
+
+Three clauses: a measurement floor the caller must state (`0` throws `IllegalArgumentException` —
+a floor of zero is not a floor), no disagreements, and `distinctReferenceValues() >= 2` **or** a
+sign-off. `AcceptedDegenerateOperations` mirrors `AcceptedThrowPairs`: opt-in, `none()` by default
+and never supplied implicitly, a mandatory non-blank rationale, and a key that includes **the single
+canonical value** so a sign-off lapses by itself the moment the operation stops answering what was
+reviewed. The rationale is copied into `stageStatement` and into the report header.
+
+`isClean()` was **not** changed. Its Javadoc now says outright that it is not a pass predicate and
+names D-15 as the reason. The harness's own regression tests need exactly the question `isClean()`
+asks, because the codomain of a synthetic two-candidate sweep is known by construction.
+
+Pinned by `theStageGateRefusesADegenerateOperation` (six scenarios, both directions, both key
+positions of the sign-off) and `aDegenerateOperationNeedsAWrittenSignOff`.
+
+### 11.3.3 The number reaches the artefact
+
+```
+# rows.disagreement	0
+# op.URealValue.add(value).distinctReferenceValues	1
+# op.URealValue.add(value).discriminating	false
+# op.URealValue.add(value).soleReferenceValue	UREAL(2.0,0.0)
+# op.URealValue.add(value).degenerate.acknowledged	reviewed: one-point domain
+# accepted.degenerateOperations	1
+```
+
+Pinned by `theReportHeaderCarriesDiscriminatingPowerPerOperation`, which asserts
+`# rows.disagreement 0` **first**, as the precondition — that is what the file used to say and all it
+used to say.
+
+---
+
+## 11.4 The measurement, before and after — pasted output
+
+Both from `mvn -B verify`, seed `20260817`, stage-shaped: each operation swept over **its own
+receiver type's corpus**, which is what an S4 stage will do. The union-domain sweep the parameterised
+invariant runs is the right shape for cross-type defects and the wrong shape for "would a stage read
+this as a pass?" — every row of it carries `HARNESS_ERROR` receivers.
+
+**BEFORE** (identical code, `booleanCorpus`/`stringCorpus` removed from `corpora()`):
+
+```
+corpora                    uReal=24, uInteger=15, uBoolean=11, uString=18, zeroDivisors=7, indexBoundaries=8; receivers=77
+operations                 285
+literals the subject holds 224  (one per operation the reference ever answered with a value)
+codomain census            285 operations: 61 measured nothing, 121 single-valued (NOT DISCRIMINATING), 103 discriminating
+isClean() AND degenerate   81   <- the size of the door: a stage asserting isClean() reads these as PASS
+refused by the stage gate  81 of 81
+stage passes (must be 0)   0
+```
+
+**AFTER** (`booleanBoundaries()` and `stringBoundaries()` in the corpora):
+
+```
+corpora                    uReal=24, uInteger=15, uBoolean=11, uString=18, boolean=4, string=16, zeroDivisors=7, indexBoundaries=8; receivers=94
+operations                 285
+literals the subject holds 274  (one per operation the reference ever answered with a value)
+codomain census            285 operations: 11 measured nothing, 159 single-valued (NOT DISCRIMINATING), 115 discriminating
+isClean() AND degenerate   119   <- the size of the door: a stage asserting isClean() reads these as PASS
+refused by the stage gate  119 of 119
+stage passes (must be 0)   0
+```
+
+| quantity | before | after |
+|---|---|---|
+| operations with **zero measurements** (D-19) | **61** | **11** |
+| operations **single-valued** (D-15 population) | **121** | **159** |
+| operations **discriminating** | **103** | **115** |
+| operations the constant-literal subject makes `isClean()` **and** degenerate | **81** | **119** |
+| of those, **refused by the stage gate** | 81 of 81 | **119 of 119** |
+| **stage passes** reached by a port containing no logic | **0** | **0** |
+
+**Round 4 predicted the +38 and it arrived.** *"Widening the corpora to reach them widens the D-15
+population by roughly 40 more"* (`stage-01-verification-round4.md` §7). It is the correct trade only
+because the labelling landed in the same commit: 50 more operations are measured, and every one of
+them that cannot vary says so in its own header line.
+
+**The 11 that still measure nothing are limits, not gaps** — 8 declared-`void` mutators (a scope
+boundary recorded since §6) and three operations that throw on every input the corpora hold:
+
+```
+  ... BooleanValue.setTypeToRuntimeType()   2 rows, 0 measured, 0 distinct ref, MIXED=2
+  ... IntegerValue.setTypeToRuntimeType()   8 rows, 0 measured, 0 distinct ref, MIXED=8
+  ... RealValue.setTypeToRuntimeType()      1 rows, 0 measured, 0 distinct ref, MIXED=1
+  ... StringValue.setTypeToRuntimeType()   15 rows, 0 measured, 0 distinct ref, MIXED=15
+  ... UBooleanValue.setTypeToRuntimeType() 11 rows, 0 measured, 0 distinct ref, MIXED=9, HARNESS_ERROR=2
+  ... UIntegerValue.setTypeToRuntimeType() 15 rows, 0 measured, 0 distinct ref, MIXED=15
+  ... URealValue.setTypeToRuntimeType()    24 rows, 0 measured, 0 distinct ref, MIXED=24
+  ... UStringValue.setTypeToRuntimeType()  18 rows, 0 measured, 0 distinct ref, MIXED=17, HARNESS_ERROR=1
+  ... UIntegerValue.power(value)          225 rows, 0 measured, 0 distinct ref, BOTH_THREW=225
+  ... UStringValue.toInteger()             18 rows, 0 measured, 0 distinct ref, BOTH_THREW=17, HARNESS_ERROR=1, throwClassMismatch=17
+  ... UStringValue.toReal()                18 rows, 0 measured, 0 distinct ref, BOTH_THREW=17, HARNESS_ERROR=1, throwClassMismatch=17
+```
+
+### 11.4.1 The 120-literal subject, before and after
+
+The attack: a `Candidate` whose every body is one hardcoded literal looked up by operation key — no
+arithmetic, no branching, the receiver and the arguments are never read. The literals are obtained by
+asking the historical oracle once per operation, which is mechanically what a porter typing them out
+by hand would produce, and keeps the attack correct as the corpora move.
+
+**BEFORE** (what §10.3 recorded, reproduced here stage-shaped): fully agreed on the single-valued
+operations, **81** of them producing a fully measured, zero-disagreement, report-writable sweep with
+`isClean() == true` and a header reading `# rows.disagreement 0`. Nothing in the tree objected.
+
+**AFTER**: the same subject, the same operations, more of them (119). Every one of the 119 is
+refused, and the refusal names the reason:
+
+```
+sweep of URealValue.add(value) is not a stage pass:
+  - the reference side produced 1 distinct value(s) across 1 measured row(s), always UREAL(2.0,0.0).
+    This operation could not have failed over this domain, so agreement on it is decided before
+    either implementation runs and is not evidence of fidelity (defect D-15). Either widen the
+    domain until the reference answers differently, or sign the operation off in
+    AcceptedDegenerateOperations with a written rationale -- which is copied into the report, so the
+    weakness travels with the number.
+  tally: URealValue.add(value): 1 rows, 1 measured, 1 distinct ref, AGREE=1
+```
+
+And the control, in the same test, so that a gate which simply refuses everything would fail it:
+
+```
+CONTROL, faithful port     URealValue.add(value): 576 rows, 576 measured, 576 agreed, 0 disagreed, 164 distinct reference value(s) [DISCRIMINATING]
+```
+
+`requireStagePass(100, none())` returns normally for that one. The sign-off route, both directions:
+
+```
+no sign-off   URealValue.isUReal(): 24 rows, 24 measured, 24 agreed, 0 disagreed, 1 distinct reference value(s) [NOT DISCRIMINATING: always BOOLEAN(true)]
+signed off    URealValue.isUReal(): 24 rows, 24 measured, 24 agreed, 0 disagreed, 1 distinct reference value(s) [NOT DISCRIMINATING: always BOOLEAN(true); acknowledged: URealValue.isUReal() is a type predicate: the historical body is iconst_1/ireturn, so BOOLEAN(true) is the whole of its specification and no corpus can make it answer otherwise. Agreement here shows the operation exists and is reachable; it is not evidence about any computation.]
+```
+
+A sign-off written against `BOOLEAN(false)`, or against `URealValue.isDefined()`, does not match. A
+blank rationale is rejected by the builder.
+
+### 11.4.2 Rounds 1–3 are not regressed — the seven subjects, verbatim
+
+```
+subject              a-throws          rows 726338  measured 0      agreement 0
+                     verdict tally     {BOTH_THREW=39880, HARNESS_ERROR=618462, MIXED=67996}
+                     fully agreed ops, DISCRIMINATING  (none)     NOT DISCRIMINATING  (none)
+subject              b-returns-java-null  rows 726338  measured 0   agreement 0
+                     verdict tally     {HARNESS_ERROR=726338}
+                     fully agreed ops, DISCRIMINATING  (none)     NOT DISCRIMINATING  (none)
+subject              c-empty-body      rows 726338  measured 67268  agreement 0
+                     verdict tally     {DIFFER=67268, HARNESS_ERROR=618462, MIXED=39880, UNMEASURABLE=728}
+                     fully agreed ops, DISCRIMINATING  (none)     NOT DISCRIMINATING  (none)
+subject              d-returns-null-value  rows 726338  measured 67268  agreement 0
+                     verdict tally     {DIFFER=67268, HARNESS_ERROR=618462, MIXED=39880, UNMEASURABLE=728}
+                     fully agreed ops, DISCRIMINATING  (none)     NOT DISCRIMINATING  (none)
+subject              e-fixed-constant  rows 726338  measured 67996  agreement 8240
+                     verdict tally     {AGREE=8240, DIFFER=59756, HARNESS_ERROR=618462, MIXED=39880}
+                     fully agreed ops, DISCRIMINATING  (none)     NOT DISCRIMINATING  (none)
+subject              f-echoes-receiver rows 726338  measured 67996  agreement 4951
+                     verdict tally     {AGREE=4951, DIFFER=63045, HARNESS_ERROR=618462, MIXED=39880}
+                     fully agreed ops, DISCRIMINATING
+                       *** BooleanValue.isTrue()   (16/16 driven rows agreed, 752 rows total, 2 distinct reference value(s); reviewed and signed off)
+                       *** BooleanValue.value()    (16/16 driven rows agreed, 752 rows total, 2 distinct reference value(s); reviewed and signed off)
+                       *** IntegerValue.value()    (64/64 driven rows agreed, 752 rows total, 8 distinct reference value(s); reviewed and signed off)
+                       *** StringValue.value()     (120/120 driven rows agreed, 752 rows total, 15 distinct reference value(s); reviewed and signed off)
+                     fully agreed ops, NOT DISCRIMINATING  1 operation
+                       --- RealValue.value()  (8/8 driven rows agreed, 752 rows total, 1 distinct reference value(s) -- always REAL(0.0) [NOT DISCRIMINATING])
+subject              g-throws-error    rows 0  measured 0  agreement 0   ESCAPED -> the sweep ABORTED
+```
+
+**a, b, c, d and g still score zero agreement.** D1, D2 and D-10 stay closed: subject `c` still has
+`agreement 0` with its `DIFFER` rows intact and its void rows on `UNMEASURABLE`. The row counts moved
+(471 471 → 726 338) because the corpora are wider, and every proportion is unchanged in kind.
+
+**Subject f is the interesting one and it is the mechanism working.** Its fully-agreed set went from
+two operations to five, and the split says which kind of finding each is:
+
+* Three are **new instances of D-18**, invisible before because `BooleanValue` and `StringValue` had
+  no receiver corpus to be driven on. `javap -p` on the vendored `use.jar`:
+  `public boolean BooleanValue.value()`, `public boolean BooleanValue.isTrue()` (body
+  `aload_0; getfield fValue:Z; ireturn`), `public java.lang.String StringValue.value()`. Each is
+  genuinely the receiver's own content, so echoing the receiver is the right answer — and each is
+  also a place where a port returning the right content with the wrong Java type would be scored
+  `AGREE`. All three are now on `ECHO_SUBJECT_REVIEWED` with that written down.
+* One, **`RealValue.value()`, was removed from the sign-off list** and is not an improvement — see
+  D-28 below.
+
+---
+
+## 11.5 D-26 and D-27 — the two round-3 MINORs
+
+**D-26 (golden comparison compared lines, not bytes).** **It was already fixed**, in `93e038ac`, and
+`stage-01-static-review-round4.md` §1.5 says so — it records `Arrays.equals(readBytes, readBytes)` at
+`DiffReportWriter.java:281`. §8.2's entry above ("re-confirmed unfixed") was true when round 3 wrote
+it and was superseded by the next behaviour commit; the open-defect list carried into this round
+still named it, and that is the error being corrected. **Verified before touching anything**:
+
+```
+$ git log --oneline -S"Arrays.equals(readBytes" -- '*DiffReportWriter.java'
+93e038ac S3 fix: a VOID is not an observation, and rows are not measurements
+```
+
+What *was* genuinely missing is that **nothing tested it**, so the correction could have been
+reverted silently. `goldenComparisonIsBytesAndNotLines` now asserts, in order: identical bytes match;
+a golden differing **only in its trailing newline** fails, with `Files.readAllLines` on both files
+asserted **equal first** as the precondition; and a CRLF-for-LF substitution fails too.
+
+```
+differential report .../d-byte-probe.tsv differs from the committed golden .../d-byte-probe.tsv in
+bytes but not in any line: the files disagree only about line terminators or a trailing newline. A
+line-based comparison would have called these two files equal.
+```
+
+**D-27 (the `MIXED` note did not name which side threw).** 67 996 rows of the invariant sweep.
+Closed: the lead clause is now `the reference threw and the subject returned.` or
+`the subject threw and the reference returned.`, and `mixedNoteNamesBothSides` asserts both
+directions plus the absence of the old unattributed phrasing.
+
+---
+
+## 11.6 D-28 (MINOR, open, new) — the corpora contain exactly one `RealValue`
+
+Found while splitting the fully-agreed set, and recorded because it is the same species as D-19 and
+was not caught by fixing D-19.
+
+`RealValue.value()` left the reviewed sign-off list not because it was fixed but because it stopped
+being *discriminating*: the shipped corpora contain exactly one `RealValue` — `REAL(0.0)`, from
+`InputGenerator.zeroDivisors()`. With one receiver, **all 23 `RealValue.*` operations have a
+one-point codomain by arithmetic**, and nothing about any of them can be measured, whatever their
+agreement figure. `IntegerValue` is the next thinnest at 8 receivers, all of them index boundaries
+drawn for a different purpose.
+
+This was **not** fixed here, deliberately: FIX C was scoped to `BOOLEAN` and `STRING` so the
+before/after in §11.4 attributes cleanly to one change. The remedy is the same one — a
+`realBoundaries()` / `integerBoundaries()` corpus — and it will move the census again.
+
+It is worth stating plainly what this means for the numbers above: **"159 single-valued" is not a
+fact about the historical implementation.** It is a joint fact about the implementation and the
+corpus, and at least 23 of the 159 are single-valued for no better reason than that nobody wrote
+down more than one `RealValue`. That is exactly why the number is now published per operation
+instead of being asserted once in a document.
+
+---
+
+## 11.7 Acceptance
+
+`mvn -q clean && mvn -B verify -Djava.awt.headless=true`, twice from clean, both `BUILD SUCCESS`.
+
+| module / phase | before (`fbc03663`) | after (`0a93ad4f`) | delta |
+|---|---|---|---|
+| use-core surefire | 61 | **67** | **+6** |
+| use-core failsafe | 1 | 1 | — |
+| use-gui surefire | 1 | 1 | — |
+| use-gui failsafe | 129 | 129 | — |
+
+Every one of the +6 is new; no pre-existing test was changed and none broke.
+
+```
+Tests run: 11 -- org.tzi.use.architecture.MavenCyclicDependenciesCoreTest
+Tests run:  6 -- Uncertainty differential smoke
+Tests run: 10 -- Unwritten-port invariant          (was 8: +2)
+Tests run:  9 -- HistoricalOracle class-loader isolation
+Tests run: 30 -- Differential harness regressions  (was 26: +4)
+Tests run:  1 -- org.tzi.use.uml.mm.ModelAPITest
+Tests run: 67 -- total
+```
+
+* **+2 invariant**: `aNoLogicPortCannotProduceAStagePass`,
+  `aDegenerateOperationNeedsAWrittenSignOff`.
+* **+4 regression**: `distinctReferenceValuesCountsTheReferenceOverMeasuredRows`,
+  `theStageGateRefusesADegenerateOperation`,
+  `theReportHeaderCarriesDiscriminatingPowerPerOperation`,
+  `goldenComparisonIsBytesAndNotLines`.
+
+**Determinism.** The harness's own stdout across both runs, 324 lines, byte-identical:
+
+```
+*** RUN1 == RUN2 byte-identical: 324 lines of harness output
+a2f6931c16f33c1d9a5fea629adcb3ced950981bb84898d63c35ea9a50a29106  harness1.txt
+a2f6931c16f33c1d9a5fea629adcb3ced950981bb84898d63c35ea9a50a29106  harness2.txt
+```
+
+**Goldens, refreshed deliberately.** Both files gained exactly seven header lines and **zero data
+rows changed**:
+
+```
+$ diff <(grep '^#' docs/port2/differential/s1-smoke-ureal-add.tsv) <(grep '^#' use-core/target/differential/s1-smoke-ureal-add.tsv)   # before the refresh
+13a14,20
+> # op.URealValue.add(value).rows	784
+> # op.URealValue.add(value).measured	784
+> # op.URealValue.add(value).agreement	784
+> # op.URealValue.add(value).disagreement	0
+> # op.URealValue.add(value).distinctReferenceValues	258
+> # op.URealValue.add(value).discriminating	true
+> # accepted.degenerateOperations	0
+
+$ diff <(grep -v '^#' golden) <(grep -v '^#' regenerated)   # both files
+(no output)
+```
+
+Refreshed with `-Duse.differential.golden.refresh=true` in one command, then re-verified without it.
+After the refresh, both match byte for byte:
+
+```
+GOLDEN == RUN2  s1-smoke-ureal-add.tsv
+GOLDEN == RUN2  s1-smoke-ureal-minus-faulty.tsv
+ad505092ab4078286735dda57e42ed32272c1597f2ac1e45521ae30b3687c9a5  s1-smoke-ureal-add.tsv
+3862dcdec7489bd6410d6809881e2124648ff9b292ded4d7f3ad524e4cf78c3c  s1-smoke-ureal-minus-faulty.tsv
+```
+
+**Scope.**
+
+```
+$ git diff --name-status 30d480db..HEAD -- '*/src/main/*'
+(no output)
+```
+
+Working tree clean after both runs; the byte-probe golden the new test writes is deleted in a
+`finally` and `git status --short` shows nothing under `docs/port2/differential/` afterwards.
+
+---
+
+## 11.8 Verdict, and what is still true of the next round
+
+**The instrument is now sound about the three things it has been caught on** — the absence of a
+measurement (rounds 1–3) and the degeneracy of one (round 4) — and each is enforced by a test that
+fails if the enforcement is removed, with a control in the same test that fails if the enforcement
+becomes a blanket refusal.
+
+**It is not sound about D-17 and D-20, and those are open.** A subject can still shrink its own
+`driven` denominator, and the enum-quantified audit still restates its own implementation. Neither
+was in this round's scope and neither should be read as closed.
+
+**The two places round 4 named for the next reviewer are still unlooked-at**, and one of them is now
+*measurable* for the first time: an operation whose range over the corpora is exactly **two** values
+would be reported `2 distinct reference values` — above the threshold, and still nearly free for a
+subject echoing one bit of its receiver. `BooleanValue.value()` and `BooleanValue.isTrue()` sit at
+exactly 2 and are on the reviewed list for a different reason. **`DISCRIMINATING_MINIMUM = 2` is a
+threshold, and a threshold is a place to stand, not a proof.** The honest statement is that the
+harness now publishes a number where it used to publish nothing; whether 2 is enough for a given
+operation is a question a reader can now ask and could not ask before.
+
+The `OPAQUE` branch is likewise unexamined: `type()` and `getRuntimeType()` are among the operations
+the constant-literal subject greens, and it greens them by reproducing a string built by field
+reflection. They are now labelled non-discriminating, which is the correct label and is not the same
+as having been measured.
