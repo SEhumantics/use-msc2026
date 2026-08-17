@@ -1,5 +1,24 @@
 # S1 — Empirical refutation of the differential harness
 
+> **⚠ FORWARD POINTER (added 2026-08-17, after round 4) — the verdict vocabulary has changed since
+> this document was written.** This report is left exactly as it was written; it was true on its
+> date. Two changes to `DiffVerdict` have happened since:
+>
+> * **`AGREE_THROWN` and `DIFFER_THROWN` were deleted** in commit `e8b73e48`. Two throws are never
+>   an agreement, whatever their classes. Wherever this document names either constant as a live
+>   verdict it is describing the code as it stood before `e8b73e48`. They are replaced by the single
+>   non-agreement **`BOTH_THREW`** (whose note always carries both classes *and* both messages), plus
+>   the opt-in, human-authored **`ACCEPTED_THROW`**.
+> * **`UNMEASURABLE` was added** in commit `93e038ac`, for rows where neither side carried an
+>   observation (`VOID`/`VOID`, `NULL`/`NULL`). Those rows used to be scored `AGREE`.
+>
+> The current vocabulary is `AGREE, ACCEPTED_THROW, DIFFER, BOTH_THREW, MIXED, UNMEASURABLE,
+> UNSUPPORTED, HARNESS_ERROR`, defined in
+> `use-core/src/test/java/org/tzi/use/uncertainty/differential/DiffVerdict.java` and summarised in
+> [`harness-contract.md`](harness-contract.md). **The current S1 verdict is `stage-01.md` §10 — not
+> this file.**
+
+
 Adversarial re-run of stage S1 by an agent who did not write the code and was not shown the
 author's reasoning. Everything below was executed on branch `port-uncertainty-2` at
 `/home/xoruser/msc-4/use-msc2026`, Java 21.0.11, Maven 3.9.16. All output is pasted verbatim.

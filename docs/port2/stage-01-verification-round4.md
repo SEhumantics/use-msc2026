@@ -1,5 +1,11 @@
 # S1 — Empirical verification, round 4 (differential harness, post six-fix)
 
+> **Pointer (2026-08-17):** this is a round-4 report and is left as written. The consolidated
+> current verdict and the single open-defect register are in [`stage-01.md`](stage-01.md) §10; the
+> rules a stage must follow when it uses the harness are in
+> [`harness-contract.md`](harness-contract.md). Defect IDs D-15..D-25 are re-keyed there, because the
+> two round-4 reports independently reused D-16..D-19 for different defects.
+
 **Verdict: DEFECTIVE. A fourth door exists and it is the largest of the four.**
 
 **Role**: empirical refuter. I own Maven. I did not write the fixes under review.
