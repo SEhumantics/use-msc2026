@@ -777,3 +777,106 @@ the pattern.
 to produce it.** For S4–S7 that means a stage may not report a fidelity figure from a tally alone.
 It must report, alongside it, how many rows were *measurements* — and until D-10 and D-12a are
 fixed, the harness cannot answer that question.
+
+---
+
+# 9. AMENDMENT 3 (appended 2026-08-17, after §8) — the third door is closed
+
+Commits `fa9bba2d` (reviewability, no behaviour change) and `93e038ac` (behaviour), on
+`port-uncertainty-2`. Everything below was run on this machine; the counts come from
+`mvn -q clean && mvn -B verify -Djava.awt.headless=true`, twice.
+
+## 9.1 D-10 — `VOID` vs `VOID` was an agreement; it is now `UNMEASURABLE`
+
+The measurement, made with the committed parameterised invariant rather than with a probe, same seed
+and same corpora before and after:
+
+```
+BEFORE  c-empty-body   rows 471471  agreement 444  {AGREE=444, DIFFER=51752, HARNESS_ERROR=388695, MIXED=30580}
+        fully agreed operations (every driven row scored AGREE):
+          IntegerValue.setTypeToRuntimeType()    48/48        UIntegerValue.setTypeToRuntimeType()   90/90
+          RealValue.setTypeToRuntimeType()        6/6         URealValue.setTypeToRuntimeType()    144/144
+          UBooleanValue.setTypeToRuntimeType()   54/54        UStringValue.setTypeToRuntimeType()  102/102
+
+AFTER   c-empty-body   rows 471471  agreement   0  {DIFFER=51752, HARNESS_ERROR=388695, MIXED=30580, UNMEASURABLE=444}
+        fully agreed operations: (none)
+```
+
+`UNMEASURABLE` is raised only when **neither** side carries an observation — both `VOID`, both
+`NULL`, or one of each. One-sided absence is left as `DIFFER`: if the reference returned a value and
+the subject returned `VOID`, the harness *did* see something distinguishing, and calling that "no
+measurement" would destroy the evidence. That is why 51752 rows of subject C remain `DIFFER`.
+
+§8.3.1 offered two routes and warned against a third. The route taken is the first (a distinct
+non-agreement verdict). No operation was excluded from the inventory: all 285 are still swept and the
+444 rows are still in the report, reclassified rather than hidden.
+
+## 9.2 The audit for other degenerate observations
+
+`DifferentialHarnessRegressionTest.everyKindIsEitherAnObservationOrUnmeasurable` iterates
+`UValue.Kind.values()`, demands a representative value for each kind, and asserts that each kind
+either carries a value (two of them are `AGREE`) or does not (two of them are `UNMEASURABLE`) — and
+that the "carries nothing" set is exactly `{NULL, VOID}`. `UNSUPPORTED` and `HARNESS_ERROR` were
+already non-agreements and remain so. `OPAQUE` carries a class name plus a field-derived
+representation, so it is an observation.
+
+## 9.3 D-11 / D-12 — rows are not measurements
+
+`Result` gained `measurementCount()` (`AGREE + DIFFER`), `measurements()`, `isClean()` and
+`requireMeasurements(int)`; the report gained `# rows.measured`; `DiffReportWriter.writeAll` refuses a
+report with no measurements, where it previously counted rows and accepted a 75-row all-`VOID` file
+whose own header read `# rows.agreement 72`. `disagreements().isEmpty()` is documented on both the
+class and the accessor as *not* a pass predicate.
+
+## 9.4 D-13 — a wrong exception class now has an aggregate
+
+`Result.throwClassMismatchCount()` and `# rows.throwClassMismatch`. A port that fails on the right
+rows with the wrong exception type used to leave every aggregate bit-identical to a correct port's.
+
+## 9.5 The invariant is a family
+
+`UnwrittenPortInvariantTest` is a `@ParameterizedTest` over seven subjects — throws, Java `null`,
+empty body (`voidValue()`), `nullValue()`, fixed constant, echoes its receiver, throws `Error` — and
+asserts per subject that no operation was scored agreement on **every row the harness could drive**,
+plus zero total agreement for the five subjects that produce no values at all. The two
+value-producing subjects genuinely agree on some rows, so zero would be a false assertion for them;
+they carry a written, reviewed allowlist of operations they may fully agree with.
+
+That allowlist has exactly two entries, both for the receiver-echoing subject, and both record a real
+limit of the instrument: `IntegerValue.value()` is declared `public int value()` and
+`RealValue.value()` is `public double value()`, and the canonical form of a raw `int` and of an
+`IntegerValue` is the same string, so the harness cannot tell "returned the value" from "returned the
+receiver". **A port that returns the wrong Java type with the right numeric content would be scored
+`AGREE` on these operations.** The limit is now pinned: a third operation becoming fully agreeable to
+a do-nothing echo requires someone to write down why.
+
+## 9.6 Counts, determinism, scope
+
+```
+surefire  use-core 45 -> 61   use-gui 1 -> 1
+failsafe  use-core  1 ->  1   use-gui 129 -> 129      total 176 -> 192, BUILD SUCCESS
+```
+The +16 is entirely `UnwrittenPortInvariantTest` (2 -> 8) and `DifferentialHarnessRegressionTest`
+(16 -> 26). No upstream test changed count.
+
+Both goldens were refreshed deliberately and the whole diff is two header lines per file
+(`# rows.measured`, `# rows.throwClassMismatch`); no data row changed. Two full runs from
+`mvn -q clean` produced byte-identical reports (`cmp`), byte-identical to the refreshed goldens, and
+identical invariant output. `git diff --name-status 30d480db..HEAD -- '*/src/main/*'` is empty.
+
+## 9.7 Still open, and the standing lesson
+
+- **`AcceptedThrowPairs` provenance (D-14)**: the report still records no `# accepted.*` header, so a
+  run with a non-empty allowlist that adjudicated nothing is byte-indistinguishable from a run with
+  `none()`. `describe()` and `DifferentialSweep.acceptedThrowPairs()` are still called from nowhere.
+- **Primitive vs boxed results** (§9.5): recorded and pinned, not fixed.
+- **Coverage (D-9)**: still 8 marshallable receivers; `SBooleanValue` and collection receivers are
+  out of reach. Widening the corpora widens what the invariant covers, which is the point.
+- **Documentation drift**: §7 and §8 above, and the `audit-*` files, still discuss
+  `AGREE_THROWN`/`DIFFER_THROWN` as live verdicts. They are historical narrative; the vocabulary in
+  the code is `AGREE, ACCEPTED_THROW, DIFFER, BOTH_THREW, MIXED, UNMEASURABLE, UNSUPPORTED,
+  HARNESS_ERROR`.
+
+§8.4 asked that a stage report, alongside any fidelity figure, how many rows were *measurements*, and
+noted the harness could not answer. It can now: `Result.measurementCount()`, `# rows.measured`, and a
+writer that refuses a report which answers zero.
