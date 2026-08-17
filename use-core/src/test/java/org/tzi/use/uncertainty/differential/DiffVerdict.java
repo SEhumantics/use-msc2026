@@ -26,7 +26,19 @@ public enum DiffVerdict {
     MIXED,
 
     /** At least one side does not implement the operation at all. */
-    UNSUPPORTED;
+    UNSUPPORTED,
+
+    /**
+     * At least one side could not be driven at all: the harness failed to marshal the input into a
+     * candidate, or to unwrap its result, and threw {@link HarnessMarshallingException} — <em>before</em>
+     * the operation under comparison was ever entered.
+     *
+     * <p>This is deliberately not an agreement and deliberately not merged with
+     * {@link #AGREE_THROWN}. A harness failure looked exactly like a matching throw by both
+     * implementations until this verdict existed, which let a sweep report full agreement over rows
+     * where neither side ran the operation.
+     */
+    HARNESS_ERROR;
 
     /** True for the two outcomes a green run is allowed to contain. */
     public boolean isAgreement() {

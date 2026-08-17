@@ -61,7 +61,9 @@ class UncertaintyDifferentialSmokeTest {
             result.rows().stream().limit(12).forEach(r -> System.out.println(r.toTsv()));
 
             Path report = DiffReportWriter.write("s1-smoke-ureal-add.tsv", result, oracle.loadedDigests());
+            Path golden = DiffReportWriter.assertMatchesGolden(report, "s1-smoke-ureal-add.tsv");
             System.out.println("report               " + report);
+            System.out.println("golden (matched)     " + golden);
             System.out.println("===================================================================");
 
             assertEquals(corpus.size() * corpus.size(), result.rowCount(),
@@ -98,7 +100,9 @@ class UncertaintyDifferentialSmokeTest {
 
             Path report = DiffReportWriter.write("s1-smoke-ureal-minus-faulty.tsv", result,
                     oracle.loadedDigests());
+            Path golden = DiffReportWriter.assertMatchesGolden(report, "s1-smoke-ureal-minus-faulty.tsv");
             System.out.println("report               " + report);
+            System.out.println("golden (matched)     " + golden);
             System.out.println("===================================================================");
 
             assertFalse(disagreements.isEmpty(),

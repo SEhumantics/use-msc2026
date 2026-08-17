@@ -57,6 +57,27 @@ import java.util.concurrent.ConcurrentHashMap;
  * degrades to a no-op and never signals "skip": a harness that quietly disables itself is
  * indistinguishable from a harness that passes.
  *
+ * <h2>Declared scope limits</h2>
+ * These are boundaries of what this oracle can observe. They are stated so that a green sweep is
+ * read as evidence about what was measured and not about what was not.
+ * <ol>
+ *   <li><b>Return values only; post-state is unobserved.</b> {@link #invoke(UOp, List)} builds a
+ *       fresh receiver from the {@link UValue} arguments, calls the method, and unwraps the
+ *       <em>returned</em> object. It never re-reads the receiver afterwards. An operation whose
+ *       effect is a mutation of the receiver therefore contributes nothing observable: a
+ *       {@code void} operation compares as {@link UValue.Kind#VOID} on both sides whatever it did to
+ *       the receiver, and a fluent operation is compared only on what it returned. Building
+ *       post-state observation is deliberately out of scope here.</li>
+ *   <li><b>One addressable package.</b> {@link #VALUE_PKG} is the only package
+ *       {@link #load(String)} will resolve in, so {@code org.tzi.use.uml.ocl.type.*} and
+ *       {@code uDataTypes.*} cannot be named as receivers or isolation-checked, by design.</li>
+ *   <li><b>Eight marshallable receiver types.</b> {@link #MARSHALLABLE_RECEIVERS}; every other
+ *       receiver type, {@code SBooleanValue} included, reports {@link DiffVerdict#UNSUPPORTED}.</li>
+ *   <li><b>Harness failures are never measurements.</b> Anything the harness itself cannot do
+ *       raises {@link HarnessMarshallingException} and is scored
+ *       {@link DiffVerdict#HARNESS_ERROR}, which is not an agreement.</li>
+ * </ol>
+ *
  * <p>Test-scoped. Not part of the product, not on the product classpath.
  */
 public final class HistoricalOracle implements Candidate {
@@ -88,6 +109,22 @@ public final class HistoricalOracle implements Candidate {
     public static final String JAR_DIR_PROPERTY = "use.historical.jars.dir";
 
     private static final String VALUE_PKG = "org.tzi.use.uml.ocl.value.";
+
+    /**
+     * Receiver simple names {@link #toHistorical(UValue)} can construct an instance for.
+     *
+     * <p>This set must stay in step with the {@code switch} in {@link #toHistorical(UValue)}: it is
+     * the whole basis on which {@link #supports(UOp)} decides that an operation is reachable.
+     * {@code SBooleanValue} is deliberately absent — the harness has no {@code SBoolean} marshalling
+     * and no {@code UValue.Kind} for it, so all 39 of its operations must report
+     * {@link DiffVerdict#UNSUPPORTED} rather than fail invisibly inside the marshaller.
+     */
+    private static final Set<String> MARSHALLABLE_RECEIVERS = Set.of(
+            "URealValue", "UIntegerValue", "UBooleanValue", "UStringValue",
+            "RealValue", "IntegerValue", "BooleanValue", "StringValue");
+
+    /** Recursion limit for {@link #opaqueRepresentation(Object)}. */
+    private static final int OPAQUE_MAX_DEPTH = 6;
 
     private final URLClassLoader loader;
     private final Path useJar;
@@ -351,12 +388,35 @@ public final class HistoricalOracle implements Candidate {
         return "historical";
     }
 
+    /**
+     * Whether this oracle can actually be driven through {@code op}.
+     *
+     * <p>Two independent conditions, and both are load-bearing.
+     *
+     * <ol>
+     *   <li>The receiver type must be one {@link #toHistorical(UValue)} can construct — see
+     *       {@link #MARSHALLABLE_RECEIVERS}. Without this check, a receiver type the harness cannot
+     *       build (every {@code SBooleanValue} operation, for one) reported {@code supports() == true}
+     *       and every row of the sweep then failed inside marshalling instead of landing on the
+     *       visible {@link DiffVerdict#UNSUPPORTED}.</li>
+     *   <li>The method must exist on the historical class. Only
+     *       {@link NoSuchHistoricalMethodException} is swallowed here. It previously caught
+     *       {@link RuntimeException}, which includes
+     *       {@link HistoricalOracleUnavailableException} (it extends {@link IllegalStateException}),
+     *       so "the oracle jar is broken, or is not the jar we think it is" was silently reported as
+     *       "this operation is not implemented" — a broken oracle rendered as ordinary
+     *       {@code UNSUPPORTED} rows. That exception now escapes and fails the run.</li>
+     * </ol>
+     */
     @Override
     public boolean supports(UOp op) {
+        if (!MARSHALLABLE_RECEIVERS.contains(op.receiverType())) {
+            return false;
+        }
         try {
             resolve(op);
             return true;
-        } catch (RuntimeException e) {
+        } catch (NoSuchHistoricalMethodException e) {
             return false;
         }
     }
@@ -367,7 +427,7 @@ public final class HistoricalOracle implements Candidate {
         Objects.requireNonNull(op, "op");
         Objects.requireNonNull(args, "args");
         if (args.size() != op.arity()) {
-            throw new IllegalArgumentException(
+            throw new HarnessMarshallingException(
                     op.key() + " needs " + op.arity() + " values (receiver + " + op.params().size()
                             + " params) but got " + args.size());
         }
@@ -375,7 +435,10 @@ public final class HistoricalOracle implements Candidate {
         Object receiver = toHistorical(args.get(0));
         Class<?> receiverClass = load(op.receiverType());
         if (!receiverClass.isInstance(receiver)) {
-            throw new IllegalArgumentException(
+            // The harness handed the wrong shape to the operation. This is not the historical code
+            // rejecting an input -- the historical method has not been entered -- so it must not be
+            // comparable with whatever the other side does. See HarnessMarshallingException.
+            throw new HarnessMarshallingException(
                     op.key() + " expects a receiver of " + receiverClass.getName() + " but the supplied "
                             + args.get(0).canonical() + " maps to " + receiver.getClass().getName());
         }
@@ -383,12 +446,23 @@ public final class HistoricalOracle implements Candidate {
         for (int i = 0; i < marshalled.length; i++) {
             marshalled[i] = marshal(op.params().get(i), args.get(i + 1));
         }
+        Object raw;
         try {
-            return fromHistorical(method.invoke(receiver, marshalled));
+            raw = method.invoke(receiver, marshalled);
         } catch (InvocationTargetException e) {
-            // Surface what the historical code actually threw, not the reflection wrapper.
+            // Surface what the historical code actually threw, not the reflection wrapper. This is
+            // the one throw on this path that is genuinely the code under test.
             throw e.getCause() == null ? e : e.getCause();
+        } catch (IllegalAccessException | IllegalArgumentException e) {
+            throw new HarnessMarshallingException("cannot reflectively call historical " + op.key(), e);
         }
+        if (method.getReturnType() == void.class) {
+            // Method.invoke returns null for void, and fromHistorical maps null to Kind.NULL. Without
+            // this branch every void operation compares equal to every other void operation forever,
+            // so an empty-bodied ported mutator would agree on every row.
+            return UValue.voidValue();
+        }
+        return fromHistorical(raw);
     }
 
     /** Convenience for the common shape: receiver plus zero or more {@code Value} arguments. */
@@ -417,7 +491,7 @@ public final class HistoricalOracle implements Candidate {
             try {
                 return owner.getMethod(op.methodName(), paramTypes);
             } catch (NoSuchMethodException e) {
-                throw new IllegalArgumentException(
+                throw new NoSuchHistoricalMethodException(
                         "historical " + owner.getName() + " has no method " + op.key(), e);
             }
         });
@@ -429,7 +503,7 @@ public final class HistoricalOracle implements Candidate {
             case INT:    return int.class;
             case DOUBLE: return double.class;
             case FLOAT:  return float.class;
-            default:     throw new IllegalArgumentException("unhandled param kind " + kind);
+            default:     throw new HarnessMarshallingException("unhandled param kind " + kind);
         }
     }
 
@@ -439,7 +513,7 @@ public final class HistoricalOracle implements Candidate {
             case INT:    return numeric(value).intValue();
             case DOUBLE: return numeric(value).doubleValue();
             case FLOAT:  return numeric(value).floatValue();
-            default:     throw new IllegalArgumentException("unhandled param kind " + kind);
+            default:     throw new HarnessMarshallingException("unhandled param kind " + kind);
         }
     }
 
@@ -452,14 +526,23 @@ public final class HistoricalOracle implements Candidate {
             case UREAL:
                 return value.asDouble();
             default:
-                throw new IllegalArgumentException(
+                throw new HarnessMarshallingException(
                         "a primitive parameter needs a numeric UValue, got " + value.canonical());
         }
     }
 
     // ------------------------------------------------------------------ marshalling
 
-    /** Builds the historical object corresponding to a plain-Java {@link UValue}. */
+    /**
+     * Builds the historical object corresponding to a plain-Java {@link UValue}.
+     *
+     * @throws HarnessMarshallingException if this harness cannot build it. Every failure exit of
+     *         this method uses that type, including a historical constructor that itself throws:
+     *         all of them happen <em>before</em> the operation under comparison is entered, so none
+     *         of them may be scored against a throw by the code under test. The set of kinds that do
+     *         not throw here is mirrored by {@link #MARSHALLABLE_RECEIVERS}, which is what keeps an
+     *         unmarshallable receiver on the visible {@link DiffVerdict#UNSUPPORTED} path.
+     */
     public Object toHistorical(UValue value) {
         checkOpen();
         Objects.requireNonNull(value, "value");
@@ -490,18 +573,27 @@ public final class HistoricalOracle implements Candidate {
                 case STRING:
                     return ctor("StringValue", String.class).newInstance(value.asString());
                 default:
-                    throw new IllegalArgumentException(
-                            "cannot construct a historical value for kind " + value.kind());
+                    throw new HarnessMarshallingException(
+                            "cannot construct a historical value for kind " + value.kind()
+                                    + " (" + value.canonical() + "); this harness marshals "
+                                    + MARSHALLABLE_RECEIVERS);
             }
         } catch (InvocationTargetException e) {
-            throw new IllegalStateException("historical constructor threw for " + value.canonical(),
+            throw new HarnessMarshallingException(
+                    "historical constructor threw while the harness was preparing " + value.canonical(),
                     e.getCause() == null ? e : e.getCause());
         } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("cannot construct historical " + value.canonical(), e);
+            throw new HarnessMarshallingException("cannot construct historical " + value.canonical(), e);
         }
     }
 
-    /** Unwraps a historical object into a plain-Java {@link UValue}. Never returns a reflective type. */
+    /**
+     * Unwraps a historical object into a plain-Java {@link UValue}. Never returns a reflective type.
+     *
+     * @throws HarnessMarshallingException if the object cannot be unwrapped exactly. Unwrapping is
+     *         harness work performed after the operation returned, so a failure here is the absence
+     *         of a measurement rather than a behaviour of the code under test.
+     */
     public UValue fromHistorical(Object result) {
         if (result == null) {
             return UValue.nullValue();
@@ -547,14 +639,177 @@ public final class HistoricalOracle implements Candidate {
                     if (result instanceof CharSequence) {
                         return UValue.string(result.toString());
                     }
-                    return UValue.opaque(className, String.valueOf(result));
+                    return UValue.opaque(className, opaqueRepresentation(result));
             }
         } catch (InvocationTargetException e) {
-            throw new IllegalStateException("historical accessor threw while unwrapping " + className,
+            throw new HarnessMarshallingException(
+                    "historical accessor threw while unwrapping " + className,
                     e.getCause() == null ? e : e.getCause());
         } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("cannot unwrap historical " + className, e);
+            throw new HarnessMarshallingException("cannot unwrap historical " + className, e);
         }
+    }
+
+    // ------------------------------------------------------------------ opaque representation
+
+    /**
+     * A deterministic, exact, locale-independent rendering of a historical object the harness does
+     * not model structurally, built from its declared instance fields.
+     *
+     * <h2>Why not {@code String.valueOf(object)}</h2>
+     * That is what this branch used to do, and it broke the exactness guarantee {@link UValue}
+     * states. Verified with {@code javap -c} against the vendored
+     * {@code atenearesearchgroup.uncertainty.jar} (sha256 {@value #UNCERTAINTY_JAR_SHA256}):
+     * <pre>
+     *   uDataTypes.UInteger.toString()           -&gt; String.format("UInteger(%d, %5.3f)", ...)
+     *   uDataTypes.UReal.toString()              -&gt; String.format("UReal(%5.3f, %5.3f)", ...)
+     *   uDataTypes.SBoolean.toString()           -&gt; String.format("SBoolean(%5.3f, %5.3f, %5.3f, %5.3f)", ...)
+     *   uDataTypes.UString.toString()            -&gt; String.format("UString(%s, %5.3f)", ...)
+     *   uDataTypes.UUnlimitedNatural.toString()  -&gt; String.format("UUnlimitedNatural(%d, %5.3f)", ...)
+     * </pre>
+     * and on the USE side {@code SBooleanValue.toString(StringBuilder)} routes every component
+     * through {@code org.tzi.use.util.MathUtil.round(double,3)}. All five {@code format} calls use
+     * the {@code String.format(String,Object[])} overload, i.e. {@code Locale.getDefault()}. Two
+     * consequences, both fatal to a differential harness: an OPAQUE comparison rounded to three
+     * decimals, so it could not see a rounding regression; and under a European default locale the
+     * same value rendered with a decimal comma, so a report was not reproducible across machines.
+     *
+     * <h2>What is rendered</h2>
+     * Declared instance fields, superclass fields first, each sorted by name within its declaring
+     * class (declaration order is not specified by {@code Class#getDeclaredFields}). Doubles go
+     * through {@link Double#toString(double)} and floats through {@link Float#toString(float)}, so
+     * every bit is preserved; strings go through {@link UValue#quote(String)}. Nested historical
+     * objects recurse, up to {@link #OPAQUE_MAX_DEPTH}.
+     *
+     * <p>Anything that cannot be rendered exactly — an unreadable field, an unhandled field type, a
+     * cycle, or a nesting deeper than the limit — raises {@link HarnessMarshallingException} rather
+     * than falling back to {@code toString()}. Refusing is the point: a representation that is only
+     * approximately right is worse than no representation, because it still populates a report
+     * column that a reader will treat as measured.
+     */
+    public String opaqueRepresentation(Object target) {
+        StringBuilder sb = new StringBuilder();
+        appendOpaque(sb, target, 0, java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>()));
+        return sb.toString();
+    }
+
+    private void appendOpaque(StringBuilder sb, Object target, int depth, Set<Object> seen) {
+        if (target == null) {
+            sb.append("null");
+            return;
+        }
+        if (target instanceof Double) {
+            sb.append(Double.toString((Double) target));
+            return;
+        }
+        if (target instanceof Float) {
+            sb.append(Float.toString((Float) target));
+            return;
+        }
+        if (target instanceof Boolean || target instanceof Character || target instanceof Byte
+                || target instanceof Short || target instanceof Integer || target instanceof Long) {
+            sb.append(target);
+            return;
+        }
+        if (target instanceof CharSequence) {
+            sb.append(UValue.quote(target.toString()));
+            return;
+        }
+        if (target instanceof Enum<?>) {
+            sb.append(((Enum<?>) target).getDeclaringClass().getName()).append('.')
+                    .append(((Enum<?>) target).name());
+            return;
+        }
+        if (depth >= OPAQUE_MAX_DEPTH) {
+            throw new HarnessMarshallingException("cannot represent " + target.getClass().getName()
+                    + " exactly: nesting deeper than " + OPAQUE_MAX_DEPTH
+                    + ". Model this type in UValue rather than widening the limit.");
+        }
+        if (target.getClass().isArray()) {
+            int length = java.lang.reflect.Array.getLength(target);
+            sb.append('[');
+            for (int i = 0; i < length; i++) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                appendOpaque(sb, java.lang.reflect.Array.get(target, i), depth + 1, seen);
+            }
+            sb.append(']');
+            return;
+        }
+        if (target instanceof List<?>) {
+            List<?> list = (List<?>) target;
+            sb.append('[');
+            for (int i = 0; i < list.size(); i++) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                appendOpaque(sb, list.get(i), depth + 1, seen);
+            }
+            sb.append(']');
+            return;
+        }
+        if (!IsolatedJarClassLoader.isIsolated(target.getClass().getName())) {
+            // Deliberately narrow. A java.util.HashSet, for instance, has no stable iteration order,
+            // and guessing at one would make the report irreproducible without saying so.
+            throw new HarnessMarshallingException("cannot represent " + target.getClass().getName()
+                    + " exactly: it is neither a historical object nor a type this harness renders. "
+                    + "Model it in UValue rather than falling back to its toString().");
+        }
+        if (!seen.add(target)) {
+            throw new HarnessMarshallingException("cannot represent " + target.getClass().getName()
+                    + " exactly: the object graph contains a cycle.");
+        }
+        try {
+            sb.append(target.getClass().getName()).append('{');
+            boolean first = true;
+            for (java.lang.reflect.Field field : opaqueFields(target.getClass())) {
+                if (!first) {
+                    sb.append(',');
+                }
+                first = false;
+                sb.append(field.getDeclaringClass().getSimpleName()).append('.')
+                        .append(field.getName()).append('=');
+                Object fieldValue;
+                try {
+                    field.setAccessible(true);
+                    fieldValue = field.get(target);
+                } catch (RuntimeException | IllegalAccessException e) {
+                    throw new HarnessMarshallingException("cannot read field " + field
+                            + " of historical " + target.getClass().getName(), e);
+                }
+                if (field.getType() == double.class) {
+                    sb.append(Double.toString((Double) fieldValue));
+                } else if (field.getType() == float.class) {
+                    sb.append(Float.toString((Float) fieldValue));
+                } else {
+                    appendOpaque(sb, fieldValue, depth + 1, seen);
+                }
+            }
+            sb.append('}');
+        } finally {
+            seen.remove(target);
+        }
+    }
+
+    /** Declared instance fields, superclass-first, name-sorted within each declaring class. */
+    private static List<java.lang.reflect.Field> opaqueFields(Class<?> type) {
+        List<Class<?>> chain = new ArrayList<>();
+        for (Class<?> c = type; c != null && c != Object.class; c = c.getSuperclass()) {
+            chain.add(0, c);
+        }
+        List<java.lang.reflect.Field> out = new ArrayList<>();
+        for (Class<?> c : chain) {
+            List<java.lang.reflect.Field> declared = new ArrayList<>();
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                if (!java.lang.reflect.Modifier.isStatic(f.getModifiers()) && !f.isSynthetic()) {
+                    declared.add(f);
+                }
+            }
+            declared.sort(java.util.Comparator.comparing(java.lang.reflect.Field::getName));
+            out.addAll(declared);
+        }
+        return out;
     }
 
     private Constructor<?> ctor(String simpleName, Class<?>... params) throws NoSuchMethodException {
@@ -632,6 +887,23 @@ public final class HistoricalOracle implements Candidate {
         }
 
         public HistoricalOracleUnavailableException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    /**
+     * Thrown when the historical class exists but does not declare the requested method — the one
+     * failure {@link #supports(UOp)} is allowed to convert into {@code false}.
+     *
+     * <p>It exists as its own type precisely so that {@code supports()} no longer has to catch
+     * {@link RuntimeException}, which would also catch
+     * {@link HistoricalOracleUnavailableException} and hide a broken oracle behind an
+     * {@code UNSUPPORTED} row.
+     */
+    public static final class NoSuchHistoricalMethodException extends IllegalArgumentException {
+        private static final long serialVersionUID = 1L;
+
+        public NoSuchHistoricalMethodException(String message, Throwable cause) {
             super(message, cause);
         }
     }

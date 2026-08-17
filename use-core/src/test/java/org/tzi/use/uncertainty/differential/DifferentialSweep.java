@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Runs an operation on both candidates over a fixed, replayable list of argument tuples and turns
@@ -112,15 +113,59 @@ public final class DifferentialSweep {
         return new Result(op, seed, reference.name(), subject.name(), rows);
     }
 
+    /**
+     * Drives one candidate on one tuple and classifies the outcome into exactly one of three
+     * populations.
+     *
+     * <ul>
+     *   <li><b>returned</b> — including the null check, which is inside the {@code try} on purpose:
+     *       a {@link Candidate} that returns Java {@code null} (the natural mistake for a ported
+     *       operation whose result maps to {@code UndefinedValue}) used to NPE inside
+     *       {@code classify} and discard every row already computed. It is now a recorded throw.</li>
+     *   <li><b>harness error</b> — {@link HarnessMarshallingException} only, caught before
+     *       {@code Exception} so it can never be scored as a throw by the code under test.</li>
+     *   <li><b>threw</b> — {@link Exception} and nothing wider. {@link Error} is re-thrown:
+     *       {@code StackOverflowError}, {@code AssertionError} and {@code NoClassDefFoundError}
+     *       describe a broken JVM or a broken build, not a behavioural difference, and turning them
+     *       into comparable report data would let a sweep agree that both sides are broken.</li>
+     * </ul>
+     */
     private static Outcome apply(Candidate candidate, UOp op, List<UValue> tuple) {
         try {
-            return Outcome.returned(candidate.invoke(op, tuple));
+            UValue produced = candidate.invoke(op, tuple);
+            Objects.requireNonNull(produced, () -> candidate.name() + " returned Java null from "
+                    + op.key() + "; a Candidate must return a UValue (use UValue.nullValue() for a "
+                    + "genuine null result)");
+            return Outcome.returned(produced);
+        } catch (HarnessMarshallingException e) {
+            return Outcome.harnessError(e);
+        } catch (Exception e) {
+            return Outcome.threw(e);
+        } catch (Error e) {
+            throw e;
         } catch (Throwable t) {
-            return Outcome.threw(t);
+            // Candidate.invoke is declared `throws Throwable`; anything that is neither an Exception
+            // nor an Error is not comparable data either.
+            throw new IllegalStateException(candidate.name() + " threw a Throwable that is neither an "
+                    + "Exception nor an Error from " + op.key(), t);
         }
     }
 
     private static DiffRow classify(int index, UOp op, List<String> inputs, Outcome ref, Outcome sub) {
+        if (ref.harnessError != null || sub.harnessError != null) {
+            // Checked first and never merged with the throw populations below: a harness failure is
+            // the absence of a measurement, not a measurement that two sides happen to share.
+            Throwable first = ref.harnessError != null ? ref.harnessError : sub.harnessError;
+            StringBuilder note = new StringBuilder("the harness could not drive ");
+            if (ref.harnessError != null && sub.harnessError != null) {
+                note.append("either side");
+            } else {
+                note.append(ref.harnessError != null ? "the reference" : "the subject");
+            }
+            note.append("; no comparison was made. ").append(safeMessage(first));
+            return new DiffRow(index, op.key(), inputs, column(ref), column(sub),
+                    DiffVerdict.HARNESS_ERROR, note.toString());
+        }
         if (ref.thrown != null && sub.thrown != null) {
             boolean same = ref.thrown.getClass().getName().equals(sub.thrown.getClass().getName());
             String note = same ? "" : "reference message: " + safeMessage(ref.thrown)
@@ -141,6 +186,17 @@ public final class DifferentialSweep {
                 agree ? DiffVerdict.AGREE : DiffVerdict.DIFFER, "");
     }
 
+    /** The report column for one outcome, whichever of the three populations it fell into. */
+    private static String column(Outcome outcome) {
+        if (outcome.harnessError != null) {
+            return DiffRow.harnessError(outcome.harnessError);
+        }
+        if (outcome.thrown != null) {
+            return DiffRow.thrown(outcome.thrown);
+        }
+        return outcome.value.canonical();
+    }
+
     private static String safeMessage(Throwable t) {
         String m = t.getMessage();
         return m == null ? "(no message)" : m;
@@ -149,18 +205,25 @@ public final class DifferentialSweep {
     private static final class Outcome {
         final UValue value;
         final Throwable thrown;
+        /** Non-null exactly when the harness itself failed; never merged with {@link #thrown}. */
+        final Throwable harnessError;
 
-        private Outcome(UValue value, Throwable thrown) {
+        private Outcome(UValue value, Throwable thrown, Throwable harnessError) {
             this.value = value;
             this.thrown = thrown;
+            this.harnessError = harnessError;
         }
 
         static Outcome returned(UValue v) {
-            return new Outcome(v, null);
+            return new Outcome(v, null, null);
         }
 
         static Outcome threw(Throwable t) {
-            return new Outcome(null, t);
+            return new Outcome(null, t, null);
+        }
+
+        static Outcome harnessError(Throwable t) {
+            return new Outcome(null, null, t);
         }
     }
 

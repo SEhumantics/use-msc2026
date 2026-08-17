@@ -8,9 +8,12 @@ import java.util.List;
  * One comparison: an operation, the inputs it was applied to, what each side produced, and the
  * verdict. Immutable; renders itself as one TSV record.
  *
- * <p>{@code historical} / {@code ported} carry either a {@link UValue#canonical()} form or, when
- * that side threw, {@code THROWN:<throwable class name>}. That keeps the report one flat column
- * pair whatever happened.
+ * <p>{@code historical} / {@code ported} carry one of three things: a {@link UValue#canonical()}
+ * form; {@code THROWN:<throwable class name>} when that side threw; or
+ * {@code HARNESS_ERROR:<throwable class name>} when the harness could not drive that side at all
+ * (see {@link DiffVerdict#HARNESS_ERROR}). That keeps the report one flat column pair whatever
+ * happened, while keeping "the code under test threw" and "the harness failed" distinguishable in
+ * the column itself and not only in the verdict.
  *
  * <p>Test-scoped. Not part of the product.
  */
@@ -70,6 +73,15 @@ public final class DiffRow {
     /** Marker used in the result columns when a side threw instead of returning. */
     public static String thrown(Throwable t) {
         return "THROWN:" + t.getClass().getName();
+    }
+
+    /**
+     * Marker used when the <em>harness</em> could not drive that side at all. Textually distinct
+     * from {@link #thrown(Throwable)} so that a harness failure can never be mistaken, by eye or by
+     * grep, for a throw by the code under test.
+     */
+    public static String harnessError(Throwable t) {
+        return "HARNESS_ERROR:" + t.getClass().getName();
     }
 
     /** One TSV record, without the trailing newline. All fields are already tab- and newline-free. */

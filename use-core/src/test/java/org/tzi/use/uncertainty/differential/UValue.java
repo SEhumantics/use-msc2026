@@ -17,7 +17,18 @@ import java.util.Objects;
  * <p>Comparison is by {@link #canonical()}, which is derived from {@link Double#toString(double)}
  * and is therefore <em>exact</em>: {@code 0.0} and {@code -0.0} differ, {@code NaN} equals
  * {@code NaN}. That is deliberate. A differential harness that silently rounds cannot detect a
- * rounding regression.
+ * rounding regression. Nothing in {@code canonical()} goes through {@code String.format} or any
+ * other locale-sensitive path, so the same values render identically under every default locale.
+ *
+ * <p>The guarantee holds on the {@link Kind#OPAQUE} branch too, but only because
+ * {@link HistoricalOracle#opaqueRepresentation(Object)} rebuilds the representation from the
+ * object's declared fields. It did <em>not</em> hold when that branch embedded the foreign
+ * {@code toString()}: the vendored historical classes format with {@code %5.3f}
+ * ({@code UInteger(%d, %5.3f)}, {@code UReal(%5.3f, %5.3f)},
+ * {@code SBoolean(%5.3f, %5.3f, %5.3f, %5.3f)} — verified with {@code javap -c} on
+ * {@code atenearesearchgroup.uncertainty.jar}) via the no-Locale
+ * {@code String.format(String,Object[])} overload, so OPAQUE comparison rounded to three decimals
+ * and flipped to a decimal comma under a European default locale.
  *
  * <p>Test-scoped. Not part of the product.
  */
@@ -45,7 +56,23 @@ public final class UValue {
         SEQUENCE,
         /** A Java {@code null} came back. */
         NULL,
-        /** Anything the harness does not model structurally; carries the class name and toString. */
+        /**
+         * The operation is declared {@code void}, so there is no result to compare.
+         *
+         * <p>Distinct from {@link #NULL} on purpose. {@code Method.invoke} returns {@code null} for
+         * a {@code void} method, so before this constant existed every {@code void} operation
+         * unwrapped to {@code NULL} — and an empty-bodied ported mutator therefore agreed with the
+         * historical one on every row, forever.
+         */
+        VOID,
+        /**
+         * Anything the harness does not model structurally; carries the class name and a
+         * representation built from the object's declared fields.
+         *
+         * <p>The representation is <em>not</em> the foreign {@code toString()}: see
+         * {@link HistoricalOracle#opaqueRepresentation(Object)} for why that would silently round
+         * and would change with the default locale.
+         */
         OPAQUE
     }
 
@@ -112,6 +139,11 @@ public final class UValue {
 
     public static UValue nullValue() {
         return new UValue(Kind.NULL, Double.NaN, 0, false, null, Double.NaN, null);
+    }
+
+    /** The result of an operation declared {@code void}. Never equal to {@link #nullValue()}. */
+    public static UValue voidValue() {
+        return new UValue(Kind.VOID, Double.NaN, 0, false, null, Double.NaN, null);
     }
 
     /** Fallback for a result shape the harness does not model; {@code repr} must be deterministic. */
@@ -225,6 +257,8 @@ public final class UValue {
             }
             case NULL:
                 return "NULL";
+            case VOID:
+                return "VOID";
             case OPAQUE:
             default:
                 return "OPAQUE(" + quote(text) + ")";
