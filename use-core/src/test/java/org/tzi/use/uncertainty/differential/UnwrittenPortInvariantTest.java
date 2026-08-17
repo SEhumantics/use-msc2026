@@ -885,7 +885,7 @@ class UnwrittenPortInvariantTest {
      * same type (plus a slice of {@link InputGenerator#indexBoundaries()} for primitive parameters,
      * which is where the historical API takes raw {@code int}/{@code double}/{@code float}).
      */
-    private static List<List<UValue>> stageDomains(UOp op, Map<String, List<UValue>> corpora) {
+    static List<List<UValue>> stageDomains(UOp op, Map<String, List<UValue>> corpora) {
         List<UValue> receivers = receiverCorpus(op.receiverType(), corpora);
         List<List<UValue>> domains = new ArrayList<>(op.arity());
         domains.add(receivers);
@@ -900,7 +900,7 @@ class UnwrittenPortInvariantTest {
     }
 
     /** Cartesian product, in the same order {@link DifferentialSweep#sweep} would build it. */
-    private static List<List<UValue>> tuples(List<List<UValue>> domains) {
+    static List<List<UValue>> tuples(List<List<UValue>> domains) {
         List<List<UValue>> out = new ArrayList<>();
         out.add(new ArrayList<>());
         for (List<UValue> domain : domains) {
