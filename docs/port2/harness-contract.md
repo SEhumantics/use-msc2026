@@ -79,6 +79,17 @@ Four clauses, each paid for:
   `Result.javaTypeMismatchCount()` / `# rows.javaTypeMismatch` / `# op.<key>.javaTypeMismatch` and printed
   unconditionally by `stageStatement()`. **Content differences are unaffected and remain `DIFFER`.**
 
+  **And since 2026-08-17 (H21) that count is split by the subject's provenance, at both scopes.**
+  `Result.subjectTypeObservedCount()` / `.subjectTypeAssumedCount()`, published as
+  `# rows.subjectTypeObserved` / `# rows.subjectTypeAssumed` and
+  `# op.<key>.subjectTypeObserved` / `# op.<key>.subjectTypeAssumed`, and carried in `summary()` and
+  unconditionally in `stageStatement()`. The two counts **partition** the mismatch population exactly —
+  `observed + assumed == javaTypeMismatch`, asserted by
+  `DifferentialHarnessRegressionTest#theTypeMismatchTotalIsSplitBySubjectTypeProvenance` — so `0` on one
+  side means "all of them are the other", and that is the number that says whether a mismatch total is a
+  finding about the **port** (`OBSERVED`) or about the **adapter** (`ASSUMED`, D-43). Before H21 that
+  distinction existed only as prose in the note column of up to 3 445 data rows.
+
   The history, because it is the argument. Round 6 left the ported side's class *declared* and the
   reference's *observed*, which made two different findings numerically identical: a **content-perfect**
   port with a factory-typed adapter measured `DIFFER 3 445, 182 of 285 operations, stage passes 74 → 45,
@@ -215,8 +226,10 @@ Two checks the gate does not make and a stage still must:
    the adapter shape §7 mandates** *(round 8R, D-52)*: the object whose class is read must be the object
    the invocation returned. Read from anything else the number is not a measurement of the port, and
    `observedFrom(aStandIn)` drove a real 401-row wrong-class defect to `0` here.
-   `stageStatement()` prints the figure unconditionally, including when it is zero, so a stage that
-   quotes *that line* cannot avoid seeing it — though `agreementCount()`, `agreements()` and `isClean()`
+   `stageStatement()` prints the figure unconditionally, including when it is zero, **and since H21 the
+   provenance split beside it** — `(subject token OBSERVED on a, ASSUMED on b)`, where `a + b == N` — so a
+   stage that quotes *that line* cannot avoid seeing either, and `b > 0` from S4 onwards is a defect in the
+   stage's own adapter rather than in the port — though `agreementCount()`, `agreements()` and `isClean()`
    remain public and unaccompanied (**D-53**), so the mechanism binds the statement and not the class.
    **Two things this number is not.** It is not a lower bound on wrong-class rows: a row wrong in *both*
    dimensions is a `DIFFER` and leaves this count, measured 3 445 / 182 ops → 1 883 / 42 ops when a
@@ -496,8 +509,13 @@ pass; if one starts failing, read it before you "fix" it.
 > and must fail the gate.
 >
 > **How a reviewer checks this was done — corrected on round 8's refutation.** The S4 document must quote
-> `stageStatement()` verbatim — it carries `N java-type mismatch(es)` unconditionally — and the report
-> header's `# rows.javaTypeMismatch`. A stage that quotes a pass without that figure has not gated on it.
+> `stageStatement()` verbatim — it carries `N java-type mismatch(es)` and, since H21, the
+> `(subject token OBSERVED on a, ASSUMED on b)` split, both unconditionally — and the report header's
+> `# rows.javaTypeMismatch` **together with `# rows.subjectTypeObserved` / `# rows.subjectTypeAssumed`**.
+> A stage that quotes a pass without those figures has not gated on it. **A non-zero
+> `rows.subjectTypeAssumed` at S4 or later is a defect in the stage's own adapter, not in the port**: it
+> says the adapter never looked at what its implementation returned, and the type figure beside it is
+> therefore not a measurement of anything in `use-core/src/main`.
 > **The earlier check, "reject a figure from an adapter whose attribution route is not stated", is NOT
 > SUFFICIENT and is withdrawn as a stand-alone test:** an honest adapter and a laundering one both route
 > through `observedFrom` and both would state that truthfully. **The check is on the shape.** Read the
@@ -573,18 +591,22 @@ infidelity is planted.
 | 1 | measured rows (not row count) | `measurementCount()` |
 | 2 | distinct reference values, and the `[DISCRIMINATING]` verdict | `distinctReferenceValues()` |
 | 3 | **java-type mismatch count**, per operation | `# op.<key>.javaTypeMismatch` |
+| 3a | **its provenance split** (H21), per operation — which half of the mismatch total is a statement about the port and which about your own adapter | `# op.<key>.subjectTypeObserved` / `# op.<key>.subjectTypeAssumed` |
 | 4 | the whole line, quoted verbatim | `stageStatement(acknowledged)` |
 | 5 | **the input domain, in prose** — what was covered and what was not | **you** (D-30) |
 
 Quote per operation, never per file (`# rows.*` and `# verdict.*` are sums — D-21; and `# op.<key>.*` keys
 are not unique if one report holds several results for one operation — D-41). "576 agreed" is not a
 fidelity claim. "576 agreed over 24 uReal boundary receivers × 24 arguments, no value in (2,100) other
-than the two random draws, 164 distinct reference values, 0 java-type mismatches" is.
+than the two random draws, 164 distinct reference values, 0 java-type mismatches (0 observed, 0 assumed)"
+is.
 
 **6. State the two sentences that stop a reader over-reading the figures.**
-*"An `AGREE` row may be an agreement on the payload alone; this operation's java-type mismatch count is N."*
-and *"The adapter observes the object each invocation returned, at one seam."* Until the second is true,
-the type figure means nothing about the port (§7).
+*"An `AGREE` row may be an agreement on the payload alone; this operation's java-type mismatch count is N,
+of which `subjectTypeObserved` a and `subjectTypeAssumed` b."* and *"The adapter observes the object each
+invocation returned, at one seam."* Until the second is true, the type figure means nothing about the port
+(§7) — and **`b > 0` is the harness telling you the second sentence is false**, whatever the adapter's
+prose claims.
 
 **7. When a sweep refuses, do this in this order.** `requireStagePass` throws with **every** failing clause
 and its numbers — read all of them, not the first.

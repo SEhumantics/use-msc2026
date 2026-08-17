@@ -48,8 +48,13 @@ Two preconditions bear on **S4**, not on S3, and both are cheap enough to clear 
    (`PortedInfidelityDetectionPowerTest.java:1116-1126`) already does. **That sentence is now in
    `harness-contract.md` §7 and in the §8 checklist.** Nothing else about D-52 needs doing at S1: the
    clause is inert here (74 stage passes with the defect and without it).
-2. **The provenance aggregate (H21).** `OBSERVED` versus `ASSUMED` reaches only the row note; there is no
-   header count (D-49 residue, D-48). The porter's own unbuilt recommendation —
+2. **The provenance aggregate (H21) — CLOSED 2026-08-17, BUILT.** As written below, `OBSERVED` versus
+   `ASSUMED` reached only the row note and had no header count (D-49 residue, D-48). It now has one, at
+   both scopes: `# rows.subjectTypeObserved` / `# rows.subjectTypeAssumed` and
+   `# op.<key>.subjectTypeObserved` / `.subjectTypeAssumed`, from
+   `DifferentialSweep.Result.subjectTypeObservedCount()` / `.subjectTypeAssumedCount()`, also carried in
+   `summary()` and printed unconditionally by `stageStatement()`. Original text, kept because it is the
+   argument the decision rests on: the porter's own unbuilt recommendation —
    `# rows.subjectTypeObserved` / `.subjectTypeAssumed`, per file and per operation — is the cheapest item
    on the whole list, and the round-8 refuter independently agreed it should exist before S4 starts
    (`stage-01-verification-round8.md` §8, limit 3).
@@ -186,7 +191,9 @@ P14-observing adapter (no defect)         0       0      74                 0   
 
 Read it as one fact: **the same 3 445 is produced by a port with a real wrong-class defect and by a port
 with no defect at all whose adapter never attributed** (D-48, reclassified as a named limit). The only
-discriminator is the row note's provenance clause, which has no header aggregate — hence H21. Before round
+discriminator is the row note's provenance clause, which had no header aggregate — hence H21, **built
+2026-08-17**: the split now has a header number at file and operation scope, so the two cases above are
+distinguishable from the preamble alone. Before round
 8 those rows were `DIFFER` and cost a **faithful** port 29 stage passes; that false-divergence mode is
 gone, independently confirmed (P13 reaches the control's exact stage-pass set; P14 is row-for-row the
 reference).
@@ -222,30 +229,51 @@ One list. **B1–B12 are `specification.md` §0** — evidence, options and reco
 **H13–H22 were added by the eight review rounds** and are not in that section. Struck rows are answered;
 they are kept visible because each cost a round.
 
+### 3.0 DECIDED — 2026-08-17 (four items)
+
+The user decided four items in one round. All four are binding and none is re-litigable. **Three went
+against the recommendation recorded above, and all three expand scope** — recorded here as the user's
+decision, with the recommendation that was not taken named, so the record shows a considered choice
+and not a drift. Nothing below deletes the original evidence or recommendation; the rows keep their
+text and are marked in place.
+
+| # | Chosen | Recommendation NOT taken | Status |
+|---|---|---|---|
+| **B3** | **(b)** a `-Pupstream-oracle` Maven profile: `junit-vintage-engine` 5.7.0, test scope, `use-core` + `use-gui`, **no test file touched**. Every stage from S3 runs both `mvn -B verify -Djava.awt.headless=true` and `mvn -B verify -Pupstream-oracle -Djava.awt.headless=true`. | — the recommendation **was** taken | **BUILT and MEASURED.** `upstream-oracle-profile.md`: default 10 classes / **210** distinct methods; profile **50 classes / 497 distinct methods, 0 failures, 0 errors**. No upstream test fails under it. |
+| **B7** | **FIX** the historical defects, documenting each. | **bug-for-bug reproduction** — the recorded recommendation, **not taken** | Open work for S4–S7. Each of the 33 behaviour-changing rows in `specification.md` §7.2 needs a fix, a written justification, and the print-output delta where one exists. |
+| **H14** | **BUILD an input-domain coverage measure** (D-30). | **prose-stated domains** in every stage document — the recorded position, **not taken** | Open work. This was "the one open question the instrument cannot answer for you, and the largest live risk"; the decision converts it from a caveat carried in prose into an instrument to be built. Everything that today reads "inherits D-30" — H17's corrected justification, D-45, D-55, D-56 — becomes measurable rather than argued. |
+| **B2** | **FULL PORT of `SBoolean`**, all 39 operations. | **skeleton** (keep `SBooleanType` only) — the recorded recommendation, **not taken** | Open work. `StandardOperationsSBoolean`'s 1502 lines enter the build with **zero** fork-test coverage behind them, so the differential harness is the only instrument that can judge the 39 operations. |
+
+**H21 is DONE** (see the struck row below): the provenance aggregate was built in this round —
+`# rows.subjectTypeObserved` / `# rows.subjectTypeAssumed` and the per-operation equivalents, plus
+`Result.subjectTypeObservedCount()` / `.subjectTypeAssumedCount()`, carried in `summary()` and
+`stageStatement()`, pinned by a regression test, and the two S1 goldens refreshed by exactly four
+added header lines each.
+
 | # | Decision |
 |---|---|
 | **B1** | How `uDataTypes` reaches the product classpath — it is on no Maven repository under any coordinates. Recommendation **A2** (vendor the 2023 MIT source, relocated). |
 | **B1a** | Whether to keep A2 on defence-in-depth grounds after its originally stated justification was refuted, or re-open A1. |
-| **B2** | `SBoolean` scope: full omission, skeleton, or full port. Recommendation **skeleton**. |
-| **B3** | `junit-vintage-engine`: in the product build, or in a `-Pupstream-oracle` profile. Without it **38 of 41** `*Test.java` never execute and "full suite green" is a near-vacuous gate. Recommendation **(b)**, run as part of every stage's acceptance. **This one decides whether S3–S7 have any automatic signal at all.** |
+| **B2** | `SBoolean` scope: full omission, skeleton, or full port. Recommendation **skeleton**. — ✅ **DECIDED 2026-08-17: FULL PORT, all 39 operations. The skeleton recommendation was NOT taken; see §3.0.** |
+| **B3** | ✅ **DECIDED 2026-08-17: option (b), the profile — BUILT, see `upstream-oracle-profile.md` (§3.0).** `junit-vintage-engine`: in the product build, or in a `-Pupstream-oracle` profile. Without it **38 of 41** `*Test.java` never execute and "full suite green" is a near-vacuous gate. Recommendation **(b)**, run as part of every stage's acceptance. **This one decides whether S3–S7 have any automatic signal at all.** |
 | **B4** | The `'equals'` keyword collision (confirmed live against three upstream fixtures): drop `identicalExpression`, hide it behind a semantic predicate, or amend the fixtures. Recommendation **1, else 2 — not 3**. |
 | **B5** | `TypeTest#testSupertype`: adopting the fork lattice breaks **exactly 10 of its 12 assertions** (independently re-derived). Recommendation **adopt and handle**. |
 | **B6** | `UndefinedValue` printed form — 7.5.0 prints `null`, the fork prints `Undefined`, **79 corpus entries** expect the latter. Recommendation **normalise in the harness**. |
-| **B7** | Bug-for-bug vs fix, as **one policy** first and then per row: **33 behaviour-changing ledger rows**. |
+| **B7** | Bug-for-bug vs fix, as **one policy** first and then per row: **33 behaviour-changing ledger rows**. — ✅ **DECIDED 2026-08-17: FIX and document each row. The bug-for-bug recommendation was NOT taken; see §3.0.** |
 | **B8** | `Op_number_sqrt` / `Op_number_pow` shadowing (chain confirmed, ends in `ClassCastException`). Recommendation **tighten `matches`**. |
 | **B9** | `ExpQuery` items 7+8 — `exists`/`forAll` over uncertain predicates. **Take both or neither.** |
 | **B10** | `ExpDefSBoolean` + `ASTSBooleanDefExpression`: drop the unreachable dead code, or port it with its three defects documented. Recommendation **drop**. |
 | **B11** | `UnlimitedNatural` lattice inconsistency: reproduce bit-for-bit or fix. Recommendation **reproduce, plus a regression test pinning the deviation**. |
 | **B12** | Corpus-harness placement and the process-global `Options.explicitVariableDeclarations` write that makes JUnit-3 suite ordering load-bearing. |
 | **H13** | **How S4 gates, given D-29.** A perfect port passes 74 of 285. Choose: (a) diff `stageGateFailures` against a recorded perfect-port baseline — cheapest, recommended; (b) fund ~**273** hand-authored sign-offs (154 `AcceptedThrowPairs` + 119 degenerate); (c) change clause 2. **Do not choose "fall back on `isClean()`"** — that is a 119-operation gap. |
-| **H14** | **Whether to build an input-domain coverage measure (D-30)**, or to accept corpus-bounded claims with the domain stated in prose in every stage document. The one open question the instrument cannot answer for you, and the largest live risk. |
+| **H14** | ✅ **DECIDED 2026-08-17: BUILD it. The prose-stated-domains position was NOT taken; see §3.0.** **Whether to build an input-domain coverage measure (D-30)**, or to accept corpus-bounded claims with the domain stated in prose in every stage document. The one open question the instrument cannot answer for you, and the largest live risk. |
 | **H15** | **Whether the corpora are widened before S4** (D-28: one `RealValue`; D-31: `indexBoundaries()`; D-42: `boolean=4`), or the single-valued census is signed off operation by operation with written rationales. |
 | **H16** | **How fidelity is established for the 33 non-nameable operations** — `equals(Object)` first: a second instrument, hand-written unit tests, or a recorded declaration that they are out of scope. |
 | ~~**H17**~~ | **ANSWERED, round 6:** a type-aware canonical form was built; "right content, wrong Java type" is not fidelity. **With the D-45 correction:** the original justification ("a declared return type is one class") is **false for 84 of 285 operations**; the conclusion survives on a corpus measurement (0 of 285) and therefore **inherits D-30**. Do not repeat the false reason in a stage document. |
 | **H18** | **Post-state** — the 8 `void` mutators cannot be shown faithful by this harness at all. Accept, or build a post-state probe. |
 | ~~**H19**~~ | **ANSWERED, round 6:** D-34, D-35, D-36 fixed before any S4 number existed, all three independently confirmed. |
 | ~~**H20**~~ | **ANSWERED, rounds 7 and 8, and the answer was corrected twice by refutation.** Round 7 made the ported token a measurement and guarded the stating route with a mandatory reason; the reason was measured to reach **0 rows** on a laundered sweep. Round 8 deleted the stating API and demoted a type-only difference to a counted `AGREE`, with a dated S4 obligation. Round 8's refuter then showed the obligation's clause is still author-influenceable through the **choice of object** (D-52) and that the fix is to mandate the adapter's **shape** — now written into `harness-contract.md` §7 and §8. **What remains yours:** hold every S4–S7 document to one sentence saying how its adapter obtained the class token, and reject a type-fidelity figure whose adapter does not observe the invocation's own return value. |
-| **H21** | **Whether to build the provenance aggregate before S4 starts** — `# rows.subjectTypeObserved` / `.subjectTypeAssumed`, per file and per operation (D-48 / D-49 residue). Today `OBSERVED` vs `ASSUMED` is a per-row fact with no header number, so two reports with equal type-mismatch counts are told apart only by reading rows. **Recommended: build it.** Both the round-8 porter and the round-8 refuter call it the cheapest item on the list. |
+| ~~**H21**~~ | ✅ **ANSWERED / BUILT 2026-08-17** — `# rows.subjectTypeObserved` / `# rows.subjectTypeAssumed`, file total and per operation, plus `Result.subjectTypeObservedCount()` / `.subjectTypeAssumedCount()` in `summary()` and `stageStatement()`, the identity `observed + assumed == javaTypeMismatch` pinned by `DifferentialHarnessRegressionTest#theTypeMismatchTotalIsSplitBySubjectTypeProvenance`, and both S1 goldens refreshed (+4 header lines each, no data row moved). Original text: **Whether to build the provenance aggregate before S4 starts** — `# rows.subjectTypeObserved` / `.subjectTypeAssumed`, per file and per operation (D-48 / D-49 residue). Today `OBSERVED` vs `ASSUMED` is a per-row fact with no header number, so two reports with equal type-mismatch counts are told apart only by reading rows. **Recommended: build it.** Both the round-8 porter and the round-8 refuter call it the cheapest item on the list. |
 | **H22** | **Whether D-55 and D-56 are closed now or carried as corpus-dependent latents.** Both are unreachable in today's corpus **by measurement, not by construction** (0 of 197 `OPAQUE` rows carry a second `\|`; 0 `DIFFER` over 17 `SequenceValue` rows), so both inherit D-30. Carrying them is defensible; a widened corpus (H15) can make either live without warning. |
 
 ---
@@ -294,8 +322,11 @@ where it did not.
   on a 1-based string index, sits in exactly that region: its rows go
   `{AGREE=37, BOTH_THREW=99}` → `{DIFFER=26, MIXED=26, BOTH_THREW=84}` while `requireStagePass` says
   `false` before and after. Diff the **clause list** against a recorded perfect-port baseline (H13).
-* **The type figure is not yet a gate (D-52), and its provenance has no aggregate (D-48/D-49, H21).** Both
-  are inert at S1 and both must be settled before S4 quotes the figure. The reviewer check that fails to
+* **The type figure is not yet a gate (D-52).** Inert at S1, and it must be settled before S4 quotes the
+  figure. **Its provenance now has an aggregate (D-48/D-49, H21, built 2026-08-17)** — the two
+  `rows.subjectType*` lines plus the per-operation pair — so "the same 3 445 from a
+  defective port and from a non-attributing adapter" is now separable from the header. That closes the
+  reporting half of D-48; the gating half (D-52, the adapter's shape) is unchanged and still yours. The reviewer check that fails to
   separate an honest adapter from a laundering one — "state the attribution route", which both would state
   truthfully — has been replaced in `harness-contract.md` §7 by a check on the adapter's shape.
 * **Attribution can be destroyed by the subject (D-17), though the verdict cannot (D-32).** A partially
@@ -313,7 +344,8 @@ where it did not.
   four were independently re-derived. What remains is that **all twelve, plus H13–H16, H18, H21 and H22,
   are unmade.**
 
-**Recommendation: S3 may start once B1–B12 and H13–H16 / H18 are answered.** H21 and H22 may be deferred
+**Recommendation: S3 may start once B1–B12 and H13–H16 / H18 are answered.** (H21 is now built and no
+longer deferrable-or-not; B2, B3, B7 and H14 were decided on 2026-08-17 — see §3.0.) H21 and H22 may be deferred
 past S3 but not past S4. The foundation carries the weight. It does not carry an unqualified fidelity
 claim, and the honest form of that claim is written into `harness-contract.md` §1, §4 and §8 so that a
 stage cannot make the stronger one by accident.
