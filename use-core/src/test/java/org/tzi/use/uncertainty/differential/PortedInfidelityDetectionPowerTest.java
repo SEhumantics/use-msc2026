@@ -764,6 +764,208 @@ class PortedInfidelityDetectionPowerTest {
         System.out.println("===================================================================");
     }
 
+    // ------------------------------------------------------------------ D-18: right content, wrong type
+
+    /**
+     * <strong>D-18: right content carried by the wrong Java type must be a divergence.</strong>
+     *
+     * <p>The subject is a perfect port with exactly one infidelity: wherever the historical
+     * operation returns a <em>raw</em> Java value — {@code boolean}, {@code int}, {@code double},
+     * {@code java.lang.String} — the port returns the corresponding
+     * {@code org.tzi.use.uml.ocl.value.*} wrapper instead, with identical content. That is the most
+     * ordinary mistake a re-implementation of this API can make: {@code IntegerValue.value()}
+     * declared to return {@code IntegerValue} rather than {@code int}. It is planted by round-tripping
+     * the produced value through {@link HistoricalOracle#toHistorical}/{@link
+     * HistoricalOracle#fromHistorical}, so the payload is provably unchanged and the <em>only</em>
+     * thing that moves is the Java type.
+     *
+     * <p>Before the fix this scored {@link DiffVerdict#AGREE} on every affected row: the canonical
+     * form of a raw {@code Boolean} and of a {@code BooleanValue} were both {@code BOOLEAN(true)}.
+     * The whole of the evidence was the four operations pinned in
+     * {@code UnwrittenPortInvariantTest.ECHO_SUBJECT_REVIEWED}.
+     *
+     * <p>Two things are asserted, and the second is as important as the first: the defect is seen,
+     * <em>and</em> the identity control over the same inventory still diverges nowhere, so the
+     * type-bearing canonical form has not turned an equivalent representation into a false alarm.
+     */
+    @Test
+    @DisplayName("D-18: a port that boxes a raw result into its Value class is a DIVERGENCE, and "
+            + "the perfect-port control is unaffected")
+    void aWrongJavaTypeWithRightContentIsADivergence() {
+        Probe identity = new Probe("P0-perfect", "control", Set.of(),
+                (op, args, perfect) -> perfect.invoke(op, args));
+        Probe boxed = new Probe("P12-boxed-primitive",
+                "results boxed into the corresponding USE Value class wherever the historical "
+                        + "returns a raw Java primitive or String -- right content, wrong Java type",
+                Set.of(),
+                (op, args, perfect) -> boxIntoValueClass(perfect.invoke(op, args)));
+
+        ProbeResult control = measure(identity);
+        ProbeResult mutant = measure(boxed);
+
+        Set<String> diverging = mutant.divergingOperations();
+        Set<String> lostStagePasses = new TreeSet<>(control.stagePasses);
+        lostStagePasses.removeAll(mutant.stagePasses);
+
+        System.out.println("=== D-18: right content, wrong Java type =========================");
+        System.out.println("operations           " + operations.size());
+        System.out.println("control  rows        " + control.rows + ", measured " + control.measured
+                + ", agreed " + control.agreed + "  " + control.verdicts);
+        System.out.println("boxed    rows        " + mutant.rows + ", measured " + mutant.measured
+                + ", agreed " + mutant.agreed + "  " + mutant.verdicts);
+        System.out.println("control DIFFER+MIXED " + (control.count(DiffVerdict.DIFFER)
+                + control.count(DiffVerdict.MIXED)) + "   <- MUST be 0");
+        System.out.println("boxed   DIFFER rows  " + mutant.count(DiffVerdict.DIFFER));
+        System.out.println("DETECTED on          " + diverging.size() + " of " + operations.size()
+                + " operations");
+        diverging.forEach(k -> System.out.println("    *** " + k + "  " + mutant.perOperation.get(k)));
+        System.out.println("stage passes         control " + control.stagePasses.size()
+                + " -> boxed " + mutant.stagePasses.size() + "; lost " + lostStagePasses.size()
+                + ": " + lostStagePasses);
+        if (!mutant.divergenceSamples.isEmpty()) {
+            System.out.println("  first " + mutant.divergenceSamples.size() + " diverging row(s):");
+            System.out.println("  " + DiffRow.TSV_HEADER);
+            mutant.divergenceSamples.forEach(s -> System.out.println("  " + s));
+        }
+        System.out.println("=================================================================");
+
+        assertEquals(0L, control.count(DiffVerdict.DIFFER),
+                "the identity control must still diverge nowhere, or the type-bearing canonical "
+                        + "form is over-strict and every number below is measuring the fix");
+        assertEquals(0L, control.count(DiffVerdict.MIXED));
+        assertEquals(Set.of(), control.divergingOperations());
+
+        assertFalse(diverging.isEmpty(),
+                "a port returning the right content with the wrong Java type was scored as agreeing "
+                        + "on every row of every operation (defect D-18)");
+        assertTrue(mutant.count(DiffVerdict.DIFFER) > 0, mutant.verdicts.toString());
+        for (String op : diverging) {
+            assertFalse(mutant.stagePasses.contains(op),
+                    "the boxing port reached a STAGE PASS on " + op + ", an operation it returns the "
+                            + "wrong Java type on");
+        }
+        // The four operations the round-4/5 record named as the whole visible extent of D-18 must
+        // now be among the detected ones: they are the ones whose blindness was already written down.
+        for (String named : List.of("BooleanValue.value()", "BooleanValue.isTrue()",
+                "IntegerValue.value()", "StringValue.value()")) {
+            assertTrue(diverging.contains(named),
+                    named + " returns a raw Java value and the boxing port must now diverge on it; "
+                            + "detected set was " + diverging);
+        }
+    }
+
+    /**
+     * <strong>The premise of the D-18 fix, measured: no operation has two equivalent
+     * representations.</strong>
+     *
+     * <p>Making the canonical form type-bearing turns "the two sides returned different Java classes"
+     * into a divergence. That is only sound if there is no operation for which two different classes
+     * are both legitimate answers — otherwise a faithful port that happened to pick the other one
+     * would be reported as wrong on every row, and the instrument would have gained a false-alarm
+     * mode in exchange for closing a blind spot. The perfect-port control cannot answer this question,
+     * because both of its sides are the same code and therefore trivially pick the same class.
+     *
+     * <p>So this test asks the reference alone, over every operation and every tuple of the
+     * stage-shaped domains, which runtime classes it ever returns. Measured result:
+     * <pre>
+     *   operations                                                285
+     *   operations whose OWN answers used more than one class      0
+     *   classes seen per Kind (the ones with two):
+     *     BOOLEAN  [java.lang.Boolean,  ...value.BooleanValue]
+     *     INTEGER  [java.lang.Integer,  ...value.IntegerValue]
+     *     REAL     [java.lang.Double,   ...value.RealValue]
+     *     STRING   [java.lang.String,   ...value.StringValue]
+     * </pre>
+     * Four kinds are carried by two classes each — that <em>is</em> D-18 — but never within one
+     * operation. A historical operation's declared return type is one class, so for any single
+     * operation there is exactly one right answer and "the port used the other class" is a defect and
+     * not a representation choice. That is the whole of the distinction, and it is a measurement
+     * rather than an argument.
+     *
+     * <p>The one legitimately-different representation that does exist is the <em>package</em>: see
+     * {@code DifferentialHarnessRegressionTest.theTypeTokenIsPackageInsensitiveOnPurpose}. The
+     * canonical form compares the simple name for exactly that reason.
+     *
+     * <p>If this test ever fails, the corpora have grown to reach an operation that answers with two
+     * classes, and the justification above has to be re-read before its green is believed again.
+     */
+    @Test
+    @DisplayName("D-18's premise: no operation answers with two different runtime classes")
+    void noOperationAnswersWithTwoRuntimeClasses() {
+        Map<String, Set<String>> classesPerOperation = new TreeMap<>();
+        Map<String, Set<String>> classesPerKind = new TreeMap<>();
+        Map<String, Integer> rowsPerClass = new TreeMap<>();
+
+        for (UOp op : operations) {
+            Set<String> here = new TreeSet<>();
+            for (List<UValue> tuple : tuplesByOp.get(op.key())) {
+                UValue produced;
+                try {
+                    produced = reference.invoke(op, tuple);
+                } catch (Throwable t) {
+                    continue; // threw, or unmarshallable: no observed class on this row
+                }
+                if (produced.javaType() == null) {
+                    continue; // NULL / VOID: the absence of a result has no class
+                }
+                here.add(produced.javaType());
+                rowsPerClass.merge(produced.javaType(), 1, Integer::sum);
+                classesPerKind.computeIfAbsent(produced.kind().name(), k -> new TreeSet<>())
+                        .add(produced.javaType());
+            }
+            if (!here.isEmpty()) {
+                classesPerOperation.put(op.key(), here);
+            }
+        }
+
+        Map<String, Set<String>> ambiguousOperations = new TreeMap<>();
+        classesPerOperation.forEach((key, classes) -> {
+            if (classes.size() > 1) {
+                ambiguousOperations.put(key, classes);
+            }
+        });
+
+        System.out.println("=== representation census: what the reference actually returns =====");
+        System.out.println("operations                 " + operations.size()
+                + "  (" + classesPerOperation.size() + " ever returned a classed value)");
+        System.out.println("--- every runtime class the reference returned, and on how many rows");
+        rowsPerClass.forEach((c, n) -> System.out.println("  " + n + "\t" + c));
+        System.out.println("--- classes per UValue.Kind (two means the KIND is ambiguous: D-18) ---");
+        classesPerKind.forEach((k, cs) -> System.out.println("  " + k + "  " + cs
+                + (cs.size() > 1 ? "   <== two representations of one kind" : "")));
+        System.out.println("--- operations whose OWN answers used more than one class -------------");
+        System.out.println("  " + (ambiguousOperations.isEmpty() ? "(none)" : ambiguousOperations));
+        System.out.println("===================================================================");
+
+        assertEquals(Map.of(), ambiguousOperations,
+                "an operation that legitimately answers with two different runtime classes would be "
+                        + "reported as diverging on the rows where a faithful port picked the other "
+                        + "one. The D-18 fix rests on this set being empty; it is not, so the "
+                        + "type-bearing canonical form needs a documented equivalence for these "
+                        + "operations before its divergences can be read as defects.");
+        // And the other half of the same fact, stated positively: the collision D-18 is about is
+        // real and is across operations, not within one. If this becomes false the defect is gone.
+        assertTrue(classesPerKind.values().stream().anyMatch(cs -> cs.size() > 1),
+                "no Kind is carried by two classes any more, so D-18 could not have existed: "
+                        + classesPerKind);
+    }
+
+    /**
+     * The planted infidelity itself: a raw Java result re-expressed as the {@code Value} class of the
+     * same kind, content untouched. A no-op for a result that already <em>is</em> a {@code Value}.
+     */
+    private static UValue boxIntoValueClass(UValue produced) {
+        switch (produced.kind()) {
+            case BOOLEAN:
+            case INTEGER:
+            case REAL:
+            case STRING:
+                return perfectPort.fromHistorical(perfectPort.toHistorical(produced));
+            default:
+                return produced;
+        }
+    }
+
     // ------------------------------------------------------------------ the metric, by hand
 
     /**

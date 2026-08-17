@@ -241,7 +241,43 @@ public final class DifferentialSweep {
         }
         boolean agree = ref.value.canonical().equals(sub.value.canonical());
         return new DiffRow(index, op.key(), inputs, ref.value.canonical(), sub.value.canonical(),
-                agree ? DiffVerdict.AGREE : DiffVerdict.DIFFER, "");
+                agree ? DiffVerdict.AGREE : DiffVerdict.DIFFER,
+                agree ? "" : typeNote(ref.value, sub.value));
+    }
+
+    /**
+     * The note on a {@link DiffVerdict#DIFFER} row, which is empty unless the <em>Java types</em>
+     * differ — the D-18 case.
+     *
+     * <p>{@link UValue#canonical()} compares {@link UValue#typeToken()}, the simple class name;
+     * this note carries both sides' fully-qualified names, which is the information the token drops,
+     * and says outright whether the content was identical. "The port returned the right number in
+     * the wrong class" and "the port returned the wrong number" are different findings and a reader
+     * must not have to reconstruct which one a row is from two nearly-identical columns.
+     *
+     * <p>An ordinary content divergence keeps the empty note it always had: the two columns already
+     * say everything, and filling every {@code DIFFER} row in the report with prose would bury the
+     * rows where the note is load-bearing.
+     */
+    private static String typeNote(UValue ref, UValue sub) {
+        String refType = ref.javaType();
+        String subType = sub.javaType();
+        if (java.util.Objects.equals(refType, subType)) {
+            return "";
+        }
+        return "java type mismatch: reference returned " + describeType(ref)
+                + " / subject returned " + describeType(sub) + "; the content is "
+                + (ref.content().equals(sub.content()) ? "IDENTICAL -- right content, wrong Java "
+                        + "type (defect D-18); this row is a divergence because a port of these "
+                        + "classes must reproduce the declared result type, not only the payload"
+                        : "different as well")
+                + ".";
+    }
+
+    private static String describeType(UValue value) {
+        return value.javaType() == null
+                ? value.kind() + " (no observed class: " + value.canonical() + ")"
+                : value.javaType() + " (" + value.canonical() + ")";
     }
 
     private static String unmeasurableNote(Outcome ref, Outcome sub) {

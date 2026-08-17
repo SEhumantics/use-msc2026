@@ -153,15 +153,33 @@ class UnwrittenPortInvariantTest {
                         + "is what has been reviewed. Detail: "
                         + tally.discriminatingFullyAgreedOperations());
 
-        // The other half of the split is printed, not asserted on here, and deliberately so. An
-        // operation the subject agreed with on every driven row while the reference gave ONE answer
-        // throughout is not a finding about the subject -- a constant is genuinely the right answer
-        // for a constant operation, and every row is individually correct. It is a finding about the
-        // CORPUS: that operation could not have failed, so its agreement figure is worth nothing.
-        // Asserting "the degenerate bucket is degenerate" here would restate the predicate that
-        // sorted it, which is the tautology D-20 is filed against. The enforcement that is NOT a
-        // restatement is aNoLogicPortCannotProduceAStagePass below: it drives the real
-        // Result.requireStagePass over a stage-shaped sweep and requires it to refuse.
+        // ---- the other half of the split: ASSERTED, not merely printed (defect D-35) -------------
+        //
+        // Commit 0a93ad4f introduced the DISCRIMINATING / NOT-DISCRIMINATING split, which is right:
+        // an operation the subject agreed with on every driven row while the reference gave ONE
+        // answer throughout is a finding about the CORPUS, not about the subject. What 0a93ad4f also
+        // did was stop asserting the second bucket at all, leaving it printed -- and the commit
+        // before, it was asserted (as part of one undivided fullyAgreedOperations() set). A standing
+        // invariant that stops asserting is how a closed door reopens: `RealValue.value()` had
+        // already moved out of an asserted list into a printed one between those two commits, with
+        // nothing failing.
+        //
+        // The D-20 objection that was offered for dropping it does not hold. D-20 is about a test
+        // that asserts the *predicate it branched on*. This assertion does not: the branch is
+        // "referenceValues().size() < 2" and what is pinned is WHICH OPERATIONS land there, an
+        // extensional fact about the historical code and the shipped corpora that no predicate in
+        // this file computes. It is the same kind of pin as the discriminating half above, and it
+        // changes for the same three reasons: the corpora widened, the jars changed, or the harness
+        // resolution changed. All three are things a reader must be told about.
+        assertEquals(subject.reviewedDegenerateFullyAgreed,
+                tally.degenerateFullyAgreedOperations().keySet(),
+                "operations scored agreement on EVERY row the harness could drive while the "
+                        + "reference gave exactly ONE answer, against the subject '" + subject.id
+                        + "' (" + subject.body + "). These are not findings about the subject -- a "
+                        + "constant is the right answer for a constant operation -- they are the "
+                        + "operations whose agreement figure is worth nothing, and the set must not "
+                        + "grow or shrink without a reader being told. Detail: "
+                        + tally.degenerateFullyAgreedOperations());
     }
 
     // ------------------------------------------------------------------ the subjects
@@ -195,15 +213,24 @@ class UnwrittenPortInvariantTest {
          * grow without someone writing down why.
          */
         final Set<String> reviewedFullyAgreed;
+        /**
+         * The other half of the split: operations this subject is fully agreed with on while the
+         * reference gave exactly one answer. Reviewed and pinned for the same reason, and stated
+         * separately because it means something different — a fact about the corpus rather than about
+         * the subject. Unasserted between {@code 0a93ad4f} and the D-35 fix.
+         */
+        final Set<String> reviewedDegenerateFullyAgreed;
         private final Supplier<Candidate> factory;
 
         Subject(String id, String body, Observability observes, boolean abortsWithError,
-                Set<String> reviewedFullyAgreed, Supplier<Candidate> factory) {
+                Set<String> reviewedFullyAgreed, Set<String> reviewedDegenerateFullyAgreed,
+                Supplier<Candidate> factory) {
             this.id = id;
             this.body = body;
             this.observes = observes;
             this.abortsWithError = abortsWithError;
             this.reviewedFullyAgreed = reviewedFullyAgreed;
+            this.reviewedDegenerateFullyAgreed = reviewedDegenerateFullyAgreed;
             this.factory = factory;
         }
 
@@ -219,72 +246,63 @@ class UnwrittenPortInvariantTest {
 
     /**
      * The operations a receiver-echoing subject is allowed to agree with completely <em>on every
-     * driven row while the reference gave more than one answer</em>, and why each one is allowed.
+     * driven row while the reference gave more than one answer</em>. <strong>It is now empty, and the
+     * four entries it used to hold are why D-18 was fixed.</strong>
      *
-     * <p>All four are the same limit, stated four times. Their declared return types are raw Java,
-     * checked with {@code javap -p} on the vendored {@code use.jar}:
+     * <p>Those four were {@code BooleanValue.value()}, {@code BooleanValue.isTrue()},
+     * {@code IntegerValue.value()} and {@code StringValue.value()} — the same limit stated four
+     * times. Their declared return types are raw Java, checked with {@code javap -p} on the vendored
+     * {@code use.jar}:
      * <pre>
      *   public boolean       BooleanValue.value()
      *   public boolean       BooleanValue.isTrue()     // body: aload_0; getfield fValue:Z; ireturn
      *   public int           IntegerValue.value()
      *   public java.lang.String StringValue.value()
      * </pre>
-     * {@code HistoricalOracle.fromHistorical} maps a raw {@code Boolean}/{@code Integer}/
-     * {@code CharSequence} to the same {@link UValue.Kind} as {@code BooleanValue}/
-     * {@code IntegerValue}/{@code StringValue}, so {@code BOOLEAN(true)} from a raw {@code boolean}
-     * and {@code BOOLEAN(true)} from a {@code BooleanValue} are the same canonical string. Handing
-     * back the receiver really is indistinguishable, at this instrument's resolution, from returning
-     * the receiver's value — and for these four operations that <em>is</em> the correct answer, so
-     * the agreement is genuine as far as it goes.
+     * {@code HistoricalOracle.fromHistorical} used to map a raw {@code Boolean}/{@code Integer}/
+     * {@code CharSequence} to the same {@link UValue.Kind} <em>and the same canonical form</em> as
+     * {@code BooleanValue}/{@code IntegerValue}/{@code StringValue}, so handing back the receiver was
+     * indistinguishable, at this instrument's resolution, from returning the receiver's value. That
+     * was defect D-18 in its whole visible extent: the four operations here were the part of a
+     * <strong>193-of-285</strong> blind spot that a subject with no code in it happened to reach.
      *
-     * <p>It is also the honest statement of the <em>limit</em>: the canonical vocabulary does not
-     * separate a primitive result from a boxed {@code Value} result, so on the 193 of 285 operations
-     * whose return type shares a canonical form with another Java type, a port returning the right
-     * content with the wrong Java type is scored {@code AGREE} (defect D-18). Pinning this set is
-     * what stops the blind spot spreading unremarked: a fifth operation becoming fully agreeable to
-     * a subject that does nothing but hand back its receiver fails this test, and someone has to
-     * explain it.
+     * <p>Since {@link UValue#canonical()} became type-bearing, the echoing subject returns the corpus
+     * value it was handed — a {@code BOOLEAN(true)@BooleanValue} — against a reference that returns a
+     * raw {@code boolean}, i.e. {@code BOOLEAN(true)@Boolean}, and every one of those rows is a
+     * {@link DiffVerdict#DIFFER} carrying a note that names both Java types. So the set is empty, and
+     * it stays asserted: a fifth operation becoming fully agreeable to a subject that does nothing but
+     * hand back its receiver still fails this test, and someone still has to explain it.
      *
-     * <p><strong>Three of the four are new, and they are new because the corpora were widened.</strong>
-     * {@code BooleanValue.*} and {@code StringValue.*} had no receiver to be driven on at all until
-     * {@link InputGenerator#booleanBoundaries()} and {@link InputGenerator#stringBoundaries()} were
-     * added (defect D-19); they were 100 % {@code HARNESS_ERROR} and invisible. Measuring more
-     * surface found more of the limit, which is the correct direction.
-     *
-     * <p><strong>{@code RealValue.value()} was on this list and has been removed</strong>, and that
-     * is not an improvement either. It is still fully agreed against the echoing subject; it is no
-     * longer in the <em>discriminating</em> half of that set, because the shipped corpora contain
-     * exactly <em>one</em> {@code RealValue} — {@code REAL(0.0)}, from
-     * {@link InputGenerator#zeroDivisors()}. With one receiver, all 23 {@code RealValue.*} operations
-     * have a one-point codomain by arithmetic, and nothing about them can be measured. It moves to
-     * the labelled degenerate population rather than staying on a list that reads as a sign-off.
+     * <p><strong>{@code RealValue.value()} is the same story one bucket over.</strong> It was on this
+     * list, moved to the printed-and-unasserted degenerate bucket under {@code 0a93ad4f} (which is the
+     * instance that made D-35 concrete), and is now detected for the same reason as the other four:
+     * {@code public double RealValue.value()} returns a raw {@code Double}. Both buckets of subject
+     * {@code f} are consequently empty, and both are asserted.
      */
-    private static final Set<String> ECHO_SUBJECT_REVIEWED = Set.of(
-            "BooleanValue.value()", "BooleanValue.isTrue()",
-            "IntegerValue.value()", "StringValue.value()");
+    private static final Set<String> ECHO_SUBJECT_REVIEWED = Set.of();
 
     static List<Subject> degenerateSubjects() {
         return List.of(
                 new Subject("a-throws", "throw new RuntimeException(\"TODO: port \" + op.key())",
-                        Observability.NOTHING, false, Set.of(),
+                        Observability.NOTHING, false, Set.of(), Set.of(),
                         () -> new DegeneratePort("unwritten-port", DegeneratePort.Body.THROW)),
                 new Subject("b-returns-java-null", "return null",
-                        Observability.NOTHING, false, Set.of(),
+                        Observability.NOTHING, false, Set.of(), Set.of(),
                         () -> new DegeneratePort("returns-java-null", DegeneratePort.Body.JAVA_NULL)),
                 new Subject("c-empty-body", "{ } -- i.e. return UValue.voidValue()",
-                        Observability.NOTHING, false, Set.of(),
+                        Observability.NOTHING, false, Set.of(), Set.of(),
                         () -> new DegeneratePort("do-nothing-port", DegeneratePort.Body.VOID_VALUE)),
                 new Subject("d-returns-null-value", "return UValue.nullValue()",
-                        Observability.NOTHING, false, Set.of(),
+                        Observability.NOTHING, false, Set.of(), Set.of(),
                         () -> new DegeneratePort("returns-null-value", DegeneratePort.Body.NULL_VALUE)),
                 new Subject("e-fixed-constant", "return UValue.uBoolean(true, 1.0)",
-                        Observability.WRONG_VALUES, false, Set.of(),
+                        Observability.WRONG_VALUES, false, Set.of(), Set.of(),
                         () -> new DegeneratePort("const-ubool-true", DegeneratePort.Body.CONSTANT)),
                 new Subject("f-echoes-receiver", "return args.get(0)",
-                        Observability.WRONG_VALUES, false, ECHO_SUBJECT_REVIEWED,
+                        Observability.WRONG_VALUES, false, ECHO_SUBJECT_REVIEWED, Set.of(),
                         () -> new DegeneratePort("echoes-receiver", DegeneratePort.Body.FIRST_ARGUMENT)),
                 new Subject("g-throws-error", "throw new AssertionError(\"TODO: port \" + op.key())",
-                        Observability.NOTHING, true, Set.of(),
+                        Observability.NOTHING, true, Set.of(), Set.of(),
                         () -> new DegeneratePort("throws-error", DegeneratePort.Body.ERROR)));
     }
 
@@ -557,8 +575,11 @@ class UnwrittenPortInvariantTest {
             discriminating.forEach((key, detail) -> System.out.println("  *** " + key + "  (" + detail
                     + (subject.reviewedFullyAgreed.contains(key) ? "; reviewed and signed off)" : ")")));
             System.out.println("fully agreed ops, NOT DISCRIMINATING (a finding about the corpus)  "
-                    + (degenerate.isEmpty() ? "(none)" : degenerate.size() + " operations"));
-            degenerate.forEach((key, detail) -> System.out.println("  --- " + key + "  (" + detail + ")"));
+                    + (degenerate.isEmpty() ? "(none)" : degenerate.size() + " operations")
+                    + "   [ASSERTED against reviewedDegenerateFullyAgreed since the D-35 fix]");
+            degenerate.forEach((key, detail) -> System.out.println("  --- " + key + "  (" + detail
+                    + (subject.reviewedDegenerateFullyAgreed.contains(key)
+                            ? "; reviewed and signed off)" : ")")));
             if (agreementRows > 0) {
                 System.out.println("--- per-operation agreement tally (agreed/driven/rows) ------------");
                 perOperation.forEach((key, per) -> {
@@ -760,7 +781,13 @@ class UnwrittenPortInvariantTest {
 
         try (HistoricalOracle oracle = HistoricalOracle.open()) {
             Map<String, UValue> literals = new TreeMap<>();
-            literals.put(isUReal.key(), UValue.bool(true));
+            // Typed as java.lang.Boolean, not as BooleanValue: URealValue.isUReal() is declared
+            // `public boolean` (javap -p on the vendored use.jar), so a port that answered
+            // BooleanValue.get(true) here would be returning the right content in the wrong Java
+            // type, which is a DIFFER since D-18 was fixed. The subject of this test has to be a
+            // port that is right about everything except discrimination, or the sweep it produces
+            // is not the clean-but-degenerate sweep the sign-off route exists for.
+            literals.put(isUReal.key(), UValue.bool(true).asJavaType("java.lang.Boolean"));
             try (Candidate port = new ConstantTablePort("constant-true", literals)) {
                 DifferentialSweep.Result result = new DifferentialSweep(oracle, port, generator.seed())
                         .run(isUReal, tuples(stageDomains(isUReal, corpora)));
@@ -771,12 +798,12 @@ class UnwrittenPortInvariantTest {
 
                 assertTrue(result.isClean(), "precondition: the old predicate says pass: " + result.summary());
                 assertEquals(1, result.distinctReferenceValues(), result.summary());
-                assertEquals("BOOLEAN(true)", result.soleReferenceValue());
+                assertEquals("BOOLEAN(true)@Boolean", result.soleReferenceValue());
                 assertFalse(result.isStagePass(1, AcceptedDegenerateOperations.none()),
                         "unsigned, a single-valued operation is not a pass");
 
                 AcceptedDegenerateOperations signed = AcceptedDegenerateOperations.builder()
-                        .accept(isUReal.key(), "BOOLEAN(true)",
+                        .accept(isUReal.key(), "BOOLEAN(true)@Boolean",
                                 "URealValue.isUReal() is a type predicate: the historical body is "
                                         + "iconst_1/ireturn, so BOOLEAN(true) is the whole of its "
                                         + "specification and no corpus can make it answer otherwise. "
@@ -793,19 +820,21 @@ class UnwrittenPortInvariantTest {
                 // Keyed on the VALUE as well as the operation: a sign-off reviewed against one
                 // answer must not survive the operation starting to answer something else.
                 AcceptedDegenerateOperations wrongValue = AcceptedDegenerateOperations.builder()
-                        .accept(isUReal.key(), "BOOLEAN(false)", "same operation, the other answer")
+                        .accept(isUReal.key(), "BOOLEAN(false)@Boolean",
+                                "same operation, the other answer")
                         .build();
                 assertFalse(result.isStagePass(1, wrongValue),
                         "a sign-off written against a different value must not match");
                 AcceptedDegenerateOperations wrongOp = AcceptedDegenerateOperations.builder()
-                        .accept("URealValue.isDefined()", "BOOLEAN(true)", "a different operation")
+                        .accept("URealValue.isDefined()", "BOOLEAN(true)@Boolean",
+                                "a different operation")
                         .build();
                 assertFalse(result.isStagePass(1, wrongOp),
                         "a sign-off written against a different operation must not match");
 
                 org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                         () -> AcceptedDegenerateOperations.builder()
-                                .accept(isUReal.key(), "BOOLEAN(true)", "  "),
+                                .accept(isUReal.key(), "BOOLEAN(true)@Boolean", "  "),
                         "a blank rationale is exactly the blanket exemption this class prevents");
             }
         }

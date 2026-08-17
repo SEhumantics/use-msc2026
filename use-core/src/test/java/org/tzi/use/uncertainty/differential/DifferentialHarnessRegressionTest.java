@@ -121,14 +121,15 @@ class DifferentialHarnessRegressionTest {
                     "a zero-row sweep looks clean, which is the trap");
 
             IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                    () -> DiffReportWriter.writeAll("must-not-be-written.tsv", List.of(empty), Map.of()));
+                    () -> DiffReportWriter.writeAll("must-not-be-written.tsv", List.of(empty), Map.of(),
+                            AcceptedDegenerateOperations.none()));
             assertTrue(e.getMessage().contains("0 rows"), e.getMessage());
 
             // The old guard tested results.isEmpty(), so a non-empty list of empty Results slipped
             // through. Pin that specific shape.
             assertThrows(IllegalArgumentException.class,
                     () -> DiffReportWriter.writeAll("must-not-be-written.tsv", List.of(empty, empty),
-                            Map.of()));
+                            Map.of(), AcceptedDegenerateOperations.none()));
             assertFalse(java.nio.file.Files.exists(
                             DiffReportWriter.reportDir().resolve("must-not-be-written.tsv")),
                     "the refused report must not have been created");
@@ -508,7 +509,7 @@ class DifferentialHarnessRegressionTest {
 
             assertEquals(DiffVerdict.DIFFER, row.verdict(), row.toTsv());
             assertEquals("VOID", row.historical());
-            assertEquals("UREAL(7.0,0.0)", row.ported());
+            assertEquals("UREAL(7.0,0.0)@URealValue", row.ported());
         }
     }
 
@@ -617,7 +618,8 @@ class DifferentialHarnessRegressionTest {
             assertEquals(0, voidOnly.measurementCount());
 
             IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-                    () -> DiffReportWriter.writeAll("no-measurements.tsv", List.of(voidOnly), Map.of()),
+                    () -> DiffReportWriter.writeAll("no-measurements.tsv", List.of(voidOnly), Map.of(),
+                            AcceptedDegenerateOperations.none()),
                     "the old guard counted rows, so a maximally green report over zero comparisons "
                             + "was written happily");
             System.out.println("=== D-11: writer refusal ==========================================");
@@ -693,7 +695,8 @@ class DifferentialHarnessRegressionTest {
             assertEquals(3, varied.measurementCount());
             assertEquals(3, varied.distinctReferenceValues(),
                     "the REFERENCE gave three answers; the subject gave one. " + varied.summary());
-            assertEquals(List.of("UREAL(1.0,0.0)", "UREAL(2.0,0.0)", "UREAL(3.0,0.0)"),
+            assertEquals(List.of("UREAL(1.0,0.0)@URealValue", "UREAL(2.0,0.0)@URealValue",
+                            "UREAL(3.0,0.0)@URealValue"),
                     List.copyOf(varied.referenceValues()));
             assertNull(varied.soleReferenceValue(), "there is no sole value when there are three");
             assertTrue(varied.isDiscriminating());
@@ -703,7 +706,7 @@ class DifferentialHarnessRegressionTest {
                     .sweepBinary(op, List.of(UValue.uReal(3.0, 0.0)), argument);
             assertTrue(degenerate.isClean(), "the old predicate says pass: " + degenerate.summary());
             assertEquals(1, degenerate.distinctReferenceValues());
-            assertEquals("UREAL(3.0,0.0)", degenerate.soleReferenceValue());
+            assertEquals("UREAL(3.0,0.0)@URealValue", degenerate.soleReferenceValue());
             assertFalse(degenerate.isDiscriminating());
         }
 
@@ -783,16 +786,16 @@ class DifferentialHarnessRegressionTest {
 
             // (6) The sign-off, and its exactness. The rationale reaches the evidence.
             AcceptedDegenerateOperations signed = AcceptedDegenerateOperations.builder()
-                    .accept(op.key(), "UREAL(2.0,0.0)", "reviewed: a one-point domain, kept as a "
+                    .accept(op.key(), "UREAL(2.0,0.0)@URealValue", "reviewed: a one-point domain, kept as a "
                             + "reachability check only")
                     .build();
             assertTrue(degenerate.isStagePass(1, signed));
             assertTrue(degenerate.stageStatement(signed).contains("acknowledged: reviewed:"),
                     degenerate.stageStatement(signed));
             assertFalse(degenerate.isStagePass(1, AcceptedDegenerateOperations.builder()
-                    .accept(op.key(), "UREAL(9.9,0.0)", "a different value").build()));
+                    .accept(op.key(), "UREAL(9.9,0.0)@URealValue", "a different value").build()));
             assertFalse(degenerate.isStagePass(1, AcceptedDegenerateOperations.builder()
-                    .accept("URealValue.minus(value)", "UREAL(2.0,0.0)", "a different op").build()));
+                    .accept("URealValue.minus(value)", "UREAL(2.0,0.0)@URealValue", "a different op").build()));
             assertThrows(NullPointerException.class, () -> degenerate.isStagePass(1, null));
             System.out.println("===================================================================");
         }
@@ -818,7 +821,7 @@ class DifferentialHarnessRegressionTest {
             DifferentialSweep.Result varied = sweep.sweepBinary(minus, many, many);
 
             AcceptedDegenerateOperations signed = AcceptedDegenerateOperations.builder()
-                    .accept(add.key(), "UREAL(2.0,0.0)", "reviewed: one-point domain")
+                    .accept(add.key(), "UREAL(2.0,0.0)@URealValue", "reviewed: one-point domain")
                     .build();
             java.nio.file.Path written = DiffReportWriter.writeAll("d15-header.tsv",
                     List.of(degenerate, varied), Map.of(), signed);
@@ -838,13 +841,216 @@ class DifferentialHarnessRegressionTest {
                     "precondition: the file-level header reads as a clean run");
             assertTrue(header.contains("# op.URealValue.add(value).distinctReferenceValues\t1"), header.toString());
             assertTrue(header.contains("# op.URealValue.add(value).discriminating\tfalse"), header.toString());
-            assertTrue(header.contains("# op.URealValue.add(value).soleReferenceValue\tUREAL(2.0,0.0)"),
+            assertTrue(header.contains(
+                    "# op.URealValue.add(value).soleReferenceValue\tUREAL(2.0,0.0)@URealValue"),
                     header.toString());
             assertTrue(header.contains("# op.URealValue.add(value).degenerate.acknowledged\t"
                     + "reviewed: one-point domain"), header.toString());
             assertTrue(header.contains("# op.URealValue.minus(value).discriminating\ttrue"), header.toString());
             assertTrue(header.contains("# accepted.degenerateOperations\t1"), header.toString());
         }
+    }
+
+    // ------------------------------------------------------------------ D-34: the header cannot lie
+
+    /**
+     * <strong>D-34: a report must not be able to understate the sign-offs its own verdict rests
+     * on.</strong>
+     *
+     * <p>{@code DiffReportWriter} used to offer a three-argument {@code writeAll} that substituted
+     * {@link AcceptedDegenerateOperations#none()}, and all five call sites in the tree used it. So a
+     * stage could take a pass that <em>only exists because of a written sign-off</em> and publish a
+     * report whose header asserts {@code # accepted.degenerateOperations 0}. Measured before the fix
+     * on exactly the sweep below:
+     * <pre>
+     *   sign-off in force?   1  [URealValue.add(value)|UREAL(2.0,0.0)@URealValue -&gt; ...]
+     *   stage pass WITHOUT the sign-off? false
+     *   stage pass WITH    the sign-off? true
+     *   # accepted.degenerateOperations   0
+     * </pre>
+     *
+     * <p>Two halves, and the second is the one that keeps the fix:
+     * <ol>
+     *   <li>the header of a report written under a sign-off carries the count <em>and</em> the
+     *       rationale verbatim, and the report of the same sweep written under
+     *       {@code none()} is a <em>different file</em>, so the two runs are never
+     *       byte-indistinguishable;</li>
+     *   <li>no {@code write}/{@code writeAll} overload exists that omits the parameter. Asserted
+     *       reflectively rather than by inspection, because "all five call sites pass it today" is a
+     *       fact about today and a sixth call site is one line of typing. The hole was a default
+     *       value, so the fix is the absence of a default.</li>
+     * </ol>
+     */
+    @Test
+    @DisplayName("D-34: a report cannot understate the sign-offs its verdict was granted under")
+    void aReportCannotUnderstateItsOwnSignOffs() throws java.io.IOException {
+        UOp op = UOp.binary("URealValue", "add");
+        List<UValue> one = List.of(UValue.uReal(1.0, 0.0));
+
+        try (StubCandidate a = StubCandidate.faithful(); StubCandidate b = StubCandidate.faithful()) {
+            DifferentialSweep.Result degenerate = new DifferentialSweep(a, b, 1L)
+                    .sweepBinary(op, one, one);
+
+            String sole = degenerate.soleReferenceValue();
+            assertNotNull(sole, "precondition: one receiver, one answer");
+            AcceptedDegenerateOperations signed = AcceptedDegenerateOperations.builder()
+                    .accept(op.key(), sole, "reviewed: a one-point domain, kept as a reachability "
+                            + "check only; nothing here is evidence about the addition rule")
+                    .build();
+
+            // The pass exists ONLY because of the sign-off. That is the premise of the defect.
+            assertFalse(degenerate.isStagePass(1, AcceptedDegenerateOperations.none()));
+            assertTrue(degenerate.isStagePass(1, signed));
+
+            List<String> underSignOff = headerOf(DiffReportWriter.write(
+                    "d34-under-sign-off.tsv", degenerate, Map.of(), signed));
+            List<String> underNone = headerOf(DiffReportWriter.write(
+                    "d34-under-none.tsv", degenerate, Map.of(),
+                    AcceptedDegenerateOperations.none()));
+
+            System.out.println("=== D-34: the same sweep, two sign-off sets =======================");
+            underSignOff.stream().filter(l -> l.startsWith("# accepted"))
+                    .forEach(l -> System.out.println("  signed:  " + l));
+            underNone.stream().filter(l -> l.startsWith("# accepted"))
+                    .forEach(l -> System.out.println("  none:    " + l));
+            System.out.println("===================================================================");
+
+            assertTrue(underSignOff.contains("# accepted.degenerateOperations\t1"),
+                    underSignOff.toString());
+            assertTrue(underSignOff.stream().anyMatch(l -> l.startsWith("# accepted.degenerateOperation\t")
+                            && l.contains("reviewed: a one-point domain")),
+                    "the rationale itself must travel with the number: " + underSignOff);
+            assertTrue(underNone.contains("# accepted.degenerateOperations\t0"), underNone.toString());
+            assertNotEquals(underSignOff, underNone,
+                    "a run with a sign-off in force must not be indistinguishable from one without");
+
+            // (2) The overload that made the understatement possible must not exist.
+            for (java.lang.reflect.Method m : DiffReportWriter.class.getMethods()) {
+                if (!m.getName().equals("write") && !m.getName().equals("writeAll")) {
+                    continue;
+                }
+                assertTrue(List.of(m.getParameterTypes()).contains(AcceptedDegenerateOperations.class),
+                        "DiffReportWriter." + m.getName() + java.util.Arrays.toString(m.getParameterTypes())
+                                + " can write a report without being told which sign-offs were in "
+                                + "force, and will substitute none(). That is defect D-34: the header "
+                                + "then asserts '# accepted.degenerateOperations 0' about a pass that "
+                                + "a sign-off granted.");
+            }
+        }
+    }
+
+    private static List<String> headerOf(java.nio.file.Path report) throws java.io.IOException {
+        List<String> header = new java.util.ArrayList<>();
+        for (String line : java.nio.file.Files.readAllLines(report,
+                java.nio.charset.StandardCharsets.UTF_8)) {
+            if (!line.startsWith("#")) {
+                break;
+            }
+            header.add(line);
+        }
+        return header;
+    }
+
+    // ------------------------------------------------------------------ D-18: the type-bearing form
+
+    /**
+     * <strong>D-18, at unit resolution: the two shapes of "wrong type", and which of them was already
+     * caught.</strong>
+     *
+     * <p>The brief for this fix names two cases and they had different starting points, which the
+     * record should not blur:
+     * <ul>
+     *   <li>a <strong>{@link UValue.Kind} difference</strong> — {@code URealValue(3,0)} where the
+     *       historical answers {@code UIntegerValue(3,0)}, or {@code IntegerValue} where
+     *       {@code UIntegerValue} is required — was <em>always</em> a {@link DiffVerdict#DIFFER}, because
+     *       the kind is the leading token of the canonical form. Pinned here so that stays true;</li>
+     *   <li>a <strong>runtime-class difference inside one kind</strong> — a raw {@code java.lang.Integer}
+     *       against an {@code org.tzi.use.uml.ocl.value.IntegerValue}, same payload — was
+     *       {@link DiffVerdict#AGREE} on 193 of 285 operations, and is the defect.</li>
+     * </ul>
+     * The note on such a row must name both fully-qualified types and say the content was identical,
+     * because "the port returned the right number in the wrong class" and "the port returned the wrong
+     * number" are different findings and the two columns look nearly the same.
+     */
+    @Test
+    @DisplayName("D-18: a Kind difference and a runtime-class difference are both DIFFER, and the "
+            + "note names both types")
+    void rightContentInTheWrongJavaTypeIsADifference() {
+        // (1) The Kind difference. Already caught before the fix; must not regress.
+        assertNotEquals(UValue.uReal(3.0, 0.0).canonical(), UValue.uInteger(3, 0.0).canonical());
+        assertNotEquals(UValue.integer(3).canonical(), UValue.uInteger(3, 0.0).canonical());
+        assertNotEquals(UValue.bool(true).canonical(), UValue.uBoolean(true, 0.0).canonical());
+
+        // (2) The runtime-class difference inside one kind. This is the defect.
+        UValue raw = UValue.integer(7).asJavaType("java.lang.Integer");
+        UValue boxed = UValue.integer(7);
+        assertEquals("INTEGER(7)@Integer", raw.canonical());
+        assertEquals("INTEGER(7)@IntegerValue", boxed.canonical());
+        assertEquals(raw.content(), boxed.content(), "the payload is the same; only the type moved");
+        assertNotEquals(raw.canonical(), boxed.canonical());
+        assertNotEquals(raw, boxed, "and UValue equality is canonical equality");
+
+        // (3) The note, on a real row.
+        UOp op = UOp.unary("URealValue", "neg");
+        try (Candidate ref = new ReturnsFixed("ref", raw);
+             Candidate sub = new ReturnsFixed("sub", boxed)) {
+            DiffRow row = new DifferentialSweep(ref, sub, 1L)
+                    .sweepUnary(op, List.of(UValue.uReal(1.0, 0.0))).rows().get(0);
+            System.out.println("=== D-18: the type-mismatch note =================================");
+            System.out.println(row.toTsv());
+            System.out.println("===================================================================");
+
+            assertEquals(DiffVerdict.DIFFER, row.verdict(), row.toTsv());
+            assertTrue(row.note().contains("java.lang.Integer"), row.note());
+            assertTrue(row.note().contains("org.tzi.use.uml.ocl.value.IntegerValue"), row.note());
+            assertTrue(row.note().contains("IDENTICAL"), row.note());
+            assertTrue(row.note().contains("D-18"), row.note());
+        }
+
+        // (4) An ordinary content divergence keeps the empty note it always had: the columns say it.
+        try (Candidate ref = new ReturnsFixed("ref", UValue.uReal(1.0, 0.0));
+             Candidate sub = new ReturnsFixed("sub", UValue.uReal(2.0, 0.0))) {
+            DiffRow row = new DifferentialSweep(ref, sub, 1L)
+                    .sweepUnary(op, List.of(UValue.uReal(1.0, 0.0))).rows().get(0);
+            assertEquals(DiffVerdict.DIFFER, row.verdict());
+            assertEquals("", row.note(), "only a TYPE mismatch earns a note here");
+        }
+
+        // (5) NULL and VOID stand for the absence of a result, so they carry no observed class and
+        //     render exactly as they always did. A non-result cannot be re-typed.
+        assertEquals("NULL", UValue.nullValue().canonical());
+        assertEquals("VOID", UValue.voidValue().canonical());
+        assertNull(UValue.nullValue().javaType());
+        assertThrows(IllegalStateException.class, () -> UValue.voidValue().asJavaType("whatever"));
+    }
+
+    /**
+     * The canonical form compares the <em>simple</em> class name, not the package, and that is a
+     * deliberate choice with a cost: two classes of one simple name in different packages compare
+     * equal. It is the right trade because the historical side is loaded from a vendored jar by an
+     * isolated class loader while the ported side comes from the reactor, and a port that relocated
+     * {@code URealValue} into another package would otherwise show every row as a divergence — a
+     * difference in where a file lives, not in what an operation answered.
+     *
+     * <p>Nothing is discarded: the fully-qualified name survives on {@link UValue#javaType()} and is
+     * what {@link DifferentialSweep}'s type note prints.
+     */
+    @Test
+    @DisplayName("D-18: the compared type token is the simple name; the FQN survives for the note")
+    void theTypeTokenIsPackageInsensitiveOnPurpose() {
+        UValue here = UValue.uReal(1.0, 0.0);
+        UValue relocated = here.asJavaType("com.example.port.value.URealValue");
+        assertEquals("URealValue", here.typeToken());
+        assertEquals("URealValue", relocated.typeToken());
+        assertEquals(here.canonical(), relocated.canonical(),
+                "a relocated port of the same class must not read as 576 divergences per operation");
+        assertEquals("org.tzi.use.uml.ocl.value.URealValue", here.javaType());
+        assertEquals("com.example.port.value.URealValue", relocated.javaType());
+
+        // A nested class is named by its own simple name, not by Outer$Inner.
+        assertEquals("Inner", UValue.simpleName("a.b.Outer$Inner"));
+        assertEquals("Plain", UValue.simpleName("Plain"));
+        assertNull(UValue.simpleName(null));
     }
 
     // ------------------------------------------------------------------ golden byte comparison
@@ -957,9 +1163,11 @@ class DifferentialHarnessRegressionTest {
             assertTrue(row.note().contains("either side"), row.note());
             assertTrue(row.note().contains("reference could not be driven"), row.note());
             assertTrue(row.note().contains("subject could not be driven"), row.note());
-            assertTrue(row.note().contains("cannot marshal UREAL(1.0,0.5) for URealValue.add(value) [ref]"),
+            assertTrue(row.note().contains(
+                    "cannot marshal UREAL(1.0,0.5)@URealValue for URealValue.add(value) [ref]"),
                     row.note());
-            assertTrue(row.note().contains("cannot marshal UREAL(1.0,0.5) for URealValue.add(value) [sub]"),
+            assertTrue(row.note().contains(
+                    "cannot marshal UREAL(1.0,0.5)@URealValue for URealValue.add(value) [sub]"),
                     row.note());
         }
     }

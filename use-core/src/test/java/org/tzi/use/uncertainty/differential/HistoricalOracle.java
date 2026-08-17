@@ -615,6 +615,14 @@ public final class HistoricalOracle implements Candidate {
     /**
      * Builds the historical object corresponding to a plain-Java {@link UValue}.
      *
+     * <p>Marshalling is directed by {@link UValue#kind()} and <em>not</em> by
+     * {@link UValue#javaType()}. The two are the same question only on the way out: on the way in the
+     * harness is choosing what object to construct, and the eight kinds each have exactly one
+     * receiver class it can be. A value that was observed as a raw {@code java.lang.Boolean} therefore
+     * marshals to a {@code BooleanValue} — which is what makes the round trip
+     * {@code fromHistorical(toHistorical(v))} the cheapest way to express "the same content in the
+     * {@code Value} class of its kind", the planted defect the D-18 detection test uses.
+     *
      * @throws HarnessMarshallingException if this harness cannot build it. Every failure exit of
      *         this method uses that type, including a historical constructor that itself throws:
      *         all of them happen <em>before</em> the operation under comparison is entered, so none
@@ -669,6 +677,20 @@ public final class HistoricalOracle implements Candidate {
     /**
      * Unwraps a historical object into a plain-Java {@link UValue}. Never returns a reflective type.
      *
+     * <h2>Every returned value is typed by what it actually was (defect D-18)</h2>
+     * The kind is chosen as it always was — the shape of the content — and then
+     * {@link UValue#asJavaType(String)} records {@code result.getClass().getName()} verbatim. The two
+     * are not the same question, and treating them as one was the defect: a raw {@code Boolean} and
+     * an {@code org.tzi.use.uml.ocl.value.BooleanValue} both carry a boolean, so both are
+     * {@link UValue.Kind#BOOLEAN}, and before this call they had the same canonical form. Nine of the
+     * branches below therefore look redundant — {@code URealValue} typed as {@code URealValue} is
+     * what the factory already assumed — and the four in the {@code default} arm are the ones that
+     * are not: a raw {@code Boolean}/{@code Integer}/{@code Double}/{@code CharSequence} is
+     * <strong>not</strong> the {@code Value} class of its kind, and 193 of 285 operations return one.
+     *
+     * <p>Deliberately uniform: every branch attributes, so a branch added later cannot fall back to
+     * the factory's assumption by omission.
+     *
      * @throws HarnessMarshallingException if the object cannot be unwrapped exactly. Unwrapping is
      *         harness work performed after the operation returned, so a failure here is the absence
      *         of a measurement rather than a behaviour of the code under test.
@@ -681,21 +703,25 @@ public final class HistoricalOracle implements Candidate {
         try {
             switch (className) {
                 case VALUE_PKG + "URealValue":
-                    return UValue.uReal(d(result, "value"), d(result, "uncertainty"));
+                    return UValue.uReal(d(result, "value"), d(result, "uncertainty"))
+                            .asJavaType(className);
                 case VALUE_PKG + "UIntegerValue":
-                    return UValue.uInteger(i(result, "value"), d(result, "uncertainty"));
+                    return UValue.uInteger(i(result, "value"), d(result, "uncertainty"))
+                            .asJavaType(className);
                 case VALUE_PKG + "UBooleanValue":
-                    return UValue.uBoolean(b(result, "value"), d(result, "probability"));
+                    return UValue.uBoolean(b(result, "value"), d(result, "probability"))
+                            .asJavaType(className);
                 case VALUE_PKG + "UStringValue":
-                    return UValue.uString(s(result, "value"), d(result, "confidence"));
+                    return UValue.uString(s(result, "value"), d(result, "confidence"))
+                            .asJavaType(className);
                 case VALUE_PKG + "RealValue":
-                    return UValue.real(d(result, "value"));
+                    return UValue.real(d(result, "value")).asJavaType(className);
                 case VALUE_PKG + "IntegerValue":
-                    return UValue.integer(i(result, "value"));
+                    return UValue.integer(i(result, "value")).asJavaType(className);
                 case VALUE_PKG + "BooleanValue":
-                    return UValue.bool(b(result, "value"));
+                    return UValue.bool(b(result, "value")).asJavaType(className);
                 case VALUE_PKG + "StringValue":
-                    return UValue.string(s(result, "value"));
+                    return UValue.string(s(result, "value")).asJavaType(className);
                 case VALUE_PKG + "SequenceValue": {
                     List<UValue> items = new ArrayList<>();
                     Object it = result.getClass().getMethod("iterator").invoke(result);
@@ -703,20 +729,20 @@ public final class HistoricalOracle implements Candidate {
                     while (iterator.hasNext()) {
                         items.add(fromHistorical(iterator.next()));
                     }
-                    return UValue.sequence(items);
+                    return UValue.sequence(items).asJavaType(className);
                 }
                 default:
                     if (result instanceof Boolean) {
-                        return UValue.bool((Boolean) result);
+                        return UValue.bool((Boolean) result).asJavaType(className);
                     }
                     if (result instanceof Integer) {
-                        return UValue.integer((Integer) result);
+                        return UValue.integer((Integer) result).asJavaType(className);
                     }
                     if (result instanceof Double) {
-                        return UValue.real((Double) result);
+                        return UValue.real((Double) result).asJavaType(className);
                     }
                     if (result instanceof CharSequence) {
-                        return UValue.string(result.toString());
+                        return UValue.string(result.toString()).asJavaType(className);
                     }
                     return UValue.opaque(className, opaqueRepresentation(result));
             }

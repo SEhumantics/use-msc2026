@@ -91,15 +91,38 @@ public final class DiffReportWriter {
     /**
      * Writes one sweep result. Returns the path written.
      *
+     * <p>{@code acknowledged} is mandatory — see {@link #writeAll} and defect D-34. Pass
+     * {@link AcceptedDegenerateOperations#none()} when no sign-off is in force, and mean it.
+     *
      * @param fileName bare file name, e.g. {@code s1-smoke-ureal-add.tsv}
      */
     public static Path write(String fileName, DifferentialSweep.Result result,
-                             Map<String, String> jarDigests) {
-        return writeAll(fileName, java.util.Collections.singletonList(result), jarDigests);
+                             Map<String, String> jarDigests,
+                             AcceptedDegenerateOperations acknowledged) {
+        return writeAll(fileName, java.util.Collections.singletonList(result), jarDigests,
+                acknowledged);
     }
 
     /**
      * Writes several sweeps into one report, in the order given.
+     *
+     * <h2>Why there is no overload without {@code acknowledged} (defect D-34)</h2>
+     * There was one, and it substituted {@link AcceptedDegenerateOperations#none()} silently, so a
+     * report could <strong>assert</strong> {@code # accepted.degenerateOperations 0} while the stage
+     * pass it documents had been granted under a written sign-off. Measured before the fix, on a
+     * sweep of {@code URealValue.isUReal()} against a one-literal subject:
+     * <pre>
+     *   sign-off in force?   1  [URealValue.isUReal()|BOOLEAN(true) -&gt; ...iconst_1/ireturn.]
+     *   stage pass WITHOUT the sign-off? false
+     *   stage pass WITH    the sign-off? true
+     *   # op.URealValue.isUReal().soleReferenceValue   BOOLEAN(true)
+     *   # accepted.degenerateOperations                0        &lt;-- the lie
+     * </pre>
+     * That is D-14's hole dug a second time in a stronger shape: a header that answers the question
+     * <em>wrongly</em> rather than one that is missing. The convenience of a shorter call is not worth
+     * a report that can understate the acknowledgements its own verdict rests on, so the shorter call
+     * no longer exists and every one of the tree's call sites names the set it was written under.
+     * {@code AcceptedDegenerateOperations.none()} is four extra tokens and is the whole of the cost.
      *
      * <h2>Two guards, and why the second one had to be added</h2>
      * The first rejects a report with no data rows. The guard is on the total row count, not on
@@ -117,21 +140,15 @@ public final class DiffReportWriter {
      * counted 75 and let it through. The property a report has to carry is "this file contains
      * comparisons", and row count is not that property.
      *
+     * <h2>The sign-off set in the header</h2>
+     * {@code acknowledged} is written into the header whether or not it matched anything, so that a
+     * run with a sign-off in force is never byte-indistinguishable from a run without one. (That is
+     * the shape of the still-open D-14 complaint against {@link AcceptedThrowPairs}, fixed here for
+     * the mechanism introduced alongside it rather than repeated.)
+     *
      * @throws IllegalArgumentException if the report would contain no data rows, or no row in which
      *         two observed values were compared
-     */
-    public static Path writeAll(String fileName, List<DifferentialSweep.Result> results,
-                                Map<String, String> jarDigests) {
-        return writeAll(fileName, results, jarDigests, AcceptedDegenerateOperations.none());
-    }
-
-    /**
-     * As above, recording which degenerate-operation sign-offs were in force.
-     *
-     * <p>The allowlist is written into the header whether or not it matched anything, so that a run
-     * with a sign-off in force is never byte-indistinguishable from a run without one. (That is the
-     * shape of the still-open D-14 complaint against {@link AcceptedThrowPairs}, fixed here for the
-     * mechanism introduced alongside it rather than repeated.)
+     * @throws NullPointerException     if {@code acknowledged} is {@code null}; there is no default
      */
     public static Path writeAll(String fileName, List<DifferentialSweep.Result> results,
                                 Map<String, String> jarDigests,

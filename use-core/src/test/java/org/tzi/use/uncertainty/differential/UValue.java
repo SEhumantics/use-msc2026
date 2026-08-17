@@ -30,6 +30,43 @@ import java.util.Objects;
  * {@code String.format(String,Object[])} overload, so OPAQUE comparison rounded to three decimals
  * and flipped to a decimal comma under a European default locale.
  *
+ * <h2>The canonical form is type-bearing (defect D-18)</h2>
+ * Every value that carries an observation also carries {@link #javaType()}, the Java class it was
+ * observed as, and {@link #canonical()} renders it. Two consequences, and both of them are the
+ * point:
+ * <ul>
+ *   <li>A <strong>{@link Kind} difference</strong> was always a difference — {@code UREAL(3.0,0.0)}
+ *       and {@code UINTEGER(3,0.0)} have never compared equal — so a port answering
+ *       {@code URealValue} where the historical answers {@code UIntegerValue} was already a
+ *       {@link DiffVerdict#DIFFER}.</li>
+ *   <li>A <strong>runtime-class difference inside one kind</strong> was not. {@code fromHistorical}
+ *       maps a raw {@code Boolean}/{@code Integer}/{@code Double}/{@code CharSequence} to the same
+ *       kind as {@code BooleanValue}/{@code IntegerValue}/{@code RealValue}/{@code StringValue}, so
+ *       right content with the wrong Java type scored {@code AGREE} on <strong>193 of 285</strong>
+ *       operations. Measured before the fix: a perfect port that boxes every raw result into its
+ *       {@code Value} class produced a verdict tally byte-identical to a perfect port's —
+ *       {@code {AGREE=17199, BOTH_THREW=910, HARNESS_ERROR=883, UNMEASURABLE=91}}, 0 {@code DIFFER},
+ *       0 diverging operations, and the same 74 stage passes.</li>
+ * </ul>
+ *
+ * <h3>What is compared, and what deliberately is not</h3>
+ * The rendered token is the class's <strong>simple name</strong>, not its package. The historical
+ * side's classes are loaded from a vendored jar by an isolated class loader and the ported side's
+ * from the reactor; comparing fully-qualified names would make every row of a port that relocated
+ * the package a false divergence, which is a difference in <em>where the file lives</em> rather than
+ * in <em>what the operation answered</em>. A difference the simple name cannot see — two distinct
+ * classes with one simple name — is not a shape any port of this API can take, and the fully
+ * qualified names of both sides are written into the row note by
+ * {@link DifferentialSweep} whenever they differ, so nothing is discarded.
+ *
+ * <h3>Where an unobserved value gets its type</h3>
+ * The factories are unchanged and keep taking content only. A value built by a factory is typed as
+ * <em>the {@code org.tzi.use.uml.ocl.value} class of its kind</em> — the type a corpus entry
+ * marshals to and the type an adapter returning that kind is claiming. A value unwrapped from a real
+ * object is typed as what it actually was, through {@link #asJavaType(String)}. There is deliberately
+ * no "unattributed" state that matches everything: a wildcard would let a subject opt out of the
+ * check by not answering the question, which is defect D-17's shape.
+ *
  * <p>Test-scoped. Not part of the product.
  */
 public final class UValue {
@@ -89,6 +126,9 @@ public final class UValue {
         OPAQUE
     }
 
+    /** The package the eight modelled {@code Value} classes live in, on both sides. */
+    static final String VALUE_PACKAGE = "org.tzi.use.uml.ocl.value.";
+
     private final Kind kind;
     private final double number;
     private final int integer;
@@ -97,9 +137,15 @@ public final class UValue {
     /** uncertainty (UREAL/UINTEGER), probability (UBOOLEAN) or confidence (USTRING); NaN if N/A. */
     private final double aux;
     private final List<UValue> elements;
+    /**
+     * The fully-qualified name of the Java class this value was observed as, or {@code null} for
+     * {@link Kind#NULL} and {@link Kind#VOID}, which stand for the <em>absence</em> of a result and
+     * therefore have no observed class. See the class comment, "the canonical form is type-bearing".
+     */
+    private final String javaType;
 
     private UValue(Kind kind, double number, int integer, boolean flag, String text, double aux,
-                   List<UValue> elements) {
+                   List<UValue> elements, String javaType) {
         this.kind = kind;
         this.number = number;
         this.integer = integer;
@@ -107,69 +153,125 @@ public final class UValue {
         this.text = text;
         this.aux = aux;
         this.elements = elements == null ? null : Collections.unmodifiableList(new ArrayList<>(elements));
+        this.javaType = javaType;
     }
 
     // ------------------------------------------------------------------ factories
 
     public static UValue uReal(double value, double uncertainty) {
-        return new UValue(Kind.UREAL, value, 0, false, null, uncertainty, null);
+        return new UValue(Kind.UREAL, value, 0, false, null, uncertainty, null,
+                VALUE_PACKAGE + "URealValue");
     }
 
     public static UValue uInteger(int value, double uncertainty) {
-        return new UValue(Kind.UINTEGER, value, value, false, null, uncertainty, null);
+        return new UValue(Kind.UINTEGER, value, value, false, null, uncertainty, null,
+                VALUE_PACKAGE + "UIntegerValue");
     }
 
     public static UValue uBoolean(boolean value, double probability) {
-        return new UValue(Kind.UBOOLEAN, Double.NaN, 0, value, null, probability, null);
+        return new UValue(Kind.UBOOLEAN, Double.NaN, 0, value, null, probability, null,
+                VALUE_PACKAGE + "UBooleanValue");
     }
 
     public static UValue uString(String value, double confidence) {
         return new UValue(Kind.USTRING, Double.NaN, 0, false, Objects.requireNonNull(value, "value"),
-                confidence, null);
+                confidence, null, VALUE_PACKAGE + "UStringValue");
     }
 
     public static UValue real(double value) {
-        return new UValue(Kind.REAL, value, 0, false, null, Double.NaN, null);
+        return new UValue(Kind.REAL, value, 0, false, null, Double.NaN, null,
+                VALUE_PACKAGE + "RealValue");
     }
 
     public static UValue integer(int value) {
-        return new UValue(Kind.INTEGER, value, value, false, null, Double.NaN, null);
+        return new UValue(Kind.INTEGER, value, value, false, null, Double.NaN, null,
+                VALUE_PACKAGE + "IntegerValue");
     }
 
     public static UValue bool(boolean value) {
-        return new UValue(Kind.BOOLEAN, Double.NaN, 0, value, null, Double.NaN, null);
+        return new UValue(Kind.BOOLEAN, Double.NaN, 0, value, null, Double.NaN, null,
+                VALUE_PACKAGE + "BooleanValue");
     }
 
     public static UValue string(String value) {
         return new UValue(Kind.STRING, Double.NaN, 0, false, Objects.requireNonNull(value, "value"),
-                Double.NaN, null);
+                Double.NaN, null, VALUE_PACKAGE + "StringValue");
     }
 
     public static UValue sequence(List<UValue> elements) {
         return new UValue(Kind.SEQUENCE, Double.NaN, 0, false, null, Double.NaN,
-                Objects.requireNonNull(elements, "elements"));
+                Objects.requireNonNull(elements, "elements"), VALUE_PACKAGE + "SequenceValue");
     }
 
     public static UValue nullValue() {
-        return new UValue(Kind.NULL, Double.NaN, 0, false, null, Double.NaN, null);
+        return new UValue(Kind.NULL, Double.NaN, 0, false, null, Double.NaN, null, null);
     }
 
     /** The result of an operation declared {@code void}. Never equal to {@link #nullValue()}. */
     public static UValue voidValue() {
-        return new UValue(Kind.VOID, Double.NaN, 0, false, null, Double.NaN, null);
+        return new UValue(Kind.VOID, Double.NaN, 0, false, null, Double.NaN, null, null);
     }
 
     /** Fallback for a result shape the harness does not model; {@code repr} must be deterministic. */
     public static UValue opaque(String className, String repr) {
         return new UValue(Kind.OPAQUE, Double.NaN, 0, false,
                 Objects.requireNonNull(className, "className") + "|" + String.valueOf(repr),
-                Double.NaN, null);
+                Double.NaN, null, Objects.requireNonNull(className, "className"));
+    }
+
+    /**
+     * The same content, re-declared as having been observed as {@code javaType}.
+     *
+     * <p>This is how {@link HistoricalOracle#fromHistorical(Object)} records what a side
+     * <em>actually</em> returned, as opposed to what the factory for that kind assumes. It is the
+     * whole of the D-18 fix: a raw {@code java.lang.Boolean} and an
+     * {@code org.tzi.use.uml.ocl.value.BooleanValue} carry the same content and are no longer the
+     * same canonical form.
+     *
+     * @throws IllegalStateException if this value carries no observation — {@link Kind#NULL} and
+     *         {@link Kind#VOID} mean "no result", and a non-result cannot have been observed as
+     *         anything
+     */
+    public UValue asJavaType(String javaType) {
+        Objects.requireNonNull(javaType, "javaType");
+        if (!carriesAnObservation()) {
+            throw new IllegalStateException("kind " + kind + " stands for the absence of a result, "
+                    + "so it cannot have been observed as " + javaType);
+        }
+        return new UValue(kind, number, integer, flag, text, aux, elements, javaType);
     }
 
     // ------------------------------------------------------------------ accessors
 
     public Kind kind() {
         return kind;
+    }
+
+    /**
+     * The fully-qualified Java class this value was observed as, or {@code null} for
+     * {@link Kind#NULL} / {@link Kind#VOID}. {@link #canonical()} renders {@link #typeToken()}, the
+     * simple name; this accessor keeps the whole of it, for a note that has to name both sides.
+     */
+    public String javaType() {
+        return javaType;
+    }
+
+    /**
+     * The part of {@link #javaType()} the canonical form compares: the simple class name, with the
+     * package and any enclosing class stripped. See the class comment for why the package is
+     * deliberately not compared.
+     */
+    public String typeToken() {
+        return simpleName(javaType);
+    }
+
+    /** {@code org.tzi.use.uml.ocl.value.URealValue} -&gt; {@code URealValue}; {@code null} passes through. */
+    static String simpleName(String fullyQualified) {
+        if (fullyQualified == null) {
+            return null;
+        }
+        int cut = Math.max(fullyQualified.lastIndexOf('.'), fullyQualified.lastIndexOf('$'));
+        return cut < 0 ? fullyQualified : fullyQualified.substring(cut + 1);
     }
 
     /**
@@ -259,8 +361,19 @@ public final class UValue {
     /**
      * A deterministic, TSV-safe rendering used both for reporting and for the agreement verdict.
      * Doubles go through {@link Double#toString(double)}, so the comparison is exact.
+     *
+     * <p>Ends in {@code @<simple class name>} for every kind that carries an observation — the
+     * D-18 fix. {@link Kind#NULL} and {@link Kind#VOID} have no observed class and render bare, as
+     * they always did. The suffix is an append rather than a new prefix so that every {@code KIND(}
+     * form already quoted in the record still reads the same way from the left.
      */
     public String canonical() {
+        String content = content();
+        return javaType == null ? content : content + "@" + typeToken();
+    }
+
+    /** {@link #canonical()} without the type suffix: the content alone. */
+    public String content() {
         switch (kind) {
             case UREAL:
                 return "UREAL(" + Double.toString(number) + "," + Double.toString(aux) + ")";
