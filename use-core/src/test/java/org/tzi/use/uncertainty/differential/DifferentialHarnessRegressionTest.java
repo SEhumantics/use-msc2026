@@ -26,8 +26,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * reported {@code 169 rows, AGREE_THROWN=169, disagreements 0} with neither side ever entering
  * {@code URealValue.add}.
  *
- * <p>JUnit 5 Jupiter only — this reactor has no {@code junit-vintage-engine}, so a JUnit 3/4 test
- * would compile, be committed, and never execute.
+ * <p>JUnit 5 Jupiter only. The default build carries no {@code junit-vintage-engine}, so a JUnit 3/4
+ * test written here would compile, be committed, and never execute. (The {@code -Pupstream-oracle}
+ * profile adds a vintage engine so that <em>upstream's</em> own JUnit 3/4 files run unedited — see
+ * {@code docs/port2/upstream-oracle-profile.md} — but nothing in this package may depend on that
+ * profile being active, because the default build is still the primary gate.)
  */
 @DisplayName("Differential harness regressions")
 class DifferentialHarnessRegressionTest {
@@ -1293,6 +1296,183 @@ class DifferentialHarnessRegressionTest {
         assertTrue(notes.get("OBSERVED (off a real object of another class)")
                         .contains("not checkable by this harness"),
                 notes.get("OBSERVED (off a real object of another class)"));
+    }
+
+    // ------------------------------------------------------------------ H21: the provenance aggregate
+
+    /**
+     * <strong>H21: {@code rows.javaTypeMismatch} gets a cause, as a header number and not only as
+     * prose in a note.</strong>
+     *
+     * <p>Round 8 closed D-43 by demoting a type-only difference out of the verdict and giving it its
+     * own count, {@link DifferentialSweep.Result#javaTypeMismatchCount()}, and by printing both sides'
+     * provenance on every such row. What it left open is the aggregate. The count answers "how many
+     * rows named two different classes for one payload"; its own Javadoc then says the question that
+     * decides what to <em>do</em> about them — a wrong-class port, or an adapter that never looked —
+     * is "in the row note's provenance clause, not in this count". So the two cases were
+     * distinguishable only by opening the data rows and reading English, and 3 445 rows of it.
+     *
+     * <p>The construction below is the blindness, then the fix. Two sweeps, both content-perfect, both
+     * with <em>exactly the same</em> {@code javaTypeMismatch} total, and opposite causes:
+     * <ul>
+     *   <li>{@code add} — the subject's adapter takes the factory default. {@code ASSUMED}: nobody
+     *       looked, so nothing here is a statement about the port (D-43).</li>
+     *   <li>{@code minus} — the subject observed a real object of a genuinely different class.
+     *       {@code OBSERVED}: a statement about two implementations, though not a certified one, since
+     *       {@code observedFrom} believes any object it is handed (D-47).</li>
+     * </ul>
+     * Before H21 the two reports' headers were identical on every type line. The last block asserts
+     * they are not any more, which is the whole of what H21 buys.
+     *
+     * <p>Also pinned here: the identity {@code observed + assumed == javaTypeMismatch}, which is what
+     * makes the split safe to read as a partition rather than as two loosely related numbers; and the
+     * two ways a row can carry no provenance at all — the subject threw ({@code null}) or the
+     * subject's result stands for the absence of a result ({@code NONE}) — neither of which may be
+     * counted into either half.
+     */
+    @Test
+    @DisplayName("H21: the type-mismatch total is split by the subject's type provenance, in the "
+            + "header and per operation")
+    void theTypeMismatchTotalIsSplitBySubjectTypeProvenance() throws java.io.IOException {
+        UOp assumedOp = UOp.binary("URealValue", "add");
+        UOp observedOp = UOp.binary("URealValue", "minus");
+        // What Method.invoke hands back for a raw `int` return, which is what the reference observes.
+        UValue reference = UValue.integer(7).observedFrom(Integer.valueOf(7));
+        UValue assumedSubject = UValue.integer(7);
+        UValue observedSubject = UValue.integer(7)
+                .observedFrom(new java.util.concurrent.atomic.AtomicInteger(7));
+        assertEquals(UValue.TypeProvenance.ASSUMED, assumedSubject.typeProvenance());
+        assertEquals(UValue.TypeProvenance.OBSERVED, observedSubject.typeProvenance());
+        assertEquals(reference.content(), assumedSubject.content(), "both subjects must be "
+                + "content-perfect, or the rows are content findings and belong in DIFFER");
+        assertEquals(reference.content(), observedSubject.content());
+
+        List<UValue> domain = List.of(UValue.uReal(1.0, 0.0), UValue.uReal(2.0, 0.0));
+
+        DifferentialSweep.Result assumed;
+        DifferentialSweep.Result observed;
+        try (Candidate ref = new ReturnsFixed("ref", reference);
+             Candidate sub = new ReturnsFixed("sub-assumed", assumedSubject)) {
+            assumed = new DifferentialSweep(ref, sub, 1L).sweepBinary(assumedOp, domain, domain);
+        }
+        try (Candidate ref = new ReturnsFixed("ref", reference);
+             Candidate sub = new ReturnsFixed("sub-observed", observedSubject)) {
+            observed = new DifferentialSweep(ref, sub, 1L).sweepBinary(observedOp, domain, domain);
+        }
+
+        // (1) THE BLINDNESS, asserted as a precondition rather than described. Every figure the
+        //     harness published before H21 is equal across the two sweeps.
+        assertEquals(4, assumed.javaTypeMismatchCount(), assumed.summary());
+        assertEquals(assumed.rowCount(), observed.rowCount());
+        assertEquals(assumed.measurementCount(), observed.measurementCount());
+        assertEquals(assumed.agreementCount(), observed.agreementCount());
+        assertEquals(assumed.disagreements().size(), observed.disagreements().size());
+        assertEquals(assumed.javaTypeMismatchCount(), observed.javaTypeMismatchCount(),
+                "the two sweeps must be indistinguishable on the pre-H21 numbers, or this test is "
+                        + "not measuring the blindness it claims to close");
+
+        // (2) THE SPLIT.
+        assertEquals(0, assumed.subjectTypeObservedCount(), assumed.summary());
+        assertEquals(4, assumed.subjectTypeAssumedCount(), assumed.summary());
+        assertEquals(4, observed.subjectTypeObservedCount(), observed.summary());
+        assertEquals(0, observed.subjectTypeAssumedCount(), observed.summary());
+
+        // (3) THE IDENTITY: the two halves partition the population exactly, so a reader may treat a
+        //     zero on one side as "all of them are the other". A future change that lets a third
+        //     provenance into the AGREE-with-differing-columns population fails here.
+        for (DifferentialSweep.Result r : List.of(assumed, observed)) {
+            assertEquals(r.javaTypeMismatchCount(),
+                    r.subjectTypeObservedCount() + r.subjectTypeAssumedCount(),
+                    "observed + assumed must exhaust the type-mismatch population: " + r.summary());
+        }
+
+        // (4) Both one-line renderings carry the split. stageStatement prints it unconditionally --
+        //     including the zero -- because a stage quoting a pass must not be able to avoid seeing
+        //     whether its mismatch rows are about the port or about the adapter.
+        System.out.println("=== H21: the same mismatch total, two causes =======================");
+        System.out.println("  summary  ASSUMED  " + assumed.summary());
+        System.out.println("  summary  OBSERVED " + observed.summary());
+        System.out.println("  stage    ASSUMED  "
+                + assumed.stageStatement(AcceptedDegenerateOperations.none()));
+        System.out.println("  stage    OBSERVED "
+                + observed.stageStatement(AcceptedDegenerateOperations.none()));
+        System.out.println("===================================================================");
+        assertTrue(assumed.summary().contains("javaTypeMismatch=4 (subjectType OBSERVED=0 ASSUMED=4)"),
+                assumed.summary());
+        assertTrue(observed.summary().contains("javaTypeMismatch=4 (subjectType OBSERVED=4 ASSUMED=0)"),
+                observed.summary());
+        assertTrue(assumed.stageStatement(AcceptedDegenerateOperations.none())
+                        .contains("4 java-type mismatch(es) (subject token OBSERVED on 0, ASSUMED on 4)"),
+                assumed.stageStatement(AcceptedDegenerateOperations.none()));
+        assertTrue(observed.stageStatement(AcceptedDegenerateOperations.none())
+                        .contains("4 java-type mismatch(es) (subject token OBSERVED on 4, ASSUMED on 0)"),
+                observed.stageStatement(AcceptedDegenerateOperations.none()));
+
+        // (5) A row that carries no provenance is counted into neither half, and there are exactly two
+        //     such shapes. The subject threw: no value, so null.
+        // (ThrowsIndexOutOfBounds reads args.get(1).asInt(), so this one sub-check needs an integer
+        // domain; the stubs ignore the inputs otherwise.)
+        List<UValue> intDomain = List.of(UValue.uInteger(1, 0.0), UValue.uInteger(2, 0.0));
+        try (Candidate ref = new ReturnsFixed("ref", reference);
+             Candidate sub = new ThrowsIndexOutOfBounds("sub-throws")) {
+            DifferentialSweep.Result mixed = new DifferentialSweep(ref, sub, 1L)
+                    .sweepBinary(assumedOp, intDomain, intDomain);
+            assertEquals(DiffVerdict.MIXED, mixed.rows().get(0).verdict(),
+                    mixed.rows().get(0).toTsv());
+            assertNull(mixed.rows().get(0).subjectTypeProvenance(),
+                    "a subject that produced no value has no class token to have a provenance");
+            assertEquals(0, mixed.subjectTypeObservedCount() + mixed.subjectTypeAssumedCount(),
+                    mixed.summary());
+        }
+        // The subject returned the ABSENCE of a result: a provenance of NONE reaches the row, and the
+        // row is a DIFFER on its content, so neither half counts it.
+        try (Candidate ref = new ReturnsFixed("ref", reference);
+             Candidate sub = new ReturnsFixed("sub-null", UValue.nullValue())) {
+            DifferentialSweep.Result oneSided = new DifferentialSweep(ref, sub, 1L)
+                    .sweepBinary(assumedOp, domain, domain);
+            DiffRow row = oneSided.rows().get(0);
+            assertEquals(DiffVerdict.DIFFER, row.verdict(), row.toTsv());
+            assertEquals(UValue.TypeProvenance.NONE, row.subjectTypeProvenance(), row.toTsv());
+            assertEquals(0, oneSided.javaTypeMismatchCount(), oneSided.summary());
+            assertEquals(0, oneSided.subjectTypeObservedCount() + oneSided.subjectTypeAssumedCount(),
+                    oneSided.summary());
+        }
+
+        // (6) THE HEADER, per operation and as a file total.
+        java.nio.file.Path both = DiffReportWriter.writeAll("h21-both.tsv",
+                List.of(assumed, observed), Map.of(), AcceptedDegenerateOperations.none());
+        List<String> header = headerOf(both);
+        System.out.println("=== H21: the report header ========================================");
+        header.forEach(System.out::println);
+        System.out.println("===================================================================");
+        assertTrue(header.contains("# rows.javaTypeMismatch\t8"), header.toString());
+        assertTrue(header.contains("# rows.subjectTypeObserved\t4"), header.toString());
+        assertTrue(header.contains("# rows.subjectTypeAssumed\t4"), header.toString());
+        assertTrue(header.contains("# op.URealValue.add(value).subjectTypeObserved\t0"),
+                header.toString());
+        assertTrue(header.contains("# op.URealValue.add(value).subjectTypeAssumed\t4"),
+                header.toString());
+        assertTrue(header.contains("# op.URealValue.minus(value).subjectTypeObserved\t4"),
+                header.toString());
+        assertTrue(header.contains("# op.URealValue.minus(value).subjectTypeAssumed\t0"),
+                header.toString());
+
+        // (7) AND THE POINT OF ALL OF IT: two reports whose type-mismatch totals are equal and whose
+        //     causes are opposite are no longer byte-indistinguishable in the header. Before H21 the
+        //     assertion below could not have been written -- there was no line to write it against.
+        List<String> assumedHeader = headerOf(DiffReportWriter.write("h21-assumed.tsv", assumed,
+                Map.of(), AcceptedDegenerateOperations.none()));
+        List<String> observedHeader = headerOf(DiffReportWriter.write("h21-observed.tsv", observed,
+                Map.of(), AcceptedDegenerateOperations.none()));
+        assertTrue(assumedHeader.contains("# rows.javaTypeMismatch\t4"), assumedHeader.toString());
+        assertTrue(observedHeader.contains("# rows.javaTypeMismatch\t4"),
+                "precondition: the one header line that existed before H21 is the SAME in both files");
+        assertEquals(List.of("# rows.subjectTypeObserved\t0", "# rows.subjectTypeAssumed\t4"),
+                assumedHeader.stream().filter(l -> l.startsWith("# rows.subjectType"))
+                        .collect(java.util.stream.Collectors.toList()));
+        assertEquals(List.of("# rows.subjectTypeObserved\t4", "# rows.subjectTypeAssumed\t0"),
+                observedHeader.stream().filter(l -> l.startsWith("# rows.subjectType"))
+                        .collect(java.util.stream.Collectors.toList()));
     }
 
     // ------------------------------------------------------------------ golden byte comparison

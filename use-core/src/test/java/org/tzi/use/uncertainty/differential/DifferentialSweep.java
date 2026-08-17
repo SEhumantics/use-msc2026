@@ -227,7 +227,7 @@ public final class DifferentialSweep {
                     ref.thrown != null ? DiffRow.thrown(ref.thrown) : ref.value.canonical(),
                     sub.thrown != null ? DiffRow.thrown(sub.thrown) : sub.value.canonical(),
                     DiffVerdict.MIXED,
-                    lead + evidence(ref, sub));
+                    lead + evidence(ref, sub), subjectTypeProvenance(sub));
         }
         if (!ref.value.carriesAnObservation() && !sub.value.carriesAnObservation()) {
             // Neither side produced a value. Comparing the two absences and finding them equal is
@@ -237,11 +237,12 @@ public final class DifferentialSweep {
             // before either implementation runs. Note that one-sided absence is NOT routed here --
             // that is a real difference and falls through to DIFFER below.
             return new DiffRow(index, op.key(), inputs, ref.value.canonical(), sub.value.canonical(),
-                    DiffVerdict.UNMEASURABLE, unmeasurableNote(ref, sub));
+                    DiffVerdict.UNMEASURABLE, unmeasurableNote(ref, sub),
+                    subjectTypeProvenance(sub));
         }
         if (ref.value.canonical().equals(sub.value.canonical())) {
             return new DiffRow(index, op.key(), inputs, ref.value.canonical(), sub.value.canonical(),
-                    DiffVerdict.AGREE, "");
+                    DiffVerdict.AGREE, "", subjectTypeProvenance(sub));
         }
         // A TYPE-ONLY difference is measured and reported, but it is not scored as a divergence.
         //
@@ -264,10 +265,22 @@ public final class DifferentialSweep {
         // CONTENT differences are untouched: they fall through to DIFFER below, as they always did.
         if (ref.value.content().equals(sub.value.content())) {
             return new DiffRow(index, op.key(), inputs, ref.value.canonical(), sub.value.canonical(),
-                    DiffVerdict.AGREE, typeNote(ref.value, sub.value));
+                    DiffVerdict.AGREE, typeNote(ref.value, sub.value),
+                    subjectTypeProvenance(sub));
         }
         return new DiffRow(index, op.key(), inputs, ref.value.canonical(), sub.value.canonical(),
-                DiffVerdict.DIFFER, typeNote(ref.value, sub.value));
+                DiffVerdict.DIFFER, typeNote(ref.value, sub.value),
+                subjectTypeProvenance(sub));
+    }
+
+    /**
+     * The subject's type provenance for a row, or {@code null} when the subject produced no value on
+     * it. Carried onto {@link DiffRow} so that
+     * {@link Result#subjectTypeObservedCount()} / {@link Result#subjectTypeAssumedCount()} are summed
+     * from a field and not scraped out of the note's prose (H21).
+     */
+    private static UValue.TypeProvenance subjectTypeProvenance(Outcome sub) {
+        return sub.value == null ? null : sub.value.typeProvenance();
     }
 
     /**
@@ -751,9 +764,14 @@ public final class DifferentialSweep {
 
         /**
          * The one-line statement a stage must publish next to any figure taken from this sweep:
-         * measured rows, agreement rows, disagreements, <strong>Java-type mismatches</strong>, distinct
-         * reference values, and — when the operation is degenerate and signed off — the rationale
-         * verbatim.
+         * measured rows, agreement rows, disagreements, <strong>Java-type mismatches split by the
+         * subject's type provenance</strong>, distinct reference values, and — when the operation is
+         * degenerate and signed off — the rationale verbatim.
+         *
+         * <p>The provenance split (H21) is printed here unconditionally, for the same reason the
+         * mismatch total is: a stage quoting a pass must be unable to avoid seeing whether its
+         * type-mismatch rows say something about the port ({@code OBSERVED}) or only about the
+         * harness's own adapter ({@code ASSUMED}). See {@link #subjectTypeObservedCount()}.
          *
          * <p>There is deliberately no way to render an agreement figure from this class without the
          * discrimination figure beside it, and since round 8 no way to render one without the
@@ -772,7 +790,9 @@ public final class DifferentialSweep {
                     .append(measurementCount()).append(" measured, ")
                     .append(agreementCount()).append(" agreed, ")
                     .append(disagreements().size()).append(" disagreed, ")
-                    .append(javaTypeMismatchCount()).append(" java-type mismatch(es), ")
+                    .append(javaTypeMismatchCount()).append(" java-type mismatch(es) (subject token ")
+                    .append("OBSERVED on ").append(subjectTypeObservedCount()).append(", ASSUMED on ")
+                    .append(subjectTypeAssumedCount()).append("), ")
                     .append(distinctReferenceValues()).append(" distinct reference value(s)");
             if (isDiscriminating()) {
                 return sb.append(" [DISCRIMINATING]").toString();
@@ -873,6 +893,76 @@ public final class DifferentialSweep {
             return n;
         }
 
+        // ------------------------------------------------- H21: the provenance aggregate
+
+        /**
+         * <strong>Of the {@link #javaTypeMismatchCount()} rows, how many had the subject's class
+         * token {@link UValue.TypeProvenance#OBSERVED}</strong> — read off an object the subject's
+         * adapter actually handed {@link UValue#observedFrom(Object)}.
+         *
+         * <p><strong>Why this number exists (H21).</strong> {@link #javaTypeMismatchCount()} answers
+         * "how many rows named different classes for the same payload" and its own Javadoc then says
+         * the load-bearing follow-up question — port defect, or an adapter that never looked? — lives
+         * "in the row note's provenance clause, not in this count". That made the distinction a
+         * <em>per-row</em> fact with no aggregate anywhere: two reports with identical
+         * {@code rows.javaTypeMismatch} could be told apart only by opening the data rows and reading
+         * prose. This pair of counts is the header number, and the split is the whole finding:
+         * <ul>
+         *   <li>all {@code ASSUMED} — the adapter is non-attributing, so the mismatch says nothing
+         *       about the port. It is a finding about the harness's own adapter (defect D-43) and the
+         *       fix is {@code UValue.observedFrom(Object)}, not a change to {@code use-core/src/main}.</li>
+         *   <li>all {@code OBSERVED} — the subject named a class it claims to have seen, so the
+         *       mismatch is a statement about two implementations. <em>Claims</em>: {@code observedFrom}
+         *       believes any object it is handed, so this is not a certification, and the row note says
+         *       so outright (defect D-47).</li>
+         *   <li>a mixture — the population is not homogeneous and no single sentence covers it; the two
+         *       numbers say so instead of a reader assuming one cause for all of it.</li>
+         * </ul>
+         *
+         * <p><strong>Population.</strong> Exactly {@link #javaTypeMismatchCount()}'s: {@link
+         * DiffVerdict#AGREE} rows whose two rendered columns differ. It is deliberately <em>not</em>
+         * every row in the sweep. A global observed/assumed tally would dilute the mismatch rows into
+         * the thousands of rows that agreed on the class as well as the payload, which is precisely the
+         * question this count is here to answer. {@link DiffVerdict#DIFFER} rows are excluded for the
+         * same reason they are excluded from {@code javaTypeMismatchCount()}: their content differs, so
+         * they are content findings and must not be diluted into a type figure.
+         *
+         * <p><strong>Identity.</strong> {@code subjectTypeObservedCount() + subjectTypeAssumedCount()
+         * == javaTypeMismatchCount()}, and it is not an accident that can quietly stop holding: every
+         * row in this population has both sides carrying a class (a value that stands for the absence
+         * of a result cannot reach {@code AGREE} against a value that does not), so the subject's
+         * provenance on it is {@code OBSERVED} or {@code ASSUMED} and never {@code NONE}. The identity
+         * is asserted in {@code DifferentialHarnessRegressionTest}, so a future change that puts a
+         * third state into the population fails a test rather than silently losing rows from both
+         * counts.
+         */
+        public int subjectTypeObservedCount() {
+            return typeMismatchesWithSubjectProvenance(UValue.TypeProvenance.OBSERVED);
+        }
+
+        /**
+         * Of the {@link #javaTypeMismatchCount()} rows, how many had the subject's class token
+         * {@link UValue.TypeProvenance#ASSUMED} — the factory default for the kind, which is wrong for
+         * 182 of the 285 enumerated operations. Nobody looked at what the subject's implementation
+         * returned, so such a row is a finding about the adapter and not about the port (D-43).
+         *
+         * @see #subjectTypeObservedCount()
+         */
+        public int subjectTypeAssumedCount() {
+            return typeMismatchesWithSubjectProvenance(UValue.TypeProvenance.ASSUMED);
+        }
+
+        private int typeMismatchesWithSubjectProvenance(UValue.TypeProvenance provenance) {
+            int n = 0;
+            for (DiffRow row : rows) {
+                if (row.verdict() == DiffVerdict.AGREE && !row.historical().equals(row.ported())
+                        && row.subjectTypeProvenance() == provenance) {
+                    n++;
+                }
+            }
+            return n;
+        }
+
         /**
          * One-line tally, e.g.
          * {@code URealValue.add(value): 484 rows, 484 measured, 231 distinct ref, AGREE=484}. The
@@ -899,7 +989,12 @@ public final class DifferentialSweep {
             }
             int typeMismatched = javaTypeMismatchCount();
             if (typeMismatched > 0) {
-                sb.append(", javaTypeMismatch=").append(typeMismatched);
+                // The split travels with the number it splits, and only with it: an operation with no
+                // type-mismatch rows has no provenance question to answer, and printing "OBSERVED:0/
+                // ASSUMED:0" on every one-line tally in the tree would bury the ones that do (H21).
+                sb.append(", javaTypeMismatch=").append(typeMismatched)
+                        .append(" (subjectType OBSERVED=").append(subjectTypeObservedCount())
+                        .append(" ASSUMED=").append(subjectTypeAssumedCount()).append(')');
             }
             return sb.toString();
         }

@@ -11,12 +11,16 @@
 # rows.disagreement	0
 # rows.throwClassMismatch	0
 # rows.javaTypeMismatch	0
+# rows.subjectTypeObserved	0
+# rows.subjectTypeAssumed	0
 # verdict.AGREE	784
 # op.URealValue.add(value).rows	784
 # op.URealValue.add(value).measured	784
 # op.URealValue.add(value).agreement	784
 # op.URealValue.add(value).disagreement	0
 # op.URealValue.add(value).javaTypeMismatch	0
+# op.URealValue.add(value).subjectTypeObserved	0
+# op.URealValue.add(value).subjectTypeAssumed	0
 # op.URealValue.add(value).distinctReferenceValues	258
 # op.URealValue.add(value).discriminating	true
 # accepted.degenerateOperations	0

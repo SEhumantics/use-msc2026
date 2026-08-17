@@ -31,12 +31,16 @@ import java.util.Map;
  * # rows.disagreement       0
  * # rows.throwClassMismatch 0
  * # rows.javaTypeMismatch   0
+ * # rows.subjectTypeObserved 0
+ * # rows.subjectTypeAssumed  0
  * # verdict.AGREE           484
  * # op.URealValue.add(value).rows                     484
  * # op.URealValue.add(value).measured                 484
  * # op.URealValue.add(value).agreement                484
  * # op.URealValue.add(value).disagreement             0
  * # op.URealValue.add(value).javaTypeMismatch         0
+ * # op.URealValue.add(value).subjectTypeObserved      0
+ * # op.URealValue.add(value).subjectTypeAssumed       0
  * # op.URealValue.add(value).distinctReferenceValues  231
  * # op.URealValue.add(value).discriminating           true
  * # accepted.degenerateOperations                     0
@@ -197,6 +201,8 @@ public final class DiffReportWriter {
         int measuredRows = 0;
         int throwClassMismatches = 0;
         int javaTypeMismatches = 0;
+        int subjectTypeObserved = 0;
+        int subjectTypeAssumed = 0;
         List<String> operations = new ArrayList<>();
         Map<DiffVerdict, Integer> tally = new LinkedHashMap<>();
         for (DifferentialSweep.Result r : results) {
@@ -205,6 +211,8 @@ public final class DiffReportWriter {
             measuredRows += r.measurementCount();
             throwClassMismatches += r.throwClassMismatchCount();
             javaTypeMismatches += r.javaTypeMismatchCount();
+            subjectTypeObserved += r.subjectTypeObservedCount();
+            subjectTypeAssumed += r.subjectTypeAssumedCount();
             operations.add(r.op().key());
             for (DiffVerdict v : DiffVerdict.values()) {
                 int c = r.count(v);
@@ -246,6 +254,25 @@ public final class DiffReportWriter {
             // the file that population has a number. See DifferentialSweep.Result
             // #javaTypeMismatchCount() and harness-contract.md §7.
             header(out, "rows.javaTypeMismatch", Integer.toString(javaTypeMismatches));
+            // H21: rows.javaTypeMismatch split by how the SUBJECT came by the class it named. The
+            // total above says how many rows named two different classes for one payload; these two
+            // say whether that is a finding about the port or about the harness's own adapter, and
+            // until now that was a per-row fact stated in prose in the note column with no number
+            // anywhere in the header. Two reports with the same rows.javaTypeMismatch and opposite
+            // causes were distinguishable only by opening the data rows and reading them.
+            //
+            //   subjectTypeObserved -- the subject's adapter routed through
+            //                          UValue.observedFrom(Object), so the difference is a statement
+            //                          about two implementations. Not a certification: observedFrom
+            //                          believes any object it is handed (D-47).
+            //   subjectTypeAssumed  -- nobody looked; the token is the factory default for the kind,
+            //                          wrong for 182 of 285 operations. A finding about the ADAPTER
+            //                          and not about the port (D-43).
+            //
+            // Both are written unconditionally, including when they are 0, because "0 assumed" is a
+            // claim a stage needs to be able to make. They sum to rows.javaTypeMismatch exactly.
+            header(out, "rows.subjectTypeObserved", Integer.toString(subjectTypeObserved));
+            header(out, "rows.subjectTypeAssumed", Integer.toString(subjectTypeAssumed));
             for (Map.Entry<DiffVerdict, Integer> e : tally.entrySet()) {
                 header(out, "verdict." + e.getKey().name(), Integer.toString(e.getValue()));
             }
@@ -282,6 +309,12 @@ public final class DiffReportWriter {
                 // block exists: a file-level 0 can hide a per-operation finding, and vice versa.
                 header(out, "op." + key + ".javaTypeMismatch",
                         Integer.toString(r.javaTypeMismatchCount()));
+                // Per operation for the D-21 reason again: one operation whose adapter never
+                // attributed can hide inside a file total that is mostly observed, and vice versa.
+                header(out, "op." + key + ".subjectTypeObserved",
+                        Integer.toString(r.subjectTypeObservedCount()));
+                header(out, "op." + key + ".subjectTypeAssumed",
+                        Integer.toString(r.subjectTypeAssumedCount()));
                 header(out, "op." + key + ".distinctReferenceValues",
                         Integer.toString(r.distinctReferenceValues()));
                 header(out, "op." + key + ".discriminating", Boolean.toString(r.isDiscriminating()));
