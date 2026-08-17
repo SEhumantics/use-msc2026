@@ -34,15 +34,19 @@ was modified. `module-info.java` was NOT edited.**
 >
 > ---
 >
-> ## → **FINAL BANNER (2026-08-17, round 4). Read §10. It supersedes every banner above.**
+> ## → **FINAL BANNER (2026-08-17, after round 5). Read §10. It supersedes every banner above.**
 >
-> D-10 was closed in commit `93e038ac` and both round-4 reviewers reproduced the closure
-> independently. **A fourth door was then found, and S1 is still DEFECTIVE.** The current verdict,
-> the evidence for it, and the single consolidated register of every open defect are in **§10**.
-> §1–§9 are the historical narrative, left as written, and are superseded wherever they disagree.
+> **S1's verdict is `SOUND_WITH_DOCUMENTED_LIMITS`.** D1, D2, D-10 and D-15 are closed and pinned by
+> executing tests; round 5 planted eleven infidelities on a perfect port and measured which the
+> instrument can see. **§10 is the consolidated record for all five rounds** — the verdict, the
+> story, the single open-defect register and the id re-keying map. §1–§9 are the historical
+> narrative, left as written; **§11 and §12 are appendices** (the D-15 fix, and the round-4 snapshot
+> that used to stand at §10). All of them are superseded by §10 wherever they disagree.
 >
-> **The one-paragraph answer to "can I trust a differential number?" is §10.1.** The rules a stage
-> must follow when it gates on a sweep are in [`harness-contract.md`](harness-contract.md).
+> **The one-paragraph answer to "can I trust a differential number?" is §10.1**, and the short
+> version for a human deciding whether S3 may start is
+> [`foundation-verdict.md`](foundation-verdict.md). The rules a stage must follow when it gates on a
+> sweep are in [`harness-contract.md`](harness-contract.md).
 
 ---
 
@@ -925,261 +929,298 @@ writer that refuses a report which answers zero.
 
 ---
 
-# 10. AMENDMENT 4 (appended 2026-08-17, after §9) — **the current verdict**
+# 10. THE CONSOLIDATED RECORD — five rounds, one verdict, one register
 
-**This section supersedes every banner and every amendment above it.** §1–§9 are left exactly as
-written; where they disagree with §10, §10 is authoritative.
+> **This section is the authority for S1. It supersedes every banner and every other section of this
+> file, including §11 and §12, which are now appendices kept for their pasted evidence.** §1–§9 are
+> the harness as it was built and reviewed round by round; §11 is the D-15 fix as written; §12 is the
+> round-4 snapshot that used to stand here and used to say `DEFECTIVE`. Where any of them disagrees
+> with §10, §10 wins.
+>
+> The normative rules a stage follows are [`harness-contract.md`](harness-contract.md). The short
+> answer for a human deciding whether S3 may start is [`foundation-verdict.md`](foundation-verdict.md).
 
-Sources for everything below, all on `port-uncertainty-2`:
+**Sources.** Everything below is either measured in one of the ten review reports on
+`port-uncertainty-2` or cited to `file:line` in the tree. Nothing here is re-derived from memory.
 
-* `docs/port2/stage-01-verification-round4.md` — independent empirical verification (ran Maven, ran
-  probes against the vendored jars).
-* `docs/port2/stage-01-static-review-round4.md` — independent static review (no Maven; `javap` and
-  reflection probes).
-* The harness itself, under `use-core/src/test/java/org/tzi/use/uncertainty/differential/`.
+| Round | Reports |
+|---|---|
+| 0 (build) | §1–§6 of this file; `stage-00-baseline.md` |
+| 1 | `stage-01-refutation-empirical.md`, `-fidelity.md`, `-isolation.md`, `audit-01-harness.md` |
+| 2 | `stage-01-verification-post-fix.md`, `stage-01-static-review-post-fix.md` |
+| 3 | `stage-01-verification-round3.md`, `stage-01-static-review-round3.md` |
+| 4 | `stage-01-verification-round4.md`, `stage-01-static-review-round4.md` |
+| 5 | `stage-01-verification-round5.md`, `stage-01-static-review-round5.md` |
 
 ---
 
-## 10.1 CURRENT VERDICT — **DEFECTIVE**, and what that means for a reader
+## 10.1 CURRENT VERDICT — `SOUND_WITH_DOCUMENTED_LIMITS`
 
-> **Can I trust a differential number from this harness?** Only with the operation named, and only
-> after checking that the operation is one whose answer can vary. The harness is now sound about the
-> *absence* of a measurement — three separate ways of scoring "nothing happened" as agreement were
-> found and all three are closed and pinned by executing tests, and the round-4 reviewers reproduced
-> each closure independently. It is **not** sound about the *degeneracy* of a measurement. **120 of
-> the 285 reachable operations produce exactly one distinct reference value over every input the
-> shipped corpora can supply**, so on those 120 the verdict `AGREE` is decided before either
-> implementation runs: a subject consisting of 120 hardcoded literals — no arithmetic, no branching,
-> never reading its receiver or arguments — scores `AGREE=8616`, `DIFFER=0`, `isClean() == true`, and
-> a written report headed `# rows.disagreement 0`. Every one of those rows is *individually* correct;
-> the false statement is at sweep level, which is the level a stage reads. **Therefore: a
-> `DIFFER`/`BOTH_THREW`/`MIXED` count from this harness is trustworthy and always was — the
-> instrument finds real defects, and nine planted defects of nine were caught. An `AGREE` count is
-> trustworthy only for an operation shown to have more than one reference value. Until D-15 is fixed,
-> no fidelity claim in S4–S7 may quote a per-operation agreement figure without also quoting how many
-> distinct reference values that operation produced.**
+Both round-5 reviewers reached that verdict independently, one by running Maven and planting
+infidelities, one by reading the tree and recomputing the metric from the committed goldens.
+
+> **Can S4–S7 rely on this harness to detect a real infidelity in a ported U-type?**
+>
+> **Yes — for a defect the corpora reach, on an operation the harness can name, and provided the
+> stage quotes numbers rather than a boolean.** Round 5 planted eleven infidelities on top of a
+> second, independently loaded `HistoricalOracle` playing a perfect port. Eight diverged; seven of
+> those on **every** operation they touched, each costing the affected operations their stage pass.
+> `Math.hypot(ua,ub)` was separated from `sqrt(ua*ua+ub*ub)` at **one ULP** —
+> `UINTEGER(696,0.3144000993956586)` against `UINTEGER(696,0.31440009939565855)` — because
+> `UValue.canonical()` compares `Double.toString` exactly. Two deliberate concealment attacks
+> destroyed the divergence and **bought no stage pass**.
+>
+> **No — outside that region, and the boundary is not published anywhere in the instrument.** One
+> planted defect was invisible: the same wrong arithmetic confined to receiver value `42.0`, which no
+> corpus contains. Its tally is byte-identical to a perfect port's on all 19 083 rows, all four
+> affected operations reach a full stage pass, and the published statement reads
+> `576 rows, 576 measured, 576 agreed, 0 disagreed, 164 distinct reference value(s) [DISCRIMINATING]`
+> for a port that computes the wrong answer (D-30). Separately, **33 public operations —
+> `equals(Object)` and `compareTo(Object)` on all eight receivers among them — cannot be named as a
+> `UOp` at all** and appear in no report, not even as `UNSUPPORTED`.
+
+**What that means for a reader of an S4–S7 number, in one line each:**
+
+* A `DIFFER` / `MIXED` / `BOTH_THREW` / `throwClassMismatch` count is **trustworthy**, and always was.
+* An `AGREE` count is trustworthy **exactly to the extent that `distinctReferenceValues() >= 2`** for
+  that operation — now computed, published per operation and enforced by the gate.
+* A **stage pass is not a fidelity certificate.** It certifies "no divergence over the inputs we
+  tried", and it is not even satisfiable by fidelity on 92 of 285 operations (D-29).
+* No aggregate over the file is a claim about any operation (D-21).
 
 ---
 
 ## 10.2 The story in order
 
-| # | State | Evidence | Closed by |
+| # | State | What was found | Closed by |
 |---|---|---|---|
-| 0 | Harness built (§1–§6). Believed sound. | §5 acceptance | — |
-| 1 | **DEFECTIVE — D1.** The harness scored *its own* marshalling failures as agreement: rows where neither side ever entered the operation came out `AGREE`. | §7.2 | `cf9d2f45` — `HARNESS_ERROR` added, a distinct non-agreement (F1–F11). |
-| 2 | **DEFECTIVE — D2.** Two throws with matching class names were scored `AGREE_THROWN` with the messages discarded. Against a subject whose every body is `throw new RuntimeException("TODO: port …")`: **21 816 of 471 471 rows green**, over 27 operations, because `RuntimeException` is what the historical code throws for type errors and is the least discriminating class in Java. | §8.1 | `e8b73e48` — throw-agreement **deleted**, not tightened. `AGREE_THROWN`/`DIFFER_THROWN` no longer exist; both outcomes are the single non-agreement `BOTH_THREW`, whose note carries both classes **and** both messages. |
-| 3 | **DEFECTIVE — D-10.** `VOID` vs `VOID` was scored `AGREE`. Against a subject whose every body is empty: **444 rows green — every driven row of every void operation the harness can reach**, e.g. `URealValue.setTypeToRuntimeType()` at 144/144. | §8.2, `stage-01-verification-round3.md` §1.1 | `93e038ac` — `UNMEASURABLE` added (`isAgreement()` false, `isMeasurement()` false), raised only when *neither* side carries an observation; plus five further fixes, §9. |
-| 4 | **DEFECTIVE — D-15 (now).** Two *real* values, correctly compared and correctly equal, over an operation whose codomain is a single point. **120 of 285 operations**; a 120-literal subject is fully agreed on all 120. | §10.3 | **open** |
+| 0 | Harness built (§1–§6), believed sound. | Isolation was the load-bearing finding: a platform-parented `URLClassLoader` is **not** isolated in this reactor (§3). | `IsolatedJarClassLoader`, 9 isolation tests. |
+| 1 | **DEFECTIVE — D1** | The harness scored **its own** marshalling failures as agreement: rows where neither side entered the operation came out `AGREE`. | `cf9d2f45` — `HARNESS_ERROR`, a distinct non-agreement (fixes F1–F11). |
+| 2 | **DEFECTIVE — D2** | Two throws with matching class names were `AGREE_THROWN`, messages discarded. Against a subject whose every body throws: **21 816 of 471 471 rows green** over 27 operations. | `e8b73e48` — throw-agreement **deleted**, not tightened. Both outcomes are `BOTH_THREW`; the note keeps both classes and both messages. |
+| 3 | **DEFECTIVE — D-10** | `VOID` vs `VOID` scored `AGREE`. Against an empty-body subject: **444 rows green — every driven row of every void operation**, e.g. `URealValue.setTypeToRuntimeType()` at 144/144. | `93e038ac` — `UNMEASURABLE` (neither an agreement nor a measurement), raised only when *neither* side observes; plus rows ≠ measurements. |
+| 4 | **DEFECTIVE — D-15** | **No scoring bug at all.** Two real values, correctly compared, correctly equal, over an operation whose codomain is a single point. 120 of 285 operations (159 after the corpus widening); a subject of hardcoded literals is fully agreed on all of them, `isClean() == true`, report headed `# rows.disagreement 0`. | `0a93ad4f` — `distinctReferenceValues()` computed, published per operation, and **gated**: `requireStagePass` refuses below 2 without a value-keyed written sign-off. Re-measured in round 5: **119 clean-but-degenerate sweeps, 119 refused, 0 stage passes.** |
+| 5 | **`SOUND_WITH_DOCUMENTED_LIMITS`** | The first direct measurement of **detection power** (`f438a365`), and no new scoring defect. What it found instead: the gate is not satisfiable by fidelity (D-29), detection is bounded by an input domain nobody measures (D-30), and three of the four MAJORs are in the **record** rather than in the instrument (D-33, D-34, D-35). | D-33 closed by this commit; D-29, D-30, D-34, D-35 open — see §10.4. |
 
-The shape has not changed in four rounds. Each round the harness stopped making one false claim and
-a reviewer found a different construction producing the same false claim. Rounds 1–3 were all "the
-absence of a measurement was scored as an agreement". Round 4 is not: it requires no bug in
-`DifferentialSweep` at all, and it is the first door that every existing safeguard is *right* to let
-through.
-
----
-
-## 10.3 D-15, the open CRITICAL, measured two independent ways
-
-Both round-4 reviewers found it independently, by different methods, and their numbers are
-consistent but not identical. Both are recorded; neither is blended.
-
-**(a) Empirical — codomain census over the shipped sweep** (`stage-01-verification-round4.md` §3.1,
-§3.2). Seed `20260817`, the shipped 285-operation inventory, the shipped six corpora. Distinct
-canonical reference values counted per operation over its measured rows:
-
-```
-TOTAL single-valued-codomain operations: 120  of 285
-     19 IntegerValue   23 RealValue   20 UBooleanValue
-     19 UIntegerValue  19 URealValue  20 UStringValue
-
-URealValue.isDefined()      144 measured  144 driven   the one value: BOOLEAN(true)
-URealValue.type()           144 measured  144 driven   OPAQUE("org.tzi.use.uml.ocl.type.URealType|…")
-UStringValue.toBoolean()    102 measured  102 driven   BOOLEAN(false)
-RealValue.toStringWithType()  6 measured    6 driven   STRING("0.0 : Real")
-…
-```
-
-Driven through the real `DifferentialSweep` with the *shipped* per-operation predicate
-(`driven > 0 && agreed == driven`, `UnwrittenPortInvariantTest.java:416-425`):
-
-```
---- subject j-constant-table   body: return CONST.get(op.key())  -- 120 hardcoded literals, no logic
-    rows 471471 / measured 8616 / agreement 8616
-    tally {AGREE=8616, BOTH_THREW=30580, HARNESS_ERROR=388695, MIXED=43580}
-    FULLY AGREED OPERATIONS: 120
-
---- subject h-const-BOOLEAN(false)   body: return UValue.bool(false)
-    rows 471471 / measured 52196 / agreement 6888
-    FULLY AGREED OPERATIONS: 92
-```
-
-**Zero `DIFFER` rows anywhere in subject j's sweep.** And what a *stage* sees, which is the level
-that matters (§3.3):
-
-```
-STAGE URealValue.isDefined()   subject 'const-BOOLEAN(true)'
-  summary                     URealValue.isDefined(): 30 rows, 30 measured, AGREE=30
-  disagreements().isEmpty()   true   <= a caller asserting this reads PASS
-  isClean()                   true   <= *** THE DOCUMENTED PASS PREDICATE SAYS PASS ***
-  requireMeasurements(1)      returned normally
-```
-
-**(b) Static — return-type census and bytecode** (`stage-01-static-review-round4.md` D-15). 140 of
-the 285 reachable operations return `boolean`, and most of those predicates are compile-time
-constants:
-
-```
-$ javap -c -p org/tzi/use/uml/ocl/value/Value.class
-  public boolean isBag();       0: iconst_0   1: ireturn
-  public boolean isUndefined(); 0: iconst_0   1: ireturn
-  public boolean isCollection();0: iconst_0   1: ireturn
-  public boolean isLink();      0: iconst_0   1: ireturn
-```
-
-Restricted to the six receiver kinds the corpora actually contain: **91 constant-`false`
-operations**, predicted at 6762 agreement rows against a one-line subject `return UValue.bool(false)`.
-
-**The two counts do not have to be reconciled to act on this, and are not reconciled here.** (a) is a
-measurement of what the sweep produced (92 fully-agreed operations for that subject, 6888 rows); (b)
-is a static prediction from declared return types and bytecode (91, 6762). The discrepancy is one
-operation. It is recorded as unreconciled; it does not change the finding, and either number is
-larger than D-10's six operations and 444 rows.
-
-**Why every safeguard from rounds 1–3 lets it through, and is right to.** `UNMEASURABLE` cannot fire
-— both sides carry an observation. `measurementCount() == rowCount()`. `isClean()` is `true`. The
-writer writes. `throwClassMismatchCount()` is 0.
-`DifferentialHarnessRegressionTest.everyKindIsEitherAnObservationOrUnmeasurable` passes, and correctly
-so: it quantifies over `UValue.Kind`, the *value vocabulary*, whereas the degeneracy is in the
-**operation's codomain**, which nothing in the tree examines.
-
-**Why the shipped family invariant misses it.** `UnwrittenPortInvariantTest` has seven subjects, one
-of which is constant-valued — `e-fixed-constant`, `return UValue.uBoolean(true, 1.0)`, canonical
-`UBOOLEAN(true,1.0)`. **No operation in the 285-operation inventory returns a `UBOOLEAN` canonical
-form as its result**, which is exactly why that subject prints "fully agreed ops (none)". The
-subject family was built from the encodings of *"no code here"* that had already caused a failure,
-not from an enumeration of what the *reference* can return. Changing that single literal to
-`UValue.bool(false)` makes the shipped assertion at `UnwrittenPortInvariantTest.java:147` fail with
-**92 unreviewed fully-agreed operations**.
+**The shape.** Rounds 1–3 were one bug class: *the absence of a measurement scored as agreement*.
+Round 4 was not — it needed no bug in `DifferentialSweep`, and every safeguard from rounds 1–3 was
+*right* to let it through. Round 5 was not either: the instrument survived every attack constructed
+against its scoring, and the softest target had become the documents reporting it.
 
 ---
 
-## 10.4 Every defect still open
+## 10.3 What is measured and is not in doubt
 
-Round 4 produced two independent reports that **both** used the keys `D-16`…`D-19`, for different
-defects. The register below is the single canonical one; the "origin" column maps each entry back.
-Nothing in the round-4 reports was renumbered.
+Recorded so that "documented limits" is not read as "unreliable". Every item was reproduced by an
+independent reviewer, in most cases twice.
 
-| Key | Sev | Defect | Origin |
+**Detection power (round 5, `PortedInfidelityDetectionPowerTest`).** Control: two independently
+loaded `HistoricalOracle` instances over 285 operations and 19 083 stage-shaped rows —
+`{AGREE=17199, BOTH_THREW=910, HARNESS_ERROR=883, UNMEASURABLE=91}`, **0 `DIFFER`, 0 `MIXED`, 0
+diverging operations**. Every divergence below is therefore attributable to the planted defect alone.
+
+| probe | planted infidelity | detected on | rows | stage passes lost |
+|---|---|---|---|---|
+| P1 | 0-based port of the 1-based string index | 3 of 3 | 138 | 0 — see D-29 |
+| P2 | uncertainties combined with `+` instead of `sqrt(ua²+ub²)` | 4 of 4 | 468 | 4 |
+| P3 | `Math.hypot(ua,ub)` for `sqrt(ua*ua+ub*ub)` | 4 of 4 | 24 | 4 |
+| P4 | `<=` for `<`, `>=` for `>` | 6 of 6 | 280 | 4 |
+| P5 | results rounded to 10 decimal places | 7 of 7 | 428 | 7 |
+| P6 | `uEquals` ignores the uncertainty component | 4 of 4 | 1 119 | 2 |
+| P7 | divide-by-zero returns `Undefined` where historical throws | 6 of 6 | 167 | 3 |
+| P8 | P2's defect hidden behind `HarnessMarshallingException` (D-17) | 0 | 0 | **4** |
+| P9 | P2's defect hidden behind `supports() == false` | 0 | 0 | **4** |
+| P10 | P2's defect only at receiver value `42.0` | **0** | **0** | **0** |
+| P11 | `-0.0` collapsed to `0.0` | 3 of 4 | 59 | 3 |
+
+The brief asked for detection "at the 10th decimal". P3 resolves **seven significant digits finer**.
+P8 and P9 are the two concealment attacks: both destroy the divergence, neither buys a pass. P10 is
+D-30 and is the reason this verdict is qualified.
+
+**The rest, unchanged and re-measured in round 5:**
+
+* **Isolation.** Historical classes come from the vendored jars through a parent-last loader; the
+  harness refuses to run if `org.tzi.use.uml.ocl.value.Value` resolves to the application loader.
+  Two independent oracles reproduced each other on all 19 083 rows — a stronger check than the
+  isolation test itself performs.
+* **D1, D2, D-10 are closed and pinned**, re-run over all seven non-port subjects: `a-throws`
+  `{BOTH_THREW=39880, HARNESS_ERROR=618462, MIXED=67996}`, measured 0, agreement 0;
+  `b-returns-java-null` `{HARNESS_ERROR=726338}`, agreement 0; `c-empty-body` 67 268 `DIFFER` and 728
+  `UNMEASURABLE`, agreement 0; `g` still **aborts loudly** on `Error` with 0 rows left behind. The
+  historical `UIntegerValue.power(value)` produces 225 `BOTH_THREW` rows against a *perfect* port
+  with identical class **and** identical message and is still scored a non-agreement.
+* **The discrimination metric is correct**, checked by two routes that read no `DiffRow`: recomputed
+  from the committed golden data rows with `awk` (258 and 389, both exact, and the ported column
+  gives 391 on the faulty golden, proving the number comes from the reference side), and recomputed
+  by driving the oracle directly over `URealValue.neg()`'s 24-receiver domain (same 23-element set,
+  enumeration printed so a reader can count it).
+* **The gate is real and bidirectional.** One implementation (`stageGateFailures`,
+  `DifferentialSweep.java:604`); a floor of zero throws; the sign-off is an exact two-part key with a
+  mandatory non-blank rationale that reaches `stageStatement()` and the report header; a wrong value
+  or a wrong operation does not match; and the control in the same test — a faithful port passing
+  `requireStagePass(100, none())` — fails if the gate degenerates into blanket refusal. No sign-off
+  exists anywhere in the tree outside the tests that exercise the mechanism.
+* **Corpus widening (D-19) worked.** Zero-measurement operations **61 → 11**; all 27 `BooleanValue.*`
+  and all 25 `StringValue.*` operations now measure. Census after widening: **11 measured nothing /
+  159 single-valued / 115 discriminating**, summing to 285.
+* **Determinism, scope and acceptance.** Four full `mvn -q clean && mvn -B verify
+  -Djava.awt.headless=true` runs in round 5, all `BUILD SUCCESS`; use-core surefire 67 → 71 (+4,
+  exactly the new tests), failsafe 1, use-gui 1 and 129 unchanged; two consecutive runs byte-identical
+  over the 557-line detection block and the 324-line invariant block; goldens reproduced without the
+  refresh flag; `git diff --name-status 30d480db..HEAD -- '*/src/main/*'` **empty** in every round.
+
+---
+
+## 10.4 The open-defect register — single and canonical
+
+A bare `D-nn` anywhere in `docs/port2/` means **this table**. A report-local id must be cited with
+its report (e.g. *static-review-round4 `D-17`*, *static-review-round5 `R5-2`*); §10.5 maps them all.
+
+| Key | Sev | State | Defect |
 |---|---|---|---|
-| **D-15** | **CRITICAL** | **A degenerate codomain is scored as fidelity.** 120 of 285 operations produce one distinct reference value over the shipped corpora; a subject of 120 hardcoded literals is `AGREE=8616 / DIFFER=0` and fully agreed on all 120. 76 of them yield a stage-shaped sweep with `isClean() == true` and a written report headed `# rows.disagreement 0`. §10.3. | both, `D-15` |
-| D-16 | MAJOR | **`isClean()` has no coverage floor.** It is `measurementCount() > 0 && disagreements().isEmpty()`, so **one** measured row passes. A 1×1 domain gives `1 rows, 1 measured, AGREE=1`, `isClean() == true`, `requireMeasurements(1)` returns normally, and the writer writes the report. `requireMeasurements(int)` is the only floor and its argument is chosen by the caller who wants to pass. | verification `D-16` |
-| D-17 | MAJOR | **A subject controls its own per-operation denominator.** `fullyAgreedOperations()` computes `driven` as "not `HARNESS_ERROR` and not `UNSUPPORTED`", and both are raised by the *subject* about itself. `HarnessMarshallingException` is precisely what `Candidate`'s Javadoc tells an S4 adapter author to throw. Measured: a subject implementing one method and raising `HarnessMarshallingException` everywhere else scores `{AGREE=444, HARNESS_ERROR=471027}` — **444 agreement rows and zero `DIFFER` rows in a 471 471-row sweep**. `isClean()` does protect a *stage* here (those rows are disagreements); the defect is in the standing invariant's predicate, which is what the whole closure argument rests on. | verification `D-17` |
-| D-18 | MAJOR | **The canonical-form collision is 193 of 285 operations, not 2.** `HistoricalOracle.fromHistorical` (lines 709–720) maps a raw `Boolean`/`Integer`/`Double`/`CharSequence` to the same `UValue.Kind` as `BooleanValue`/`IntegerValue`/`RealValue`/`StringValue`. §9.5 recorded this as a two-operation blind spot and pinned those two on `ECHO_SUBJECT_REVIEWED`; measured against declared return types in the vendored jars it is **193 of 285 (68%)**. On all of them a port returning the right content with the wrong Java type is scored `AGREE` on every row. | verification `D-18` |
-| D-19 | MINOR | **Coverage, quantified.** 61 of 285 operations produce **zero measurements** across the whole 471 471-row sweep even against a perfect port; 52 have zero driven rows. `BooleanValue` and `StringValue` are in `MARSHALLABLE_RECEIVERS` so `supports()` returns `true`, but no corpus contains a `BOOLEAN` or `STRING` value, so all 27 `BooleanValue.*` and all 25 `StringValue.*` operations are 100% `HARNESS_ERROR`. Compounds D-15: nearly all 52 are type predicates or constant accessors, so widening the corpora widens the single-valued population by roughly 40 more. | verification `D-19` |
-| D-20 | MAJOR | **`everyKindIsEitherAnObservationOrUnmeasurable` is tautological.** It branches on `sample.carriesAnObservation()` and asserts the verdict `DifferentialSweep.classify` derives from that same predicate, so it restates the implementation. Add a `Kind.UNDEFINED`, forget to widen `carriesAnObservation()` (`UValue.java:191-193`, hard-coded `kind != VOID && kind != NULL`), add the required sample: the test stays green and D-10 is reintroduced. §9.2 and the closure argument both claim the opposite. A non-circular criterion exists: a value-carrying kind has at least two distinguishable inhabitants. | static `D-16` |
-| D-21 | MAJOR | **The writer's guard and every report header are file-level totals.** `writeAll` sums `measurementCount()` over all results and checks only the total; `# rows`, `# rows.measured`, `# rows.agreement`, `# rows.disagreement`, `# rows.throwClassMismatch` and `# verdict.*` are likewise sums, and `# operations` is a comma-joined list with no per-operation counts. A 40-operation report in which 39 measured nothing and one measured one row is written happily and its header is indistinguishable in shape from a fully-measured one. This is the D-10 lesson ("444 of 471 471 is noise in an aggregate; per operation it was 144 of 144") applied to the invariant test and **not** applied to the artefact a human reads. | static `D-17` |
-| D-22 | MINOR (live at S4) | The `UNSUPPORTED` row's note asserts `reference: could be driven` / `subject: could be driven` whenever `supports()` returned true, but `supports()` is per-operation while the note is written per row with the inputs in hand; the per-row receiver check happens later (`HistoricalOracle.java:507-514`). Unreachable with today's candidates; live the moment a port with partial `supports()` coverage is plugged in. | static `D-18` |
-| D-23 | MINOR (latent) | `unmeasurableNote` sets `voidOperation` from a *disjunction*, so the **subject** alone returning `VOID` is enough to assert a fact about the historical method's declaration. Not reachable with the shipped corpora (no null-returning invocation was found). Correct predicate: `ref.value.kind() == VOID` alone. | static `D-19` |
-| D-24 | MINOR | §5.2 of this document pasted a report header and line counts that the golden refresh in `93e038ac` superseded, in the one place the document invites the reader to check the record against the artefact. **Annotated in place, 2026-08-17** — see the correction box in §5.2. | static `D-20` |
-| D-25 | MINOR | `AcceptedThrowPairs.java:48-49` states "the source file is plain ASCII"; the same paragraph contains a U+2014 and the file has fifteen non-ASCII bytes. Harmless in effect — git's binary heuristic keys on NUL and the file has none, so the reviewability claim holds — but this round's own standard is that a comment in evidence-producing code must not state something the file falsifies. | static `D-21` |
-| D-14 | MINOR | `AcceptedThrowPairs` provenance: no `# accepted.*` header, so a run with a non-empty allowlist that adjudicated nothing is byte-indistinguishable from a run with `none()`. `describe()` and `DifferentialSweep.acceptedThrowPairs()` are called from nowhere. | §9.7, still open |
-| D-9 | MINOR | Coverage: 8 marshallable receivers; `SBooleanValue` (39 operations) and collection receivers are out of reach, `org.tzi.use.uml.ocl.type.*` and `uDataTypes.*` unreachable by design. A declared scope boundary, recorded so it is not mistaken for a result. | §9.7, still open |
+| **D-29** | **MAJOR** | **open** | **The stage gate is not satisfiable by fidelity.** Clause 2 counts `BOTH_THREW`, `HARNESS_ERROR`, `UNSUPPORTED` and `UNMEASURABLE` as disagreements. A **perfect** port reaches `isStagePass(1, none())` on **74 of 285**: 119 refused by clause 3 (D-15, by design), **92 refused by clause 2** for rows a faithful port cannot avoid, and the only route out is **154** hand-authored `AcceptedThrowPairs` entries keyed on both messages verbatim. Two consequences: the incentive to fall back on the still-public `isClean()` (which says yes to 193 of 285 for the same port) is a **119-operation gap**; and on those 92 operations an infidelity leaves the pass bit **unchanged** — measured on 10 (defect, operation) pairs, the whole off-by-one probe among them, whose rows go from `{AGREE=37, BOTH_THREW=99}` to `{DIFFER=26, MIXED=26, BOTH_THREW=84}` while `requireStagePass` says `false` before and after. |
+| **D-30** | **MAJOR** | **open** | **Detection is bounded by the input corpus and no domain-coverage figure is computed, published or gated.** `distinctReferenceValues()` made the *codomain* an enforced quantity; its dual is measured nowhere. A real arithmetic defect at receiver `42.0` is stage-pass-identical to a perfect port, with `[DISCRIMINATING]` printed beside the number — true, and completely uninformative about the input never tried. Same in miniature at `URealValue.round()` for `-0.0 → 0.0`, which *is* caught on `floor()`, `neg()` and `mult(value)`. Not a bug in `DifferentialSweep`; it is the boundary of what a fidelity claim from this instrument means, and the instrument does not state it. |
+| D-18 | MAJOR | open | **The primitive/boxed canonical collision is 193 of 285.** `fromHistorical` maps a raw `Boolean`/`Integer`/`Double`/`CharSequence` to the same `UValue.Kind` as the corresponding `Value` class, so right content with the wrong Java type scores `AGREE`. Three instances are on the reviewed allowlist with written reasons; the other 190 are not. Out of reach of a mutation experiment. |
+| D-20 | MAJOR | open | `everyKindIsEitherAnObservationOrUnmeasurable` is **tautological**: it branches on `carriesAnObservation()` and asserts the verdict `classify` derives from that same predicate. Add a `Kind`, forget to widen the predicate, add the sample: the test stays green and D-10 returns. Non-circular criterion, still unwritten: a value-carrying kind has at least two distinguishable inhabitants. |
+| **D-34** | **MAJOR** | **open** | The 3-argument `DiffReportWriter.writeAll` (`DiffReportWriter.java:123-125`) silently substitutes `AcceptedDegenerateOperations.none()`, so a report can **assert** `# accepted.degenerateOperations 0` while the pass it documents was granted under a sign-off. All five call sites use the 3-argument form. This is D-14's hole dug a second time, in a stronger shape — a header that answers the question **wrongly** rather than one that is missing. Mitigation until fixed: `harness-contract.md` §4.3 requires the 4-argument form. |
+| **D-35** | **MAJOR** | **open** | Commit `0a93ad4f` **weakened** the standing invariant. `anUnwrittenPortAgreesWithNothing` used to assert the reviewed set against *all* fully-agreed operations; it now asserts only the discriminating half, and the degenerate half — **159 of 285** — is printed and unasserted, for the only two subjects that can produce agreement at all. The stated D-20 justification does not support it: asserting membership of the degenerate bucket is not restating the predicate that sorted it. One instance already exists (`RealValue.value()` moved from an asserted list to a printed one). Corroborated by re-measurement: the unasserted bucket holds 1 operation for subject `f` and 0 for subject `e` — small today, unguarded tomorrow. |
+| **D-36** | **MAJOR** | **open** | **The gate is opt-in and the tree's own flagship green is not gated.** `isClean()`, `requireMeasurements(int)`, `disagreements().isEmpty()` and `writeAll` all still return a clean-looking answer on a degenerate sweep, and `UncertaintyDifferentialSmokeTest` — whose goldens are S1's committed evidence — still asserts `isClean()` with a comment that now contradicts `isClean()`'s own Javadoc. `harness-contract.md`'s claim "a stage that forgets fails rather than passes" was **false and has been withdrawn** in this commit; what is unavoidable is the *number*, not the *refusal*. |
+| D-17 | MAJOR | open, **narrowed by D-32** | A subject can shrink its own `driven` denominator by raising `HarnessMarshallingException` — precisely what `Candidate`'s Javadoc instructs — so the per-operation **invariant predicate** scores it fully agreed. |
+| **D-32** | MINOR | **new — narrows D-17** | Measured against the **stage gate**, a subject carrying a real arithmetic defect and hiding the affected rows behind `HarnessMarshallingException` reaches **zero** stage passes on all four affected operations (clause 2 refuses `HARNESS_ERROR`) and the row note still names the subject as the side that could not be driven. **What the attack destroys is attribution, not the verdict.** The round-4 register's "the per-operation invariant predicate is still vulnerable" is correct but over-reads as residual risk to a stage. |
+| D-21 | MAJOR | **closed for the header, open for the guard** | `# rows.*` and `# verdict.*` are still sums over every result in the file and `writeAll`'s measurement guard is still file-level; but the header now carries a per-operation `# op.<key>.*` block, so no number in the file is unattributable. |
+| **D-31** | MINOR | **open** | `indexBoundaries()` was drawn for `at(int)` (`MIN_VALUE, -1, 0, 1, 2, 3, 4, MAX_VALUE`) and is mostly out of range for two-index extraction: `UStringValue.uSubstring(int,int)` is **17 measured rows of 432** against a perfect port (391 `BOTH_THREW`), `at(int)` / `uAt(int)` 37 of 144. Direct cause of that operation costing no stage pass under P1. Same species as D-19 and D-28: a fact about the corpus, not the historical code. |
+| D-28 | MINOR | open | The corpora contain exactly **one** `RealValue` (`REAL(0.0)`), so all 23 `RealValue.*` operations are single-valued by arithmetic. **"159 single-valued" is a joint fact about the implementation and the corpus.** |
+| D-22 | MINOR | open, latent until S4 | The `UNSUPPORTED` note asserts "could be driven" per row from a per-operation `supports()`. Live the moment a port with partial `supports()` coverage is plugged in. |
+| D-23 | MINOR | open, latent | `unmeasurableNote` derives void-ness from a **disjunction**, so the subject alone returning `VOID` asserts a fact about the historical declaration. Correct predicate: `ref.value.kind() == VOID` alone. |
+| D-25 | MINOR | open | `AcceptedThrowPairs.java:48-49` says "the source file is plain ASCII"; the file holds fifteen non-ASCII bytes. Harmless in effect; this project's own standard is that a comment in evidence-producing code must not state something the file falsifies. |
+| D-14 | MINOR | open for `AcceptedThrowPairs` | No `# accepted.*` provenance header for throw-pairs; `describe()` is called from nowhere. `AcceptedDegenerateOperations` does emit its header even when zero — but see D-34. |
+| **D-37** | MINOR | **open** | Clause 3's refusal message conflates *"nothing was measured"* with *"this operation could not have failed"* when `distinctReferenceValues() == 0`, and prescribes a sign-off that **can never match** (`soleReferenceValue()` is `null`, so `rationaleFor(key, null)` is `null` unconditionally). Clause 1 fires alongside, so the true reason is present next to the false one. |
+| **D-38** | MINOR | **open** | `assertEquals(cleanAndDegenerate, refusedByTheGate)` in `aNoLogicPortCannotProduceAStagePass` is **tautological** — both counters increment in the same `if` body with only `assertThrows` between them. D-20's shape inside the test that closes D-15. The `assertThrows` does the real work; the equality is not a second, independent check and must not be summarised as one. |
+| **D-39** | MINOR | **open** | The "169 distinct marker strings" rationale is **false**: `DiffRow.harnessError(t)` returns `"HARNESS_ERROR:" + t.getClass().getName()` and all 169 rows failed with the same class, so all 169 carry **one** string. The pin still holds, at 1-vs-0, not 169-vs-0. Stated in `DifferentialHarnessRegressionTest.java:671-677`, `:710` and (until this commit) `harness-contract.md` §4. |
+| **D-40** | MINOR | **open** | `fullyAgreedOperations()` tests `agreed == driven` (`UnwrittenPortInvariantTest.java:466`) rather than `agreed >= driven`. A regression making `HARNESS_ERROR` or `UNSUPPORTED` an agreement — the exact D1/D2 defect class — yields `agreed > driven` and drops the operation out of **both** buckets silently. One-character fix. |
+| **D-41** | MINOR | **open, latent** | `# op.<key>.*` header keys are **not unique**: `DiffReportWriter.java:246-263` emits a block per `Result`, not per operation, so several results for one operation give duplicate keys with different values, no aggregation and no detection. Directly in the path of an S4 stage sweeping one operation over several corpora into one report. |
+| **D-42** | MINOR | **open** | `booleanCorpus(RANDOM_DRAWS)` appends random draws to an already-exhaustive two-element domain, so the corpus census printed in every run reads `boolean=4` for a type with two inhabitants. Harmless; overstates the domain in an artefact a human reads. |
+| **D-33** | MAJOR | **CLOSED by this commit** | §11.4.1 pasted, as the AFTER evidence of the 119-operation attack, a refusal produced by a **different test on a different subject over a different domain** (the one-row stub-vs-stub sweep in `DifferentialHarnessRegressionTest`), naming an operation that has 576 rows and 164 distinct reference values in the run being described. Corrected **in place** with a box that says what produced it, rather than swapped for a matching block. |
+| D-15 | CRITICAL | **CLOSED** (`0a93ad4f`) | A degenerate codomain scored as fidelity. Computed, published per operation, and gated. Re-measured in round 5 by an independent reviewer who attacked the gate five ways and could not get a clean pass out of a single-valued operation. |
+| D-16 | MAJOR | **CLOSED for the stage gate** | `isClean()` has no coverage floor and is unchanged deliberately; `isStagePass(int, …)` takes a mandatory floor and **rejects zero**. See D-36 for what remains. |
+| D-19 | MINOR | **CLOSED** | 61 → 11 zero-measurement operations; the 11 are declared limits (8 void mutators, `UIntegerValue.power(value)`, `UStringValue.toInteger()`, `UStringValue.toReal()`). |
+| D-26 | MINOR | **CLOSED and pinned** | `assertMatchesGolden` compares bytes, not lines (`93e038ac`), pinned by `goldenComparisonIsBytesAndNotLines`. |
+| D-27 | MINOR | **CLOSED** | The `MIXED` note names which side threw, asserted in both directions on live data. |
+| D-24 | MINOR | annotated in place | §5.2 pasted a header the `93e038ac` golden refresh superseded. |
+| D-9 | — | **declared boundary, not a defect** | `SBooleanValue` (39 operations), collection receivers, `org.tzi.use.uml.ocl.type.*` and `uDataTypes.*` are out of reach by design; the 33 non-nameable operations (§10.1) and post-state are the same species. Recorded so they are not mistaken for results. |
 
-**And one planning fact that is not a defect but is not written down anywhere else:** a **perfect**
-port is `isClean() == false` on **97 of 285 operations**, because their shared error paths produce
-`BOTH_THREW` rows even when both sides throw the same class with the same message — `BOTH_THREW` is a
-non-agreement by design. A stage told simply to "assert `isClean()`" is therefore pushed towards
-`AcceptedThrowPairs`, which is the one remaining agreement-without-two-values route in the harness.
-Bulk sign-off there is exactly how a blanket throw-agreement rule gets reintroduced. See
-`harness-contract.md` §6.
-
----
-
-## 10.5 What IS sound, and is not in doubt
-
-Recorded because "DEFECTIVE" must not be read as "worthless". Every item was reproduced
-independently in round 4.
-
-* **Isolation.** The historical classes come out of the vendored jars through a parent-last loader;
-  the harness refuses to run if `org.tzi.use.uml.ocl.value.Value` resolves to the application loader
-  (§3). Nine isolation tests.
-* **D1, D2, D-10 are closed and pinned.** Subject `c-empty-body`: `rows 471471 / agreement 0`, tally
-  `{DIFFER=51752, HARNESS_ERROR=388695, MIXED=30580, UNMEASURABLE=444}`, "fully agreed ops (none)" —
-  the 444 rows were *relabelled*, not deleted, and the 51 752 genuine divergences are untouched.
-  One-sided absence correctly stays `DIFFER`.
-* **The instrument finds real defects.** Nine planted defects spanning arithmetic, comparison,
-  conversion, string, exception class, zero divisor, the 0/1 confidence boundary, empty string and
-  out-of-range index were **all nine** reported as divergence, every one `isClean() == false`, with a
-  clean control (perfect port on `URealValue.add`: 784/784 `AGREE`, `isClean() == true`).
-* **A wrong exception class has an aggregate.** `throwClassMismatchCount()` separated an otherwise
-  bit-identical port 0 vs 120 where `rowCount`, `measured`, `AGREE`, `BOTH_THREW`, `HARNESS_ERROR`
-  and `disagreements` were all equal.
-* **The writer refuses to lie by omission.** Zero-row and zero-measurement reports are both refused,
-  and the refusal is pinned by a test that also asserts the file was not created.
-* **Determinism and scope.** `mvn -q clean && mvn -B verify -Djava.awt.headless=true` twice from
-  clean, both `BUILD SUCCESS`; use-core surefire 61, failsafe 1; use-gui surefire 1, failsafe 129;
-  identical both runs. The invariant's 205 lines of output byte-identical across runs at
-  `sha256 482ddb2fef0e97f6915b6e3f44c5c3910cf574337ca0154345bf7ac153308530`, reproduced independently
-  by the round-4 verifier. Both goldens byte-identical to the regenerated reports.
-  `git diff --name-status 30d480db..HEAD -- '*/src/main/*'` is **empty**. No `AcceptedThrowPairs`
-  sign-off exists anywhere in the tree.
+**Totals.** Open: **8 MAJOR** — D-17 (narrowed by D-32), D-18, D-20, D-29, D-30, D-34, D-35, D-36 —
+plus D-21 open only in its `writeAll` guard, and **12 MINOR** — D-14, D-22, D-23, D-25, D-28, D-31,
+D-37, D-38, D-39, D-40, D-41, D-42. Closed: D-15 (CRITICAL), D-16, D-19, D-26, D-27, D-33, and the
+round-1/2/3 CRITICALs D1, D2, D-10. **No defect open today is a scoring defect:** every one is a
+limit of reach, a gap between the artefact and the run, or an invariant that is printed rather than
+asserted.
 
 ---
 
-## 10.6 The precondition on S4 — what must be true before a fidelity number is quoted
+## 10.5 The id re-keying map — so no evidence is orphaned
 
-Not a wish-list; this is the gate. It is stated normatively, with the rest of the rules, in
-[`harness-contract.md`](harness-contract.md).
+Round 4 produced two independent reports that both used `D-16`…`D-19` for different defects, and
+`D-15` denoted **both** a round-3 MINOR and the round-4 CRITICAL. Round 5's static review used its
+own `R5-n` space. Nothing in any round report was rewritten; this is how they are read.
 
-1. **`isClean()` must not be the pass predicate on its own.** A stage must additionally assert that
-   the sweep observed **at least two distinct canonical reference values** — that it *could* have
-   failed. The genuinely-constant operations go on a written, reviewed allowlist, exactly like
-   `ECHO_SUBJECT_REVIEWED`. The 120 are enumerable, stable, and already listed in
-   `stage-01-verification-round4.md` §3.1.
-2. **A constant subject per canonical kind joins the invariant family** — `bool(false)`, `bool(true)`,
-   `integer(0)`, `string("")`, and an `OPAQUE` — so the family covers what the *reference* can return
-   and not only the encodings of "no code here". Today it covers exactly one constant, and that
-   constant is the one kind no operation returns.
-3. **A subject must not be able to shrink its own denominator.** `HARNESS_ERROR` raised by the
-   subject must not silently leave `driven` (D-17).
-4. **Coverage facts go in the report header, per operation** — measured count and distinct reference
-   values — not as file-level sums (D-21).
+| Source report | local id | canonical | defect |
+|---|---|---|---|
+| `stage-01.md` §8.2 (round 3) | `D-15` | **D-26** | `assertMatchesGolden` compared lines, not bytes |
+| `stage-01.md` §8.2 (round 3) | `D-16` | **D-27** | the `MIXED` note did not name which side threw |
+| `stage-01.md` §8.2 (round 3) | `D-10`…`D-14`, `D-11a/b/c`, `D-12a/b`, `D-13a/b` | unchanged | — |
+| `stage-01-verification-round4.md` | `D-15` | **D-15** | degenerate codomain scored as fidelity |
+| `stage-01-verification-round4.md` | `D-16` | **D-16** | `isClean()` has no coverage floor |
+| `stage-01-verification-round4.md` | `D-17` | **D-17** | a subject controls its own denominator |
+| `stage-01-verification-round4.md` | `D-18` | **D-18** | the canonical-form collision, 193 of 285 |
+| `stage-01-verification-round4.md` | `D-19` | **D-19** | coverage: 61 operations measure nothing |
+| `stage-01-static-review-round4.md` | `D-15` | **D-15** | same defect, static route (91 constant-`false` ops) |
+| `stage-01-static-review-round4.md` | `D-16` | **D-20** | `everyKindIsEither…` is tautological |
+| `stage-01-static-review-round4.md` | `D-17` | **D-21** | writer guard and headers are file-level totals |
+| `stage-01-static-review-round4.md` | `D-18` | **D-22** | `UNSUPPORTED` note asserts "could be driven" |
+| `stage-01-static-review-round4.md` | `D-19` | **D-23** | `unmeasurableNote` void-ness from a disjunction |
+| `stage-01-static-review-round4.md` | `D-20` | **D-24** | §5.2 pasted a superseded header |
+| `stage-01-static-review-round4.md` | `D-21` | **D-25** | `AcceptedThrowPairs` "plain ASCII" comment |
+| `stage-01.md` §11.6 (amendment 5) | — | **D-28** | the corpora contain exactly one `RealValue` |
+| `stage-01-verification-round5.md` | `D-29` | **D-29** | the gate is not satisfiable by fidelity |
+| `stage-01-verification-round5.md` | `D-30` | **D-30** | detection is bounded by an unmeasured domain |
+| `stage-01-verification-round5.md` | `D-31` | **D-31** | `indexBoundaries()` yields almost no measured rows |
+| `stage-01-verification-round5.md` | `D-32` | **D-32** | D-17 costs attribution, not the verdict |
+| `stage-01-static-review-round5.md` | `R5-1` | **D-33** | §11.4.1 attributes one test's output to another |
+| `stage-01-static-review-round5.md` | `R5-2` | **D-34** | 3-arg `writeAll` substitutes `none()` |
+| `stage-01-static-review-round5.md` | `R5-3` | **D-35** | the standing invariant was weakened |
+| `stage-01-static-review-round5.md` | `R5-4` | **D-36** | the gate is opt-in; the smoke test gates on `isClean()` |
+| `stage-01-static-review-round5.md` | `R5-5` | **D-37** | clause-3 refusal message conflates two causes |
+| `stage-01-static-review-round5.md` | `R5-6` | **D-38** | tautological assertion in the D-15 test |
+| `stage-01-static-review-round5.md` | `R5-7` | **D-39** | "169 distinct marker strings" is false |
+| `stage-01-static-review-round5.md` | `R5-8` | **D-40** | `agreed == driven` should be `agreed >= driven` |
+| `stage-01-static-review-round5.md` | `R5-9` | **D-41** | `# op.<key>.*` keys are not unique |
+| `stage-01-static-review-round5.md` | `R5-10` | **D-42** | `boolean=4` over a two-inhabitant type |
 
-Until (1) and (2) hold, every fidelity claim S4 makes about a **type predicate, an accessor, or a
-`type()` / `getRuntimeType()` operation** would be an artefact of the instrument rather than a
-measurement of the port.
+Round-1 and round-2 fix ids (`F1`–`F11`) are commit-scoped and unchanged; they name fixes, not
+defects.
 
 ---
 
-## 10.7 The standing lesson, after four rounds
+## 10.6 What S4–S7 may and may not say
+
+Normative form in [`harness-contract.md`](harness-contract.md) §4; this is the summary a reviewer
+should hold a stage document to.
+
+1. **Quote per operation, never per file.** `# rows.*` and `# verdict.*` are sums (D-21).
+2. **Quote three numbers together or none:** measured rows, distinct reference values, and — in
+   prose, because the harness does not compute it — **the input domain the sweep covered** (D-30).
+   "576 agreed" is not a fidelity claim; "576 agreed over 24 boundary receivers × 24 arguments, no
+   value in (2,100) other than the two random draws, 164 distinct reference values" is.
+3. **Gate with `requireStagePass(floor, acknowledged)`, with the floor written down before the run**,
+   and call the **4-argument** `writeAll` (D-34).
+4. **Do not automate on the boolean.** Record the perfect-port baseline `stageGateFailures(...)` and
+   diff the **clause list** against it; on 92 of 285 operations the boolean cannot move (D-29).
+5. **Never `isClean()` as a pass** (D-36), never `disagreements().isEmpty()`, and never `>= 2` read
+   as *sufficient* — `BooleanValue.value()` and `BooleanValue.isTrue()` sit at exactly 2 and are
+   nearly free for a subject echoing one bit.
+6. **Name what the harness could not see**, per stage: void operations, `SBooleanValue`, collection
+   receivers, the type layer, the 33 non-nameable operations (`equals(Object)` first among them), and
+   any operation the corpora leave single-valued.
+7. **A sign-off is a disclosure, not a pass.** Its rationale must say what a reader should *not*
+   conclude, and it lands in the evidence file.
+
+---
+
+## 10.7 The standing lesson, after five rounds
 
 Round 1: a harness failure counted as agreement. Round 2: two throws counted as agreement. Round 3:
 two `VOID`s counted as agreement. Round 4: two equal values over a one-valued codomain counted as
-fidelity. **They are getting harder to see, not easier** — the fourth required no bug in
-`DifferentialSweep` at all, and was found within an hour by asking a question the harness had never
-been asked: *how many distinct answers does the reference give?*
+fidelity — no bug in the scorer at all. Round 5: no false claim in the scorer to find, and three of
+its four MAJORs in the **documents**: a report pasting one test's output as another's (D-33), a
+report able to assert zero sign-offs while one was in force (D-34), and an invariant quietly asserting
+less than it did the commit before (D-35). The same failure mode, translated up one level.
 
-That is the diagnosis worth carrying forward. The space is being searched by a series of ad-hoc
-questions, one per round, rather than by a property. The property that would have made D-10, D-15 and
-D-18 visible as **one family** is a single statistic the harness does not compute: **for each
-operation, the number of distinct canonical reference values observed.** An operation with one
-distinct reference value over 144 rows is not evidence of fidelity whatever its agreement rate.
-Publishing that number is cheap and is the first thing the next round should do.
+The generalisation that survives all five: **an artefact whose headline reads stronger than the
+measurement behind it.** That is the thing to look for in S4–S7, and it is why the round-5 verifier
+recorded, in place rather than quietly fixing it, that they had drafted a hand-recomputation section
+from memory before the run finished and had to replace the fabricated block with pasted output. A
+review whose own evidence is reconstructed is worth nothing.
 
-**Neither round-4 reviewer claims the space is closed, and neither does this document.** The two
-places both named for the next reviewer to look: the **two-valued** codomain (an operation whose
-range over the corpora is `{true, false}` — a subject echoing one bit of its receiver would green
-those, and the census only counted singletons), and the **`OPAQUE`** branch, where
-`UncertainBooleanValue` (9 operations) and `uDataTypes.UInteger` (1) are rendered by field reflection
-and a port need only reproduce a string.
+Two questions the instrument now answers and one it does not:
+
+* *Could the sweep have failed?* — `distinctReferenceValues()`, gated. **Answered.**
+* *Does silence mean anything?* — round 5's eleven probes. **Answered, and measured: yes, inside the
+  region the corpora reach.**
+* *How much of the input domain did we reach?* — **unanswered, and it is the fifth door.** The next
+  round should push there, and it should push on the operations that cannot be named at all.
 
 ---
 
-# 11. AMENDMENT 5 (appended 2026-08-17, after §10) — D-15 is closed by measurement, not by argument
+# 11. APPENDIX — amendment 5 (the D-15 fix), as originally written
 
-**This section supersedes every banner and every amendment above it, §10 included.** Where §10 and
-§11 disagree, §11 is authoritative. §10.5 ("what IS sound") is unchanged and still holds.
+> **This section is the evidence for the D-15 fix, not the verdict.** It was written on 2026-08-17
+> as the authority of record; it is now an appendix to §10, which is the consolidated record and is
+> authoritative wherever the two disagree. Its numbering is unchanged — `§11.1`, `§11.2`, `§11.4.1`
+> and `§11.6` are cited by the round-5 reports — and its content is unchanged apart from two
+> corrections annotated in place: the register in **§11.2 is superseded by the register in §10.4**
+> (it predates round 5 and carries no D-29…D-32), and the pasted block in **§11.4.1 is
+> misattributed**, as the round-5 static review found (R5-1); the correction box there says what
+> actually produced it. §12.5 ("what IS sound") is unchanged and still holds.
 
 Behaviour commit `0a93ad4f`, test-scoped. `git diff --name-status 30d480db..HEAD -- '*/src/main/*'`
 is empty.
@@ -1233,6 +1274,10 @@ left colliding with round-4's. Both are now **closed** (§11.5). `D-28` is new a
 ---
 
 ## 11.2 Register — state after this amendment
+
+> **SUPERSEDED by §10.4.** This table is the round-4 register as it stood after the D-15 fix
+> and before round 5. It is correct as of `0a93ad4f` and is kept for that reason, but it does
+> not carry D-29, D-30, D-31 or D-32, and its D-17 entry is narrowed by D-32. Read §10.4.
 
 | Key | Sev | State | Defect and what changed |
 |---|---|---|---|
@@ -1384,12 +1429,28 @@ arithmetic, no branching, the receiver and the arguments are never read. The lit
 asking the historical oracle once per operation, which is mechanically what a porter typing them out
 by hand would produce, and keeps the attack correct as the corpora move.
 
-**BEFORE** (what §10.3 recorded, reproduced here stage-shaped): fully agreed on the single-valued
+**BEFORE** (what §12.3 recorded, reproduced here stage-shaped): fully agreed on the single-valued
 operations, **81** of them producing a fully measured, zero-disagreement, report-writable sweep with
 `isClean() == true` and a header reading `# rows.disagreement 0`. Nothing in the tree objected.
 
 **AFTER**: the same subject, the same operations, more of them (119). Every one of the 119 is
-refused, and the refusal names the reason:
+refused, and the refusal names the reason. **The refusal below is the shape of that message, not an
+instance from this run — correction, 2026-08-17:**
+
+> **CORRECTION (R5-1, round-5 static review).** The block that follows is genuine output, but it was
+> **not** produced by `aNoLogicPortCannotProduceAStagePass` and it is **not** one of the 119. It is
+> the one-row stub-vs-stub sweep in
+> `DifferentialHarnessRegressionTest.theStageGateRefusesADegenerateOperation` — that is the only
+> place in the tree where `UREAL(2.0,0.0)` is the sole reference value
+> (`DifferentialHarnessRegressionTest.java:754`, `:786`, `:821`), and
+> `UnwrittenPortInvariantTest.java:692-693` asserts on the refusal message rather than printing it.
+> `URealValue.add(value)` has 576 rows and 164 distinct reference values in the run being described,
+> as the CONTROL line nine lines below says, so it cannot be one of the 119. **What the block
+> demonstrates is the wording and structure of a clause-3 refusal; the claim that all 119 are refused
+> is carried by the assertion in that test, and was re-measured in round 5 ("refused by the stage
+> gate 119 of 119", "stage passes (must be 0) 0").** The block is left in place rather than swapped,
+> because a report that silently repairs its own evidence is worth less than one that says what
+> happened.
 
 ```
 sweep of URealValue.add(value) is not a stage pass:
@@ -1624,3 +1685,260 @@ The `OPAQUE` branch is likewise unexamined: `type()` and `getRuntimeType()` are 
 the constant-literal subject greens, and it greens them by reproducing a string built by field
 reflection. They are now labelled non-discriminating, which is the correct label and is not the same
 as having been measured.
+
+---
+
+# 12. APPENDIX — the round-4 snapshot (former §10), as originally written
+
+> **This section is history, not the verdict.** It is the round-4 record exactly as it was written
+> on 2026-08-17, when it stood as §10 and said `DEFECTIVE`. It is kept verbatim because its pasted
+> output is the primary evidence for D-15 and for the round-4 census, and deleting it would orphan
+> that evidence. **Only its subsection numbers changed** (`§10.n` → `§12.n`), because §10 is now the
+> consolidated record. Where this appendix and §10 disagree — and on the verdict they do — **§10 is
+> authoritative.** D-15 was closed in `0a93ad4f`; see §11.
+
+Sources for everything below, all on `port-uncertainty-2`:
+
+* `docs/port2/stage-01-verification-round4.md` — independent empirical verification (ran Maven, ran
+  probes against the vendored jars).
+* `docs/port2/stage-01-static-review-round4.md` — independent static review (no Maven; `javap` and
+  reflection probes).
+* The harness itself, under `use-core/src/test/java/org/tzi/use/uncertainty/differential/`.
+
+---
+
+## 12.1 CURRENT VERDICT — **DEFECTIVE**, and what that means for a reader
+
+> **Can I trust a differential number from this harness?** Only with the operation named, and only
+> after checking that the operation is one whose answer can vary. The harness is now sound about the
+> *absence* of a measurement — three separate ways of scoring "nothing happened" as agreement were
+> found and all three are closed and pinned by executing tests, and the round-4 reviewers reproduced
+> each closure independently. It is **not** sound about the *degeneracy* of a measurement. **120 of
+> the 285 reachable operations produce exactly one distinct reference value over every input the
+> shipped corpora can supply**, so on those 120 the verdict `AGREE` is decided before either
+> implementation runs: a subject consisting of 120 hardcoded literals — no arithmetic, no branching,
+> never reading its receiver or arguments — scores `AGREE=8616`, `DIFFER=0`, `isClean() == true`, and
+> a written report headed `# rows.disagreement 0`. Every one of those rows is *individually* correct;
+> the false statement is at sweep level, which is the level a stage reads. **Therefore: a
+> `DIFFER`/`BOTH_THREW`/`MIXED` count from this harness is trustworthy and always was — the
+> instrument finds real defects, and nine planted defects of nine were caught. An `AGREE` count is
+> trustworthy only for an operation shown to have more than one reference value. Until D-15 is fixed,
+> no fidelity claim in S4–S7 may quote a per-operation agreement figure without also quoting how many
+> distinct reference values that operation produced.**
+
+---
+
+## 12.2 The story in order
+
+| # | State | Evidence | Closed by |
+|---|---|---|---|
+| 0 | Harness built (§1–§6). Believed sound. | §5 acceptance | — |
+| 1 | **DEFECTIVE — D1.** The harness scored *its own* marshalling failures as agreement: rows where neither side ever entered the operation came out `AGREE`. | §7.2 | `cf9d2f45` — `HARNESS_ERROR` added, a distinct non-agreement (F1–F11). |
+| 2 | **DEFECTIVE — D2.** Two throws with matching class names were scored `AGREE_THROWN` with the messages discarded. Against a subject whose every body is `throw new RuntimeException("TODO: port …")`: **21 816 of 471 471 rows green**, over 27 operations, because `RuntimeException` is what the historical code throws for type errors and is the least discriminating class in Java. | §8.1 | `e8b73e48` — throw-agreement **deleted**, not tightened. `AGREE_THROWN`/`DIFFER_THROWN` no longer exist; both outcomes are the single non-agreement `BOTH_THREW`, whose note carries both classes **and** both messages. |
+| 3 | **DEFECTIVE — D-10.** `VOID` vs `VOID` was scored `AGREE`. Against a subject whose every body is empty: **444 rows green — every driven row of every void operation the harness can reach**, e.g. `URealValue.setTypeToRuntimeType()` at 144/144. | §8.2, `stage-01-verification-round3.md` §1.1 | `93e038ac` — `UNMEASURABLE` added (`isAgreement()` false, `isMeasurement()` false), raised only when *neither* side carries an observation; plus five further fixes, §9. |
+| 4 | **DEFECTIVE — D-15 (now).** Two *real* values, correctly compared and correctly equal, over an operation whose codomain is a single point. **120 of 285 operations**; a 120-literal subject is fully agreed on all 120. | §12.3 | **open** |
+
+The shape has not changed in four rounds. Each round the harness stopped making one false claim and
+a reviewer found a different construction producing the same false claim. Rounds 1–3 were all "the
+absence of a measurement was scored as an agreement". Round 4 is not: it requires no bug in
+`DifferentialSweep` at all, and it is the first door that every existing safeguard is *right* to let
+through.
+
+---
+
+## 12.3 D-15, the open CRITICAL, measured two independent ways
+
+Both round-4 reviewers found it independently, by different methods, and their numbers are
+consistent but not identical. Both are recorded; neither is blended.
+
+**(a) Empirical — codomain census over the shipped sweep** (`stage-01-verification-round4.md` §3.1,
+§3.2). Seed `20260817`, the shipped 285-operation inventory, the shipped six corpora. Distinct
+canonical reference values counted per operation over its measured rows:
+
+```
+TOTAL single-valued-codomain operations: 120  of 285
+     19 IntegerValue   23 RealValue   20 UBooleanValue
+     19 UIntegerValue  19 URealValue  20 UStringValue
+
+URealValue.isDefined()      144 measured  144 driven   the one value: BOOLEAN(true)
+URealValue.type()           144 measured  144 driven   OPAQUE("org.tzi.use.uml.ocl.type.URealType|…")
+UStringValue.toBoolean()    102 measured  102 driven   BOOLEAN(false)
+RealValue.toStringWithType()  6 measured    6 driven   STRING("0.0 : Real")
+…
+```
+
+Driven through the real `DifferentialSweep` with the *shipped* per-operation predicate
+(`driven > 0 && agreed == driven`, `UnwrittenPortInvariantTest.java:416-425`):
+
+```
+--- subject j-constant-table   body: return CONST.get(op.key())  -- 120 hardcoded literals, no logic
+    rows 471471 / measured 8616 / agreement 8616
+    tally {AGREE=8616, BOTH_THREW=30580, HARNESS_ERROR=388695, MIXED=43580}
+    FULLY AGREED OPERATIONS: 120
+
+--- subject h-const-BOOLEAN(false)   body: return UValue.bool(false)
+    rows 471471 / measured 52196 / agreement 6888
+    FULLY AGREED OPERATIONS: 92
+```
+
+**Zero `DIFFER` rows anywhere in subject j's sweep.** And what a *stage* sees, which is the level
+that matters (§3.3):
+
+```
+STAGE URealValue.isDefined()   subject 'const-BOOLEAN(true)'
+  summary                     URealValue.isDefined(): 30 rows, 30 measured, AGREE=30
+  disagreements().isEmpty()   true   <= a caller asserting this reads PASS
+  isClean()                   true   <= *** THE DOCUMENTED PASS PREDICATE SAYS PASS ***
+  requireMeasurements(1)      returned normally
+```
+
+**(b) Static — return-type census and bytecode** (`stage-01-static-review-round4.md` D-15). 140 of
+the 285 reachable operations return `boolean`, and most of those predicates are compile-time
+constants:
+
+```
+$ javap -c -p org/tzi/use/uml/ocl/value/Value.class
+  public boolean isBag();       0: iconst_0   1: ireturn
+  public boolean isUndefined(); 0: iconst_0   1: ireturn
+  public boolean isCollection();0: iconst_0   1: ireturn
+  public boolean isLink();      0: iconst_0   1: ireturn
+```
+
+Restricted to the six receiver kinds the corpora actually contain: **91 constant-`false`
+operations**, predicted at 6762 agreement rows against a one-line subject `return UValue.bool(false)`.
+
+**The two counts do not have to be reconciled to act on this, and are not reconciled here.** (a) is a
+measurement of what the sweep produced (92 fully-agreed operations for that subject, 6888 rows); (b)
+is a static prediction from declared return types and bytecode (91, 6762). The discrepancy is one
+operation. It is recorded as unreconciled; it does not change the finding, and either number is
+larger than D-10's six operations and 444 rows.
+
+**Why every safeguard from rounds 1–3 lets it through, and is right to.** `UNMEASURABLE` cannot fire
+— both sides carry an observation. `measurementCount() == rowCount()`. `isClean()` is `true`. The
+writer writes. `throwClassMismatchCount()` is 0.
+`DifferentialHarnessRegressionTest.everyKindIsEitherAnObservationOrUnmeasurable` passes, and correctly
+so: it quantifies over `UValue.Kind`, the *value vocabulary*, whereas the degeneracy is in the
+**operation's codomain**, which nothing in the tree examines.
+
+**Why the shipped family invariant misses it.** `UnwrittenPortInvariantTest` has seven subjects, one
+of which is constant-valued — `e-fixed-constant`, `return UValue.uBoolean(true, 1.0)`, canonical
+`UBOOLEAN(true,1.0)`. **No operation in the 285-operation inventory returns a `UBOOLEAN` canonical
+form as its result**, which is exactly why that subject prints "fully agreed ops (none)". The
+subject family was built from the encodings of *"no code here"* that had already caused a failure,
+not from an enumeration of what the *reference* can return. Changing that single literal to
+`UValue.bool(false)` makes the shipped assertion at `UnwrittenPortInvariantTest.java:147` fail with
+**92 unreviewed fully-agreed operations**.
+
+---
+
+## 12.4 Every defect still open
+
+Round 4 produced two independent reports that **both** used the keys `D-16`…`D-19`, for different
+defects. The register below is the single canonical one; the "origin" column maps each entry back.
+Nothing in the round-4 reports was renumbered.
+
+| Key | Sev | Defect | Origin |
+|---|---|---|---|
+| **D-15** | **CRITICAL** | **A degenerate codomain is scored as fidelity.** 120 of 285 operations produce one distinct reference value over the shipped corpora; a subject of 120 hardcoded literals is `AGREE=8616 / DIFFER=0` and fully agreed on all 120. 76 of them yield a stage-shaped sweep with `isClean() == true` and a written report headed `# rows.disagreement 0`. §12.3. | both, `D-15` |
+| D-16 | MAJOR | **`isClean()` has no coverage floor.** It is `measurementCount() > 0 && disagreements().isEmpty()`, so **one** measured row passes. A 1×1 domain gives `1 rows, 1 measured, AGREE=1`, `isClean() == true`, `requireMeasurements(1)` returns normally, and the writer writes the report. `requireMeasurements(int)` is the only floor and its argument is chosen by the caller who wants to pass. | verification `D-16` |
+| D-17 | MAJOR | **A subject controls its own per-operation denominator.** `fullyAgreedOperations()` computes `driven` as "not `HARNESS_ERROR` and not `UNSUPPORTED`", and both are raised by the *subject* about itself. `HarnessMarshallingException` is precisely what `Candidate`'s Javadoc tells an S4 adapter author to throw. Measured: a subject implementing one method and raising `HarnessMarshallingException` everywhere else scores `{AGREE=444, HARNESS_ERROR=471027}` — **444 agreement rows and zero `DIFFER` rows in a 471 471-row sweep**. `isClean()` does protect a *stage* here (those rows are disagreements); the defect is in the standing invariant's predicate, which is what the whole closure argument rests on. | verification `D-17` |
+| D-18 | MAJOR | **The canonical-form collision is 193 of 285 operations, not 2.** `HistoricalOracle.fromHistorical` (lines 709–720) maps a raw `Boolean`/`Integer`/`Double`/`CharSequence` to the same `UValue.Kind` as `BooleanValue`/`IntegerValue`/`RealValue`/`StringValue`. §9.5 recorded this as a two-operation blind spot and pinned those two on `ECHO_SUBJECT_REVIEWED`; measured against declared return types in the vendored jars it is **193 of 285 (68%)**. On all of them a port returning the right content with the wrong Java type is scored `AGREE` on every row. | verification `D-18` |
+| D-19 | MINOR | **Coverage, quantified.** 61 of 285 operations produce **zero measurements** across the whole 471 471-row sweep even against a perfect port; 52 have zero driven rows. `BooleanValue` and `StringValue` are in `MARSHALLABLE_RECEIVERS` so `supports()` returns `true`, but no corpus contains a `BOOLEAN` or `STRING` value, so all 27 `BooleanValue.*` and all 25 `StringValue.*` operations are 100% `HARNESS_ERROR`. Compounds D-15: nearly all 52 are type predicates or constant accessors, so widening the corpora widens the single-valued population by roughly 40 more. | verification `D-19` |
+| D-20 | MAJOR | **`everyKindIsEitherAnObservationOrUnmeasurable` is tautological.** It branches on `sample.carriesAnObservation()` and asserts the verdict `DifferentialSweep.classify` derives from that same predicate, so it restates the implementation. Add a `Kind.UNDEFINED`, forget to widen `carriesAnObservation()` (`UValue.java:191-193`, hard-coded `kind != VOID && kind != NULL`), add the required sample: the test stays green and D-10 is reintroduced. §9.2 and the closure argument both claim the opposite. A non-circular criterion exists: a value-carrying kind has at least two distinguishable inhabitants. | static `D-16` |
+| D-21 | MAJOR | **The writer's guard and every report header are file-level totals.** `writeAll` sums `measurementCount()` over all results and checks only the total; `# rows`, `# rows.measured`, `# rows.agreement`, `# rows.disagreement`, `# rows.throwClassMismatch` and `# verdict.*` are likewise sums, and `# operations` is a comma-joined list with no per-operation counts. A 40-operation report in which 39 measured nothing and one measured one row is written happily and its header is indistinguishable in shape from a fully-measured one. This is the D-10 lesson ("444 of 471 471 is noise in an aggregate; per operation it was 144 of 144") applied to the invariant test and **not** applied to the artefact a human reads. | static `D-17` |
+| D-22 | MINOR (live at S4) | The `UNSUPPORTED` row's note asserts `reference: could be driven` / `subject: could be driven` whenever `supports()` returned true, but `supports()` is per-operation while the note is written per row with the inputs in hand; the per-row receiver check happens later (`HistoricalOracle.java:507-514`). Unreachable with today's candidates; live the moment a port with partial `supports()` coverage is plugged in. | static `D-18` |
+| D-23 | MINOR (latent) | `unmeasurableNote` sets `voidOperation` from a *disjunction*, so the **subject** alone returning `VOID` is enough to assert a fact about the historical method's declaration. Not reachable with the shipped corpora (no null-returning invocation was found). Correct predicate: `ref.value.kind() == VOID` alone. | static `D-19` |
+| D-24 | MINOR | §5.2 of this document pasted a report header and line counts that the golden refresh in `93e038ac` superseded, in the one place the document invites the reader to check the record against the artefact. **Annotated in place, 2026-08-17** — see the correction box in §5.2. | static `D-20` |
+| D-25 | MINOR | `AcceptedThrowPairs.java:48-49` states "the source file is plain ASCII"; the same paragraph contains a U+2014 and the file has fifteen non-ASCII bytes. Harmless in effect — git's binary heuristic keys on NUL and the file has none, so the reviewability claim holds — but this round's own standard is that a comment in evidence-producing code must not state something the file falsifies. | static `D-21` |
+| D-14 | MINOR | `AcceptedThrowPairs` provenance: no `# accepted.*` header, so a run with a non-empty allowlist that adjudicated nothing is byte-indistinguishable from a run with `none()`. `describe()` and `DifferentialSweep.acceptedThrowPairs()` are called from nowhere. | §9.7, still open |
+| D-9 | MINOR | Coverage: 8 marshallable receivers; `SBooleanValue` (39 operations) and collection receivers are out of reach, `org.tzi.use.uml.ocl.type.*` and `uDataTypes.*` unreachable by design. A declared scope boundary, recorded so it is not mistaken for a result. | §9.7, still open |
+
+**And one planning fact that is not a defect but is not written down anywhere else:** a **perfect**
+port is `isClean() == false` on **97 of 285 operations**, because their shared error paths produce
+`BOTH_THREW` rows even when both sides throw the same class with the same message — `BOTH_THREW` is a
+non-agreement by design. A stage told simply to "assert `isClean()`" is therefore pushed towards
+`AcceptedThrowPairs`, which is the one remaining agreement-without-two-values route in the harness.
+Bulk sign-off there is exactly how a blanket throw-agreement rule gets reintroduced. See
+`harness-contract.md` §6.
+
+---
+
+## 12.5 What IS sound, and is not in doubt
+
+Recorded because "DEFECTIVE" must not be read as "worthless". Every item was reproduced
+independently in round 4.
+
+* **Isolation.** The historical classes come out of the vendored jars through a parent-last loader;
+  the harness refuses to run if `org.tzi.use.uml.ocl.value.Value` resolves to the application loader
+  (§3). Nine isolation tests.
+* **D1, D2, D-10 are closed and pinned.** Subject `c-empty-body`: `rows 471471 / agreement 0`, tally
+  `{DIFFER=51752, HARNESS_ERROR=388695, MIXED=30580, UNMEASURABLE=444}`, "fully agreed ops (none)" —
+  the 444 rows were *relabelled*, not deleted, and the 51 752 genuine divergences are untouched.
+  One-sided absence correctly stays `DIFFER`.
+* **The instrument finds real defects.** Nine planted defects spanning arithmetic, comparison,
+  conversion, string, exception class, zero divisor, the 0/1 confidence boundary, empty string and
+  out-of-range index were **all nine** reported as divergence, every one `isClean() == false`, with a
+  clean control (perfect port on `URealValue.add`: 784/784 `AGREE`, `isClean() == true`).
+* **A wrong exception class has an aggregate.** `throwClassMismatchCount()` separated an otherwise
+  bit-identical port 0 vs 120 where `rowCount`, `measured`, `AGREE`, `BOTH_THREW`, `HARNESS_ERROR`
+  and `disagreements` were all equal.
+* **The writer refuses to lie by omission.** Zero-row and zero-measurement reports are both refused,
+  and the refusal is pinned by a test that also asserts the file was not created.
+* **Determinism and scope.** `mvn -q clean && mvn -B verify -Djava.awt.headless=true` twice from
+  clean, both `BUILD SUCCESS`; use-core surefire 61, failsafe 1; use-gui surefire 1, failsafe 129;
+  identical both runs. The invariant's 205 lines of output byte-identical across runs at
+  `sha256 482ddb2fef0e97f6915b6e3f44c5c3910cf574337ca0154345bf7ac153308530`, reproduced independently
+  by the round-4 verifier. Both goldens byte-identical to the regenerated reports.
+  `git diff --name-status 30d480db..HEAD -- '*/src/main/*'` is **empty**. No `AcceptedThrowPairs`
+  sign-off exists anywhere in the tree.
+
+---
+
+## 12.6 The precondition on S4 — what must be true before a fidelity number is quoted
+
+Not a wish-list; this is the gate. It is stated normatively, with the rest of the rules, in
+[`harness-contract.md`](harness-contract.md).
+
+1. **`isClean()` must not be the pass predicate on its own.** A stage must additionally assert that
+   the sweep observed **at least two distinct canonical reference values** — that it *could* have
+   failed. The genuinely-constant operations go on a written, reviewed allowlist, exactly like
+   `ECHO_SUBJECT_REVIEWED`. The 120 are enumerable, stable, and already listed in
+   `stage-01-verification-round4.md` §3.1.
+2. **A constant subject per canonical kind joins the invariant family** — `bool(false)`, `bool(true)`,
+   `integer(0)`, `string("")`, and an `OPAQUE` — so the family covers what the *reference* can return
+   and not only the encodings of "no code here". Today it covers exactly one constant, and that
+   constant is the one kind no operation returns.
+3. **A subject must not be able to shrink its own denominator.** `HARNESS_ERROR` raised by the
+   subject must not silently leave `driven` (D-17).
+4. **Coverage facts go in the report header, per operation** — measured count and distinct reference
+   values — not as file-level sums (D-21).
+
+Until (1) and (2) hold, every fidelity claim S4 makes about a **type predicate, an accessor, or a
+`type()` / `getRuntimeType()` operation** would be an artefact of the instrument rather than a
+measurement of the port.
+
+---
+
+## 12.7 The standing lesson, after four rounds
+
+Round 1: a harness failure counted as agreement. Round 2: two throws counted as agreement. Round 3:
+two `VOID`s counted as agreement. Round 4: two equal values over a one-valued codomain counted as
+fidelity. **They are getting harder to see, not easier** — the fourth required no bug in
+`DifferentialSweep` at all, and was found within an hour by asking a question the harness had never
+been asked: *how many distinct answers does the reference give?*
+
+That is the diagnosis worth carrying forward. The space is being searched by a series of ad-hoc
+questions, one per round, rather than by a property. The property that would have made D-10, D-15 and
+D-18 visible as **one family** is a single statistic the harness does not compute: **for each
+operation, the number of distinct canonical reference values observed.** An operation with one
+distinct reference value over 144 rows is not evidence of fidelity whatever its agreement rate.
+Publishing that number is cheap and is the first thing the next round should do.
+
+**Neither round-4 reviewer claims the space is closed, and neither does this document.** The two
+places both named for the next reviewer to look: the **two-valued** codomain (an operation whose
+range over the corpora is `{true, false}` — a subject echoing one bit of its receiver would green
+those, and the census only counted singletons), and the **`OPAQUE`** branch, where
+`UncertainBooleanValue` (9 operations) and `uDataTypes.UInteger` (1) are rendered by field reflection
+and a port need only reproduce a string.
+
+---
