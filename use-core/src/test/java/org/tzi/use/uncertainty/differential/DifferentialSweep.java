@@ -239,14 +239,39 @@ public final class DifferentialSweep {
             return new DiffRow(index, op.key(), inputs, ref.value.canonical(), sub.value.canonical(),
                     DiffVerdict.UNMEASURABLE, unmeasurableNote(ref, sub));
         }
-        boolean agree = ref.value.canonical().equals(sub.value.canonical());
+        if (ref.value.canonical().equals(sub.value.canonical())) {
+            return new DiffRow(index, op.key(), inputs, ref.value.canonical(), sub.value.canonical(),
+                    DiffVerdict.AGREE, "");
+        }
+        // A TYPE-ONLY difference is measured and reported, but it is not scored as a divergence.
+        //
+        // canonical() is content + "@" + simple class name, so content equality with canonical
+        // inequality is exactly and only the case "the payload matches, the Java class does not".
+        // That case is AGREE here and is counted by Result#javaTypeMismatchCount(), which the report
+        // header and stageStatement() both publish.
+        //
+        // WHY (round 8, defect D-43 half (b)). Scoring it DIFFER measures the ADAPTER, not the port,
+        // for as long as there is no ported implementation to observe -- and at S1 there is none: no
+        // org.tzi.use.uml.ocl.value.URealValue exists in use-core/src/main, and writing one IS stage
+        // S4. Measured: a CONTENT-PERFECT port whose adapter takes the factory default produced 3 445
+        // DIFFER rows across 182 of 285 operations and lost 29 stage passes, numbers byte-identical to
+        // a genuinely wrong-class port's. Rounds 6 and 7 both tried to fix that by giving the adapter
+        // author a way to state the token; both statements could be false, and round 7's measured
+        // sweep from a wrong-class port plus declaredJavaType(referenceToken, "x") was byte-identical
+        // to the perfect-port control. The token is unavoidably author-influenced today, so the
+        // difference belongs in its own reported dimension rather than in the verdict.
+        //
+        // CONTENT differences are untouched: they fall through to DIFFER below, as they always did.
+        if (ref.value.content().equals(sub.value.content())) {
+            return new DiffRow(index, op.key(), inputs, ref.value.canonical(), sub.value.canonical(),
+                    DiffVerdict.AGREE, typeNote(ref.value, sub.value));
+        }
         return new DiffRow(index, op.key(), inputs, ref.value.canonical(), sub.value.canonical(),
-                agree ? DiffVerdict.AGREE : DiffVerdict.DIFFER,
-                agree ? "" : typeNote(ref.value, sub.value));
+                DiffVerdict.DIFFER, typeNote(ref.value, sub.value));
     }
 
     /**
-     * The note on a {@link DiffVerdict#DIFFER} row, which is empty unless the <em>Java types</em>
+     * The note on a row whose two sides disagree, which is empty unless the <em>Java types</em>
      * differ — the D-18 case.
      *
      * <p>{@link UValue#canonical()} compares {@link UValue#typeToken()}, the simple class name;
@@ -268,53 +293,48 @@ public final class DifferentialSweep {
         return "java type mismatch: reference returned " + describeType(ref)
                 + " / subject returned " + describeType(sub) + "; the content is "
                 + (ref.content().equals(sub.content()) ? "IDENTICAL -- right content, wrong Java "
-                        + "type (defect D-18); this row is a divergence because a port of these "
-                        + "classes must reproduce the declared result type, not only the payload"
-                        : "different as well")
+                        + "type (defect D-18). This row is scored AGREE and counted in "
+                        + "rows.javaTypeMismatch, not scored as a divergence: at S1 the ported side's "
+                        + "class cannot be authentically observed, because no ported value class "
+                        + "exists to observe, so a type-only difference measures the adapter and not "
+                        + "the port (D-43)"
+                        : "different as well, so this row is a divergence on its content")
                 + "." + provenanceClause(ref, sub);
     }
 
     /**
-     * <strong>Whether each side's class was observed or merely asserted — defect D-43.</strong>
+     * <strong>How each side came by the class named above — defect D-43.</strong>
      *
      * <p>A type-mismatch row has two possible causes and they are different findings: the
      * implementation returned the wrong class, or the <em>adapter</em> never looked at what its
-     * implementation returned. Until {@link UValue#observedFrom(Object)} existed, only the reference
-     * side was ever observed, and a content-perfect port whose adapter took the factory default
-     * produced 3 445 rows that read exactly like the second cause dressed as the first.
+     * implementation returned. Both provenances are printed on every such row, unconditionally, so
+     * that the row states the attribution rather than leaving a reader to reconstruct it.
      *
-     * <p>The provenance is reported and never scored: the verdict is already {@code DIFFER} and stays
-     * {@code DIFFER}. A subject must not be able to talk its way out of a divergence by admitting that
-     * it guessed — that would be D-17's shape in a new costume. What this clause buys is attribution,
-     * which is the thing the round-6 measurement lacked.
+     * <p>This clause states what the harness knows and no more. It used to end an all-observed row
+     * with "Both classes were OBSERVED from the objects the two sides returned, so this row is a
+     * statement about the two implementations" — a certification the harness cannot make, because
+     * {@link UValue#observedFrom(Object)} believes any object it is handed and a subject can hand it
+     * one its port never returned. That sentence was measured making 1 618 false assertions in round 7
+     * and is gone; what replaces it names the provenances and says outright what is not checkable.
+     *
+     * <p>The provenance is reported and never scored: it must not be able to move a verdict in either
+     * direction, or a subject could talk its way out of a finding by admitting how it got the token.
      */
     private static String provenanceClause(UValue ref, UValue sub) {
-        StringBuilder sb = new StringBuilder();
-        appendProvenance(sb, "subject", sub);
-        appendProvenance(sb, "reference", ref);
-        if (sb.length() == 0) {
-            return " Both classes were OBSERVED from the objects the two sides returned, so this row "
-                    + "is a statement about the two implementations.";
+        StringBuilder sb = new StringBuilder(" Provenance: reference ")
+                .append(ref.typeProvenance()).append(", subject ").append(sub.typeProvenance())
+                .append(" (OBSERVED = read off the object that side returned; ASSUMED = the factory "
+                        + "default for the kind, which is wrong for 182 of 285 operations).");
+        if (sub.typeProvenance() == UValue.TypeProvenance.ASSUMED) {
+            sb.append(" The subject's adapter never looked at what its implementation returned, so "
+                    + "this difference is a finding about the ADAPTER and not about the port (D-43); "
+                    + "an adapter must attribute through UValue.observedFrom(Object).");
+        }
+        if (sub.typeProvenance() == UValue.TypeProvenance.OBSERVED) {
+            sb.append(" Whether the object the subject observed is the one its implementation "
+                    + "returned is not checkable by this harness.");
         }
         return sb.toString();
-    }
-
-    private static void appendProvenance(StringBuilder sb, String side, UValue value) {
-        if (value.typeProvenance() == UValue.TypeProvenance.OBSERVED
-                || value.typeProvenance() == UValue.TypeProvenance.NONE) {
-            return;
-        }
-        sb.append(" The ").append(side).append("'s class was ").append(value.typeProvenance())
-                .append(", not observed");
-        if (value.typeProvenance() == UValue.TypeProvenance.ASSUMED) {
-            sb.append(" -- the factory default for kind ").append(value.kind())
-                    .append(", which is wrong for 182 of 285 operations: this row may be an adapter "
-                            + "defect and not a port defect (D-43), and an adapter must attribute "
-                            + "through UValue.observedFrom(Object)");
-        } else {
-            sb.append(", declared because: ").append(value.typeDeclarationReason());
-        }
-        sb.append('.');
     }
 
     private static String describeType(UValue value) {
@@ -661,6 +681,17 @@ public final class DifferentialSweep {
          * {@link #isStagePass(int, AcceptedDegenerateOperations)}, but throws with <em>every</em>
          * failing clause and the numbers behind it rather than returning a bare {@code false}.
          *
+         * <p><strong>Two clauses this call deliberately does not make, and a stage must:</strong>
+         * {@code throwClassMismatchCount() == 0} and — from S4 onwards, as a dated obligation
+         * (2026-08-17), once real ported value classes exist in {@code use-core/src/main} and the
+         * adapter routes through {@link UValue#observedFrom(Object)} —
+         * {@code javaTypeMismatchCount() == 0}. Both are populations every other figure on this class
+         * is blind to. The type figure is not enforced here at S1 because there is no ported
+         * implementation to observe, which would make it a measurement of the adapter; it is
+         * nevertheless printed unconditionally by {@link #stageStatement(AcceptedDegenerateOperations)}
+         * and by the report header, so a stage cannot quote a pass without seeing it. See
+         * {@code harness-contract.md} §7.
+         *
          * @return {@code this}, so it can be chained onto a sweep call
          * @throws IllegalStateException if any clause fails
          */
@@ -720,11 +751,18 @@ public final class DifferentialSweep {
 
         /**
          * The one-line statement a stage must publish next to any figure taken from this sweep:
-         * measured rows, agreement rows, distinct reference values, and — when the operation is
-         * degenerate and signed off — the rationale verbatim.
+         * measured rows, agreement rows, disagreements, <strong>Java-type mismatches</strong>, distinct
+         * reference values, and — when the operation is degenerate and signed off — the rationale
+         * verbatim.
          *
          * <p>There is deliberately no way to render an agreement figure from this class without the
-         * discrimination figure beside it.
+         * discrimination figure beside it, and since round 8 no way to render one without the
+         * {@link #javaTypeMismatchCount()} beside it either. The reason is the same mechanism-not-a-
+         * convention argument as D-15's: a type-only difference is scored {@link DiffVerdict#AGREE}, so
+         * it is invisible in every other figure on this line, and a stage that quotes a pass must see
+         * how many of its agreement rows agreed only on the payload. The figure is printed
+         * unconditionally, including when it is zero, because "0" is the claim a stage needs to be able
+         * to make.
          */
         public String stageStatement(AcceptedDegenerateOperations acknowledged) {
             Objects.requireNonNull(acknowledged,
@@ -734,6 +772,7 @@ public final class DifferentialSweep {
                     .append(measurementCount()).append(" measured, ")
                     .append(agreementCount()).append(" agreed, ")
                     .append(disagreements().size()).append(" disagreed, ")
+                    .append(javaTypeMismatchCount()).append(" java-type mismatch(es), ")
                     .append(distinctReferenceValues()).append(" distinct reference value(s)");
             if (isDiscriminating()) {
                 return sb.append(" [DISCRIMINATING]").toString();
@@ -786,6 +825,42 @@ public final class DifferentialSweep {
          * alike: an adjudicated pair with mismatched classes is exactly the sign-off a reviewer
          * should be asked to justify twice.
          */
+        /**
+         * <strong>Rows on which the two sides' content was identical and only the Java class
+         * differed</strong> — the D-18 population, in its own dimension because it is no longer a
+         * verdict (defect <strong>D-43</strong>, round 8).
+         *
+         * <p>Deliberately shaped like {@link #throwClassMismatchCount()}: a defect class that is
+         * otherwise invisible above row level gets a number, so a sweep with no golden to diff against
+         * can still assert on it. Every such row is {@link DiffVerdict#AGREE}, so without this count a
+         * content-perfect port and a port returning the right payload in the wrong class produce
+         * identical aggregates — which is exactly the blindness D-18 was opened to close, and closing
+         * it here rather than in the verdict is what keeps a factory-typed adapter from being reported
+         * as a defective port.
+         *
+         * <p>Counted from the rendered columns, like the throw counterpart: an {@code AGREE} row whose
+         * two columns differ is, by construction of {@link UValue#canonical()}, exactly a type-only
+         * mismatch. A row whose content differs <em>as well</em> is a {@link DiffVerdict#DIFFER} and is
+         * counted there; it is a content finding and must not be diluted into this number.
+         *
+         * <p><strong>What this number does and does not tell a stage.</strong> Non-zero means the two
+         * sides named different classes for the same payload. Whether that is a port defect or an
+         * adapter that never attributed is in the row note's provenance clause, not in this count: a
+         * subject whose adapter is uniformly non-attributing produces the same 3 445 here whether its
+         * port is perfect or carries a real wrong-class infidelity. From S4 onwards, when the adapter
+         * routes through {@link UValue#observedFrom(Object)} and real ported classes exist, that
+         * ambiguity is gone and this count becomes a gate clause — see {@code harness-contract.md} §7.
+         */
+        public int javaTypeMismatchCount() {
+            int n = 0;
+            for (DiffRow row : rows) {
+                if (row.verdict() == DiffVerdict.AGREE && !row.historical().equals(row.ported())) {
+                    n++;
+                }
+            }
+            return n;
+        }
+
         public int throwClassMismatchCount() {
             int n = 0;
             for (DiffRow row : rows) {
@@ -821,6 +896,10 @@ public final class DifferentialSweep {
             int mismatched = throwClassMismatchCount();
             if (mismatched > 0) {
                 sb.append(", throwClassMismatch=").append(mismatched);
+            }
+            int typeMismatched = javaTypeMismatchCount();
+            if (typeMismatched > 0) {
+                sb.append(", javaTypeMismatch=").append(typeMismatched);
             }
             return sb.toString();
         }

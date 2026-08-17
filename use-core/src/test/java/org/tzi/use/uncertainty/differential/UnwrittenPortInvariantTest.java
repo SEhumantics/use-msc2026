@@ -153,6 +153,28 @@ class UnwrittenPortInvariantTest {
                         + "is what has been reviewed. Detail: "
                         + tally.discriminatingFullyAgreedOperations());
 
+        // ---- a sign-off must say WHICH dimension the finding moved into (D-43, round 8) -----------
+        //
+        // A type-only difference is scored AGREE and counted in javaTypeMismatchCount(), because at S1
+        // the ported token cannot be authentically observed. That is the only reason any operation is
+        // signed off above for a subject that returns its receiver, and leaving it as prose would make
+        // the sign-off unfalsifiable. So it is asserted: every agreement row of a signed-off operation
+        // must be a row on which the payload matched and the Java class did not. If a future change
+        // makes one of them agree on the class as well, this fails and the sign-off has to be re-read.
+        Set<String> everySignOff = new LinkedHashSet<>(subject.reviewedFullyAgreed);
+        everySignOff.addAll(subject.reviewedDegenerateFullyAgreed);
+        for (String signedOff : everySignOff) {
+            OperationTally per = tally.perOperation.get(signedOff);
+            assertNotNull(per, signedOff + " is signed off as fully agreed but was never swept");
+            assertEquals(per.agreed, per.javaTypeMismatch,
+                    signedOff + " is signed off against subject '" + subject.id + "' on the grounds "
+                            + "that its agreement is payload-only -- the two sides name different Java "
+                            + "classes (D-43). Measured: " + per.agreed + " agreement row(s), of which "
+                            + per.javaTypeMismatch + " are java-type mismatches. If those numbers "
+                            + "differ, some of the agreement is NOT explained by the class difference "
+                            + "and the sign-off is wrong.");
+        }
+
         // ---- the other half of the split: ASSERTED, not merely printed (defect D-35) -------------
         //
         // Commit 0a93ad4f introduced the DISCRIMINATING / NOT-DISCRIMINATING split, which is right:
@@ -268,18 +290,68 @@ class UnwrittenPortInvariantTest {
      *
      * <p>Since {@link UValue#canonical()} became type-bearing, the echoing subject returns the corpus
      * value it was handed — a {@code BOOLEAN(true)@BooleanValue} — against a reference that returns a
-     * raw {@code boolean}, i.e. {@code BOOLEAN(true)@Boolean}, and every one of those rows is a
-     * {@link DiffVerdict#DIFFER} carrying a note that names both Java types. So the set is empty, and
-     * it stays asserted: a fifth operation becoming fully agreeable to a subject that does nothing but
-     * hand back its receiver still fails this test, and someone still has to explain it.
+     * raw {@code boolean}, i.e. {@code BOOLEAN(true)@Boolean}, so the difference between the two sides
+     * is still <em>seen</em> on every one of those rows.
      *
-     * <p><strong>{@code RealValue.value()} is the same story one bucket over.</strong> It was on this
-     * list, moved to the printed-and-unasserted degenerate bucket under {@code 0a93ad4f} (which is the
-     * instance that made D-35 concrete), and is now detected for the same reason as the other four:
-     * {@code public double RealValue.value()} returns a raw {@code Double}. Both buckets of subject
-     * {@code f} are consequently empty, and both are asserted.
+     * <p><strong>Round 8 moved it out of the verdict, so four of the five are back on this list — with
+     * the reason, and with the finding pinned in the dimension it moved to.</strong> A type-only
+     * difference is now scored {@link DiffVerdict#AGREE} and counted in
+     * {@link DifferentialSweep.Result#javaTypeMismatchCount()}, because at S1 the ported side's class
+     * token cannot be authentically observed and a type-only divergence therefore measures the adapter
+     * rather than the port (defect <strong>D-43</strong>). This subject's adapter is exactly such an
+     * adapter: {@code return args.get(0)} hands back a factory-typed corpus value, provenance
+     * {@link UValue.TypeProvenance#ASSUMED}. So the honest statement about these four is:
+     * <ul>
+     *   <li>the <em>content</em> the echoing subject produces on them really is the content the
+     *       historical implementation produces — {@code BooleanValue.value()} on receiver {@code true}
+     *       answers {@code true}, and echoing the receiver answers {@code true} — so an agreement
+     *       verdict on the payload is correct and asserting zero agreement would assert a falsehood;
+     *       and</li>
+     *   <li>the difference that <em>is</em> there is a class difference, and
+     *       {@link #anUnwrittenPortAgreesWithNothing(Subject)} asserts, for every entry of this set,
+     *       that <em>all</em> of that operation's agreement rows are counted as java-type mismatches —
+     *       so the finding is measured, not lost.</li>
+     * </ul>
+     * That is a deliberate loss of <em>verdict-level</em> resolution against this subject, accepted for
+     * the reason above, and it is the reason {@code harness-contract.md} §7 makes
+     * {@code javaTypeMismatchCount() == 0} a dated REQUIREMENT on S4 rather than advice: once real
+     * ported classes exist and the adapter observes, this set must go back to empty.
+     *
+     * <p>The set stays asserted either way: a fifth operation becoming fully agreeable to a subject
+     * that does nothing but hand back its receiver still fails this test, and someone still has to
+     * explain it.
+     *
+     * <p><strong>{@code RealValue.value()} is the fifth, and it lands in the other bucket</strong> —
+     * measured, not assumed: {@code 8/8 driven rows agreed, always REAL(0.0)@Double, 1 distinct
+     * reference value}, so it is degenerate rather than discriminating, because the shipped corpora
+     * contain exactly one {@code RealValue} (defect D-28). It sat on this list, moved to the
+     * printed-and-unasserted degenerate bucket under {@code 0a93ad4f} (the instance that made D-35
+     * concrete), and is now signed off in {@link #ECHO_SUBJECT_REVIEWED_DEGENERATE}. Both buckets are
+     * asserted, so wherever it goes next a reader is told.
      */
-    private static final Set<String> ECHO_SUBJECT_REVIEWED = Set.of();
+    private static final Set<String> ECHO_SUBJECT_REVIEWED = Set.of(
+            "BooleanValue.value()", "BooleanValue.isTrue()", "IntegerValue.value()",
+            "StringValue.value()");
+
+    /**
+     * The degenerate half of the same sign-off: {@code RealValue.value()}, fully agreed with the
+     * receiver-echoing subject on all 8 driven rows while the reference answered {@code REAL(0.0)@Double}
+     * every time.
+     *
+     * <p>Two facts, both measured and both needed. It is <strong>degenerate</strong> because the shipped
+     * corpora hold exactly one {@code RealValue} (defect D-28), so the operation could not have answered
+     * differently and its agreement figure is a statement about the corpus. And its agreement is
+     * <strong>payload-only</strong>: {@code public double RealValue.value()} returns a raw
+     * {@code Double} while the echoed receiver is a factory-typed {@code RealValue}, so all 8 rows are
+     * java-type mismatches — asserted, like the discriminating half, rather than described.
+     *
+     * <p>It became visible again for the same round-8 reason as the other four: a type-only difference is
+     * scored {@link DiffVerdict#AGREE} and counted in
+     * {@link DifferentialSweep.Result#javaTypeMismatchCount()} rather than reported as a divergence
+     * (D-43). Widening the {@code RealValue} corpus (D-28) would move it into the discriminating bucket;
+     * an S4 adapter that observes its class would remove it from both.
+     */
+    private static final Set<String> ECHO_SUBJECT_REVIEWED_DEGENERATE = Set.of("RealValue.value()");
 
     static List<Subject> degenerateSubjects() {
         return List.of(
@@ -299,7 +371,8 @@ class UnwrittenPortInvariantTest {
                         Observability.WRONG_VALUES, false, Set.of(), Set.of(),
                         () -> new DegeneratePort("const-ubool-true", DegeneratePort.Body.CONSTANT)),
                 new Subject("f-echoes-receiver", "return args.get(0)",
-                        Observability.WRONG_VALUES, false, ECHO_SUBJECT_REVIEWED, Set.of(),
+                        Observability.WRONG_VALUES, false, ECHO_SUBJECT_REVIEWED,
+                        ECHO_SUBJECT_REVIEWED_DEGENERATE,
                         () -> new DegeneratePort("echoes-receiver", DegeneratePort.Body.FIRST_ARGUMENT)),
                 new Subject("g-throws-error", "throw new AssertionError(\"TODO: port \" + op.key())",
                         Observability.NOTHING, true, Set.of(), Set.of(),
@@ -401,6 +474,13 @@ class UnwrittenPortInvariantTest {
         long agreed;
         long measured;
         /**
+         * Agreement rows on which the two sides' content matched and their Java class did not —
+         * scored {@link DiffVerdict#AGREE} since round 8 and counted separately (D-43). For a subject
+         * that hands back its receiver this is the whole of the agreement on the raw-returning
+         * accessors, and it is why those four operations are signed off below rather than fixed.
+         */
+        long javaTypeMismatch;
+        /**
          * Every distinct canonical value the <em>reference</em> produced across this operation's
          * measured rows, unioned over the corpora. Taken from
          * {@link DifferentialSweep.Result#referenceValues()} rather than recomputed here: two
@@ -421,6 +501,7 @@ class UnwrittenPortInvariantTest {
         long rows;
         long agreementRows;
         long measuredRows;
+        long javaTypeMismatchRows;
         Throwable escaped;
         final Map<String, Long> verdicts = new TreeMap<>();
         final Map<String, OperationTally> perOperation = new TreeMap<>();
@@ -437,6 +518,7 @@ class UnwrittenPortInvariantTest {
             // Counted here row by row and also read off the Result: two independent routes to the
             // same number, so a measurementCount() that ever drifts from the verdicts is caught.
             int measuredHere = 0;
+            int typeMismatchesHere = 0;
             for (DiffVerdict v : DiffVerdict.values()) {
                 if (result.count(v) > 0) {
                     verdicts.merge(v.name(), (long) result.count(v), Long::sum);
@@ -454,6 +536,11 @@ class UnwrittenPortInvariantTest {
                     measuredRows++;
                     measuredHere++;
                 }
+                if (row.verdict() == DiffVerdict.AGREE && !row.historical().equals(row.ported())) {
+                    per.javaTypeMismatch++;
+                    javaTypeMismatchRows++;
+                    typeMismatchesHere++;
+                }
                 if (row.verdict().isAgreement()) {
                     per.agreed++;
                     agreementRows++;
@@ -464,6 +551,10 @@ class UnwrittenPortInvariantTest {
             }
             assertEquals(measuredHere, result.measurementCount(),
                     "Result.measurementCount() must agree with the verdicts it is derived from, "
+                            + "for " + op.key() + " over corpus " + corpus);
+            assertEquals(typeMismatchesHere, result.javaTypeMismatchCount(),
+                    "Result.javaTypeMismatchCount() must agree with this file's own recount of the "
+                            + "same population -- AGREE rows whose two rendered columns differ -- "
                             + "for " + op.key() + " over corpus " + corpus);
             assertEquals(result.agreements().size() + result.disagreements().size(),
                     result.rowCount(), "the two partitions must still cover every row");
@@ -483,7 +574,8 @@ class UnwrittenPortInvariantTest {
             perOperation.forEach((key, per) -> {
                 if (per.driven > 0 && per.agreed == per.driven) {
                     out.put(key, per.agreed + "/" + per.driven + " driven rows agreed, "
-                            + per.rows + " rows total, "
+                            + per.javaTypeMismatch + " of them on the payload only (java type "
+                            + "mismatch), " + per.rows + " rows total, "
                             + per.referenceValues.size() + " distinct reference value(s)"
                             + (per.referenceValues.size() == 1
                                     ? " -- always " + per.referenceValues.iterator().next()
@@ -557,6 +649,8 @@ class UnwrittenPortInvariantTest {
             System.out.println("subject              " + subject.id + "  (every method body: "
                     + subject.body + ")");
             System.out.println("observability        " + subject.observes);
+            System.out.println("javaTypeMismatch     " + javaTypeMismatchRows
+                    + "  <- agreement rows on which only the Java class differed (D-43)");
             System.out.println("operations           " + operations + "  (enumerated from " + jars + ")");
             System.out.println("corpora              " + corpora);
             System.out.println("rows                 " + rows);
@@ -784,9 +878,10 @@ class UnwrittenPortInvariantTest {
             // Typed as java.lang.Boolean, not as BooleanValue: URealValue.isUReal() is declared
             // `public boolean` (javap -p on the vendored use.jar), so a port that answered
             // BooleanValue.get(true) here would be returning the right content in the wrong Java
-            // type, which is a DIFFER since D-18 was fixed. The subject of this test has to be a
-            // port that is right about everything except discrimination, or the sweep it produces
-            // is not the clean-but-degenerate sweep the sign-off route exists for.
+            // type -- since round 8 that is an AGREE row counted in javaTypeMismatchCount() rather
+            // than a DIFFER, but it is still a finding, and this test's subject has to be a port that
+            // is right about everything except discrimination, or the sweep it produces is not the
+            // clean-but-degenerate sweep the sign-off route exists for. Asserted below.
             //
             // And the token is OBSERVED off a real java.lang.Boolean rather than written as a string
             // literal (D-43): a boolean-returning operation answers with exactly the object autoboxing
@@ -803,6 +898,10 @@ class UnwrittenPortInvariantTest {
                         AcceptedDegenerateOperations.none()));
 
                 assertTrue(result.isClean(), "precondition: the old predicate says pass: " + result.summary());
+                assertEquals(0, result.javaTypeMismatchCount(),
+                        "precondition: this subject must be right about the class as well, or the "
+                                + "sweep is not the clean-but-degenerate one under test: "
+                                + result.summary());
                 assertEquals(1, result.distinctReferenceValues(), result.summary());
                 assertEquals("BOOLEAN(true)@Boolean", result.soleReferenceValue());
                 assertFalse(result.isStagePass(1, AcceptedDegenerateOperations.none()),

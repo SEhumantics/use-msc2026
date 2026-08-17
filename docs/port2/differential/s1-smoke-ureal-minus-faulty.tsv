@@ -10,12 +10,14 @@
 # rows.agreement	558
 # rows.disagreement	226
 # rows.throwClassMismatch	0
+# rows.javaTypeMismatch	0
 # verdict.AGREE	558
 # verdict.DIFFER	226
 # op.URealValue.minus(value).rows	784
 # op.URealValue.minus(value).measured	784
 # op.URealValue.minus(value).agreement	558
 # op.URealValue.minus(value).disagreement	226
+# op.URealValue.minus(value).javaTypeMismatch	0
 # op.URealValue.minus(value).distinctReferenceValues	389
 # op.URealValue.minus(value).discriminating	true
 # accepted.degenerateOperations	0

@@ -460,8 +460,26 @@ class PortedInfidelityDetectionPowerTest {
         long measured;
         long agreed;
         /**
+         * Rows on which the content matched and only the Java class differed — scored
+         * {@link DiffVerdict#AGREE} since round 8 and counted here instead (D-43). Summed from
+         * {@link DifferentialSweep.Result#javaTypeMismatchCount()}, so this figure is the harness's own
+         * and not recomputed from row text.
+         */
+        long javaTypeMismatches;
+        /** The same figure per operation, because a file total can hide a per-operation fact (D-21). */
+        final Map<String, Integer> perOperationJavaTypeMismatches = new TreeMap<>();
+        /** First few type-only-mismatch rows verbatim, so the evidence shows what such a row says. */
+        final List<String> typeMismatchSamples = new ArrayList<>();
+        /**
+         * The same population, recounted from the rows by this test rather than taken from
+         * {@link DifferentialSweep.Result#javaTypeMismatchCount()}: an {@link DiffVerdict#AGREE} row whose
+         * two rendered columns differ. Two independently written implementations of one property is how
+         * they come to disagree, and this one is the definition the report header claims to publish.
+         */
+        long agreeRowsWhoseColumnsDiffer;
+        /**
          * Rows whose note says the <em>subject's</em> Java class was never observed (D-43). This is
-         * what separates a factory-typed adapter's divergences from a genuinely wrong-class port's,
+         * what separates a factory-typed adapter's type mismatches from a genuinely wrong-class port's,
          * which are numerically identical.
          */
         long notesSayingTheClassWasAssumed;
@@ -484,6 +502,12 @@ class PortedInfidelityDetectionPowerTest {
         long count(DiffVerdict verdict) {
             return verdicts.getOrDefault(verdict.name(), 0L);
         }
+
+        /** One line naming the type dimension, for an assertion message that has to be readable. */
+        String summaryOfTypes() {
+            return probe.id + ": javaTypeMismatch=" + javaTypeMismatches + " (recounted "
+                    + agreeRowsWhoseColumnsDiffer + ") over " + rows + " rows, verdicts " + verdicts;
+        }
     }
 
     /** How many diverging rows to keep verbatim, per probe. */
@@ -503,6 +527,8 @@ class PortedInfidelityDetectionPowerTest {
                 out.rows += result.rowCount();
                 out.measured += result.measurementCount();
                 out.agreed += result.agreementCount();
+                out.javaTypeMismatches += result.javaTypeMismatchCount();
+                out.perOperationJavaTypeMismatches.put(op.key(), result.javaTypeMismatchCount());
                 Map<DiffVerdict, Integer> tally = new LinkedHashMap<>();
                 for (DiffVerdict v : DiffVerdict.values()) {
                     if (result.count(v) > 0) {
@@ -529,10 +555,17 @@ class PortedInfidelityDetectionPowerTest {
                             && out.divergenceSamples.size() < SAMPLE_LIMIT) {
                         out.divergenceSamples.add(row.toTsv());
                     }
+                    if (row.verdict() == DiffVerdict.AGREE
+                            && !row.historical().equals(row.ported())) {
+                        out.agreeRowsWhoseColumnsDiffer++;
+                        if (out.typeMismatchSamples.size() < SAMPLE_LIMIT) {
+                            out.typeMismatchSamples.add(row.toTsv());
+                        }
+                    }
                     if (row.verdict() == DiffVerdict.BOTH_THREW) {
                         out.throwPairKeys.add(op.key() + " || " + row.note());
                     }
-                    if (row.note().contains("subject's class was ASSUMED")) {
+                    if (row.note().contains("subject ASSUMED")) {
                         out.notesSayingTheClassWasAssumed++;
                     }
                 }
@@ -797,19 +830,21 @@ class PortedInfidelityDetectionPowerTest {
      * <em>and</em> the identity control over the same inventory still diverges nowhere, so the
      * type-bearing canonical form has not turned an equivalent representation into a false alarm.
      *
-     * <p><strong>Read the next method before quoting any number from this one.</strong> This subject's
-     * adapter <em>observes</em> the class of the object it returns — the boxing goes through
-     * {@code toHistorical}/{@code fromHistorical}, so the wrong class is a real object's real class —
-     * and that is what makes these 3 445 rows a statement about a port. A <em>content-perfect</em> port
-     * whose adapter merely takes the factory default produces the identical figure and is not defective
-     * at all (D-43), which is measured and asserted in
-     * {@link #aFactoryTypedAdapterMeasuresExactlyWhatThePlantedWrongTypeDoes()}. The two live next to
-     * each other so that neither can be read alone.
+     * <p><strong>Round 8: this is measured but no longer scored as a divergence.</strong> The rows are
+     * {@link DiffVerdict#AGREE} and counted in {@link DifferentialSweep.Result#javaTypeMismatchCount()},
+     * for the reason the next method measures: a <em>content-perfect</em> port whose adapter merely takes
+     * the factory default produces the identical figure and is not defective at all (D-43), and at S1
+     * there is no ported implementation to observe, so the ported token is unavoidably author-influenced
+     * and a type-only divergence measures the adapter rather than the port. The blindness D-18 was opened
+     * to close is not back — before D-18 this subject produced <em>no signal at all</em>, in any figure
+     * the harness published; it now produces 3 445 in a named, published dimension. What it no longer
+     * does is cost a stage pass. The two tests still live next to each other so that neither can be read
+     * alone.
      */
     @Test
-    @DisplayName("D-18: a port that boxes a raw result into its Value class is a DIVERGENCE, and "
-            + "the perfect-port control is unaffected")
-    void aWrongJavaTypeWithRightContentIsADivergence() {
+    @DisplayName("D-18/D-43: a port that boxes a raw result into its Value class is COUNTED in "
+            + "javaTypeMismatch, not scored as a divergence, and the control is unaffected")
+    void aWrongJavaTypeWithRightContentIsCountedNotScored() {
         Probe identity = new Probe("P0-perfect", "control", Set.of(),
                 (op, args, perfect) -> perfect.invoke(op, args));
         Probe boxed = new Probe("P12-boxed-primitive",
@@ -821,7 +856,12 @@ class PortedInfidelityDetectionPowerTest {
         ProbeResult control = measure(identity);
         ProbeResult mutant = measure(boxed);
 
-        Set<String> diverging = mutant.divergingOperations();
+        Set<String> typeMismatchOperations = new TreeSet<>();
+        mutant.perOperationJavaTypeMismatches.forEach((key, n) -> {
+            if (n > 0) {
+                typeMismatchOperations.add(key);
+            }
+        });
         Set<String> lostStagePasses = new TreeSet<>(control.stagePasses);
         lostStagePasses.removeAll(mutant.stagePasses);
 
@@ -833,18 +873,20 @@ class PortedInfidelityDetectionPowerTest {
                 + ", agreed " + mutant.agreed + "  " + mutant.verdicts);
         System.out.println("control DIFFER+MIXED " + (control.count(DiffVerdict.DIFFER)
                 + control.count(DiffVerdict.MIXED)) + "   <- MUST be 0");
-        System.out.println("boxed   DIFFER rows  " + mutant.count(DiffVerdict.DIFFER));
-        System.out.println("DETECTED on          " + diverging.size() + " of " + operations.size()
-                + " operations");
-        diverging.forEach(k -> System.out.println("    *** " + k + "  " + mutant.perOperation.get(k)));
+        System.out.println("control javaTypeMismatch " + control.javaTypeMismatches
+                + "   <- MUST be 0");
+        System.out.println("boxed   DIFFER rows  " + mutant.count(DiffVerdict.DIFFER)
+                + "   <- 0 since round 8: a type-only difference is not a divergence");
+        System.out.println("boxed   javaTypeMismatch rows " + mutant.javaTypeMismatches
+                + "   <- where the finding lives now");
+        System.out.println("MEASURED on          " + typeMismatchOperations.size() + " of "
+                + operations.size() + " operations");
         System.out.println("stage passes         control " + control.stagePasses.size()
                 + " -> boxed " + mutant.stagePasses.size() + "; lost " + lostStagePasses.size()
                 + ": " + lostStagePasses);
-        if (!mutant.divergenceSamples.isEmpty()) {
-            System.out.println("  first " + mutant.divergenceSamples.size() + " diverging row(s):");
-            System.out.println("  " + DiffRow.TSV_HEADER);
-            mutant.divergenceSamples.forEach(s -> System.out.println("  " + s));
-        }
+        System.out.println("  a sample of the rows, which still SHOW both classes:");
+        System.out.println("  " + DiffRow.TSV_HEADER);
+        mutant.typeMismatchSamples.forEach(sample -> System.out.println("  " + sample));
         System.out.println("=================================================================");
 
         assertEquals(0L, control.count(DiffVerdict.DIFFER),
@@ -852,51 +894,69 @@ class PortedInfidelityDetectionPowerTest {
                         + "form is over-strict and every number below is measuring the fix");
         assertEquals(0L, control.count(DiffVerdict.MIXED));
         assertEquals(Set.of(), control.divergingOperations());
+        assertEquals(0L, control.javaTypeMismatches,
+                "and a perfect port must name the same class as the reference on every row");
 
-        assertFalse(diverging.isEmpty(),
-                "a port returning the right content with the wrong Java type was scored as agreeing "
-                        + "on every row of every operation (defect D-18)");
-        assertTrue(mutant.count(DiffVerdict.DIFFER) > 0, mutant.verdicts.toString());
-        for (String op : diverging) {
-            assertFalse(mutant.stagePasses.contains(op),
-                    "the boxing port reached a STAGE PASS on " + op + ", an operation it returns the "
-                            + "wrong Java type on");
-        }
+        // The demotion, asserted in both directions.
+        assertEquals(0L, mutant.count(DiffVerdict.DIFFER),
+                "a type-only difference must not be scored as a divergence any more (D-43 half (b)): "
+                        + mutant.verdicts);
+        assertEquals(0L, mutant.count(DiffVerdict.MIXED), mutant.verdicts.toString());
+        assertEquals(control.stagePasses, mutant.stagePasses,
+                "and it must not cost a stage pass, because at S1 it does not attribute to the port");
+        assertTrue(mutant.javaTypeMismatches > 0,
+                "but the difference must still be MEASURED, or D-18's blind spot is back: "
+                        + mutant.verdicts);
+        assertEquals(control.rows, mutant.rows);
+        assertFalse(typeMismatchOperations.isEmpty(),
+                "a port returning the right content with the wrong Java type must be visible per "
+                        + "operation and not only in a file total (D-21)");
         // The four operations the round-4/5 record named as the whole visible extent of D-18 must
-        // now be among the detected ones: they are the ones whose blindness was already written down.
+        // now be among the measured ones: they are the ones whose blindness was already written down.
         for (String named : List.of("BooleanValue.value()", "BooleanValue.isTrue()",
                 "IntegerValue.value()", "StringValue.value()")) {
-            assertTrue(diverging.contains(named),
-                    named + " returns a raw Java value and the boxing port must now diverge on it; "
-                            + "detected set was " + diverging);
+            assertTrue(typeMismatchOperations.contains(named),
+                    named + " returns a raw Java value and the boxing port must show a java-type "
+                            + "mismatch on it; measured set was " + typeMismatchOperations);
         }
+        // And every such row still carries both fully-qualified class names, so nothing was discarded
+        // by moving the finding out of the verdict.
+        assertFalse(mutant.typeMismatchSamples.isEmpty());
+        mutant.typeMismatchSamples.forEach(sample -> assertTrue(
+                sample.contains("java type mismatch") && sample.contains("IDENTICAL"), sample));
     }
 
     /**
-     * <strong>D-43: the other reading of the same 3 445 rows — and why it is no longer the only one.</strong>
+     * <strong>D-43: the two readings of the same 3 445 rows, and why neither of them is a verdict any
+     * more.</strong>
      *
-     * <p>This test sits next to {@link #aWrongJavaTypeWithRightContentIsADivergence()} on purpose. That
-     * one measures a port that returns the <em>wrong Java class</em> with the right content and reports
-     * {@code DIFFER 3 445}, {@code 182 of 285} operations, {@code 74 → 45} stage passes. This one
-     * measures a port with <strong>no defect in it at all</strong> — bit-for-bit the historical content
-     * on every row — whose <em>adapter</em> returns {@code UValue.<factory>(content)} and never
-     * attributes. It reports the same four numbers. Round 6 published them as detection power; a
-     * faithful port reproduces them exactly, which is why round 6's refutation returned
-     * {@code DEFECTIVE} (D-43).
+     * <p>This test sits next to {@link #aWrongJavaTypeWithRightContentIsCountedNotScored()} on purpose.
+     * That one measures a port that returns the <em>wrong Java class</em> with the right content. This one
+     * measures a port with <strong>no defect in it at all</strong> — bit-for-bit the historical content on
+     * every row — whose <em>adapter</em> returns {@code UValue.<factory>(content)} and never attributes.
+     * Before round 8 both reported {@code DIFFER 3 445}, {@code 182 of 285} operations and
+     * {@code 74 → 45} stage passes: round 6 published those as detection power, and a faithful port
+     * reproduced them exactly, which is why round 6's refutation returned {@code DEFECTIVE}.
      *
-     * <p>Both readings are asserted here, against each other, so that no later stage can quote one
-     * without the other being one screen away:
+     * <p>Rounds 6 and 7 both tried to fix that by giving the adapter author a way to <em>state</em> the
+     * token. Both statements could be false, and round 7's was measured false at sweep scale: a
+     * wrong-class port plus {@code declaredJavaType(referenceToken, "x")} produced a sweep byte-identical
+     * to the perfect-port control, with the mandated reason in 0 rows. Round 8 removed the declaration API
+     * and demoted the difference instead. What this test now asserts:
      * <ol>
-     *   <li>the factory-typed adapter on a content-perfect port loses <strong>exactly 29</strong> stage
-     *       passes and produces <strong>exactly</strong> as many {@code DIFFER} rows as the planted
-     *       wrong-class defect;</li>
+     *   <li>the factory-typed adapter on a content-perfect port loses <strong>no</strong> stage passes and
+     *       produces <strong>0</strong> {@code DIFFER} rows — the false-divergence mode is gone;</li>
+     *   <li>its 3 445 rows are <em>not</em> gone: they are counted in
+     *       {@link DifferentialSweep.Result#javaTypeMismatchCount()}, the same number as before, and the
+     *       planted wrong-class port produces the same figure there;</li>
      *   <li>the <em>same</em> content-perfect port with an adapter that routes through
-     *       {@link UValue#observedFrom(Object)} — reading the class off the object its port returned,
-     *       which is what an S4 adapter does — measures <strong>0 {@code DIFFER}</strong> and the
-     *       control's 74 stage passes. That is the defect closed;</li>
-     *   <li>and the two measurements are now <em>distinguishable in the evidence</em>: every one of the
-     *       factory-typed adapter's rows carries "{@code ASSUMED, not observed}" in its note, and none of
-     *       the planted defect's rows does. The number alone was ambiguous; the rows are not.</li>
+     *       {@link UValue#observedFrom(Object)} — which is what an S4 adapter does — measures 0 in that
+     *       dimension too, and is indistinguishable from the reference itself;</li>
+     *   <li>and the two 3 445s remain distinguishable <em>in the evidence</em>: every one of the
+     *       factory-typed adapter's rows carries {@code subject ASSUMED} in its note and none of the
+     *       planted defect's does. That note is now the <strong>only</strong> discriminator, which is
+     *       precisely why {@code harness-contract.md} §7 makes routing through {@code observedFrom} and
+     *       gating on {@code javaTypeMismatchCount() == 0} a requirement on S4 rather than advice.</li>
      * </ol>
      *
      * <p>The observing adapter is built from {@link HistoricalOracle#invokeRaw}, which hands back the
@@ -905,9 +965,9 @@ class PortedInfidelityDetectionPowerTest {
      * the move that made D-43 invisible, and a test that did it would be measuring nothing.
      */
     @Test
-    @DisplayName("D-43: a factory-typed adapter on a CONTENT-PERFECT port measures exactly what the "
-            + "planted wrong type does; an observing adapter measures 0")
-    void aFactoryTypedAdapterMeasuresExactlyWhatThePlantedWrongTypeDoes() {
+    @DisplayName("D-43: a factory-typed adapter on a CONTENT-PERFECT port costs no stage pass and no "
+            + "DIFFER row, and its 3 445 rows are counted in javaTypeMismatch instead")
+    void aFactoryTypedAdapterCostsNoPassAndIsCountedNotScored() {
         Probe identity = new Probe("P0-perfect", "control", Set.of(),
                 (op, args, perfect) -> perfect.invoke(op, args));
         Probe boxed = new Probe("P12-boxed-primitive",
@@ -936,62 +996,79 @@ class PortedInfidelityDetectionPowerTest {
         lostToTheDefect.removeAll(plantedDefect.stagePasses);
 
         System.out.println("=== D-43: two readings of the same measurement ====================");
-        System.out.printf("  %-34s %8s %10s %8s %12s%n",
-                "subject", "DIFFER", "ops", "passes", "notes ASSUMED");
+        System.out.printf("  %-34s %8s %10s %8s %10s %12s%n",
+                "subject", "DIFFER", "divOps", "passes", "typeMism", "notes ASSUMED");
         for (ProbeResult r : List.of(control, plantedDefect, adapterDefect, observed)) {
-            System.out.printf("  %-34s %8d %10d %8d %12d%n", r.probe.id,
+            System.out.printf("  %-34s %8d %10d %8d %10d %12d%n", r.probe.id,
                     r.count(DiffVerdict.DIFFER), r.divergingOperations().size(),
-                    r.stagePasses.size(), countNotesSayingTheClassWasAssumed(r));
+                    r.stagePasses.size(), r.javaTypeMismatches,
+                    countNotesSayingTheClassWasAssumed(r));
         }
-        System.out.println("  the port with a DEFECT loses    " + lostToTheDefect.size()
-                + " stage passes");
-        System.out.println("  the port with NO defect loses   " + lostToTheAdapter.size()
-                + " stage passes, to its adapter alone");
-        System.out.println("  the 29 a faithful port loses to a factory-typed adapter:");
-        System.out.println("      " + lostToTheAdapter);
-        System.out.println("  first row of the ADAPTER defect, which reads like a port defect:");
-        adapterDefect.divergenceSamples.stream().limit(1)
-                .forEach(s -> System.out.println("      " + s));
+        System.out.println("  stage passes the port with a DEFECT loses    " + lostToTheDefect.size());
+        System.out.println("  stage passes the port with NO defect loses   " + lostToTheAdapter.size()
+                + "   <- was 29 before round 8; the false-divergence mode");
+        System.out.println("  operations carrying a java-type mismatch:");
+        System.out.println("      P12 " + countOperationsWithATypeMismatch(plantedDefect)
+                + "   P13 " + countOperationsWithATypeMismatch(adapterDefect)
+                + "   P14 " + countOperationsWithATypeMismatch(observed));
+        System.out.println("  first row of the ADAPTER's omission, which is AGREE and says so:");
+        adapterDefect.typeMismatchSamples.stream().limit(1)
+                .forEach(sample -> System.out.println("      " + sample));
+        System.out.println("  first row of the PORT's real wrong class, same figure, different note:");
+        plantedDefect.typeMismatchSamples.stream().limit(1)
+                .forEach(sample -> System.out.println("      " + sample));
         System.out.println("===================================================================");
 
         // (1) The control, first. Nothing below means anything if a perfect port diverges.
         assertEquals(0L, control.count(DiffVerdict.DIFFER), control.verdicts.toString());
         assertEquals(Set.of(), control.divergingOperations());
+        assertEquals(0L, control.javaTypeMismatches, control.summaryOfTypes());
 
-        // (2) The two readings of one number. This is the whole of D-43, as an assertion.
-        assertEquals(plantedDefect.count(DiffVerdict.DIFFER), adapterDefect.count(DiffVerdict.DIFFER),
-                "a content-perfect port with a factory-typed adapter must produce the SAME number of "
-                        + "DIFFER rows as the planted wrong-class defect -- that identity is the defect "
-                        + "D-43 records, and if it ever stops holding the record is stale");
-        assertEquals(plantedDefect.divergingOperations(), adapterDefect.divergingOperations(),
-                "on the same operations, too");
-        assertEquals(lostToTheDefect, lostToTheAdapter,
-                "and costing the same stage passes: " + lostToTheAdapter);
-        assertEquals(29, lostToTheAdapter.size(),
-                "the measured figure the record quotes: 29 stage passes lost by a FAITHFUL port whose "
-                        + "adapter did not attribute. Got " + lostToTheAdapter.size() + ": "
-                        + lostToTheAdapter);
-        for (String accessor : List.of("URealValue.value()", "URealValue.uncertainty()",
-                "UIntegerValue.value()", "UIntegerValue.uncertainty()")) {
-            assertTrue(lostToTheAdapter.contains(accessor),
-                    accessor + " -- one of the four accessors the whole extension is about -- must be "
-                            + "among the stage passes a factory-typed adapter costs a perfect port");
-        }
+        // (2) THE FALSE-DIVERGENCE MODE IS GONE. This is D-43 half (a), closed by demotion rather than
+        //     by asking the adapter author to state something the harness cannot check.
+        assertEquals(0L, adapterDefect.count(DiffVerdict.DIFFER),
+                "a CONTENT-PERFECT port must not produce a single DIFFER row because its adapter did "
+                        + "not attribute: " + adapterDefect.verdicts);
+        assertEquals(0L, adapterDefect.count(DiffVerdict.MIXED), adapterDefect.verdicts.toString());
+        assertEquals(Set.of(), adapterDefect.divergingOperations());
+        assertEquals(control.stagePasses, adapterDefect.stagePasses,
+                "and it must reach exactly the control's stage passes: 29 were lost before round 8");
+        assertEquals(0, lostToTheAdapter.size(), "lost: " + lostToTheAdapter);
 
-        // (3) The closure: the same port, attributing the way Candidate now requires, diverges nowhere.
-        assertEquals(0L, observed.count(DiffVerdict.DIFFER),
-                "an adapter that observes the class of the object its port returned must diverge "
-                        + "NOWHERE on a content-perfect port; that is D-43 closed. Got "
-                        + observed.verdicts);
+        // (3) The rows did not vanish; they moved dimension. The figure is the same one the record
+        //     quotes, and the planted wrong-class port produces it too -- which is the ambiguity that
+        //     makes this a MEASUREMENT and not a verdict.
+        assertTrue(adapterDefect.javaTypeMismatches > 0, adapterDefect.summaryOfTypes());
+        assertEquals(plantedDefect.javaTypeMismatches, adapterDefect.javaTypeMismatches,
+                "a content-perfect port with a factory-typed adapter names a different class from the "
+                        + "reference on exactly as many rows as the planted wrong-class defect does. "
+                        + "That identity is the whole of D-43; it is why the figure is reported rather "
+                        + "than scored, and if it ever stops holding the record is stale");
+        assertEquals(plantedDefect.perOperationJavaTypeMismatches,
+                adapterDefect.perOperationJavaTypeMismatches, "on the same operations, too");
+        assertEquals(adapterDefect.agreeRowsWhoseColumnsDiffer, adapterDefect.javaTypeMismatches,
+                "the harness's own count must equal this test's independent recount of the same "
+                        + "population -- AGREE rows whose two rendered columns differ. "
+                        + adapterDefect.summaryOfTypes());
+        assertEquals(plantedDefect.agreeRowsWhoseColumnsDiffer, plantedDefect.javaTypeMismatches,
+                plantedDefect.summaryOfTypes());
+        assertEquals(0L, control.agreeRowsWhoseColumnsDiffer, control.summaryOfTypes());
+
+        // (4) The closure: the same port, attributing the way Candidate requires, is invisible.
+        assertEquals(0L, observed.count(DiffVerdict.DIFFER), observed.verdicts.toString());
         assertEquals(0L, observed.count(DiffVerdict.MIXED), observed.verdicts.toString());
-        assertEquals(Set.of(), observed.divergingOperations());
+        assertEquals(0L, observed.javaTypeMismatches,
+                "an adapter that observes the class of the object its port returned must show NO type "
+                        + "mismatch on a content-perfect port; that is D-43 closed. "
+                        + observed.summaryOfTypes());
         assertEquals(control.stagePasses, observed.stagePasses,
                 "and it must reach exactly the control's stage passes, not merely as many");
         assertEquals(control.verdicts, observed.verdicts,
                 "row for row, the observing adapter is indistinguishable from the reference itself");
 
-        // (4) And the two 3 445s are told apart in the evidence, not only in this Javadoc.
-        assertEquals(adapterDefect.count(DiffVerdict.DIFFER),
+        // (5) And the two figures are told apart in the evidence, not only in this Javadoc. Since the
+        //     demotion this note is the ONLY discriminator, which is the S4 obligation's whole basis.
+        assertEquals(adapterDefect.javaTypeMismatches,
                 countNotesSayingTheClassWasAssumed(adapterDefect),
                 "every row the adapter's omission produced must say in its note that the subject's "
                         + "class was ASSUMED, not observed");
@@ -999,8 +1076,13 @@ class PortedInfidelityDetectionPowerTest {
                 "and no row of the genuinely wrong-class port may say that: its adapter observed, so "
                         + "its rows are a statement about the port. Hedging them would be the same "
                         + "defect from the other side");
-        assertTrue(plantedDefect.count(DiffVerdict.DIFFER) > 0,
-                "D-18 must still be detected: " + plantedDefect.verdicts);
+        assertTrue(plantedDefect.javaTypeMismatches > 0,
+                "D-18 must still be MEASURED: " + plantedDefect.summaryOfTypes());
+    }
+
+    /** How many operations a probe showed at least one java-type mismatch on. */
+    private static long countOperationsWithATypeMismatch(ProbeResult r) {
+        return r.perOperationJavaTypeMismatches.values().stream().filter(n -> n > 0).count();
     }
 
     /**

@@ -20,8 +20,9 @@ import java.util.Set;
  * <p>Two things in this file are worth copying and one is not. Copy the
  * {@link HarnessMarshallingException} discipline on all four failure exits, and copy the fact that
  * every result is attributed through one named method. Do <strong>not</strong> copy what that method
- * does: {@link #attributed(UValue)} <em>declares</em> its Java class, because S1 has no ported object
- * to observe; an S4 adapter holds one and must call {@link UValue#observedFrom(Object)} (D-43).
+ * does: {@link #attributed(UValue)} leaves the Java class at the factory's <em>assumption</em>, because
+ * S1 has no ported object to observe; an S4 adapter holds one and must call
+ * {@link UValue#observedFrom(Object)} (D-43).
  *
  * <p><strong>This class is not, and must not become, the port.</strong> It exists so S1 can
  * demonstrate that the harness produces agreement rows against a known-good side and disagreement
@@ -136,44 +137,42 @@ public final class StubCandidate implements Candidate {
     }
 
     /**
-     * <strong>Every result goes through here, and this is the one thing in this file an S4 adapter must
-     * not copy.</strong> A value is its content <em>plus</em> the Java class the implementation answered
-     * with (defect D-18), and there are two routes to that class — observing it off the returned object
-     * or stating it. Which route was taken is itself a measurement, because a <em>stated</em> class
-     * measures the adapter and not the implementation (defect <strong>D-43</strong>).
+     * <strong>Every result goes through this one place, and that is the thing to copy. What it does is
+     * the thing not to copy.</strong> A value is its content <em>plus</em> the Java class the
+     * implementation answered with (defect D-18), and there are exactly two states that class can be
+     * in: {@link UValue.TypeProvenance#OBSERVED}, read off the object the implementation returned, or
+     * {@link UValue.TypeProvenance#ASSUMED}, the factory default for the kind. An adapter author cannot
+     * choose a third — see {@link UValue}'s class comment for the two rounds of measurement that removed
+     * the declaration API (defect <strong>D-43</strong>).
      *
-     * <p>This stub takes the stating route, deliberately and visibly:
-     * {@link UValue#declaredJavaType(String, String)} with the reason below. It has to. It computes in
+     * <p>This stub's values are <strong>ASSUMED</strong>, and it cannot be otherwise: it computes in
      * plain Java and <strong>no ported object exists in S1 to observe</strong> — there is no
      * {@code URealValue} in {@code use-core/src/main} yet; writing one is S4. Fabricating an object
-     * merely to have something to observe would be a worse lie than an honest declaration, and a
-     * measurable one: the harness compares the class's <em>simple</em> name but
-     * {@link DifferentialSweep}'s type note compares the fully-qualified names, so a stand-in class in
-     * this package would leave every agreement row intact and re-caption all 226 disagreeing rows of
-     * {@code s1-smoke-ureal-minus-faulty.tsv} as a "java type mismatch" — a false explanation of an
-     * arithmetic finding, in S1's own committed evidence.
+     * merely to have something to observe would be measurably worse than an honest assumption: the
+     * harness compares the class's <em>simple</em> name but {@link DifferentialSweep}'s type note
+     * compares the fully-qualified names, so a stand-in class in this package would re-caption all 226
+     * disagreeing rows of {@code s1-smoke-ureal-minus-faulty.tsv} with a type clause — a false
+     * explanation of an arithmetic finding, in S1's own committed evidence.
      *
-     * <p><strong>An S4 adapter has the object and must observe it instead:</strong>
+     * <p>The assumption is right for these three operations and that is luck, not design: {@code javap -p}
+     * on the vendored {@code use.jar} declares {@code add(Value)}, {@code minus(Value)} and {@code neg()}
+     * as returning {@code org.tzi.use.uml.ocl.value.URealValue}, which is exactly the factory default for
+     * {@link UValue.Kind#UREAL}, so this stub's {@code javaTypeMismatchCount()} is 0 and the goldens carry
+     * no type clause. The same default is <strong>wrong for 182 of the 285 enumerated operations</strong>,
+     * because most of that surface returns a raw {@code boolean} / {@code int} / {@code double} /
+     * {@code String}. "The default was right this time" is what made D-43 invisible in the first place.
+     *
+     * <p><strong>An S4 adapter has the object and must observe it:</strong>
      * <pre>
      *   Object returned = portMethod.invoke(receiver, marshalledArgs);
      *   return UValue.uReal(v, u).observedFrom(returned);   // OBSERVED -- see Candidate
      * </pre>
-     * The attribution is explicit here even though these three operations happen to make the factory
-     * default right, because "the default was right this time" is what made D-43 invisible: the factory
-     * types every value as the {@code Value} class of its kind, which is correct for
-     * {@code URealValue.add}/{@code minus}/{@code neg} and wrong for 182 of the 285 enumerated
-     * operations. An adapter that says nothing is not agreeing with the harness; it is guessing, and it
-     * guesses wrong on two thirds of the surface.
+     * This method stays even though it now only returns its argument, because the shape is the point: one
+     * named place per adapter where every result is attributed, which is the line S4 changes and the line
+     * a reviewer looks for.
      */
     private static UValue attributed(UValue content) {
-        return content.declaredJavaType(UValue.VALUE_PACKAGE + "URealValue",
-                "DECLARED, not observed: this stub computes in plain Java and S1 has no ported "
-                        + "URealValue object to read a class off. The class named is what the "
-                        + "historical operation was measured to return during S1 -- javap -p on the "
-                        + "vendored use.jar declares add(Value), minus(Value) and neg() as returning "
-                        + "org.tzi.use.uml.ocl.value.URealValue -- and the token compared is the simple "
-                        + "name, so a port in another package still matches. An S4 adapter must call "
-                        + "UValue.observedFrom(theObjectItsPortReturned) instead: see Candidate.");
+        return content;
     }
 
     /**

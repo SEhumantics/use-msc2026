@@ -30,11 +30,13 @@ import java.util.Map;
  * # rows.agreement          484
  * # rows.disagreement       0
  * # rows.throwClassMismatch 0
+ * # rows.javaTypeMismatch   0
  * # verdict.AGREE           484
  * # op.URealValue.add(value).rows                     484
  * # op.URealValue.add(value).measured                 484
  * # op.URealValue.add(value).agreement                484
  * # op.URealValue.add(value).disagreement             0
+ * # op.URealValue.add(value).javaTypeMismatch         0
  * # op.URealValue.add(value).distinctReferenceValues  231
  * # op.URealValue.add(value).discriminating           true
  * # accepted.degenerateOperations                     0
@@ -194,6 +196,7 @@ public final class DiffReportWriter {
         int agreementRows = 0;
         int measuredRows = 0;
         int throwClassMismatches = 0;
+        int javaTypeMismatches = 0;
         List<String> operations = new ArrayList<>();
         Map<DiffVerdict, Integer> tally = new LinkedHashMap<>();
         for (DifferentialSweep.Result r : results) {
@@ -201,6 +204,7 @@ public final class DiffReportWriter {
             agreementRows += r.agreementCount();
             measuredRows += r.measurementCount();
             throwClassMismatches += r.throwClassMismatchCount();
+            javaTypeMismatches += r.javaTypeMismatchCount();
             operations.add(r.op().key());
             for (DiffVerdict v : DiffVerdict.values()) {
                 int c = r.count(v);
@@ -235,6 +239,13 @@ public final class DiffReportWriter {
             // A port that fails on the right rows with the wrong exception class changes no other
             // aggregate in this header. See DifferentialSweep.Result#throwClassMismatchCount().
             header(out, "rows.throwClassMismatch", Integer.toString(throwClassMismatches));
+            // Rows whose content matched and whose Java class did not. Scored AGREE since round 8 --
+            // at S1 the ported token cannot be authentically observed, so a type-only divergence
+            // measures the adapter rather than the port (D-43) -- and therefore invisible in
+            // rows.agreement, rows.disagreement and every verdict.* line. This is the only place in
+            // the file that population has a number. See DifferentialSweep.Result
+            // #javaTypeMismatchCount() and harness-contract.md §7.
+            header(out, "rows.javaTypeMismatch", Integer.toString(javaTypeMismatches));
             for (Map.Entry<DiffVerdict, Integer> e : tally.entrySet()) {
                 header(out, "verdict." + e.getKey().name(), Integer.toString(e.getValue()));
             }
@@ -267,6 +278,10 @@ public final class DiffReportWriter {
                 header(out, "op." + key + ".agreement", Integer.toString(r.agreementCount()));
                 header(out, "op." + key + ".disagreement",
                         Integer.toString(r.disagreements().size()));
+                // Per operation as well as in the file total, for the D-21 reason the rest of this
+                // block exists: a file-level 0 can hide a per-operation finding, and vice versa.
+                header(out, "op." + key + ".javaTypeMismatch",
+                        Integer.toString(r.javaTypeMismatchCount()));
                 header(out, "op." + key + ".distinctReferenceValues",
                         Integer.toString(r.distinctReferenceValues()));
                 header(out, "op." + key + ".discriminating", Boolean.toString(r.isDiscriminating()));

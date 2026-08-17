@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -966,15 +967,26 @@ class DifferentialHarnessRegressionTest {
      *       the kind is the leading token of the canonical form. Pinned here so that stays true;</li>
      *   <li>a <strong>runtime-class difference inside one kind</strong> — a raw {@code java.lang.Integer}
      *       against an {@code org.tzi.use.uml.ocl.value.IntegerValue}, same payload — was
-     *       {@link DiffVerdict#AGREE} on 193 of 285 operations, and is the defect.</li>
+     *       {@link DiffVerdict#AGREE} on 193 of 285 operations, <em>invisibly</em>, and is the defect.</li>
      * </ul>
      * The note on such a row must name both fully-qualified types and say the content was identical,
      * because "the port returned the right number in the wrong class" and "the port returned the wrong
      * number" are different findings and the two columns look nearly the same.
+     *
+     * <p><strong>Round 8 demoted the second case from a verdict to a counted dimension</strong>
+     * (defect <strong>D-43</strong> half (b)). It is scored {@link DiffVerdict#AGREE} and counted by
+     * {@link DifferentialSweep.Result#javaTypeMismatchCount()}, because at S1 the ported side's token
+     * cannot be authentically observed — no ported value class exists in {@code use-core/src/main} to
+     * observe, so a type-only divergence measures the adapter and not the port. The blindness D-18 was
+     * opened to close is <em>not</em> back: the difference is on the row, in the note, in the summary, in
+     * {@code stageStatement()} and in the report header, and it is asserted here in all of those places.
+     * What changed is which population it is counted in. A {@link UValue.Kind} difference is a content
+     * difference and stays {@link DiffVerdict#DIFFER}, as does a row whose content differs as well.
      */
     @Test
-    @DisplayName("D-18: a Kind difference and a runtime-class difference are both DIFFER, and the "
-            + "note names both types")
+    @DisplayName("D-18/D-43: a Kind difference is DIFFER; a runtime-class difference with identical "
+            + "content is AGREE and counted in javaTypeMismatch, with both types and both provenances "
+            + "in the note")
     void rightContentInTheWrongJavaTypeIsADifference() {
         // (1) The Kind difference. Already caught before the fix; must not regress.
         assertNotEquals(UValue.uReal(3.0, 0.0).canonical(), UValue.uInteger(3, 0.0).canonical());
@@ -996,26 +1008,58 @@ class DifferentialHarnessRegressionTest {
         UOp op = UOp.unary("URealValue", "neg");
         try (Candidate ref = new ReturnsFixed("ref", raw);
              Candidate sub = new ReturnsFixed("sub", boxed)) {
-            DiffRow row = new DifferentialSweep(ref, sub, 1L)
-                    .sweepUnary(op, List.of(UValue.uReal(1.0, 0.0))).rows().get(0);
+            DifferentialSweep.Result result = new DifferentialSweep(ref, sub, 1L)
+                    .sweepUnary(op, List.of(UValue.uReal(1.0, 0.0)));
+            DiffRow row = result.rows().get(0);
             System.out.println("=== D-18: the type-mismatch note =================================");
             System.out.println(row.toTsv());
             System.out.println("===================================================================");
 
-            assertEquals(DiffVerdict.DIFFER, row.verdict(), row.toTsv());
+            // Round 8: AGREE, not DIFFER -- the content is identical and only the class moved, and
+            // at S1 the ported token cannot be authentically observed, so that difference measures
+            // the adapter. It is still measured, in its own dimension, on this very row.
+            assertEquals(DiffVerdict.AGREE, row.verdict(), row.toTsv());
+            assertNotEquals(row.historical(), row.ported(),
+                    "the two columns must still SHOW the difference: an AGREE row that renders "
+                            + "identically would have lost the observation, not demoted it");
+            assertEquals(1, result.javaTypeMismatchCount(),
+                    "and the row must be counted where the demotion put it: " + result.summary());
+            assertEquals(0, result.disagreements().size(), result.summary());
+            assertTrue(result.summary().contains("javaTypeMismatch=1"), result.summary());
             assertTrue(row.note().contains("java.lang.Integer"), row.note());
             assertTrue(row.note().contains("org.tzi.use.uml.ocl.value.IntegerValue"), row.note());
             assertTrue(row.note().contains("IDENTICAL"), row.note());
             assertTrue(row.note().contains("D-18"), row.note());
+            assertTrue(row.note().contains("rows.javaTypeMismatch"),
+                    "the note must name the dimension the row was counted in: " + row.note());
+            assertTrue(row.note().contains("Provenance: reference OBSERVED, subject ASSUMED"),
+                    "and must name both provenances: " + row.note());
         }
 
-        // (4) An ordinary content divergence keeps the empty note it always had: the columns say it.
+        // (4) A CONTENT divergence is untouched by the demotion -- still DIFFER, still the empty note
+        //     it always had, because the two columns already say everything.
         try (Candidate ref = new ReturnsFixed("ref", UValue.uReal(1.0, 0.0));
              Candidate sub = new ReturnsFixed("sub", UValue.uReal(2.0, 0.0))) {
-            DiffRow row = new DifferentialSweep(ref, sub, 1L)
-                    .sweepUnary(op, List.of(UValue.uReal(1.0, 0.0))).rows().get(0);
+            DifferentialSweep.Result result = new DifferentialSweep(ref, sub, 1L)
+                    .sweepUnary(op, List.of(UValue.uReal(1.0, 0.0)));
+            DiffRow row = result.rows().get(0);
             assertEquals(DiffVerdict.DIFFER, row.verdict());
             assertEquals("", row.note(), "only a TYPE mismatch earns a note here");
+            assertEquals(0, result.javaTypeMismatchCount(),
+                    "a content divergence must NOT be diluted into the type dimension");
+        }
+
+        // (4b) Content AND type both wrong is a content finding: DIFFER, and not counted as a type
+        //      mismatch. The demotion must not give a wrong answer a discount for also being the
+        //      wrong class.
+        try (Candidate ref = new ReturnsFixed("ref", UValue.integer(7).observedFrom(Integer.valueOf(7)));
+             Candidate sub = new ReturnsFixed("sub", UValue.integer(8))) {
+            DifferentialSweep.Result result = new DifferentialSweep(ref, sub, 1L)
+                    .sweepUnary(op, List.of(UValue.uReal(1.0, 0.0)));
+            DiffRow row = result.rows().get(0);
+            assertEquals(DiffVerdict.DIFFER, row.verdict(), row.toTsv());
+            assertEquals(0, result.javaTypeMismatchCount(), result.summary());
+            assertTrue(row.note().contains("different as well"), row.note());
         }
 
         // (5) NULL and VOID stand for the absence of a result, so they carry no observed class and
@@ -1026,7 +1070,7 @@ class DifferentialHarnessRegressionTest {
         assertEquals(UValue.TypeProvenance.NONE, UValue.nullValue().typeProvenance());
         assertThrows(IllegalStateException.class, () -> UValue.voidValue().observedFrom("whatever"));
         assertThrows(IllegalStateException.class,
-                () -> UValue.nullValue().declaredJavaType("whatever", "because"));
+                () -> UValue.nullValue().observedFrom(Integer.valueOf(1)));
     }
 
     /**
@@ -1053,15 +1097,21 @@ class DifferentialHarnessRegressionTest {
     @DisplayName("D-18: the compared type token is the simple name; the FQN survives for the note")
     void theTypeTokenIsPackageInsensitiveOnPurpose() {
         UValue here = UValue.uReal(1.0, 0.0);
-        UValue relocated = here.declaredJavaType("com.example.port.value.URealValue",
-                "a synthetic relocated port: no such class exists to observe, and the point of the "
-                        + "test is that its package must not matter");
+        // The relocated token is OBSERVED off a real object of a real class whose simple name is
+        // URealValue and whose package is not org.tzi.use.uml.ocl.value -- a nested class in THIS file
+        // is exactly that, and simpleName() cuts at the last '.' or '$'. It used to be produced by
+        // declaredJavaType("com.example.port.value.URealValue", ...); that method is gone (D-43 half
+        // (b)) and an observation of a genuinely relocated class is the stronger construction anyway,
+        // because nothing here states a name.
+        UValue relocated = UValue.uReal(1.0, 0.0).observedFrom(new URealValue());
+        assertEquals(UValue.TypeProvenance.OBSERVED, relocated.typeProvenance());
+        assertEquals(getClass().getName() + "$URealValue", relocated.javaType());
         assertEquals("URealValue", here.typeToken());
         assertEquals("URealValue", relocated.typeToken());
         assertEquals(here.canonical(), relocated.canonical(),
                 "a relocated port of the same class must not read as 576 divergences per operation");
         assertEquals("org.tzi.use.uml.ocl.value.URealValue", here.javaType());
-        assertEquals("com.example.port.value.URealValue", relocated.javaType());
+        assertNotEquals(here.javaType(), relocated.javaType(), "the packages really do differ");
 
         // A nested class is named by its own simple name, not by Outer$Inner.
         assertEquals("Inner", UValue.simpleName("a.b.Outer$Inner"));
@@ -1079,78 +1129,131 @@ class DifferentialHarnessRegressionTest {
     }
 
     /**
-     * <strong>D-43, at unit resolution: the class token is either OBSERVED off a returned object or
-     * asserted with a written reason, and the evidence says which.</strong>
+     * A stand-in for a port that relocated {@code URealValue} into another package. Its only job is to
+     * be a real class, of a real package that is not {@code org.tzi.use.uml.ocl.value}, whose simple
+     * name is {@code URealValue} — so that
+     * {@link #theTypeTokenIsPackageInsensitiveOnPurpose()} can <em>observe</em> a relocated token
+     * instead of declaring one. A nested class's binary name is {@code Outer$URealValue} and
+     * {@link UValue#simpleName(String)} cuts at the last {@code '.'} or {@code '$'}, so the token is
+     * {@code URealValue} exactly as a top-level relocated class's would be.
+     */
+    static final class URealValue {
+    }
+
+    /**
+     * <strong>D-43, at unit resolution: a class token is OBSERVED or it is ASSUMED, there is no third
+     * state, and no API takes one from an adapter author.</strong>
      *
-     * <p>The D-18 fix made a Java-class difference a divergence. What it did not do was make the two
-     * halves of that comparison the same kind of statement: {@link HistoricalOracle#fromHistorical}
-     * <em>observes</em> the reference's class, while the ported side's token was whatever an adapter
-     * passed to a one-argument {@code asJavaType(String)}. A content-perfect port whose adapter took the
-     * factory default therefore measured 3 445 {@code DIFFER} rows on 182 of 285 operations — pinned end
-     * to end in {@code PortedInfidelityDetectionPowerTest} — and one line of {@code asJavaType} took a
-     * genuinely wrong-class port to 0.
+     * <p>The D-18 fix made a Java-class difference visible. What it did not do was make the two halves of
+     * that comparison the same kind of statement: {@link HistoricalOracle#fromHistorical} <em>observes</em>
+     * the reference's class, while the ported side's token was whatever an adapter passed to a
+     * one-argument {@code asJavaType(String)} (round 6) and then to
+     * {@code declaredJavaType(String javaType, String why)} (round 7). Both were measured erasing the
+     * check with one line: a genuinely wrong-class port plus the reference's own token produced a sweep
+     * byte-identical to the perfect-port control, and in round 7's case the mandatory reason reached
+     * <strong>0</strong> rows, because the type note fires only when the two class names differ and a
+     * laundering declaration makes them equal by construction.
      *
-     * <p>Three properties are asserted here, in the order that matters:
+     * <p>Round 8's answer is removal, not a third patch. The property asserted here is therefore about
+     * the <em>shape of the API</em> as much as about values:
      * <ol>
-     *   <li>{@link UValue#observedFrom(Object)} derives the token from {@code getClass().getName()},
-     *       and a boxed primitive is exactly what the reference observes for a raw return;</li>
-     *   <li>the factory default is {@link UValue.TypeProvenance#ASSUMED} and the only other route,
-     *       {@link UValue#declaredJavaType(String, String)}, <strong>refuses a blank reason</strong> —
-     *       there is no longer any way to state a class in one argument;</li>
-     *   <li>the provenance reaches the row note, and it does <em>not</em> reach the verdict or the
-     *       canonical form. A subject must not be able to excuse a divergence by admitting it guessed.</li>
+     *   <li>{@link UValue#observedFrom(Object)} derives the token from {@code getClass().getName()}, and a
+     *       boxed primitive is exactly what the reference observes for a raw return;</li>
+     *   <li>the factory default is {@link UValue.TypeProvenance#ASSUMED}, and
+     *       <strong>{@link UValue.TypeProvenance} has exactly three constants</strong> — two that carry a
+     *       class, plus {@code NONE} for the absence of a result. No {@code DECLARED};</li>
+     *   <li><strong>no public member of {@link UValue} can be handed a class name.</strong> Checked by
+     *       reflection over the whole public surface, because the two escape hatches that had to be
+     *       deleted were both ordinary-looking public methods and a grep is not a mechanism;</li>
+     *   <li>the provenance reaches the row note in both shapes and reaches neither the canonical form nor
+     *       the verdict. A subject must not be able to move a row in either direction by how it came by
+     *       its token.</li>
      * </ol>
      */
     @Test
-    @DisplayName("D-43: a class token is OBSERVED or DECLARED-with-a-reason, and the row note says "
-            + "which, without that changing any verdict")
-    void theTypeTokenIsObservedOrDeclaredAndTheRowSaysWhich() {
+    @DisplayName("D-43: a class token is OBSERVED or ASSUMED, no API accepts one from an adapter, and "
+            + "the note says which without moving any verdict")
+    void theTypeTokenIsObservedOrAssumedAndNoApiTakesOne() {
         // (1) Observation reads the object's own class. A raw `boolean`/`int` return arrives boxed,
         //     through Method.invoke or through autoboxing, and that is what the reference sees too.
         UValue observedRawBoolean = UValue.bool(true).observedFrom(Boolean.TRUE);
         assertEquals("java.lang.Boolean", observedRawBoolean.javaType());
         assertEquals("BOOLEAN(true)@Boolean", observedRawBoolean.canonical());
         assertEquals(UValue.TypeProvenance.OBSERVED, observedRawBoolean.typeProvenance());
-        assertNull(observedRawBoolean.typeDeclarationReason());
         assertEquals("java.lang.Integer", UValue.integer(5).observedFrom(5).javaType());
-
-        // (2) The factory default is a guess, and the only stating route costs a sentence.
-        assertEquals(UValue.TypeProvenance.ASSUMED, UValue.bool(true).typeProvenance());
-        assertEquals("org.tzi.use.uml.ocl.value.BooleanValue", UValue.bool(true).javaType());
-        assertThrows(IllegalArgumentException.class,
-                () -> UValue.bool(true).declaredJavaType("java.lang.Boolean", "  "));
-        assertThrows(IllegalArgumentException.class,
-                () -> UValue.bool(true).declaredJavaType("java.lang.Boolean", null));
         assertThrows(IllegalArgumentException.class, () -> UValue.bool(true).observedFrom(null),
                 "there is no class on a null result: that is nullValue(), not an observation");
-        UValue declared = UValue.bool(true).declaredJavaType("java.lang.Boolean",
-                "the port's method is declared `public boolean`; no object exists in this test");
-        assertEquals(UValue.TypeProvenance.DECLARED, declared.typeProvenance());
-        assertEquals(observedRawBoolean.canonical(), declared.canonical(),
-                "the two routes must produce the same canonical form -- the provenance is not compared");
-        assertEquals(observedRawBoolean, declared, "and UValue equality is canonical equality");
-        assertNotEquals(observedRawBoolean.typeProvenance(), declared.typeProvenance());
 
-        // (3) The note. Same content, same divergence, three different attributions of the subject's
-        //     class -- and the reader can tell them apart.
+        // (2) The factory default is a guess, and it is the ONLY other state.
+        assertEquals(UValue.TypeProvenance.ASSUMED, UValue.bool(true).typeProvenance());
+        assertEquals("org.tzi.use.uml.ocl.value.BooleanValue", UValue.bool(true).javaType());
+        assertEquals(List.of("OBSERVED", "ASSUMED", "NONE"),
+                java.util.Arrays.stream(UValue.TypeProvenance.values()).map(Enum::name)
+                        .collect(java.util.stream.Collectors.toList()),
+                "two states carry a class and neither is author-chosen; a DECLARED constant is exactly "
+                        + "the escape hatch rounds 6 and 7 shipped, and it is not coming back");
+
+        // (3) THE ESCAPE HATCH IS GONE, checked against the API and not against a grep. No public
+        //     member of UValue accepts a class name from a caller. The three String-taking factories
+        //     are enumerated by hand below and each is justified: their String is CONTENT.
+        Map<String, String> stringTakingMembers = new java.util.TreeMap<>();
+        for (java.lang.reflect.Method m : UValue.class.getMethods()) {
+            if (m.getDeclaringClass() != UValue.class) {
+                continue;                                   // Object's own methods
+            }
+            for (Class<?> parameter : m.getParameterTypes()) {
+                if (parameter == String.class || parameter == CharSequence.class) {
+                    stringTakingMembers.put(m.getName(),
+                            m.getName() + java.util.Arrays.toString(m.getParameterTypes()));
+                }
+            }
+        }
+        System.out.println("=== D-43: every public UValue member that accepts a String ========");
+        stringTakingMembers.values().forEach(v -> System.out.println("  " + v));
+        System.out.println("===================================================================");
+        assertEquals(Set.of("uString", "string", "opaque"), stringTakingMembers.keySet(),
+                "a new public UValue member taking a String is how the type-token escape hatch comes "
+                        + "back. These three take CONTENT: uString/string take the payload, and "
+                        + "opaque(className, repr) writes the name it is given into content() as well "
+                        + "as into javaType(), so an untruthful opaque token is a CONTENT difference "
+                        + "and stays a DIFFER. Nothing here turns a String into a type token while "
+                        + "leaving the content alone. Found instead: " + stringTakingMembers);
+        for (java.lang.reflect.Method m : UValue.class.getMethods()) {
+            if (m.getDeclaringClass() != UValue.class) {
+                continue;
+            }
+            assertFalse(m.getName().toLowerCase(Locale.ROOT).contains("javatype")
+                            && m.getParameterCount() > 0,
+                    "UValue." + m.getName() + " takes arguments and names the type token; the only "
+                            + "way to set that token is observedFrom(Object). " + m);
+        }
+        // opaque's String really is content, asserted rather than argued: two opaque values differing
+        // only in the class name they were given differ in content(), so the row is a DIFFER.
+        assertNotEquals(UValue.opaque("a.b.C", "x").content(), UValue.opaque("d.e.C", "x").content());
+
+        // (4) The note. Same content, same class difference, two attributions of the subject's class --
+        //     and the reader can tell them apart. Neither attribution moves the verdict: both rows are
+        //     AGREE (the content is identical) and both are counted in javaTypeMismatch.
         UOp op = UOp.unary("URealValue", "neg");
         UValue referenceSide = UValue.integer(7).observedFrom(Integer.valueOf(7));   // a raw int
         Map<String, UValue> subjects = new java.util.LinkedHashMap<>();
         subjects.put("ASSUMED (factory default)", UValue.integer(7));
         subjects.put("OBSERVED (off a real object of another class)",
                 UValue.integer(7).observedFrom(new java.util.concurrent.atomic.AtomicInteger(7)));
-        subjects.put("DECLARED (with a reason)", UValue.integer(7).declaredJavaType(
-                "org.tzi.use.uml.ocl.value.IntegerValue", "asserted by hand in a unit test"));
 
-        System.out.println("=== D-43: the same DIFFER row, three attributions of the subject ===");
+        System.out.println("=== D-43: the same type-mismatch row, two attributions of the subject ===");
         Map<String, String> notes = new java.util.LinkedHashMap<>();
         subjects.forEach((label, subjectValue) -> {
             try (Candidate ref = new ReturnsFixed("ref", referenceSide);
                  Candidate sub = new ReturnsFixed("sub", subjectValue)) {
-                DiffRow row = new DifferentialSweep(ref, sub, 1L)
-                        .sweepUnary(op, List.of(UValue.uReal(1.0, 0.0))).rows().get(0);
-                assertEquals(DiffVerdict.DIFFER, row.verdict(),
-                        "the provenance must not move the verdict: " + row.toTsv());
+                DifferentialSweep.Result result = new DifferentialSweep(ref, sub, 1L)
+                        .sweepUnary(op, List.of(UValue.uReal(1.0, 0.0)));
+                DiffRow row = result.rows().get(0);
+                assertEquals(DiffVerdict.AGREE, row.verdict(),
+                        "the provenance must not move the verdict, and a type-only difference is no "
+                                + "longer a divergence: " + row.toTsv());
+                assertEquals(1, result.javaTypeMismatchCount(),
+                        "but it must be counted: " + result.summary());
                 notes.put(label, row.note());
                 System.out.println("  " + label);
                 System.out.println("      " + row.note());
@@ -1158,20 +1261,38 @@ class DifferentialHarnessRegressionTest {
         });
         System.out.println("===================================================================");
 
-        assertTrue(notes.get("ASSUMED (factory default)").contains("ASSUMED, not observed"),
+        // Both provenances are named on EVERY type-mismatch row, whatever they are. Round 7's note
+        // only spoke up when a provenance was not OBSERVED, which is why a laundered row said nothing.
+        notes.forEach((label, note) -> assertTrue(note.contains("Provenance: reference OBSERVED"),
+                label + " -> " + note));
+        assertTrue(notes.get("ASSUMED (factory default)").contains("subject ASSUMED"),
                 notes.get("ASSUMED (factory default)"));
         assertTrue(notes.get("ASSUMED (factory default)").contains("D-43"),
                 "a row a stage might mistake for a port defect must name the defect that explains it");
         assertTrue(notes.get("ASSUMED (factory default)").contains("observedFrom"),
                 "and must name the call that would have made it a measurement");
         assertTrue(notes.get("OBSERVED (off a real object of another class)")
-                        .contains("Both classes were OBSERVED"),
+                        .contains("subject OBSERVED"),
                 notes.get("OBSERVED (off a real object of another class)"));
-        assertFalse(notes.get("OBSERVED (off a real object of another class)").contains("D-43"),
-                "an observed-vs-observed mismatch IS a port defect and must not be hedged");
-        assertTrue(notes.get("DECLARED (with a reason)")
-                        .contains("declared because: asserted by hand in a unit test"),
-                notes.get("DECLARED (with a reason)"));
+        // The hedge -- "this is a finding about the ADAPTER" -- must appear only when the subject's
+        // class was assumed. (The D-43 id itself now appears on every type-only row, because it is the
+        // id of the demotion the row's verdict rests on; the hedge is the part that attributes.)
+        assertTrue(notes.get("ASSUMED (factory default)").contains("finding about the ADAPTER"),
+                notes.get("ASSUMED (factory default)"));
+        assertFalse(notes.get("OBSERVED (off a real object of another class)")
+                        .contains("finding about the ADAPTER"),
+                "an observed-vs-observed difference is not an adapter finding and must not be hedged "
+                        + "as one: " + notes.get("OBSERVED (off a real object of another class)"));
+        assertFalse(notes.get("OBSERVED (off a real object of another class)")
+                        .contains("never looked"),
+                notes.get("OBSERVED (off a real object of another class)"));
+        // And the harness must not certify what it cannot check (D-47): observedFrom believes any
+        // object, so the note may not assert that the object came from the implementation.
+        notes.values().forEach(note -> assertFalse(note.contains("Both classes were OBSERVED"),
+                "the harness cannot vouch for an adapter's choice of object: " + note));
+        assertTrue(notes.get("OBSERVED (off a real object of another class)")
+                        .contains("not checkable by this harness"),
+                notes.get("OBSERVED (off a real object of another class)"));
     }
 
     // ------------------------------------------------------------------ golden byte comparison

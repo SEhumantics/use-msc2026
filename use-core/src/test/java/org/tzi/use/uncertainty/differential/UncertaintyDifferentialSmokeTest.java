@@ -35,7 +35,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link DifferentialSweep.Result#requireStagePass(int, AcceptedDegenerateOperations)} with
  * {@link #ADD_FLOOR} — a floor derived from the corpus and written down here, above the run, rather
  * than read off it — plus the two checks the gate deliberately does not make: the byte-identical
- * golden comparison, and {@code throwClassMismatchCount() == 0}. That is exactly the shape of
+ * golden comparison, {@code throwClassMismatchCount() == 0} and {@code javaTypeMismatchCount() == 0}.
+ * That is exactly the shape of
  * {@code harness-contract.md} §4.3's worked stage gate. {@code isClean()} is still <em>measured</em>
  * below, and printed beside the gate's verdict, because the gap between the two is the number D-36
  * is about; it is no longer what the test passes on.
@@ -110,6 +111,8 @@ class UncertaintyDifferentialSmokeTest {
                     + "   <- measured, NOT the pass criterion (D-36)");
             System.out.println("stage gate failures  "
                     + result.stageGateFailures(ADD_FLOOR, acknowledged));
+            System.out.println("javaTypeMismatch     " + result.javaTypeMismatchCount()
+                    + "   <- clause 6 (D-43); the gate does not make it, a stage must");
             System.out.println("STAGE STATEMENT      " + result.stageStatement(acknowledged));
             System.out.println("===================================================================");
 
@@ -124,6 +127,13 @@ class UncertaintyDifferentialSmokeTest {
             // Clause 5, which the gate deliberately does not make: a port that fails on the right
             // rows with the wrong exception class leaves every other aggregate identical.
             assertEquals(0, result.throwClassMismatchCount(), result.summary());
+            // Clause 6, likewise outside the gate: rows whose content matched and whose Java class did
+            // not are scored AGREE since round 8 (D-43), so they are invisible in every other figure
+            // here. This stub's values are ASSUMED and the assumption happens to be right for these
+            // three operations, so the figure is 0 -- and asserting the 0 is the point: from S4, when
+            // real ported classes exist and the adapter observes, harness-contract.md §7 makes this
+            // clause a REQUIREMENT rather than a worked example.
+            assertEquals(0, result.javaTypeMismatchCount(), result.summary());
             // And the discrimination figure itself, so this file states the number the gate acted on.
             assertTrue(result.isDiscriminating(),
                     "a stage pass on a single-valued operation would be D-15: " + result.summary());

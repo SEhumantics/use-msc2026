@@ -28,11 +28,14 @@ import java.util.List;
  * "agreement" without either side executing anything. The invariant belongs here, on the interface,
  * because from S4 the <em>ported implementation</em> is the side being adapted.
  *
- * <h2>The second invariant: OBSERVE the Java class your port returned — never declare it</h2>
+ * <h2>The second invariant: OBSERVE the Java class your port returned</h2>
  * <strong>A value is its content <em>together with its Java class</em> (defect D-18), and the class
  * must be read off the object your port actually returned:</strong>
  *
  * <pre>
+ *   if (portMethod.getReturnType() == void.class) {
+ *       return UValue.voidValue();                                   // NOT nullValue(): invoke()
+ *   }                                                                // answers null for void too
  *   Object returned = portMethod.invoke(receiver, marshalledArgs);   // or a direct call
  *   if (returned == null) {
  *       return UValue.nullValue();                                   // no class to observe
@@ -40,39 +43,47 @@ import java.util.List;
  *   return UValue.uReal(v, u).observedFrom(returned);                 // &lt;-- the whole obligation
  * </pre>
  *
- * <p><strong>An adapter that does not route through {@link UValue#observedFrom(Object)} is
- * declaring a type, not observing one — and a declared type makes the type check measure the
- * adapter instead of the port.</strong> The reference side is observed:
- * {@link HistoricalOracle#fromHistorical(Object)} derives the class from
- * {@code result.getClass().getName()} on every branch. If your side is not observed too, the two
- * halves of the comparison are not the same question. That asymmetry is defect <strong>D-43</strong>,
- * and it does its damage in both directions:
+ * <p>The {@code void} branch is part of the obligation and used to be missing from this snippet
+ * (defect <strong>D-51</strong>): {@code Method.invoke} answers {@code null} for a {@code void}-declared
+ * method, so an adapter that tested only for {@code null} would return {@link UValue#nullValue()} on the
+ * 8 {@code void} mutators where the reference returns {@link UValue#voidValue()}.
+ *
+ * <p><strong>There are exactly two states a class token can be in, and you choose neither:</strong>
+ * {@link UValue.TypeProvenance#OBSERVED}, if you route through {@link UValue#observedFrom(Object)}, or
+ * {@link UValue.TypeProvenance#ASSUMED}, the factory default, if you do not. There is deliberately no
+ * API on {@link UValue} that takes a class name from an adapter — rounds 6 and 7 each shipped one and
+ * each was measured erasing the check with a single line. See {@link UValue}'s class comment.
+ *
+ * <p>The reference side is observed: {@link HistoricalOracle#fromHistorical(Object)} derives the class
+ * from {@code result.getClass().getName()} on every branch. If your side is not observed too, the two
+ * halves of the comparison are not the same question. That asymmetry is defect <strong>D-43</strong>:
  * <ul>
- *   <li><strong>False divergence, through the obvious code.</strong> {@code UValue.uReal(...)},
- *       {@code UValue.bool(...)} and the other factories type a value as the
- *       {@code org.tzi.use.uml.ocl.value} class of its kind — {@link UValue.TypeProvenance#ASSUMED} —
- *       which is <strong>wrong for 182 of the 285 enumerated operations</strong>, because most of that
- *       surface returns a raw {@code boolean} (140 declarations), {@code int} (18), {@code double} (6)
- *       or {@code String} (18). Measured on a <em>content-perfect</em> port with such an adapter:
- *       <strong>3 445 {@code DIFFER} rows across 182 of 285 operations and 29 stage passes lost</strong>,
+ *   <li><strong>Where it does its damage.</strong> {@code UValue.uReal(...)}, {@code UValue.bool(...)}
+ *       and the other factories type a value as the {@code org.tzi.use.uml.ocl.value} class of its kind
+ *       — {@link UValue.TypeProvenance#ASSUMED} — which is <strong>wrong for 182 of the 285 enumerated
+ *       operations</strong>, because most of that surface returns a raw {@code boolean} (140
+ *       declarations), {@code int} (18), {@code double} (6) or {@code String} (18). Measured on a
+ *       <em>content-perfect</em> port with such an adapter: <strong>3 445 rows on which the two sides
+ *       named different classes for identical content</strong>, across 182 of 285 operations, including
  *       {@code URealValue.value()}, {@code URealValue.uncertainty()}, {@code UIntegerValue.value()} and
- *       {@code UIntegerValue.uncertainty()} among them — a measurement numerically
- *       <em>indistinguishable</em> from the planted wrong-class defect it is not.
- *       Both readings are pinned side by side in
- *       {@code PortedInfidelityDetectionPowerTest.aWrongJavaTypeWithRightContentIsADivergence} and
- *       {@code …aFactoryTypedAdapterMeasuresExactlyWhatThePlantedWrongTypeDoes}.</li>
- *   <li><strong>False agreement, if you clear those rows the easy way.</strong> Answering the 3 445
- *       rows by stating the class the reference reported — one line — took a genuinely wrong-class
- *       port from 3 445 {@code DIFFER} to <strong>0</strong>. So do not silence a type row by naming a
- *       type: find out what your port returned. {@link UValue#declaredJavaType(String, String)} is the
- *       only stating route left and it demands a written reason for exactly this purpose; a row moved
- *       by a declaration carries that reason into its note.</li>
+ *       {@code UIntegerValue.uncertainty()} — a figure numerically <em>indistinguishable</em> from the
+ *       planted wrong-class defect it is not.</li>
+ *   <li><strong>Why it is not scored against you at S1, and why that is temporary.</strong> Because that
+ *       figure cannot be attributed while there is no ported implementation to observe, a type-only
+ *       difference is scored {@link DiffVerdict#AGREE} and counted in
+ *       {@code Result.javaTypeMismatchCount()} rather than reported as a divergence. It is
+ *       <em>reported</em>, in the row note, in {@code stageStatement()} and in the report header — and
+ *       {@code harness-contract.md} §7 carries the dated requirement that S4, which is where the real
+ *       ported classes get written, routes through {@code observedFrom} and turns that count into a gate
+ *       clause. An adapter that does not attribute will publish a non-zero figure with your stage's
+ *       name on it.</li>
  * </ul>
  *
  * <p>{@link StubCandidate} is the only worked example an adapter has to copy, and on this point it
- * <strong>cannot</strong> be copied: it computes in plain Java, has no port object in existence, and
- * therefore declares its class with a written reason. It says so at the call site. Copy its
- * {@link HarnessMarshallingException} discipline; for the class token copy the snippet above.
+ * <strong>cannot</strong> be copied: it computes in plain Java, has no port object in existence, and its
+ * values are therefore assumed. It says so at the call site. Copy its
+ * {@link HarnessMarshallingException} discipline and its single named attribution point; for the class
+ * token copy the snippet above.
  *
  * <p>Test-scoped. Not part of the product.
  */

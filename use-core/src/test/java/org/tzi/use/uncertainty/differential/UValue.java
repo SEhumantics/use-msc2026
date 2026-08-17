@@ -49,6 +49,16 @@ import java.util.Objects;
  *       0 diverging operations, and the same 74 stage passes.</li>
  * </ul>
  *
+ * <p><strong>A type-only difference is measured but no longer scored (round 8).</strong> The token is
+ * still part of {@link #canonical()}, so the two sides' classes are still compared on every row and the
+ * difference is still reported — but where the {@link #content()} is identical and only the class
+ * differs, {@link DifferentialSweep} records {@link DiffVerdict#AGREE} and counts the row in
+ * {@code Result.javaTypeMismatchCount()} instead of calling it a divergence. The reason is dated and
+ * specific: at S1 the ported side's token cannot be authentically observed, because no ported value
+ * class exists to observe, so a type-only divergence measures the adapter rather than the port. Content
+ * differences are untouched and remain {@link DiffVerdict#DIFFER}. See {@code harness-contract.md} §7
+ * for the S4 obligation that turns the count back into a gate clause.
+ *
  * <h3>What is compared, and what deliberately is not</h3>
  * The rendered token is the class's <strong>simple name</strong>, not its package. The historical
  * side's classes are loaded from a vendored jar by an isolated class loader and the ported side's
@@ -74,29 +84,51 @@ import java.util.Objects;
  *       package-insensitivity is a property of the <em>type token</em> only, never of the row.</li>
  * </ul>
  *
- * <h3>Where a value's type comes from: OBSERVED, DECLARED, or merely ASSUMED</h3>
- * There are exactly three routes to the token, {@link #typeProvenance()} says which one a value took,
- * and the difference between the first two is defect <strong>D-43</strong>:
+ * <h3>Where a value's type comes from: OBSERVED or merely ASSUMED — two states, neither chosen</h3>
+ * A value's Java type is <strong>observed</strong> or it is <strong>assumed</strong>, and
+ * {@link #typeProvenance()} says which. There is no third state and, deliberately, <strong>no route by
+ * which an adapter author can hand this class a type token of their choosing</strong>:
  * <ul>
  *   <li>{@link TypeProvenance#OBSERVED} — {@link #observedFrom(Object)} reads
  *       {@code returned.getClass().getName()} off the object a side actually returned. This is what
  *       {@link HistoricalOracle#fromHistorical(Object)} does on every branch, and it is what an
- *       adapter for a real port <strong>must</strong> do. It is the only route under which a type
- *       difference is a statement about the code being compared.</li>
- *   <li>{@link TypeProvenance#DECLARED} — {@link #declaredJavaType(String, String)} takes the name
- *       <em>and a written reason</em>, because a declared token measures the adapter and not the port.
- *       The reason is mandatory and non-blank for the same purpose as the rationale on an
- *       {@link AcceptedDegenerateOperations} sign-off: a claim the instrument cannot check has to cost
- *       a sentence a reviewer can read. There is no one-argument form — the earlier
- *       {@code asJavaType(String)}, which believed any string, is gone.</li>
- *   <li>{@link TypeProvenance#ASSUMED} — nobody said. A value built by a factory is typed as
+ *       adapter for a real port <strong>must</strong> do from S4 onwards. It is the only route under
+ *       which a type difference is a statement about the code being compared.</li>
+ *   <li>{@link TypeProvenance#ASSUMED} — nobody looked. A value built by a factory is typed as
  *       <em>the {@code org.tzi.use.uml.ocl.value} class of its kind</em>, which is what a corpus entry
  *       marshals to and is <strong>wrong for 182 of 285 operations</strong>, because most of the
  *       enumerated surface returns a raw {@code boolean} / {@code int} / {@code double} /
  *       {@code String}. Measured: a <em>content-perfect</em> port whose adapter never attributes
- *       produces 3 445 false {@code DIFFER} rows and loses 29 stage passes.</li>
+ *       differs from the reference's token on 3 445 rows across 182 of 285 operations.</li>
  * </ul>
- * The provenance is deliberately <strong>not</strong> part of {@link #canonical()}: it must never
+ *
+ * <h3>Why there is no third, author-chosen state (defect D-43, round 8)</h3>
+ * Rounds 6 and 7 carried a {@code DECLARED} state: an adapter could name a class and, from round 7,
+ * had to write a reason for it. Both shapes were refuted by measurement, and the second refutation is
+ * the reason this class now has two states:
+ * <ul>
+ *   <li>round 6's one-argument {@code asJavaType(String)} took a genuinely wrong-class port from
+ *       3 445 {@code DIFFER} rows to <strong>0</strong>;</li>
+ *   <li>round 7's {@code declaredJavaType(String javaType, String why)} did exactly the same thing —
+ *       {@code declaredJavaType(referenceToken, "x")} produced a sweep <em>byte-identical</em> to the
+ *       perfect-port control — and the mandated reason reached <strong>0 rows</strong>, because the
+ *       type note only fires when the two class names differ, which a laundering declaration makes
+ *       false by construction.</li>
+ * </ul>
+ * The pattern is the point: the ported side's token is author-influenced at S1 because <strong>there is
+ * no ported implementation to observe</strong>. No {@code org.tzi.use.uml.ocl.value.URealValue} exists
+ * in {@code use-core/src/main}; writing it <em>is</em> stage S4. Each round therefore invented a new way
+ * for the author to influence the token, and patching the newest instance leaves the class of defect
+ * intact. Removing the declaration API removes the class: with nothing to declare, there is nothing to
+ * declare falsely.
+ *
+ * <p>The one remaining place a caller names a class is {@link #opaque(String, String)}, and it is not a
+ * type-only channel: the name it is given goes into {@link #content()} as well as into
+ * {@link #javaType()}, so an untruthful {@code opaque} token is a content difference, and content
+ * differences are {@link DiffVerdict#DIFFER} exactly as before. Nothing on this class turns a String
+ * into a type token while leaving the content alone.
+ *
+ * <p>The provenance is deliberately <strong>not</strong> part of {@link #canonical()}: it must never
  * change a verdict, or a subject could excuse a real divergence by admitting it guessed. It is
  * carried into the note of a type-mismatch row instead, so a reader of the evidence can tell
  * "the port returned the wrong class" from "the adapter never looked".
@@ -166,6 +198,10 @@ public final class UValue {
     /**
      * How a value came by its {@link #javaType()} — the distinction defect <strong>D-43</strong> is
      * about. See the class comment, "where a value's type comes from".
+     *
+     * <p><strong>Exactly two states carry a class, and an adapter author chooses neither.</strong> A
+     * {@code DECLARED} constant existed in rounds 6 and 7 and is gone: see the class comment for the
+     * two measurements that removed it.
      */
     public enum TypeProvenance {
         /**
@@ -175,12 +211,7 @@ public final class UValue {
          */
         OBSERVED,
         /**
-         * Stated by an adapter through {@link UValue#declaredJavaType(String, String)}, with a written
-         * reason. Measures the adapter, not the port: whatever the adapter says, the harness believes.
-         */
-        DECLARED,
-        /**
-         * Nobody said. The factory's default for the kind — the {@code org.tzi.use.uml.ocl.value}
+         * Nobody looked. The factory's default for the kind — the {@code org.tzi.use.uml.ocl.value}
          * class — which is wrong for 182 of the 285 enumerated operations.
          */
         ASSUMED,
@@ -208,26 +239,23 @@ public final class UValue {
      * therefore have no observed class. See the class comment, "the canonical form is type-bearing".
      */
     private final String javaType;
-    /** Which of the three routes {@link #javaType} came by. Never part of {@link #canonical()}. */
+    /** Which of the two routes {@link #javaType} came by. Never part of {@link #canonical()}. */
     private final TypeProvenance typeProvenance;
-    /** The reason a {@link TypeProvenance#DECLARED} token was declared; {@code null} otherwise. */
-    private final String typeDeclarationReason;
 
     /**
      * The factory constructor. Every value built here is {@link TypeProvenance#ASSUMED} — the factory
      * chose the {@code Value} class of the kind and nobody looked at an object — or
-     * {@link TypeProvenance#NONE} for the two kinds that stand for the absence of a result. Both of
-     * the attributing routes go through {@link #withJavaType}.
+     * {@link TypeProvenance#NONE} for the two kinds that stand for the absence of a result. The one
+     * attributing route goes through {@link #observed(String)}.
      */
     private UValue(Kind kind, double number, int integer, boolean flag, String text, double aux,
                    List<UValue> elements, String javaType) {
         this(kind, number, integer, flag, text, aux, elements, javaType,
-                javaType == null ? TypeProvenance.NONE : TypeProvenance.ASSUMED, null);
+                javaType == null ? TypeProvenance.NONE : TypeProvenance.ASSUMED);
     }
 
     private UValue(Kind kind, double number, int integer, boolean flag, String text, double aux,
-                   List<UValue> elements, String javaType, TypeProvenance typeProvenance,
-                   String typeDeclarationReason) {
+                   List<UValue> elements, String javaType, TypeProvenance typeProvenance) {
         this.kind = kind;
         this.number = number;
         this.integer = integer;
@@ -237,7 +265,6 @@ public final class UValue {
         this.elements = elements == null ? null : Collections.unmodifiableList(new ArrayList<>(elements));
         this.javaType = javaType;
         this.typeProvenance = typeProvenance;
-        this.typeDeclarationReason = typeDeclarationReason;
     }
 
     // ------------------------------------------------------------------ factories
@@ -314,12 +341,20 @@ public final class UValue {
      * returned, so it can do exactly the same thing:
      *
      * <pre>
+     *   if (portMethod.getReturnType() == void.class) {   // invoke() answers null for a void method,
+     *       return UValue.voidValue();                    // which is NOT the same as a null result
+     *   }
      *   Object returned = portMethod.invoke(receiver, marshalledArgs);   // or a direct call
      *   if (returned == null) {
      *       return UValue.nullValue();
      *   }
-     *   return UValue.uReal(value, uncertainty).observedFrom(returned);  // OBSERVED, not declared
+     *   return UValue.uReal(value, uncertainty).observedFrom(returned);  // OBSERVED, not assumed
      * </pre>
+     *
+     * <p>The {@code void} line is not decoration: {@code Method.invoke} hands back {@code null} for a
+     * {@code void}-declared method, so a snippet that tested only for {@code null} would answer
+     * {@link #nullValue()} where the reference answers {@link #voidValue()} — on the 8 {@code void}
+     * mutators of the enumerated surface (defect D-51).
      *
      * <p>A primitive result needs nothing special: {@code Method.invoke} boxes a {@code boolean} into
      * a {@code java.lang.Boolean} and so does autoboxing at a direct call site, which is precisely
@@ -344,47 +379,26 @@ public final class UValue {
                     + "UValue.nullValue() for a method that returned null and UValue.voidValue() for "
                     + "a void method (kind " + kind + ", content " + content() + ")");
         }
-        return withJavaType(returned.getClass().getName(), TypeProvenance.OBSERVED, null);
+        return observed(returned.getClass().getName());
     }
 
     /**
-     * <strong>The same content, typed by a class name the caller states rather than observes.</strong>
-     * The reason is mandatory because this token is not evidence: the harness cannot check it, so a
-     * type difference involving a declared token measures the <em>declaring code</em> and not the
-     * implementation under comparison (defect <strong>D-43</strong>).
+     * The single private path that sets an {@link TypeProvenance#OBSERVED} token, reachable only from
+     * {@link #observedFrom(Object)}.
      *
-     * <p>Legitimate uses are ones where no object exists to observe: a hand-written sign-off key, a
-     * synthetic value in a unit test, a stub that computes in plain Java and stands in for a port that
-     * has not been written yet ({@link StubCandidate}). <strong>An adapter for a real port is not one
-     * of them</strong> — it holds the returned object and must call {@link #observedFrom(Object)}.
-     *
-     * <p>This replaced a one-argument {@code asJavaType(String)} that believed any string. The
-     * measurement that forced the change: a genuinely wrong-class port plus one line of
-     * {@code .asJavaType(referenceToken)} took 3 445 {@code DIFFER} rows to 0. Requiring a written
-     * reason does not make that impossible — nothing can — but it makes it a sentence a reviewer sees,
-     * and {@link DifferentialSweep} prints the reason into the note of any row the declaration moved.
-     *
-     * @param javaType the fully-qualified class name being claimed
-     * @param why      why this is the class the code being compared produced; must be non-blank
-     * @throws IllegalArgumentException if {@code why} is blank
-     * @throws IllegalStateException    if this value carries no observation
+     * <p>It is private, and there is no public counterpart, on purpose: a public method taking a class
+     * name is exactly the escape hatch rounds 6 and 7 shipped twice — {@code asJavaType(String)} and
+     * then {@code declaredJavaType(String, String)} — and each time a wrong-class port erased the type
+     * check with one line. See the class comment.
      */
-    public UValue declaredJavaType(String javaType, String why) {
-        if (why == null || why.isBlank()) {
-            throw new IllegalArgumentException("a declared Java type needs a written reason: the "
-                    + "harness cannot check the claim, so the claim has to be readable (" + javaType
-                    + " for " + content() + ")");
-        }
-        return withJavaType(javaType, TypeProvenance.DECLARED, why);
-    }
-
-    private UValue withJavaType(String javaType, TypeProvenance provenance, String why) {
+    private UValue observed(String javaType) {
         Objects.requireNonNull(javaType, "javaType");
         if (!carriesAnObservation()) {
             throw new IllegalStateException("kind " + kind + " stands for the absence of a result, "
                     + "so it cannot have been observed as " + javaType);
         }
-        return new UValue(kind, number, integer, flag, text, aux, elements, javaType, provenance, why);
+        return new UValue(kind, number, integer, flag, text, aux, elements, javaType,
+                TypeProvenance.OBSERVED);
     }
 
     // ------------------------------------------------------------------ accessors
@@ -403,24 +417,15 @@ public final class UValue {
     }
 
     /**
-     * Which of the three routes {@link #javaType()} came by — observed off a returned object, declared
-     * by a caller with a reason, or assumed by a factory. Defect D-43 is the difference between the
-     * first two, and this accessor is what lets the evidence say which one a row rests on.
+     * Which of the two routes {@link #javaType()} came by — observed off a returned object, or assumed
+     * by a factory. Defect D-43 is the difference between them, and this accessor is what lets the
+     * evidence say which one a row rests on.
      *
      * <p>Never part of {@link #canonical()} and never part of {@link #equals(Object)}: provenance must
      * not be able to change a verdict.
      */
     public TypeProvenance typeProvenance() {
         return typeProvenance;
-    }
-
-    /**
-     * The reason given to {@link #declaredJavaType(String, String)}, or {@code null} for a token that
-     * was observed or assumed. {@link DifferentialSweep} prints it into the note of a row whose two
-     * sides disagree about the Java type.
-     */
-    public String typeDeclarationReason() {
-        return typeDeclarationReason;
     }
 
     /**
