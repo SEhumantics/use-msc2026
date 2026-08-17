@@ -893,3 +893,352 @@ $ git diff --name-status 30d480db..HEAD -- '*/src/test/*' | awk '$1!="A"'  -> EM
 Both full verifies exited 0 with `BUILD SUCCESS`; the tree was clean after each (modulo untracked
 files created by the other session, which the refuter did not touch). One `git worktree` was created
 in the scratchpad and removed; `git worktree list` shows only the main checkout.
+
+---
+---
+
+# Round 9b — second, independent empirical pass
+
+**Added by a second refuter, working from the same brief and unaware of §§0–13 until its own
+measurements were complete.** Everything above was produced in the shared checkout
+`/home/xoruser/msc-4/use-msc2026`; everything below was produced in a **separate `git clone` of the
+same commit**, for the reason given in 9b.1. The two passes agree on every headline number, which is
+the point of recording both.
+
+**Verdict of this pass: SOUND WITH DOCUMENTED LIMITS.** The profile does what it claims. The
+mechanism is sound, upstream's tests are untouched, and no upstream test fails. The one finding this
+pass adds is not about the profile's mechanism but about **operating it as a gate**: the gate is
+green when it is not running (9b.6).
+
+## 9b.1 Why this pass used a clone — and a warning for anyone re-running
+
+The first thing this pass measured was invalid, and the reason matters. A `mvn -q clean && mvn -B
+verify` in the shared checkout produced a *default*-build report directory containing **64** XML
+files and 367 surefire methods, because a sibling session's `-Pupstream-oracle` build was writing
+into the same `target/` concurrently:
+
+```
+$ pgrep -af "classworlds.launcher"
+1522389 ... Launcher -B verify -Pupstream-oracle -Djava.awt.headless=true       <- not mine
+```
+
+A 45-second quiet-wait loop then failed to find a single Maven-free window in **ten minutes**. All
+numbers below therefore come from:
+
+```
+$ git clone -q --local --no-hardlinks /home/xoruser/msc-4/use-msc2026 <scratch>/iso
+$ cd <scratch>/iso && git checkout -q b15b5a94 && git rev-parse HEAD
+b15b5a94bc58fd40a06e6ff08a27fbf7c83e56ae
+$ md5sum {,<scratch>/iso/}use-core/pom.xml {,<scratch>/iso/}use-gui/pom.xml
+89e355ca09d653bb451fb979a119dd9b  use-core/pom.xml
+4257bd269057d1503a0516470928bd69  use-gui/pom.xml
+89e355ca09d653bb451fb979a119dd9b  <scratch>/iso/use-core/pom.xml
+4257bd269057d1503a0516470928bd69  <scratch>/iso/use-gui/pom.xml
+```
+
+`diff -r -x .git -x target` between the two trees reports only untracked ArchUnit CSV/report
+by-products present in the shared checkout. **Warning for S3+: a count taken from this checkout while
+another session builds is worthless. Snapshot the XML inside the same shell command that runs Maven,
+or clone.** HEAD also advanced twice during this pass (`5d9770a5`, `d07c26da`); both are docs-only —
+`git diff --name-status b15b5a94..d07c26da | grep -v '^A[[:space:]]*docs/'` is empty — so these
+numbers still describe HEAD's build.
+
+## 9b.2 Default build — 210 methods, and vintage absent
+
+```
+$ mvn -q clean && mvn -B verify -Djava.awt.headless=true          # in the clone
+DEFAULT_EXIT=0
+[INFO] BUILD SUCCESS
+[INFO] Total time:  01:49 min
+
+$ grep -E "^\[INFO\] Tests run: [0-9]+, Failures.*Skipped: [0-9]+$" <log>
+[INFO] Tests run: 79, Failures: 0, Errors: 0, Skipped: 0      <- use-core surefire
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0       <- use-core failsafe
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0       <- use-gui  surefire
+[INFO] Tests run: 129, Failures: 0, Errors: 0, Skipped: 0     <- use-gui  failsafe
+```
+
+The identical four lines appear at the identical log line numbers (1320/1339/1390/1417) in the shared
+checkout's own 21:06 default log, so this is not a clone artefact. Per class, from the XML:
+
+```
+--- use-core/surefire-reports          --- use-gui/surefire-reports
+  11  MavenCyclicDependenciesCoreTest    1  MavenLayeredArchitectureTest
+   1  ModelAPITest                     ==== classes=1 methods=1
+  35  DifferentialHarnessRegressionTest
+   9  HistoricalOracleIsolationTest    --- use-core/failsafe: 1 OCLExpressionIT
+   7  PortedInfidelityDetectionPower   --- use-gui/failsafe: 129 ShellIT
+   6  UncertaintyDifferentialSmokeTest
+  10  UnwrittenPortInvariantTest
+==== classes=7 methods=79
+```
+
+**80 surefire + 130 failsafe = 210 methods over 10 classes, 0 failures.** The brief's "79 surefire +
+130 failsafe = 209" labels *use-core's* surefire subtotal as the surefire total and is the
+pre-H21 figure; §2.3 above already accounts for the +1. Nothing is wrong with the build.
+
+Vintage absence, three independent ways (the fourth is 9b.6):
+
+```
+$ mvn -B dependency:tree -Dincludes=org.junit.vintage
+[INFO] --- dependency:3.7.0:tree (default-cli) @ use ---
+[INFO] --- dependency:3.7.0:tree (default-cli) @ use-core ---        <- no dependency line
+[INFO] --- dependency:3.7.0:tree (default-cli) @ use-gui ---         <- no dependency line
+[INFO] --- dependency:3.7.0:tree (default-cli) @ use-assembly ---
+[INFO] BUILD SUCCESS
+
+$ mvn -B dependency:tree -Dincludes=org.junit.vintage -Pupstream-oracle
+[INFO] Building use-core 7.5.0    [2/4]
+[INFO] \- org.junit.vintage:junit-vintage-engine:jar:5.7.0:test
+[INFO] Building use-gui 7.5.0     [3/4]
+[INFO] \- org.junit.vintage:junit-vintage-engine:jar:5.7.0:test
+
+$ grep -c junit.vintage <dependency:list default>   -> 0
+$ grep -c junit.vintage <dependency:list profile>   -> 2
+```
+
+**Methodological caveat on a proof method this pass tried and rejected.** The `java.class.path`
+property recorded inside each surefire XML is **abridged** — it omits `use-core/target/classes` and
+every compile-scope jar (guava, antlr, jruby, vtd-xml), ending in a bare `:`:
+
+```
+default run:  len=1995  has_target_classes=False  has_vintage=False
+profile run:  len=2100  has_target_classes=False  has_vintage=True
+```
+
+The 105-character delta is exactly the vintage jar entry, so the two runs' *engine* sections are
+complete and comparable — but "no vintage string in the XML" must not be quoted as a classpath proof,
+because that classpath is not the whole classpath. Use `dependency:tree`/`build-classpath` (§2.1).
+
+## 9b.3 Under the profile — 497 distinct methods, 0 failures, twice
+
+```
+$ mvn -q clean && mvn -B verify -Pupstream-oracle -Djava.awt.headless=true
+ORACLE_EXIT=0   [INFO] BUILD SUCCESS   [INFO] Total time:  01:45 min
+
+TOTAL classes=50 methods(@tests)=497 methods(distinct)=497 executions=1085 failures=0 errors=0 skipped=0
+```
+
+This pass counted the same XML **two independent ways** and the two agree exactly, which retires the
+question of which dedup rule is right: the root `@tests` attribute *already is* the distinct-method
+count, and the `<testcase>` elements are the executions.
+
+```
+    @tests=  38  distinct=  38  execs= 152  org.tzi.use.uml.ocl.type.TypeTest
+    @tests=  11  distinct=  11  execs=  55  org.tzi.use.uml.sys.soil.StatementEffectTest
+    @tests=   2  distinct=   2  execs=   6  org.tzi.use.parser.USECompilerTest
+    @tests=   0  distinct=   0  execs=   0  org.tzi.use.AllTests  [NO TESTCASES -> not a class]
+```
+
+No file in either run has `@tests != distinct`; the 14 aggregators are uniformly `0/0/0`. Surefire's
+`938` headline is 938 **executions**. Reconciliation with the probe is exact:
+
+```
+probe 2 (8789e035, post-S1):        45 classes / 315 surefire methods
+S2 harness classes added since:  PortedInfidelityDetectionPowerTest 7
+                                 UnwrittenPortInvariantTest        10
+                                 DifferentialHarnessRegressionTest 35  (34 + the H21 test)  = 52
+predicted:                          48 classes / 367 methods
+measured:                           48 classes / 367 methods
+```
+
+Run 2, after another `mvn -q clean`: the per-class table `diff`s **identical**, and the harness's
+entire stdout is md5-identical (`57690f76eea5729edd8f27a37d1e83a9`) across both profile runs.
+
+## 9b.4 Task 3 — no upstream test fails, and the pass is not vacuous
+
+`0 failures / 0 errors / 0 skipped` in all 62 XML files of both profile runs;
+`grep -inE "<<< FAILURE|<<< ERROR|BUILD FAILURE|Tests in error|Failed tests"` over the whole build
+log returns **nothing**. Two extra attacks found nothing either:
+
+```
+$ mvn -B -pl use-core test -Pupstream-oracle -Dsurefire.runOrder=reversealphabetical
+EXIT=0   [INFO] Tests run: 938, Failures: 0, Errors: 0, Skipped: 0   [INFO] BUILD SUCCESS
+```
+
+Reversing the order does **not** turn the unrestored `Options.explicitVariableDeclarations`
+(R-4) red today. That is a fact about this tree, not a guarantee, and it corroborates keeping R-4's
+re-run condition.
+
+Second, the profile's output is **purely additive** to the default's — the default-vs-profile diff of
+all non-Maven stdout has **0 `<` lines** (nothing the default printed disappears) and 64 `>` lines,
+all of them from the revived tests (`No of classes incl.: 836`, `Cycles in core module: 34`, USE's
+`Warning: Iteration over a non-ordered collection`). The perfect-port control is intact under the
+profile:
+
+```
+diverging operations 0   <- MUST be 0, or nothing below is attributable to a planted defect
+stage passes         74 of 285  (isStagePass(1, none()))
+```
+
+**And `USECompilerTest`'s pass is not vacuous — R-3 is confirmed from the other side.** The corpus
+has a hard floor written by upstream:
+
+```java
+USECompilerTest.java:69    private static final int EXPECTED = 49;
+USECompilerTest.java:77    TEST_PATH = new File(ClassLoader.getSystemResource("org/tzi/use/parser").toURI());
+USECompilerTest.java:297   assertEquals("make sure that all test files can be found ...", expected, fileList.size());
+```
+
+`ls target/test-classes/org/tzi/use/parser/*.use | wc -l` → **49**. An empty or short corpus cannot
+pass: it fails on `assertEquals(49, …)`. So this is the opposite of a vacuous test, and §4.6 caveat 2
+of `upstream-oracle-profile.md` is wrong in both its mechanism (`user.dir` — the file uses
+`ClassLoader.getSystemResource`) and its conclusion. Its 2 methods compile 49 specifications and
+compare each against its `.fail` file. (`EXAMPLES_PATH` resolves to `target/classes/examples`, whose
+*top level* holds 0 `.use` files — the 85 under it are in subdirectories — so the example corpus adds
+nothing. Non-obvious, harmless, and worth knowing before someone "fixes" it.)
+
+## 9b.5 Scope — the resolved dependency list differs by exactly one artefact
+
+Beyond reading the diff (§6), this pass diffed the *resolved* lists over all four modules:
+
+```
+$ diff <(dependency:list, default) <(dependency:list, -Pupstream-oracle)
+21d20  < org.apiguardian:apiguardian-api:jar:1.1.0:test
+26d24  < org.junit.platform:junit-platform-engine:jar:1.7.0:test
+32a31  > org.junit.vintage:junit-vintage-engine:jar:5.7.0:test
+       > org.apiguardian:apiguardian-api:jar:1.1.0:test
+       > org.junit.platform:junit-platform-engine:jar:1.7.0:test
+   ... the same three-line pattern once more, for use-gui
+```
+
+One artefact **added** per module; `apiguardian-api` and `junit-platform-engine` are **re-ordered,
+not re-versioned** (both remain `1.1.0` / `1.7.0`); nothing is removed. `grep -rn surefire
+--include=pom.xml .` finds no declaration anywhere, so no `includes`, `excludes`, `argLine`,
+`forkCount`, `skipTests` or fork setting exists to have been touched — surefire 3.5.4 is Maven
+3.9.16's default binding, and the gate's discovered test set is therefore a property of the
+*installed Maven*, not of the repository (see RB-3).
+
+## 9b.6 RB-1 (MAJOR) — the gate is green when it is not running
+
+This is the one finding this pass adds. §5 above proves the gate **can** go red when it is active.
+It is equally important that nothing makes it observable **that it was active**. Measured, both
+halves:
+
+```
+$ mvn -B -pl use-core test -Pupstream-oracl -Djava.awt.headless=true      # one character short
+[WARNING] The requested profile "upstream-oracl" could not be activated because it does not exist.
+[INFO] Tests run: 79, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+EXIT=0
+```
+
+```
+$ mvn -B -pl use-core test -Dtest=TypeTest -Djava.awt.headless=true       # default build
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+EXIT=0
+
+$ mvn -B -pl use-core test -Dtest=TypeTest -Pupstream-oracle -Djava.awt.headless=true
+[INFO] Tests run: 38, Failures: 0, Errors: 0, Skipped: 0 -- in org.tzi.use.uml.ocl.type.TypeTest
+[INFO] BUILD SUCCESS
+EXIT=0
+```
+
+Both invocations exit 0. The only difference between "upstream's 38-assertion type oracle ran" and
+"no engine could see it" is a number in the middle of the log.
+
+A mistyped `-P` id, a `settings.xml` that swallows the profile, an offline resolution failure of the
+vintage jar, or a future jupiter bump that skews the platform train, all land in the same place:
+`BUILD SUCCESS`, exit 0, and the vacuous 210-method default gate — with at most one `[WARNING]` in a
+1300-line log. Asking surefire directly for upstream's own `TypeTest` and getting `Tests run: 0` and
+a green build is the same defect from the other end.
+
+`upstream-oracle-profile.md` §5 already mitigates this **procedurally** — it requires each stage to
+quote the deduplicated counts — and that is the right rule. But across S3–S10 it is enforced only by
+whoever writes the stage document. **The gate needs a floor that fails, not a number to remember.**
+Cheapest sufficient guard, no upstream test touched:
+
+* add `-Dtest=TypeTest -DfailIfNoTests=true` (or `-Dsurefire.failIfNoSpecifiedTests=true`) as a
+  one-line canary run before the gate proper: under the profile it passes 38 tests; with the profile
+  inactive for *any* reason it fails the build instead of printing 0; **or**
+* require the stage document to quote `497`/`50` *and* have a reviewer check it — which is today's
+  rule, and is exactly as strong as the reviewer.
+
+Not filed as CRITICAL because the failure mode is silence, not a wrong answer, and §5's rule does
+catch it when followed. Filed as MAJOR because a gate that eight stages depend on should not be able
+to be off and green.
+
+## 9b.7 RB-2 (MINOR) — H21 is correct, on a thin population
+
+Independently recounted from the written report, using only the row columns and the note prose —
+which is a genuinely different path from the accessors, since the counts come from
+`DiffRow.subjectTypeProvenance()` (a structural field) and the note comes from
+`provenanceClause(ref, sub)`:
+
+```
+header under test:                            recount from the 8 data rows:
+# rows.javaTypeMismatch          8               subject ASSUMED: 4
+# rows.subjectTypeObserved       4               subject OBSERVED: 4
+# rows.subjectTypeAssumed        4               SUM = 8
+# op.URealValue.add(value).subjectTypeAssumed   4    op URealValue.add(value):   {'ASSUMED': 4}
+# op.URealValue.minus(value).subjectTypeObserved 4   op URealValue.minus(value): {'OBSERVED': 4}
+```
+
+Scaled up over every rendering the whole suite prints:
+
+```
+h-oracle.txt  stageStatement lines with the H21 clause: 77   identity violations: 0   nonzero totals: 2
+h-default.txt stageStatement lines with the H21 clause: 77   identity violations: 0   nonzero totals: 2
+h-oracle.txt  summary() lines with the H21 clause:       2   identity violations: 0
+```
+
+`stageStatement()` carries the split **unconditionally** (77 lines, zeros included);
+`summary()` carries it **only when the total is nonzero** (2 lines) — which matches both the code
+comment at `DifferentialSweep.java:990-993` and the commit message. The limit: of 77 statements only
+**2** have a nonzero total, and the whole non-degenerate population in the tree is the **8** fixture
+rows. `observed + assumed == javaTypeMismatch` is sound by construction and pinned by a test, but it
+has never been exercised at scale, because the harness's own adapters now attribute everywhere (the
+19 083-row control reports `0 java-type mismatch(es)`). Nothing to fix; do not quote it as a
+large-population result.
+
+## 9b.8 RB-3 (MINOR) — the gate's test set depends on the installed Maven
+
+No pom declares `maven-surefire-plugin`, so `3.5.4` came from Maven 3.9.16's default lifecycle
+binding, and surefire's **default `includes`** are what collect the 14 `AllTests.java` aggregators
+(`**/*Tests.java`) and `TestSystem.java` (`**/Test*.java`). A different Maven on a different machine
+is a different oracle. The project already pins `maven-compiler-plugin` for exactly this reason
+(baseline commit `30d480db`, "fix/pin-maven-compiler-plugin"). Pre-existing, out of this round's
+permitted scope, and correctly left alone — but it is a **gate condition**: quote the Maven and
+surefire versions with the counts, as §2.1's preamble already does.
+
+## 9b.9 Rule 3 and the tree
+
+```
+$ git diff --name-status 30d480db..HEAD -- '*/src/test/*'   -> 21 lines, every one 'A',
+                                                               all under .../uncertainty/differential/
+$ git diff --name-status 30d480db..HEAD -- '*/src/main/*'   -> EMPTY
+$ git log --oneline 30d480db..HEAD -- '*pom.xml'            -> e3668a04 only
+$ git diff --stat 30d480db..HEAD -- '*pom.xml'              -> 2 files changed, 78 insertions(+)
+```
+
+Zero `M`/`D`/`R` on any pre-existing upstream test; the working tree was clean
+(`git status --porcelain` empty) before and after, so there is no uncommitted edit hiding from the
+diff either. A `-Pupstream-oracle verify` in a **pristine** clone left
+`git status --porcelain` **empty**: the 12 files the revived ArchUnit tests write outside `target/`
+(10 CSVs in `use-gui/`, 2 reports in `docs/archunit-results/`) are all matched by this round's
+`.gitignore` additions. This pass created nothing in the repository except this section; its clone
+and logs live in the session scratchpad.
+
+## 9b.10 Fitness — this pass's answer
+
+**Yes, S3–S10 can gate on this, under four conditions.** The mechanism is sound: one test-scope
+artefact, off by default, proven absent by `dependency:tree`, proven to revive 40 classes / 287
+methods of upstream's own assertions with not one upstream byte edited, deterministic across reruns,
+and additive-only to the default tier.
+
+1. **Give the gate a floor** (RB-1). A canary that fails when the profile is inactive, or a reviewer
+   who checks the quoted `497`/`50` every single stage. Silence must not read as success.
+2. **Quote 210 and 497 with the Maven and surefire versions**, never the `938`/`1085` headline as a
+   method count, and never mix counting rules (R-1, RB-3).
+3. **Do not overclaim the signal**: 33 of the 497 assert nothing (R-5), and H21's split is verified
+   on 8 rows (RB-2). The gate's strength is upstream's assertions — `TypeTest` 38, `MImportedModelTest`
+   55, `USECompilerTest`'s 49-spec corpus — not the total.
+4. **Fix the caveats before they are cited** (R-2, R-3): the profile document currently tells a
+   future stage that `USECompilerTest` may be vacuous, when it is guarded by
+   `assertEquals(49, fileList.size())`. That sentence is how a genuine S8 corpus failure gets waved
+   through.
+
+The single most valuable result remains negative and is now measured twice, in two trees: **no
+upstream test fails under the profile.** The gate's first real test is S3, when `TypeTest#testSupertype`
+is predicted to go red — and it will, in upstream's own words, which is the whole point.
