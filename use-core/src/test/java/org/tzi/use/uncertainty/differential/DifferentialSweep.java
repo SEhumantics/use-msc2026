@@ -216,11 +216,18 @@ public final class DifferentialSweep {
                             : "adjudicated: " + rationale + ". " + evidence(ref, sub));
         }
         if (ref.thrown != null || sub.thrown != null) {
+            // Which side threw, named in the lead clause. It used to read "one side threw and the
+            // other returned", leaving the reader to recover the attribution from the columns --
+            // over 52 196 rows of the standing invariant sweep. The evidence() clause that follows
+            // has always been attributed; the summary sentence in front of it now is too.
+            String lead = ref.thrown != null
+                    ? "the reference threw and the subject returned. "
+                    : "the subject threw and the reference returned. ";
             return new DiffRow(index, op.key(), inputs,
                     ref.thrown != null ? DiffRow.thrown(ref.thrown) : ref.value.canonical(),
                     sub.thrown != null ? DiffRow.thrown(sub.thrown) : sub.value.canonical(),
                     DiffVerdict.MIXED,
-                    "one side threw and the other returned. " + evidence(ref, sub));
+                    lead + evidence(ref, sub));
         }
         if (!ref.value.carriesAnObservation() && !sub.value.carriesAnObservation()) {
             // Neither side produced a value. Comparing the two absences and finding them equal is
@@ -316,6 +323,13 @@ public final class DifferentialSweep {
 
     /** The rows produced by one sweep, plus the tallies a caller needs to decide pass or fail. */
     public static final class Result {
+
+        /**
+         * The number of distinct reference values below which an operation cannot support a fidelity
+         * claim. Two: an operation that answered the same thing on every row could not have failed,
+         * so agreement on it was decided before either implementation ran.
+         */
+        public static final int DISCRIMINATING_MINIMUM = 2;
 
         private final UOp op;
         private final long seed;
@@ -451,16 +465,210 @@ public final class DifferentialSweep {
         }
 
         /**
-         * The pass predicate: <strong>something was measured, and nothing disagreed.</strong>
+         * <strong>Necessary and not sufficient</strong>: something was measured, and nothing
+         * disagreed.
          *
          * <p>{@code disagreements().isEmpty()} alone is not a pass predicate and must not be used as
          * one. It is true of a sweep whose input domain was empty, of a sweep every row of which is
          * a void operation, and of any other sweep that compared nothing — "no row disagreed" is
-         * vacuously true when no row was a comparison. Callers that want to assert a clean run
-         * should assert this, or call {@link #requireMeasurements(int)} alongside their own check.
+         * vacuously true when no row was a comparison.
+         *
+         * <p><strong>This predicate is not a pass predicate either, and a stage must not use it as
+         * one.</strong> It says the measured rows agreed; it says nothing about whether they
+         * <em>could</em> have disagreed. On the 120 operations whose reference side answers the same
+         * thing on every input the shipped corpora can supply, a subject consisting of one hardcoded
+         * literal is {@code isClean() == true} — measured, agreed, report written, header reading
+         * {@code # rows.disagreement 0} — and not one row of it is evidence about a port. That is
+         * defect D-15, and the row-level verdicts are all correct: the false statement is at sweep
+         * level, which is the level a stage reads.
+         *
+         * <p>The stage-facing predicate is {@link #isStagePass(int, AcceptedDegenerateOperations)},
+         * which adds a measurement floor and the discrimination clause. Use that. This one remains
+         * because it is exactly the right question for the harness's own regression tests, where the
+         * codomain of the synthetic operation is known by construction.
+         *
+         * @see #isDiscriminating()
          */
         public boolean isClean() {
             return measurementCount() > 0 && disagreements().isEmpty();
+        }
+
+        // -------------------------------------------------------------- discriminating power
+
+        /**
+         * <strong>The distinct canonical values the reference side produced across the measured
+         * rows</strong>, in sorted order.
+         *
+         * <p>Counted over {@link #measurements()} — {@link DiffVerdict#AGREE} plus
+         * {@link DiffVerdict#DIFFER} — because those are exactly the rows an agreement figure can
+         * come from. A row on which the reference threw, or on which the harness failed, tells a
+         * reader nothing about the range of answers the operation has.
+         *
+         * <p>This is the statistic whose absence let three separate defects look like one another's
+         * opposites. An operation is only evidence of fidelity if its reference side <em>could</em>
+         * have answered differently; when it could not, {@code AGREE} is decided before either
+         * implementation runs, and every safeguard in this class is right to let it through.
+         */
+        public java.util.SortedSet<String> referenceValues() {
+            java.util.SortedSet<String> out = new java.util.TreeSet<>();
+            for (DiffRow row : rows) {
+                if (row.verdict().isMeasurement()) {
+                    out.add(row.historical());
+                }
+            }
+            return java.util.Collections.unmodifiableSortedSet(out);
+        }
+
+        /** Size of {@link #referenceValues()}. Zero when nothing was measured. */
+        public int distinctReferenceValues() {
+            return referenceValues().size();
+        }
+
+        /**
+         * The one value the reference gave on every measured row, or {@code null} when it gave none
+         * or more than one. This is the key an {@link AcceptedDegenerateOperations} sign-off is
+         * written against, so that a sign-off lapses the moment the operation's single answer
+         * changes.
+         */
+        public String soleReferenceValue() {
+            java.util.SortedSet<String> values = referenceValues();
+            return values.size() == 1 ? values.first() : null;
+        }
+
+        /**
+         * <strong>Could this sweep have failed?</strong> True when the reference side produced at
+         * least {@link #DISCRIMINATING_MINIMUM} distinct values across the measured rows.
+         *
+         * <p>False has two causes and they are not the same, which is why the number and not only
+         * the boolean is published: {@code distinctReferenceValues() == 0} means nothing was
+         * measured at all, and {@code == 1} means the operation's codomain over this domain is a
+         * single point.
+         */
+        public boolean isDiscriminating() {
+            return distinctReferenceValues() >= DISCRIMINATING_MINIMUM;
+        }
+
+        // -------------------------------------------------------------- the stage gate
+
+        /**
+         * <strong>The stage-facing pass predicate.</strong> All three clauses, or no pass:
+         *
+         * <ol>
+         *   <li>at least {@code minimumMeasurements} rows compared two observed values, and at least
+         *       one did;</li>
+         *   <li>no row disagreed;</li>
+         *   <li>the operation is {@link #isDiscriminating() discriminating} — <em>or</em> it is
+         *       single-valued and {@code acknowledged} carries a written, keyed sign-off for exactly
+         *       this operation and exactly this value.</li>
+         * </ol>
+         *
+         * <p>Clause 3 is the D-15 gate. It is a mechanism and not a convention on purpose: the rule
+         * "quote distinct reference values alongside any agreement figure" was written into
+         * {@code harness-contract.md} and a rule a human has to remember is not a property the
+         * instrument enforces. {@link AcceptedDegenerateOperations#none()} is the default and must be
+         * passed explicitly, so a caller cannot reach a pass on a degenerate operation without
+         * naming the mechanism that let them.
+         *
+         * @param minimumMeasurements floor on the evidence, derived from the corpus and written down
+         *                            in the stage document <em>before</em> the run
+         * @param acknowledged        sign-offs for genuinely-constant operations; never {@code null}
+         * @see #requireStagePass(int, AcceptedDegenerateOperations)
+         */
+        public boolean isStagePass(int minimumMeasurements, AcceptedDegenerateOperations acknowledged) {
+            return stageGateFailures(minimumMeasurements, acknowledged).isEmpty();
+        }
+
+        /**
+         * {@link #isStagePass(int, AcceptedDegenerateOperations)}, but throws with <em>every</em>
+         * failing clause and the numbers behind it rather than returning a bare {@code false}.
+         *
+         * @return {@code this}, so it can be chained onto a sweep call
+         * @throws IllegalStateException if any clause fails
+         */
+        public Result requireStagePass(int minimumMeasurements,
+                                       AcceptedDegenerateOperations acknowledged) {
+            List<String> failures = stageGateFailures(minimumMeasurements, acknowledged);
+            if (!failures.isEmpty()) {
+                StringBuilder sb = new StringBuilder("sweep of ").append(op.key())
+                        .append(" is not a stage pass:");
+                for (String failure : failures) {
+                    sb.append("\n  - ").append(failure);
+                }
+                sb.append("\n  tally: ").append(summary());
+                throw new IllegalStateException(sb.toString());
+            }
+            return this;
+        }
+
+        /** Every clause of the stage gate this result fails, in order; empty means pass. */
+        public List<String> stageGateFailures(int minimumMeasurements,
+                                              AcceptedDegenerateOperations acknowledged) {
+            Objects.requireNonNull(acknowledged,
+                    "acknowledged (use AcceptedDegenerateOperations.none())");
+            if (minimumMeasurements < 1) {
+                throw new IllegalArgumentException("minimumMeasurements must be at least 1, got "
+                        + minimumMeasurements + ": a floor of zero is not a floor, and a sweep that "
+                        + "measured nothing must never read as a pass");
+            }
+            List<String> failures = new ArrayList<>();
+            int measured = measurementCount();
+            if (measured < minimumMeasurements) {
+                failures.add("measured " + measured + " row(s) of " + rowCount() + ", needed at least "
+                        + minimumMeasurements + ". A result with too little evidence is not evidence.");
+            }
+            int disagreed = disagreements().size();
+            if (disagreed > 0) {
+                failures.add(disagreed + " row(s) did not agree.");
+            }
+            int distinct = distinctReferenceValues();
+            if (distinct < DISCRIMINATING_MINIMUM) {
+                String sole = soleReferenceValue();
+                String rationale = sole == null ? null : acknowledged.rationaleFor(op.key(), sole);
+                if (rationale == null) {
+                    failures.add("the reference side produced " + distinct + " distinct value(s) "
+                            + "across " + measured + " measured row(s)"
+                            + (sole == null ? "" : ", always " + sole)
+                            + ". This operation could not have failed over this domain, so agreement "
+                            + "on it is decided before either implementation runs and is not evidence "
+                            + "of fidelity (defect D-15). Either widen the domain until the reference "
+                            + "answers differently, or sign the operation off in "
+                            + "AcceptedDegenerateOperations with a written rationale — which is copied "
+                            + "into the report, so the weakness travels with the number.");
+                }
+            }
+            return failures;
+        }
+
+        /**
+         * The one-line statement a stage must publish next to any figure taken from this sweep:
+         * measured rows, agreement rows, distinct reference values, and — when the operation is
+         * degenerate and signed off — the rationale verbatim.
+         *
+         * <p>There is deliberately no way to render an agreement figure from this class without the
+         * discrimination figure beside it.
+         */
+        public String stageStatement(AcceptedDegenerateOperations acknowledged) {
+            Objects.requireNonNull(acknowledged,
+                    "acknowledged (use AcceptedDegenerateOperations.none())");
+            StringBuilder sb = new StringBuilder(op.key())
+                    .append(": ").append(rowCount()).append(" rows, ")
+                    .append(measurementCount()).append(" measured, ")
+                    .append(agreementCount()).append(" agreed, ")
+                    .append(disagreements().size()).append(" disagreed, ")
+                    .append(distinctReferenceValues()).append(" distinct reference value(s)");
+            if (isDiscriminating()) {
+                return sb.append(" [DISCRIMINATING]").toString();
+            }
+            String sole = soleReferenceValue();
+            String rationale = sole == null ? null : acknowledged.rationaleFor(op.key(), sole);
+            sb.append(" [NOT DISCRIMINATING");
+            if (sole != null) {
+                sb.append(": always ").append(sole);
+            }
+            if (rationale != null) {
+                sb.append("; acknowledged: ").append(rationale);
+            }
+            return sb.append(']').toString();
         }
 
         /**
@@ -512,13 +720,20 @@ public final class DifferentialSweep {
         }
 
         /**
-         * One-line tally, e.g. {@code URealValue.add(value): 484 rows, 484 measured, AGREE=484}. The
+         * One-line tally, e.g.
+         * {@code URealValue.add(value): 484 rows, 484 measured, 231 distinct ref, AGREE=484}. The
          * measured count sits next to the row count on purpose: those two numbers being far apart is
          * the single most important thing about a sweep, and it used to be unreadable from here.
+         *
+         * <p>The distinct-reference-value count sits next to both of them for the same reason one
+         * level up. {@code 30 rows, 30 measured, AGREE=30} and
+         * {@code 30 rows, 30 measured, 1 distinct ref, AGREE=30} are the same sweep; only the second
+         * lets a reader see that it could not have said anything else.
          */
         public String summary() {
             StringBuilder sb = new StringBuilder(op.key()).append(": ").append(rowCount())
-                    .append(" rows, ").append(measurementCount()).append(" measured");
+                    .append(" rows, ").append(measurementCount()).append(" measured, ")
+                    .append(distinctReferenceValues()).append(" distinct ref");
             for (Map.Entry<DiffVerdict, Integer> e : tally.entrySet()) {
                 if (e.getValue() > 0) {
                     sb.append(", ").append(e.getKey()).append('=').append(e.getValue());

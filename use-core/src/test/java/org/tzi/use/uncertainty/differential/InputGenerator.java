@@ -20,11 +20,24 @@ import java.util.Random;
  *       every {@code *Boundaries()} list</li>
  *   <li>negative values and zero — {@link #uRealBoundaries()}, {@link #uIntegerBoundaries()}</li>
  *   <li>zero divisor — {@link #zeroDivisors()}</li>
- *   <li>empty string — {@link #uStringBoundaries()}</li>
+ *   <li>empty string — {@link #uStringBoundaries()}, {@link #stringBoundaries()}</li>
  *   <li>out-of-range index — {@link #indexBoundaries()}</li>
  *   <li>NaN and infinities — {@link #uRealBoundaries()} (reachable: the historical
  *       {@code URealValue(double,double)} constructor takes raw doubles)</li>
+ *   <li>plain (non-uncertain) booleans and strings — {@link #booleanBoundaries()},
+ *       {@link #stringBoundaries()}</li>
  * </ul>
+ *
+ * <p><strong>A receiver type with no corpus is not covered, whatever {@code supports()} says.</strong>
+ * {@code BooleanValue} and {@code StringValue} were marshallable from the start, so every one of
+ * their 52 operations reported {@code supports() == true}, produced rows, and then failed the
+ * per-row receiver check on all of them: 52 operations at 100 % {@code HARNESS_ERROR} and
+ * <em>zero</em> measurements against a perfect port (defect D-19). {@link #booleanBoundaries()} and
+ * {@link #stringBoundaries()} exist to close that, and closing it is expected to <em>enlarge</em> the
+ * population of single-valued operations, because most of what those 52 do is answer a type
+ * predicate. That is the correct trade: more surface measured, with its weakness labelled by
+ * {@link DifferentialSweep.Result#distinctReferenceValues()}, rather than less surface measured and
+ * the weakness invisible.
  *
  * <p>Test-scoped. Not part of the product.
  */
@@ -81,6 +94,22 @@ public final class InputGenerator {
         return UValue.uString(sb.toString(), round6(random.nextDouble()));
     }
 
+    /** A plain (non-uncertain) {@code BooleanValue}. */
+    public UValue randomBoolean() {
+        return UValue.bool(random.nextBoolean());
+    }
+
+    /** A plain (non-uncertain) {@code StringValue}, length 0..8 over the same alphabet. */
+    public UValue randomString() {
+        final String alphabet = "abcXYZ019 ";
+        int length = random.nextInt(9);
+        StringBuilder sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            sb.append(alphabet.charAt(random.nextInt(alphabet.length())));
+        }
+        return UValue.string(sb.toString());
+    }
+
     private static double round6(double d) {
         if (!Double.isFinite(d)) {
             return d;
@@ -105,6 +134,19 @@ public final class InputGenerator {
 
     public List<UValue> uStringCorpus(int randomCount) {
         return corpus(uStringBoundaries(), randomCount, this::randomUString);
+    }
+
+    /**
+     * Plain {@code BooleanValue} inputs. See {@link #booleanBoundaries()} for why this corpus had to
+     * exist before 27 operations could be measured at all.
+     */
+    public List<UValue> booleanCorpus(int randomCount) {
+        return corpus(booleanBoundaries(), randomCount, this::randomBoolean);
+    }
+
+    /** Plain {@code StringValue} inputs. See {@link #stringBoundaries()}. */
+    public List<UValue> stringCorpus(int randomCount) {
+        return corpus(stringBoundaries(), randomCount, this::randomString);
     }
 
     private List<UValue> corpus(List<UValue> boundaries, int randomCount,
@@ -206,6 +248,66 @@ public final class InputGenerator {
                 UValue.uString("é中", 0.5),
                 UValue.uString("abc", Double.NaN),
                 UValue.uString("abc", -1.0)));
+    }
+
+    /**
+     * <strong>Plain {@code BooleanValue} boundaries: both truth values.</strong>
+     *
+     * <p>A two-element corpus is the whole domain of the type, so "boundary" and "exhaustive" are
+     * the same list here.
+     *
+     * <p>This corpus is why it exists at all: {@code BooleanValue} has always been in
+     * {@code HistoricalOracle.MARSHALLABLE_RECEIVERS}, so {@code supports()} answered {@code true}
+     * for every {@code BooleanValue.*} operation and the sweep dutifully produced rows for all 27 of
+     * them — and then failed the per-row receiver check on every single one, because not one value
+     * in any shipped corpus was a {@code BOOLEAN}. All 27 operations were 100 % {@code HARNESS_ERROR}
+     * and contributed <em>zero</em> measurements to a 471 471-row sweep, against a perfect port
+     * (defect D-19). A receiver type the harness can marshal but never marshals is a coverage claim
+     * the instrument makes and does not honour.
+     */
+    public static List<UValue> booleanBoundaries() {
+        return Collections.unmodifiableList(Arrays.asList(
+                UValue.bool(true),
+                UValue.bool(false)));
+    }
+
+    /**
+     * <strong>Plain {@code StringValue} boundaries.</strong> Same story as
+     * {@link #booleanBoundaries()}: all 25 {@code StringValue.*} operations were 100 %
+     * {@code HARNESS_ERROR} for want of a single {@code STRING} in any corpus.
+     *
+     * <p>Deliberately parallel to {@link #uStringBoundaries()} — empty, whitespace, mixed case,
+     * multi-word, the characters that would break a naive TSV writer (tab, newline, quote,
+     * backslash), non-ASCII — plus two the uncertain corpus does not carry:
+     * <ul>
+     *   <li>a <strong>very long</strong> string, 256 characters, which is where a length-dependent
+     *       or buffer-dependent difference between two implementations would show;</li>
+     *   <li>a <strong>supplementary-plane</strong> character (U+1F600, a surrogate pair), where
+     *       {@code String.length()} and the number of code points disagree — the single most likely
+     *       place for a re-implemented {@code size()}, {@code at()} or {@code substring()} to
+     *       diverge from the original without anyone noticing.</li>
+     * </ul>
+     */
+    public static List<UValue> stringBoundaries() {
+        StringBuilder longString = new StringBuilder(256);
+        while (longString.length() < 256) {
+            longString.append("abcdefghij");
+        }
+        return Collections.unmodifiableList(Arrays.asList(
+                UValue.string(""),
+                UValue.string(" "),
+                UValue.string("a"),
+                UValue.string("abc"),
+                UValue.string("ABC"),
+                UValue.string("aBc"),
+                UValue.string("abc abc"),
+                UValue.string("\t"),
+                UValue.string("\n"),
+                UValue.string("\"quoted\""),
+                UValue.string("back\\slash"),
+                UValue.string("é中"),
+                UValue.string("😀"),
+                UValue.string(longString.substring(0, 256))));
     }
 
     /**

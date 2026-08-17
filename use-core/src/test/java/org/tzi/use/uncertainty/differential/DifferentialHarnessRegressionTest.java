@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -665,6 +666,235 @@ class DifferentialHarnessRegressionTest {
         }
     }
 
+    // ------------------------------------------------------------------ D-15: degenerate codomain
+
+    /**
+     * The measurement the harness never took. {@code distinctReferenceValues()} must count the
+     * <em>reference's</em> answers, over the <em>measured</em> rows, and nothing else — the two
+     * mistakes that would make it useless are counting the subject's column (a constant subject then
+     * looks degenerate whatever the reference did, which is accidentally the right answer here and
+     * the wrong answer for a real port) and counting over all rows (throw and harness-error markers
+     * are distinct strings, so an all-{@code HARNESS_ERROR} sweep would look richly discriminating).
+     */
+    @Test
+    @DisplayName("D-15: distinctReferenceValues counts the reference, over measured rows only")
+    void distinctReferenceValuesCountsTheReferenceOverMeasuredRows() {
+        UOp op = UOp.binary("URealValue", "add");
+        try (StubCandidate faithful = StubCandidate.faithful();
+             Candidate constant = new ReturnsFixed("const", UValue.uReal(3.0, 0.0))) {
+
+            // Three receivers, three different sums: the reference varies.
+            List<UValue> receivers = List.of(UValue.uReal(1.0, 0.0), UValue.uReal(2.0, 0.0),
+                    UValue.uReal(3.0, 0.0));
+            List<UValue> argument = List.of(UValue.uReal(0.0, 0.0));
+
+            DifferentialSweep.Result varied = new DifferentialSweep(faithful, constant, 1L)
+                    .sweepBinary(op, receivers, argument);
+            assertEquals(3, varied.measurementCount());
+            assertEquals(3, varied.distinctReferenceValues(),
+                    "the REFERENCE gave three answers; the subject gave one. " + varied.summary());
+            assertEquals(List.of("UREAL(1.0,0.0)", "UREAL(2.0,0.0)", "UREAL(3.0,0.0)"),
+                    List.copyOf(varied.referenceValues()));
+            assertNull(varied.soleReferenceValue(), "there is no sole value when there are three");
+            assertTrue(varied.isDiscriminating());
+
+            // One receiver: the reference cannot say anything else, and the subject is right.
+            DifferentialSweep.Result degenerate = new DifferentialSweep(faithful, constant, 1L)
+                    .sweepBinary(op, List.of(UValue.uReal(3.0, 0.0)), argument);
+            assertTrue(degenerate.isClean(), "the old predicate says pass: " + degenerate.summary());
+            assertEquals(1, degenerate.distinctReferenceValues());
+            assertEquals("UREAL(3.0,0.0)", degenerate.soleReferenceValue());
+            assertFalse(degenerate.isDiscriminating());
+        }
+
+        // Rows that are not measurements contribute nothing, however many distinct markers they
+        // carry. Two different harness failures and two different throws are still zero.
+        try (HistoricalOracle oracle = HistoricalOracle.open();
+             StubCandidate stub = StubCandidate.faithful()) {
+            DifferentialSweep.Result unmarshallable = new DifferentialSweep(oracle, stub, 1L)
+                    .sweepBinary(op, InputGenerator.uIntegerBoundaries(),
+                            InputGenerator.uIntegerBoundaries());
+            assertEquals(169, unmarshallable.rowCount());
+            assertEquals(0, unmarshallable.measurementCount());
+            assertEquals(0, unmarshallable.distinctReferenceValues(),
+                    "169 rows of absence are not 169 observations of a range");
+            assertFalse(unmarshallable.isDiscriminating());
+            assertNull(unmarshallable.soleReferenceValue());
+        }
+    }
+
+    /**
+     * The gate itself, in all three of its clauses and in both directions. This is the mechanical
+     * form of the rule {@code harness-contract.md} used to state as discipline — "no fidelity claim
+     * may quote a per-operation agreement figure without also quoting distinct reference values" —
+     * because discipline is not enforcement.
+     */
+    @Test
+    @DisplayName("D-15: the stage gate refuses a single-valued operation, and says why")
+    void theStageGateRefusesADegenerateOperation() {
+        UOp op = UOp.binary("URealValue", "add");
+        List<UValue> one = List.of(UValue.uReal(1.0, 0.0));
+        List<UValue> many = List.of(UValue.uReal(1.0, 0.0), UValue.uReal(2.0, 0.0),
+                UValue.uReal(4.0, 0.0), UValue.uReal(8.0, 0.0));
+
+        try (StubCandidate a = StubCandidate.faithful(); StubCandidate b = StubCandidate.faithful()) {
+
+            // (1) One measured row, agreed, single-valued: isClean() says pass, the gate does not.
+            DifferentialSweep.Result degenerate = new DifferentialSweep(a, b, 1L)
+                    .sweepBinary(op, one, one);
+            assertTrue(degenerate.isClean(), "precondition: the documented pass predicate says yes");
+            assertSame(degenerate, degenerate.requireMeasurements(1), "and so does the floor of 1");
+            assertFalse(degenerate.isStagePass(1, AcceptedDegenerateOperations.none()));
+
+            IllegalStateException refusal = assertThrows(IllegalStateException.class,
+                    () -> degenerate.requireStagePass(1, AcceptedDegenerateOperations.none()));
+            System.out.println("=== D-15: the stage gate ==========================================");
+            System.out.println(refusal.getMessage());
+            assertTrue(refusal.getMessage().contains("1 distinct value(s)"), refusal.getMessage());
+            assertTrue(refusal.getMessage().contains("UREAL(2.0,0.0)"), refusal.getMessage());
+            assertTrue(refusal.getMessage().contains("D-15"), refusal.getMessage());
+
+            // (2) The measurement floor is a separate clause and reports separately.
+            List<String> tooFew = degenerate.stageGateFailures(50, AcceptedDegenerateOperations.none());
+            assertEquals(2, tooFew.size(), tooFew.toString());
+            assertTrue(tooFew.get(0).contains("needed at least 50"), tooFew.toString());
+
+            // (3) A floor of zero is not a floor and must not be expressible.
+            assertThrows(IllegalArgumentException.class,
+                    () -> degenerate.stageGateFailures(0, AcceptedDegenerateOperations.none()));
+
+            // (4) Widen the domain until the reference varies, and the same subject passes.
+            DifferentialSweep.Result discriminating = new DifferentialSweep(a, b, 1L)
+                    .sweepBinary(op, many, many);
+            assertTrue(discriminating.isDiscriminating(), discriminating.summary());
+            assertSame(discriminating, discriminating.requireStagePass(
+                    16, AcceptedDegenerateOperations.none()));
+            System.out.println("PASSES: " + discriminating.stageStatement(
+                    AcceptedDegenerateOperations.none()));
+
+            // (5) A disagreement is still a disagreement in a discriminating sweep.
+            try (Candidate wrong = new ReturnsFixed("const", UValue.uReal(1.0, 0.0))) {
+                DifferentialSweep.Result bad = new DifferentialSweep(a, wrong, 1L)
+                        .sweepBinary(op, many, many);
+                assertFalse(bad.isStagePass(1, AcceptedDegenerateOperations.none()));
+                assertTrue(bad.stageGateFailures(1, AcceptedDegenerateOperations.none()).get(0)
+                        .contains("did not agree"));
+            }
+
+            // (6) The sign-off, and its exactness. The rationale reaches the evidence.
+            AcceptedDegenerateOperations signed = AcceptedDegenerateOperations.builder()
+                    .accept(op.key(), "UREAL(2.0,0.0)", "reviewed: a one-point domain, kept as a "
+                            + "reachability check only")
+                    .build();
+            assertTrue(degenerate.isStagePass(1, signed));
+            assertTrue(degenerate.stageStatement(signed).contains("acknowledged: reviewed:"),
+                    degenerate.stageStatement(signed));
+            assertFalse(degenerate.isStagePass(1, AcceptedDegenerateOperations.builder()
+                    .accept(op.key(), "UREAL(9.9,0.0)", "a different value").build()));
+            assertFalse(degenerate.isStagePass(1, AcceptedDegenerateOperations.builder()
+                    .accept("URealValue.minus(value)", "UREAL(2.0,0.0)", "a different op").build()));
+            assertThrows(NullPointerException.class, () -> degenerate.isStagePass(1, null));
+            System.out.println("===================================================================");
+        }
+    }
+
+    /**
+     * The number has to reach the artefact a human reads, per operation and not as a file-level sum.
+     * A report whose header says {@code # rows.disagreement 0} and nothing else is exactly what the
+     * 120-literal subject produces.
+     */
+    @Test
+    @DisplayName("D-15: the report header carries distinct reference values, per operation")
+    void theReportHeaderCarriesDiscriminatingPowerPerOperation() throws java.io.IOException {
+        UOp add = UOp.binary("URealValue", "add");
+        UOp minus = UOp.binary("URealValue", "minus");
+        List<UValue> one = List.of(UValue.uReal(1.0, 0.0));
+        List<UValue> many = List.of(UValue.uReal(1.0, 0.0), UValue.uReal(2.0, 0.0),
+                UValue.uReal(4.0, 0.0));
+
+        try (StubCandidate a = StubCandidate.faithful(); StubCandidate b = StubCandidate.faithful()) {
+            DifferentialSweep sweep = new DifferentialSweep(a, b, 1L);
+            DifferentialSweep.Result degenerate = sweep.sweepBinary(add, one, one);
+            DifferentialSweep.Result varied = sweep.sweepBinary(minus, many, many);
+
+            AcceptedDegenerateOperations signed = AcceptedDegenerateOperations.builder()
+                    .accept(add.key(), "UREAL(2.0,0.0)", "reviewed: one-point domain")
+                    .build();
+            java.nio.file.Path written = DiffReportWriter.writeAll("d15-header.tsv",
+                    List.of(degenerate, varied), Map.of(), signed);
+            List<String> header = new java.util.ArrayList<>();
+            for (String line : java.nio.file.Files.readAllLines(written,
+                    java.nio.charset.StandardCharsets.UTF_8)) {
+                if (!line.startsWith("#")) {
+                    break;
+                }
+                header.add(line);
+            }
+            System.out.println("=== D-15: the report header =======================================");
+            header.forEach(System.out::println);
+            System.out.println("===================================================================");
+
+            assertTrue(header.contains("# rows.disagreement\t0"),
+                    "precondition: the file-level header reads as a clean run");
+            assertTrue(header.contains("# op.URealValue.add(value).distinctReferenceValues\t1"), header.toString());
+            assertTrue(header.contains("# op.URealValue.add(value).discriminating\tfalse"), header.toString());
+            assertTrue(header.contains("# op.URealValue.add(value).soleReferenceValue\tUREAL(2.0,0.0)"),
+                    header.toString());
+            assertTrue(header.contains("# op.URealValue.add(value).degenerate.acknowledged\t"
+                    + "reviewed: one-point domain"), header.toString());
+            assertTrue(header.contains("# op.URealValue.minus(value).discriminating\ttrue"), header.toString());
+            assertTrue(header.contains("# accepted.degenerateOperations\t1"), header.toString());
+        }
+    }
+
+    // ------------------------------------------------------------------ golden byte comparison
+
+    /**
+     * {@code assertMatchesGolden}'s Javadoc says "byte for byte" and it used to compare
+     * {@code Files.readAllLines} to {@code Files.readAllLines}, which is blind to line terminators
+     * and to a missing final newline: {@code "a\nb\n"} and {@code "a\nb"} both read back as
+     * {@code [a, b]}. The comparison was corrected; nothing pinned it, so this does.
+     */
+    @Test
+    @DisplayName("a golden that differs only in its trailing newline is a failure, not a match")
+    void goldenComparisonIsBytesAndNotLines() throws java.io.IOException {
+        java.nio.file.Path golden = DiffReportWriter.goldenDir().resolve("d-byte-probe.tsv");
+        java.nio.file.Path written = DiffReportWriter.reportDir().resolve("d-byte-probe.tsv");
+        java.nio.file.Files.createDirectories(golden.getParent());
+        java.nio.file.Files.createDirectories(written.getParent());
+        try {
+            byte[] withNewline = "# harness\tprobe\nindex\n0\n".getBytes(
+                    java.nio.charset.StandardCharsets.UTF_8);
+            byte[] withoutNewline = "# harness\tprobe\nindex\n0".getBytes(
+                    java.nio.charset.StandardCharsets.UTF_8);
+
+            java.nio.file.Files.write(golden, withNewline);
+            java.nio.file.Files.write(written, withNewline);
+            assertEquals(golden, DiffReportWriter.assertMatchesGolden(written, "d-byte-probe.tsv"),
+                    "identical bytes must match");
+
+            java.nio.file.Files.write(written, withoutNewline);
+            assertEquals(java.nio.file.Files.readAllLines(golden),
+                    java.nio.file.Files.readAllLines(written),
+                    "precondition: a LINE comparison cannot tell these two files apart");
+            AssertionError e = assertThrows(AssertionError.class,
+                    () -> DiffReportWriter.assertMatchesGolden(written, "d-byte-probe.tsv"));
+            System.out.println("=== golden byte comparison ========================================");
+            System.out.println(e.getMessage());
+            System.out.println("===================================================================");
+            assertTrue(e.getMessage().contains("in bytes but not in any line"), e.getMessage());
+
+            // A CRLF-for-LF substitution is the same class of difference, and also caught.
+            java.nio.file.Files.write(written, "# harness\tprobe\r\nindex\r\n0\r\n".getBytes(
+                    java.nio.charset.StandardCharsets.UTF_8));
+            assertThrows(AssertionError.class,
+                    () -> DiffReportWriter.assertMatchesGolden(written, "d-byte-probe.tsv"));
+        } finally {
+            java.nio.file.Files.deleteIfExists(golden);
+            java.nio.file.Files.deleteIfExists(written);
+        }
+    }
+
     // ------------------------------------------------------------------ D-13: wrong throw class
 
     @Test
@@ -749,6 +979,31 @@ class DifferentialHarnessRegressionTest {
             assertTrue(row.note().contains("reference returned UREAL(2.0,"), row.note());
             assertTrue(row.note().contains("subject threw java.lang.RuntimeException: TODO: port"),
                     row.note());
+
+            // The lead clause names the side too. It used to read "one side threw and the other
+            // returned", which is 67 996 rows of the standing invariant sweep telling the reader to
+            // go and work it out from the columns.
+            assertTrue(row.note().startsWith("the subject threw and the reference returned."),
+                    row.note());
+            assertFalse(row.note().contains("one side threw"), row.note());
+        }
+
+        // ...and the other way round, which is the case the unattributed phrasing hid.
+        try (Candidate thrower = new ThrowsRuntime("ref", "historical blew up");
+             StubCandidate stub = StubCandidate.faithful()) {
+
+            DiffRow row = new DifferentialSweep(thrower, stub, 1L)
+                    .sweepBinary(op, domain, domain).rows().get(0);
+
+            System.out.println("=== MIXED note, both directions ===================================");
+            System.out.println(row.note());
+            System.out.println("===================================================================");
+            assertEquals(DiffVerdict.MIXED, row.verdict());
+            assertTrue(row.note().startsWith("the reference threw and the subject returned."),
+                    row.note());
+            assertTrue(row.note().contains("reference threw java.lang.RuntimeException: historical "
+                    + "blew up"), row.note());
+            assertTrue(row.note().contains("subject returned UREAL(2.0,"), row.note());
         }
     }
 

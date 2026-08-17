@@ -144,13 +144,24 @@ class UnwrittenPortInvariantTest {
                             + "as unmeasurable: " + tally.verdicts);
         }
 
-        assertEquals(subject.reviewedFullyAgreed, tally.fullyAgreedOperations().keySet(),
-                "operations scored agreement on EVERY row the harness could drive, against the "
-                        + "subject '" + subject.id + "' (" + subject.body + "). Each one has to be "
-                        + "read and either fixed or signed off in the subject's reviewedFullyAgreed "
-                        + "set with a written reason; the set above is what this run produced and "
-                        + "the set below is what has been reviewed. Detail: "
-                        + tally.fullyAgreedOperations());
+        assertEquals(subject.reviewedFullyAgreed, tally.discriminatingFullyAgreedOperations().keySet(),
+                "operations scored agreement on EVERY row the harness could drive, AND whose "
+                        + "reference side gave more than one answer, against the subject '"
+                        + subject.id + "' (" + subject.body + "). Each one has to be read and either "
+                        + "fixed or signed off in the subject's reviewedFullyAgreed set with a "
+                        + "written reason; the set above is what this run produced and the set below "
+                        + "is what has been reviewed. Detail: "
+                        + tally.discriminatingFullyAgreedOperations());
+
+        // The other half of the split is printed, not asserted on here, and deliberately so. An
+        // operation the subject agreed with on every driven row while the reference gave ONE answer
+        // throughout is not a finding about the subject -- a constant is genuinely the right answer
+        // for a constant operation, and every row is individually correct. It is a finding about the
+        // CORPUS: that operation could not have failed, so its agreement figure is worth nothing.
+        // Asserting "the degenerate bucket is degenerate" here would restate the predicate that
+        // sorted it, which is the tautology D-20 is filed against. The enforcement that is NOT a
+        // restatement is aNoLogicPortCannotProduceAStagePass below: it drives the real
+        // Result.requireStagePass over a stage-shaped sweep and requires it to refuse.
     }
 
     // ------------------------------------------------------------------ the subjects
@@ -207,24 +218,50 @@ class UnwrittenPortInvariantTest {
     }
 
     /**
-     * The two operations a receiver-echoing subject is allowed to agree with completely, and why.
+     * The operations a receiver-echoing subject is allowed to agree with completely <em>on every
+     * driven row while the reference gave more than one answer</em>, and why each one is allowed.
      *
-     * <p>{@code IntegerValue.value()} is declared {@code public int value()} and
-     * {@code RealValue.value()} is {@code public double value()} — checked with {@code javap} on the
-     * vendored {@code use.jar}. The harness canonicalises a raw {@code int} result and an
-     * {@code IntegerValue} result to the same string, {@code INTEGER(n)}, so echoing the receiver
-     * really is indistinguishable from returning its value, and the agreement is genuine at the
-     * level this instrument measures at.
+     * <p>All four are the same limit, stated four times. Their declared return types are raw Java,
+     * checked with {@code javap -p} on the vendored {@code use.jar}:
+     * <pre>
+     *   public boolean       BooleanValue.value()
+     *   public boolean       BooleanValue.isTrue()     // body: aload_0; getfield fValue:Z; ireturn
+     *   public int           IntegerValue.value()
+     *   public java.lang.String StringValue.value()
+     * </pre>
+     * {@code HistoricalOracle.fromHistorical} maps a raw {@code Boolean}/{@code Integer}/
+     * {@code CharSequence} to the same {@link UValue.Kind} as {@code BooleanValue}/
+     * {@code IntegerValue}/{@code StringValue}, so {@code BOOLEAN(true)} from a raw {@code boolean}
+     * and {@code BOOLEAN(true)} from a {@code BooleanValue} are the same canonical string. Handing
+     * back the receiver really is indistinguishable, at this instrument's resolution, from returning
+     * the receiver's value — and for these four operations that <em>is</em> the correct answer, so
+     * the agreement is genuine as far as it goes.
      *
-     * <p>It is also the honest statement of a <em>limit</em>: the canonical vocabulary does not
-     * separate a primitive result from a boxed {@code Value} result, so a port that returns the
-     * wrong one of those two would be scored {@code AGREE} here. That limit is recorded rather than
-     * papered over, and pinning the set is what stops it spreading: if a third operation ever
-     * becomes fully agreeable to a subject that does nothing but hand back its receiver, this test
-     * fails and someone has to explain the new one.
+     * <p>It is also the honest statement of the <em>limit</em>: the canonical vocabulary does not
+     * separate a primitive result from a boxed {@code Value} result, so on the 193 of 285 operations
+     * whose return type shares a canonical form with another Java type, a port returning the right
+     * content with the wrong Java type is scored {@code AGREE} (defect D-18). Pinning this set is
+     * what stops the blind spot spreading unremarked: a fifth operation becoming fully agreeable to
+     * a subject that does nothing but hand back its receiver fails this test, and someone has to
+     * explain it.
+     *
+     * <p><strong>Three of the four are new, and they are new because the corpora were widened.</strong>
+     * {@code BooleanValue.*} and {@code StringValue.*} had no receiver to be driven on at all until
+     * {@link InputGenerator#booleanBoundaries()} and {@link InputGenerator#stringBoundaries()} were
+     * added (defect D-19); they were 100 % {@code HARNESS_ERROR} and invisible. Measuring more
+     * surface found more of the limit, which is the correct direction.
+     *
+     * <p><strong>{@code RealValue.value()} was on this list and has been removed</strong>, and that
+     * is not an improvement either. It is still fully agreed against the echoing subject; it is no
+     * longer in the <em>discriminating</em> half of that set, because the shipped corpora contain
+     * exactly <em>one</em> {@code RealValue} — {@code REAL(0.0)}, from
+     * {@link InputGenerator#zeroDivisors()}. With one receiver, all 23 {@code RealValue.*} operations
+     * have a one-point codomain by arithmetic, and nothing about them can be measured. It moves to
+     * the labelled degenerate population rather than staying on a list that reads as a sign-off.
      */
     private static final Set<String> ECHO_SUBJECT_REVIEWED = Set.of(
-            "IntegerValue.value()", "RealValue.value()");
+            "BooleanValue.value()", "BooleanValue.isTrue()",
+            "IntegerValue.value()", "StringValue.value()");
 
     static List<Subject> degenerateSubjects() {
         return List.of(
@@ -345,6 +382,15 @@ class UnwrittenPortInvariantTest {
         long driven;
         long agreed;
         long measured;
+        /**
+         * Every distinct canonical value the <em>reference</em> produced across this operation's
+         * measured rows, unioned over the corpora. Taken from
+         * {@link DifferentialSweep.Result#referenceValues()} rather than recomputed here: two
+         * independently written implementations of one property is how they come to disagree.
+         *
+         * <p>Size 1 means the operation could not have failed, whatever its agreement rate.
+         */
+        final Set<String> referenceValues = new java.util.TreeSet<>();
     }
 
     /** Everything one subject's sweep produced, aggregated the several ways the assertions need. */
@@ -379,6 +425,7 @@ class UnwrittenPortInvariantTest {
                 }
             }
             OperationTally per = perOperation.computeIfAbsent(op.key(), k -> new OperationTally());
+            per.referenceValues.addAll(result.referenceValues());
             for (DiffRow row : result.rows()) {
                 per.rows++;
                 if (row.verdict() != DiffVerdict.HARNESS_ERROR && row.verdict() != DiffVerdict.UNSUPPORTED) {
@@ -418,10 +465,72 @@ class UnwrittenPortInvariantTest {
             perOperation.forEach((key, per) -> {
                 if (per.driven > 0 && per.agreed == per.driven) {
                     out.put(key, per.agreed + "/" + per.driven + " driven rows agreed, "
-                            + per.rows + " rows total");
+                            + per.rows + " rows total, "
+                            + per.referenceValues.size() + " distinct reference value(s)"
+                            + (per.referenceValues.size() == 1
+                                    ? " -- always " + per.referenceValues.iterator().next()
+                                      + " [NOT DISCRIMINATING]"
+                                    : ""));
                 }
             });
             return out;
+        }
+
+        /**
+         * The fully-agreed operations that could actually have failed — at least
+         * {@link DifferentialSweep.Result#DISCRIMINATING_MINIMUM} distinct reference values.
+         *
+         * <p>This is the subset that has to be reviewed and signed off one at a time. An operation
+         * that is fully agreed <em>and</em> single-valued is not a finding about the subject at all:
+         * the subject guessed a constant and the constant was right, which is what
+         * {@link #degenerateFullyAgreedOperations()} records instead.
+         */
+        Map<String, String> discriminatingFullyAgreedOperations() {
+            Map<String, String> out = new TreeMap<>();
+            fullyAgreedOperations().forEach((key, detail) -> {
+                if (perOperation.get(key).referenceValues.size()
+                        >= DifferentialSweep.Result.DISCRIMINATING_MINIMUM) {
+                    out.put(key, detail);
+                }
+            });
+            return out;
+        }
+
+        /** The fully-agreed operations whose reference answered the same thing every time. */
+        Map<String, String> degenerateFullyAgreedOperations() {
+            Map<String, String> out = new TreeMap<>();
+            fullyAgreedOperations().forEach((key, detail) -> {
+                if (perOperation.get(key).referenceValues.size()
+                        < DifferentialSweep.Result.DISCRIMINATING_MINIMUM) {
+                    out.put(key, detail);
+                }
+            });
+            return out;
+        }
+
+        /**
+         * The codomain census, in one line: how many operations the reference answered with 0, 1 or
+         * many distinct values over this sweep.
+         *
+         * <p>Counted over <em>every</em> operation, driven or not, because "zero measurements" is a
+         * coverage fact a reader needs as badly as the other two.
+         */
+        String codomainCensus() {
+            int zero = 0;
+            int one = 0;
+            int many = 0;
+            for (OperationTally per : perOperation.values()) {
+                int n = per.referenceValues.size();
+                if (n == 0) {
+                    zero++;
+                } else if (n < DifferentialSweep.Result.DISCRIMINATING_MINIMUM) {
+                    one++;
+                } else {
+                    many++;
+                }
+            }
+            return perOperation.size() + " operations: " + zero + " measured nothing, " + one
+                    + " single-valued (NOT DISCRIMINATING), " + many + " discriminating";
         }
 
         void print() {
@@ -436,14 +545,20 @@ class UnwrittenPortInvariantTest {
             System.out.println("measured rows        " + measuredRows + "  (AGREE + DIFFER)");
             System.out.println("agreement rows       " + agreementRows);
             System.out.println("verdict tally        " + verdicts);
+            System.out.println("codomain census      " + codomainCensus());
             if (escaped != null) {
                 System.out.println("ESCAPED              " + escaped
                         + "  -> the sweep ABORTED; rows above are only those completed before it");
             }
-            Map<String, String> fullyAgreed = fullyAgreedOperations();
-            System.out.println("fully agreed ops     " + (fullyAgreed.isEmpty() ? "(none)" : ""));
-            fullyAgreed.forEach((key, detail) -> System.out.println("  *** " + key + "  (" + detail
+            Map<String, String> discriminating = discriminatingFullyAgreedOperations();
+            Map<String, String> degenerate = degenerateFullyAgreedOperations();
+            System.out.println("fully agreed ops, DISCRIMINATING (a finding about the subject)  "
+                    + (discriminating.isEmpty() ? "(none)" : ""));
+            discriminating.forEach((key, detail) -> System.out.println("  *** " + key + "  (" + detail
                     + (subject.reviewedFullyAgreed.contains(key) ? "; reviewed and signed off)" : ")")));
+            System.out.println("fully agreed ops, NOT DISCRIMINATING (a finding about the corpus)  "
+                    + (degenerate.isEmpty() ? "(none)" : degenerate.size() + " operations"));
+            degenerate.forEach((key, detail) -> System.out.println("  --- " + key + "  (" + detail + ")"));
             if (agreementRows > 0) {
                 System.out.println("--- per-operation agreement tally (agreed/driven/rows) ------------");
                 perOperation.forEach((key, per) -> {
@@ -458,6 +573,348 @@ class UnwrittenPortInvariantTest {
             }
             System.out.println("===================================================================");
         }
+    }
+
+    // ------------------------------------------------------------------ D-15: the fourth door
+
+    /**
+     * <strong>The 120-literal subject, and the gate that has to refuse it.</strong>
+     *
+     * <p>This is the fourth shape of the one defect this class exists for, and it is the only one of
+     * the four that needs no bug in {@link DifferentialSweep} at all. Rounds 1–3 were all <em>the
+     * absence of a measurement scored as an agreement</em>: a harness failure, two throws, two
+     * {@code VOID}s. Round 4 is two <em>real</em> values, correctly compared and correctly equal,
+     * over an operation whose reference side answers the same thing on every input the corpora can
+     * supply. Every row is right. The sweep-level claim — which is the level a stage reads — is not.
+     *
+     * <h2>What this test does</h2>
+     * <ol>
+     *   <li><strong>Stage-shaped domains.</strong> The parameterised invariant above sweeps every
+     *       operation over the union of every corpus, so nearly every row is a
+     *       {@link DiffVerdict#HARNESS_ERROR} from a receiver of the wrong type and no operation is
+     *       ever free of disagreements. That is the right shape for finding cross-type defects and
+     *       the wrong shape for asking "would a stage read this as a pass?". Here each operation is
+     *       driven over <em>its own</em> receiver type's corpus, which is what S4 will do.</li>
+     *   <li><strong>The literals.</strong> {@link #constantTable} asks the historical oracle, once
+     *       per operation, what it answers — and hands that answer back verbatim on every row
+     *       thereafter. That is precisely the subject the round-4 census constructed by hand: a class
+     *       of one-line method bodies, no arithmetic, no branching, never reading its receiver or its
+     *       arguments. Deriving the literals mechanically rather than typing them keeps the attack
+     *       correct as the corpora change; it does not make the subject any less empty.</li>
+     *   <li><strong>The assertions.</strong> The attack must still land (some operations really are
+     *       fully agreed and {@code isClean()} against it — if that ever becomes zero, this test has
+     *       stopped testing anything and someone must find out why); every one of those must be
+     *       <em>refused</em> by {@link DifferentialSweep.Result#requireStagePass}; no operation at all
+     *       may reach a stage pass against this subject; and — the control that stops the whole thing
+     *       being a blanket refusal — a faithful subject on a discriminating operation must pass.</li>
+     * </ol>
+     */
+    @Test
+    @DisplayName("D-15: a no-logic port of hardcoded literals is refused by the stage gate, "
+            + "and the gate still passes a real port")
+    void aNoLogicPortCannotProduceAStagePass() {
+        InputGenerator generator = new InputGenerator(InputGenerator.DEFAULT_SEED);
+        Map<String, List<UValue>> corpora = corpora(generator);
+
+        try (HistoricalOracle oracle = HistoricalOracle.open()) {
+            List<UOp> operations = reachableOperations(oracle);
+            Map<String, UValue> literals = new TreeMap<>();
+            Map<String, Set<String>> observed = new TreeMap<>();
+            Map<String, List<List<UValue>>> tuplesByOp = new LinkedHashMap<>();
+
+            for (UOp op : operations) {
+                List<List<UValue>> tuples = tuples(stageDomains(op, corpora));
+                tuplesByOp.put(op.key(), tuples);
+                Set<String> canonicals = new java.util.TreeSet<>();
+                for (List<UValue> tuple : tuples) {
+                    UValue produced;
+                    try {
+                        produced = oracle.invoke(op, tuple);
+                    } catch (Throwable t) {
+                        continue; // threw, or the harness could not marshal: no value to record
+                    }
+                    canonicals.add(produced.canonical());
+                    if (produced.carriesAnObservation() && !literals.containsKey(op.key())) {
+                        literals.put(op.key(), produced);
+                    }
+                }
+                observed.put(op.key(), canonicals);
+            }
+
+            int zeroMeasured = 0;
+            int singleValued = 0;
+            int discriminating = 0;
+            int cleanAndDegenerate = 0;
+            int refusedByTheGate = 0;
+            Map<String, String> stagePasses = new TreeMap<>();
+            List<String> degenerateButClean = new ArrayList<>();
+            List<String> measuredNothing = new ArrayList<>();
+
+            try (Candidate port = new ConstantTablePort("constant-table", literals)) {
+                DifferentialSweep sweep = new DifferentialSweep(oracle, port, generator.seed());
+                for (UOp op : operations) {
+                    DifferentialSweep.Result result = sweep.run(op, tuplesByOp.get(op.key()));
+
+                    int distinct = result.distinctReferenceValues();
+                    if (distinct == 0) {
+                        zeroMeasured++;
+                        measuredNothing.add(op.key() + "  " + result.summary());
+                    } else if (distinct < DifferentialSweep.Result.DISCRIMINATING_MINIMUM) {
+                        singleValued++;
+                    } else {
+                        discriminating++;
+                    }
+
+                    // The harness's own referenceValues() against an independently collected set:
+                    // for every operation this subject has a literal for, the subject returns on
+                    // every row, so the measured rows are exactly the rows the reference returned on.
+                    if (literals.containsKey(op.key())) {
+                        assertEquals(observed.get(op.key()), new java.util.TreeSet<>(result.referenceValues()),
+                                "Result.referenceValues() must be the reference's canonical forms over "
+                                        + "the measured rows of " + op.key() + ", no more and no less");
+                    }
+
+                    if (result.isStagePass(1, AcceptedDegenerateOperations.none())) {
+                        stagePasses.put(op.key(), result.stageStatement(AcceptedDegenerateOperations.none()));
+                    }
+                    if (result.isClean() && !result.isDiscriminating()) {
+                        cleanAndDegenerate++;
+                        if (degenerateButClean.size() < SAMPLE_LIMIT) {
+                            degenerateButClean.add(result.stageStatement(
+                                    AcceptedDegenerateOperations.none()));
+                        }
+                        // THE GATE. isClean() says pass; the stage predicate must not.
+                        IllegalStateException refusal = org.junit.jupiter.api.Assertions.assertThrows(
+                                IllegalStateException.class,
+                                () -> result.requireStagePass(1, AcceptedDegenerateOperations.none()),
+                                "isClean() is true for " + op.key() + " against a subject of one "
+                                        + "hardcoded literal, and the stage gate let it through");
+                        assertTrue(refusal.getMessage().contains("distinct value(s)"), refusal.getMessage());
+                        assertTrue(refusal.getMessage().contains("D-15"), refusal.getMessage());
+                        refusedByTheGate++;
+                    }
+                }
+            }
+
+            System.out.println("=== D-15: the constant-literal subject, stage-shaped ==============");
+            System.out.println("seed                       " + generator.seed());
+            System.out.println("corpora                    " + corpusSizes(corpora));
+            System.out.println("operations                 " + operations.size());
+            System.out.println("literals the subject holds " + literals.size()
+                    + "  (one per operation the reference ever answered with a value)");
+            System.out.println("codomain census            " + operations.size() + " operations: "
+                    + zeroMeasured + " measured nothing, " + singleValued
+                    + " single-valued (NOT DISCRIMINATING), " + discriminating + " discriminating");
+            System.out.println("isClean() AND degenerate   " + cleanAndDegenerate
+                    + "   <- the size of the door: a stage asserting isClean() reads these as PASS");
+            System.out.println("refused by the stage gate  " + refusedByTheGate + " of "
+                    + cleanAndDegenerate);
+            System.out.println("stage passes (must be 0)   " + stagePasses.size());
+            stagePasses.forEach((key, detail) -> System.out.println("  *** " + detail));
+            System.out.println("--- operations that measured NOTHING (" + measuredNothing.size()
+                    + ") -------------------------");
+            measuredNothing.forEach(s -> System.out.println("  ... " + s));
+            System.out.println("--- first " + degenerateButClean.size()
+                    + " clean-but-degenerate operations ------------------");
+            degenerateButClean.forEach(s -> System.out.println("  --- " + s));
+            System.out.println("===================================================================");
+
+            assertTrue(cleanAndDegenerate > 0,
+                    "the D-15 attack must still be constructible against this corpus. If it is not, "
+                            + "this test has stopped exercising the gate and someone has to find out "
+                            + "why before reading its green as reassurance.");
+            assertEquals(cleanAndDegenerate, refusedByTheGate,
+                    "every clean-but-degenerate sweep must be refused by the stage gate");
+            assertEquals(java.util.Collections.emptyMap(), stagePasses,
+                    "a subject consisting of one hardcoded literal per operation reached a STAGE PASS. "
+                            + "Every entry above is an operation on which a port containing no logic "
+                            + "would be reported as faithful.");
+
+            // The control. A gate that refuses everything is not a gate, and a refusal that costs
+            // nothing to satisfy is not enforcement either -- so both directions are pinned here.
+            try (StubCandidate faithful = StubCandidate.faithful()) {
+                UOp add = UOp.binary("URealValue", "add");
+                DifferentialSweep.Result good = new DifferentialSweep(oracle, faithful, generator.seed())
+                        .run(add, tuplesByOp.get(add.key()));
+                System.out.println("CONTROL, faithful port     " + good.stageStatement(
+                        AcceptedDegenerateOperations.none()));
+                assertTrue(good.isDiscriminating(),
+                        "URealValue.add(value) over the UReal corpus must produce many reference "
+                                + "values, or the control proves nothing: " + good.summary());
+                good.requireStagePass(100, AcceptedDegenerateOperations.none());
+            }
+        }
+    }
+
+    /**
+     * The sign-off route, both directions: a degenerate operation passes the gate once a human has
+     * written down why its constant answer is the whole of its specification, and only for the exact
+     * value that was reviewed.
+     */
+    @Test
+    @DisplayName("D-15: a degenerate operation passes only with a written, value-keyed sign-off")
+    void aDegenerateOperationNeedsAWrittenSignOff() {
+        InputGenerator generator = new InputGenerator(InputGenerator.DEFAULT_SEED);
+        Map<String, List<UValue>> corpora = corpora(generator);
+        UOp isUReal = UOp.unary("URealValue", "isUReal");
+
+        try (HistoricalOracle oracle = HistoricalOracle.open()) {
+            Map<String, UValue> literals = new TreeMap<>();
+            literals.put(isUReal.key(), UValue.bool(true));
+            try (Candidate port = new ConstantTablePort("constant-true", literals)) {
+                DifferentialSweep.Result result = new DifferentialSweep(oracle, port, generator.seed())
+                        .run(isUReal, tuples(stageDomains(isUReal, corpora)));
+
+                System.out.println("=== D-15: the sign-off route ======================================");
+                System.out.println("no sign-off                " + result.stageStatement(
+                        AcceptedDegenerateOperations.none()));
+
+                assertTrue(result.isClean(), "precondition: the old predicate says pass: " + result.summary());
+                assertEquals(1, result.distinctReferenceValues(), result.summary());
+                assertEquals("BOOLEAN(true)", result.soleReferenceValue());
+                assertFalse(result.isStagePass(1, AcceptedDegenerateOperations.none()),
+                        "unsigned, a single-valued operation is not a pass");
+
+                AcceptedDegenerateOperations signed = AcceptedDegenerateOperations.builder()
+                        .accept(isUReal.key(), "BOOLEAN(true)",
+                                "URealValue.isUReal() is a type predicate: the historical body is "
+                                        + "iconst_1/ireturn, so BOOLEAN(true) is the whole of its "
+                                        + "specification and no corpus can make it answer otherwise. "
+                                        + "Agreement here shows the operation exists and is reachable; "
+                                        + "it is not evidence about any computation.")
+                        .build();
+                System.out.println("signed off                 " + result.stageStatement(signed));
+                System.out.println("===================================================================");
+
+                assertTrue(result.isStagePass(1, signed), "a written sign-off must open the gate");
+                assertTrue(result.stageStatement(signed).contains("acknowledged: URealValue.isUReal() "
+                        + "is a type predicate"), result.stageStatement(signed));
+
+                // Keyed on the VALUE as well as the operation: a sign-off reviewed against one
+                // answer must not survive the operation starting to answer something else.
+                AcceptedDegenerateOperations wrongValue = AcceptedDegenerateOperations.builder()
+                        .accept(isUReal.key(), "BOOLEAN(false)", "same operation, the other answer")
+                        .build();
+                assertFalse(result.isStagePass(1, wrongValue),
+                        "a sign-off written against a different value must not match");
+                AcceptedDegenerateOperations wrongOp = AcceptedDegenerateOperations.builder()
+                        .accept("URealValue.isDefined()", "BOOLEAN(true)", "a different operation")
+                        .build();
+                assertFalse(result.isStagePass(1, wrongOp),
+                        "a sign-off written against a different operation must not match");
+
+                org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                        () -> AcceptedDegenerateOperations.builder()
+                                .accept(isUReal.key(), "BOOLEAN(true)", "  "),
+                        "a blank rationale is exactly the blanket exemption this class prevents");
+            }
+        }
+    }
+
+    /**
+     * A port whose every method body is one hardcoded literal, looked up by operation key. No
+     * arithmetic, no branching; the receiver and the arguments are never read. Operations with no
+     * literal throw, so they can never be mistaken for implemented ones.
+     */
+    static final class ConstantTablePort implements Candidate {
+
+        private final String name;
+        private final Map<String, UValue> literals;
+
+        ConstantTablePort(String name, Map<String, UValue> literals) {
+            this.name = name;
+            this.literals = literals;
+        }
+
+        @Override
+        public String name() {
+            return name;
+        }
+
+        @Override
+        public UValue invoke(UOp op, List<UValue> args) {
+            UValue literal = literals.get(op.key());
+            if (literal == null) {
+                throw new RuntimeException("TODO: port " + op.key());
+            }
+            return literal;
+        }
+
+        @Override
+        public boolean supports(UOp op) {
+            return true;
+        }
+
+        @Override
+        public void close() {
+        }
+    }
+
+    /**
+     * The values in {@code corpora} that can be marshalled into a receiver of {@code receiverType} —
+     * i.e. the corpus a stage would sweep that operation over. Derived from the kind, so a corpus
+     * added to {@link #corpora(InputGenerator)} widens this automatically.
+     */
+    static List<UValue> receiverCorpus(String receiverType, Map<String, List<UValue>> corpora) {
+        List<UValue> out = new ArrayList<>();
+        for (UValue v : allValues(corpora)) {
+            if (receiverType.equals(receiverTypeOf(v))) {
+                out.add(v);
+            }
+        }
+        return out;
+    }
+
+    /** The historical receiver class a value of this kind marshals to, or {@code null}. */
+    private static String receiverTypeOf(UValue value) {
+        switch (value.kind()) {
+            case UREAL:    return "URealValue";
+            case UINTEGER: return "UIntegerValue";
+            case UBOOLEAN: return "UBooleanValue";
+            case USTRING:  return "UStringValue";
+            case REAL:     return "RealValue";
+            case INTEGER:  return "IntegerValue";
+            case BOOLEAN:  return "BooleanValue";
+            case STRING:   return "StringValue";
+            default:       return null;
+        }
+    }
+
+    /**
+     * Domains for a stage-shaped sweep: the operation's own receiver corpus, and arguments of the
+     * same type (plus a slice of {@link InputGenerator#indexBoundaries()} for primitive parameters,
+     * which is where the historical API takes raw {@code int}/{@code double}/{@code float}).
+     */
+    private static List<List<UValue>> stageDomains(UOp op, Map<String, List<UValue>> corpora) {
+        List<UValue> receivers = receiverCorpus(op.receiverType(), corpora);
+        List<List<UValue>> domains = new ArrayList<>(op.arity());
+        domains.add(receivers);
+        for (int i = 0; i < op.params().size(); i++) {
+            List<UValue> source = op.params().get(i) == UOp.ParamKind.VALUE
+                    ? receivers
+                    : InputGenerator.indexBoundaries();
+            domains.add(i == 0 ? source
+                    : source.subList(0, Math.min(EXTRA_PARAM_SLICE, source.size())));
+        }
+        return domains;
+    }
+
+    /** Cartesian product, in the same order {@link DifferentialSweep#sweep} would build it. */
+    private static List<List<UValue>> tuples(List<List<UValue>> domains) {
+        List<List<UValue>> out = new ArrayList<>();
+        out.add(new ArrayList<>());
+        for (List<UValue> domain : domains) {
+            List<List<UValue>> next = new ArrayList<>();
+            for (List<UValue> prefix : out) {
+                for (UValue v : domain) {
+                    List<UValue> extended = new ArrayList<>(prefix);
+                    extended.add(v);
+                    next.add(extended);
+                }
+            }
+            out = next;
+        }
+        return out;
     }
 
     // ------------------------------------------------------------------ partitioning
@@ -544,13 +1001,24 @@ class UnwrittenPortInvariantTest {
         return kinds;
     }
 
-    /** Every corpus {@link InputGenerator} ships, in a fixed order. */
+    /**
+     * Every corpus {@link InputGenerator} ships, in a fixed order.
+     *
+     * <p>{@code boolean} and {@code string} were added after the round-4 measurement that
+     * {@code BooleanValue} and {@code StringValue} are in
+     * {@code HistoricalOracle.MARSHALLABLE_RECEIVERS} — so {@code supports()} said yes for all 52 of
+     * their operations — while no corpus contained a single {@code BOOLEAN} or {@code STRING}, so
+     * every row of all 52 was {@code HARNESS_ERROR} and the whole sweep measured them zero times
+     * (defect D-19).
+     */
     static Map<String, List<UValue>> corpora(InputGenerator generator) {
         Map<String, List<UValue>> out = new LinkedHashMap<>();
         out.put("uReal", generator.uRealCorpus(RANDOM_DRAWS));
         out.put("uInteger", generator.uIntegerCorpus(RANDOM_DRAWS));
         out.put("uBoolean", generator.uBooleanCorpus(RANDOM_DRAWS));
         out.put("uString", generator.uStringCorpus(RANDOM_DRAWS));
+        out.put("boolean", generator.booleanCorpus(RANDOM_DRAWS));
+        out.put("string", generator.stringCorpus(RANDOM_DRAWS));
         out.put("zeroDivisors", InputGenerator.zeroDivisors());
         out.put("indexBoundaries", InputGenerator.indexBoundaries());
         return out;

@@ -31,6 +31,13 @@ import java.util.Map;
  * # rows.disagreement       0
  * # rows.throwClassMismatch 0
  * # verdict.AGREE           484
+ * # op.URealValue.add(value).rows                     484
+ * # op.URealValue.add(value).measured                 484
+ * # op.URealValue.add(value).agreement                484
+ * # op.URealValue.add(value).disagreement             0
+ * # op.URealValue.add(value).distinctReferenceValues  231
+ * # op.URealValue.add(value).discriminating           true
+ * # accepted.degenerateOperations                     0
  * index &lt;tab&gt; operation &lt;tab&gt; inputs &lt;tab&gt; historical &lt;tab&gt; ported &lt;tab&gt; verdict &lt;tab&gt; note
  * ...
  * </pre>
@@ -38,6 +45,15 @@ import java.util.Map;
  * <p>Every header line begins with {@code #}, so a consumer can skip the preamble with a single
  * predicate. Nothing time-dependent is written: two runs with the same seed and the same jars
  * produce byte-identical files, which is what makes a diff of two reports meaningful.
+ *
+ * <h2>The {@code # rows.*} block is a sum; the {@code # op.*} block is not</h2>
+ * Every {@code # rows.*} and {@code # verdict.*} line is a total over all the results in the file,
+ * and {@code # operations} is a comma-joined list with no counts attached. A report over 40
+ * operations in which 39 measured nothing and one measured a single row therefore has a header
+ * indistinguishable in shape from a fully-measured one. The {@code # op.<key>.*} block exists so
+ * that a number can be attributed to an operation without re-deriving it from the data rows, and
+ * above all so that {@code distinctReferenceValues} — <em>how many different answers the reference
+ * gave</em> — is impossible to read the agreement count without.
  *
  * <p>Test-scoped. Not part of the product.
  */
@@ -106,6 +122,22 @@ public final class DiffReportWriter {
      */
     public static Path writeAll(String fileName, List<DifferentialSweep.Result> results,
                                 Map<String, String> jarDigests) {
+        return writeAll(fileName, results, jarDigests, AcceptedDegenerateOperations.none());
+    }
+
+    /**
+     * As above, recording which degenerate-operation sign-offs were in force.
+     *
+     * <p>The allowlist is written into the header whether or not it matched anything, so that a run
+     * with a sign-off in force is never byte-indistinguishable from a run without one. (That is the
+     * shape of the still-open D-14 complaint against {@link AcceptedThrowPairs}, fixed here for the
+     * mechanism introduced alongside it rather than repeated.)
+     */
+    public static Path writeAll(String fileName, List<DifferentialSweep.Result> results,
+                                Map<String, String> jarDigests,
+                                AcceptedDegenerateOperations acknowledged) {
+        java.util.Objects.requireNonNull(acknowledged,
+                "acknowledged (use AcceptedDegenerateOperations.none())");
         int rowTotal = 0;
         int measuredTotal = 0;
         for (DifferentialSweep.Result r : results) {
@@ -189,6 +221,53 @@ public final class DiffReportWriter {
             for (Map.Entry<DiffVerdict, Integer> e : tally.entrySet()) {
                 header(out, "verdict." + e.getKey().name(), Integer.toString(e.getValue()));
             }
+            // ---------------------------------------------------------- per operation
+            //
+            // Everything above this point is a SUM over all results. A 40-operation report in which
+            // 39 measured nothing and one measured a single row produces a header indistinguishable
+            // in shape from a fully-measured one (defect D-21) -- the D-10 lesson ("444 of 471471 is
+            // noise in an aggregate; per operation it was 144 of 144") applied to the invariant test
+            // and not to the artefact a human reads. The block below is per operation, and it
+            // carries the one number that says whether an agreement figure means anything:
+            //
+            //   op.<key>.distinctReferenceValues -- how many different answers the reference gave
+            //                                       across the measured rows. 1 means this sweep
+            //                                       could not have failed; its agreement figure was
+            //                                       decided before either implementation ran.
+            //   op.<key>.discriminating          -- that number against DISCRIMINATING_MINIMUM,
+            //                                       stated outright rather than left to be derived,
+            //                                       because deriving it wrongly is this harness's
+            //                                       recurring defect.
+            //   op.<key>.soleReferenceValue      -- present only when there is exactly one, so the
+            //                                       reader can see WHAT the constant was without
+            //                                       reading 20 000 data rows.
+            //   op.<key>.degenerate.acknowledged -- the written sign-off, verbatim, when one is in
+            //                                       force for that operation and that value.
+            for (DifferentialSweep.Result r : results) {
+                String key = r.op().key();
+                header(out, "op." + key + ".rows", Integer.toString(r.rowCount()));
+                header(out, "op." + key + ".measured", Integer.toString(r.measurementCount()));
+                header(out, "op." + key + ".agreement", Integer.toString(r.agreementCount()));
+                header(out, "op." + key + ".disagreement",
+                        Integer.toString(r.disagreements().size()));
+                header(out, "op." + key + ".distinctReferenceValues",
+                        Integer.toString(r.distinctReferenceValues()));
+                header(out, "op." + key + ".discriminating", Boolean.toString(r.isDiscriminating()));
+                String sole = r.soleReferenceValue();
+                if (sole != null) {
+                    header(out, "op." + key + ".soleReferenceValue", sole);
+                    String rationale = acknowledged.rationaleFor(key, sole);
+                    if (rationale != null) {
+                        header(out, "op." + key + ".degenerate.acknowledged", rationale);
+                    }
+                }
+            }
+            // Stated even when empty, so that "no sign-off was in force" is an assertion this file
+            // makes rather than an absence the reader has to infer.
+            header(out, "accepted.degenerateOperations", Integer.toString(acknowledged.size()));
+            for (String entry : acknowledged.describe()) {
+                header(out, "accepted.degenerateOperation", entry);
+            }
             out.write(DiffRow.TSV_HEADER);
             out.write('\n');
             for (DifferentialSweep.Result r : results) {
@@ -203,8 +282,14 @@ public final class DiffReportWriter {
         return target;
     }
 
+    /**
+     * One header line, {@code # key<tab>value}. The value is scrubbed of tabs and newlines: most
+     * header values are numbers, but the degenerate-operation rationales are prose a human typed,
+     * and a tab in one of them would silently turn a two-column header into a three-column one.
+     */
     private static void header(BufferedWriter out, String key, String value) throws IOException {
-        out.write("# " + key + "\t" + value + "\n");
+        out.write("# " + key + "\t"
+                + value.replace('\t', ' ').replace('\r', ' ').replace('\n', ' ') + "\n");
     }
 
     /**

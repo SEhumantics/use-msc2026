@@ -12,6 +12,13 @@
 # rows.throwClassMismatch	0
 # verdict.AGREE	558
 # verdict.DIFFER	226
+# op.URealValue.minus(value).rows	784
+# op.URealValue.minus(value).measured	784
+# op.URealValue.minus(value).agreement	558
+# op.URealValue.minus(value).disagreement	226
+# op.URealValue.minus(value).distinctReferenceValues	389
+# op.URealValue.minus(value).discriminating	true
+# accepted.degenerateOperations	0
 index	operation	inputs	historical	ported	verdict	note
 0	URealValue.minus(value)	UREAL(0.0,0.0) | UREAL(0.0,0.0)	UREAL(0.0,0.0)	UREAL(0.0,0.0)	AGREE	
 1	URealValue.minus(value)	UREAL(0.0,0.0) | UREAL(0.0,1.0)	UREAL(0.0,1.0)	UREAL(0.0,1.0)	AGREE	
