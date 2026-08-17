@@ -280,4 +280,43 @@
             </plugin>
         </plugins>
     </build>
+
+    <!-- ==================================================================================
+         -Pupstream-oracle  (decision B3, 2026-08-17)
+
+         Adds junit-vintage-engine at TEST scope, and nothing else.  Upstream USE's own test
+         tree is overwhelmingly JUnit 3 (junit.framework.TestCase) and JUnit 4
+         (org.junit.Test); this reactor declares only junit-jupiter, so surefire's JUnit
+         Platform discovers none of it.  Those files are neither skipped nor reported; they
+         are never collected, which is why the default build runs 3 test classes out of the
+         41 *Test.java files present (docs/port2/stage-00-baseline.md sec. 3).
+
+         With this profile active they execute EXACTLY AS UPSTREAM WROTE THEM.  No upstream
+         test file is edited, migrated or renamed by this port: that is the entire reason a
+         profile was chosen over a JUnit 5 migration.  The previous port migrated them by
+         hand (TypeTest.java at +1172/-1096), which re-authored the oracle with the same
+         change it was meant to judge.
+
+         The profile is OFF by default so that the product build keeps the specified
+         toolchain (JUnit 5 Jupiter, no vintage engine).  From S3 onwards every stage's
+         acceptance runs BOTH:
+
+             mvn -B verify -Djava.awt.headless=true
+             mvn -B verify -Pupstream-oracle -Djava.awt.headless=true
+
+         See docs/port2/upstream-oracle-profile.md.
+         ================================================================================== -->
+    <profiles>
+        <profile>
+            <id>upstream-oracle</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.junit.vintage</groupId>
+                    <artifactId>junit-vintage-engine</artifactId>
+                    <version>5.7.0</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
 </project>
