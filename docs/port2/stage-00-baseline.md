@@ -57,6 +57,53 @@ for f in use-core/target/surefire-reports/*.txt use-gui/target/surefire-reports/
 
 **Pre-existing failures: none.**
 
+### Correction — `mvn test` is the wrong gate; the baseline is 143, not 13
+
+The figures above are real but they measure the wrong thing, and this was caught later during an
+audit of this stage. `mvn test` runs surefire only. The reactor also configures
+**maven-failsafe-plugin**, and `mvn verify` runs a second, much larger tier that `mvn test` never
+touches:
+
+```bash
+mvn -B verify -Djava.awt.headless=true
+```
+```
+--- failsafe:2.22.2:integration-test (default) @ use-core ---
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0 - in org.tzi.use.OCLExpressionIT
+--- failsafe:2.22.2:integration-test (default) @ use-gui ---
+Tests run: 129, Failures: 0, Errors: 0, Skipped: 0 - in org.tzi.use.main.shell.ShellIT
+BUILD SUCCESS
+```
+
+| Tier | `use-core` | `use-gui` | total |
+|---|---|---|---|
+| surefire (`mvn test`) — the figure recorded above | 12 | 1 | **13** |
+| failsafe (`mvn verify` only) | 1 | 129 | **130** |
+| **true baseline** | 13 | 130 | **143** |
+
+Both integration classes are JUnit 5 Jupiter, so unlike the dormant tree in §3 they *do* execute —
+just never under `mvn test`. `ShellIT` drives the 131 `.use` fixtures under
+`use-gui/src/it/resources/testfiles/shell/`.
+
+**Why this matters more than the raw number.** These 130 tests are the port's most relevant
+oracle and were absent from every acceptance gate as originally written:
+
+* `use-core/src/it/java/org/tzi/use/OCLExpressionIT.java` is an **OCL expression** test — precisely
+  the subsystem the uncertainty port modifies most.
+* `ShellIT`'s fixtures include the three files that make blocking decision **B4** (the `equals`
+  keyword collision) a live risk: `testfiles/shell/t098.use:11` and
+  `testfiles/shell/imports/t133_import_date.use:29` declare an operation named `equals`, and
+  `testfiles/shell/imports/t133_import_datetime.use:12` calls it. If the fork's
+  `identicalExpression` rule makes `equals` a reserved token, **`ShellIT` is what catches it** —
+  and only under `mvn verify`.
+
+**Consequence for every later stage: the acceptance command is `mvn verify`, not `mvn test`.**
+Every "suite green" claim in S3–S10 must be made against `mvn verify`. Stage S1's recorded counts
+were taken with `mvn test` and are correct as far as they go, but they are not the whole gate.
+
+Post-S1 state, for reference: `mvn verify` = 28 surefire + 130 failsafe = **158 methods, 0
+failures**, confirmed on a fresh `git clone` of the branch.
+
 ## 3. Load-bearing finding — the upstream test tree is ~93% dormant
 
 The baseline is 13 methods across 3 classes. The repository contains **41 `*Test.java` files**
