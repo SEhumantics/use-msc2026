@@ -729,6 +729,12 @@ in `uml/ocl/value/{SBooleanValue,UBooleanValue,UIntegerValue,URealValue,UStringV
 `UUnlimitedNatural`, `UEnum` and `Distribution` are never imported** (they are still needed on the
 classpath as transitive return types, e.g. `UReal.toUUnlimitedNatural()`).
 
+> **CORRECTION 2026-08-18 — `stage-03-scope.md` §5.5.** Measured: only `UUnlimitedNatural` is a
+> transitive need. Neither `UEnum` nor `Distribution` is referenced by any class in the compile
+> closure, nor anywhere in `USE-Uncertainty/src/`. The transitive set is overstated by two classes.
+> Under the purge decision of `stage-03-scope.md` §5 the `UUnlimitedNatural` dependency is removed
+> too, leaving a vendored set of five.
+
 ### 6.2 Files the port must EDIT (present in both trees, touched by the fork): 23
 
 Drift measured with `$Id`/`$ProjectVersion` lines and trailing whitespace excluded:

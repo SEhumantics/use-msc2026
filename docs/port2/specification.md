@@ -1448,6 +1448,12 @@ into GPL-2 USE is legally sound provided the notice travels with the copied file
 `SBoolean`) — `UUnlimitedNatural`, `UEnum` and `Distribution` are never imported but are still needed
 on the classpath as transitive return types.
 
+> **CORRECTION 2026-08-18 — `stage-03-scope.md` §5.5.** Measured: only `UUnlimitedNatural` is a
+> transitive need. Neither `UEnum` nor `Distribution` is referenced by any class in the compile
+> closure, nor anywhere in `USE-Uncertainty/src/`. The transitive set is overstated by two classes.
+> Under the purge decision of `stage-03-scope.md` §5 the `UUnlimitedNatural` dependency is removed
+> too, leaving a vendored set of five.
+
 Derivation: `comm -23` of the fork's `src/main` file list against `use-core` + `use-gui` gives **62**
 fork-only paths; removing the 15 `analysis/metrics` files, `main/Main.java`,
 `util/input/ShellReadline.java` and the 12 checked-in ANTLR parsers leaves exactly **33**.

@@ -162,7 +162,9 @@ So the type the uncertain version would extend is, in practice, the singleton `*
 returns it, so it is in the compile closure even though no USE code calls it. Of the 23 library
 `.java` files, only **five** are imported by the fork (`SBoolean`, `UBoolean`, `UInteger`, `UReal`,
 `UString`, by `grep -rhoE "import uDataTypes\.[A-Za-z_]+"`); the rest are transitive. This is a
-linkage fact, not a language feature, and `specification.md:1448` already records it correctly.
+linkage fact, not a language feature. `specification.md:1448` records it, but overstates the
+transitive set by two classes — see the correction in §5.5. Under the §5 purge this dependency is
+removed outright and the vendored set drops to five classes.
 
 ### 3.4 If the research later wants uncertain multiplicities
 
@@ -175,5 +177,129 @@ solver work, and ground rule 6 puts it out of scope. Recorded here so the option
 ## 4. Net effect on S3
 
 Added: five obligations (§2.3), all in `use-core/src/test`, none touching the type-system work.
-Removed: nothing. The UUnlimitedNatural determination is **no new port work** — one line of vendoring
-that was already required.
+Removed: nothing from the type-system line. The UUnlimitedNatural determination **removes** three
+classes and seven methods from the vendoring set (§5) and adds no port work at all.
+
+Sections 5 and 6 below record the purge recipe and the model-finder position. Neither blocks S3's
+type-system work; §5 executes when vendoring does (B1).
+
+---
+
+## 5. The UUnlimitedNatural purge — recipe, and when it can run
+
+Decision 2026-08-18: **purge, not add.** §3 gives the reasons. This section gives the exact edit, and
+records that it **cannot execute yet** — `uDataTypes` has not been vendored (B1 is open), so this is a
+vendoring-plan decision that lands when vendoring does.
+
+### 5.1 Do not confuse the two types
+
+`UnlimitedNatural` (crisp, USE 7.5.0 core) is **not** in scope and must not be touched. It is upstream
+product source; removing it would breach ground rules 3 and 5 and would break `StandardOperationsNumber`
+(argument casts at lines 640-791) and `ExpConstUnlimitedNatural`. **Only `UUnlimitedNatural` — the
+uncertain one, which exists solely in the `uDataTypes` library — is purged.**
+
+### 5.2 The measured compile closure
+
+Seeded from the five classes the fork actually imports
+(`grep -rhoE "import uDataTypes\.[A-Za-z_]+" USE-Uncertainty/src/` → `SBoolean`, `UBoolean`,
+`UInteger`, `UReal`, `UString`) and followed transitively over the 23 library `.java` files:
+
+| | Classes |
+|---|---|
+| **Closure as-is (6)** | `SBoolean`, `UBoolean`, `UInteger`, `UReal`, `UString`, **`UUnlimitedNatural`** |
+| **Excluded already (17)** | `Distribution`, `DistributionGenerator`, `ExamplesSBoolean`, `N_UBoolean`, `N_UInteger`, `N_UReal`, `N_UUnlimitedNatural`, `SBooleanTest`, `SBooleanTest3`, `SBooleans`, `UBooleans`, `UEnum`, `UEnumTest`, `UIntegers`, `UReals`, `UUnlimitedNaturals`, `UncertaintyTest` |
+
+`UUnlimitedNatural` is in the closure for exactly one reason: `UReal` and `UInteger` declare
+conversions to it. Remove those and the closure drops to **five**.
+
+### 5.3 The edit
+
+Delete **7 methods**, then **3 classes**:
+
+| File | Line | Member |
+|---|---|---|
+| `UReal.java` | 670 | `toUUnlimitedNatural()` |
+| `UReal.java` | 677 | `toBestUUnlimitedNatural()` |
+| `UInteger.java` | 532 | `toUUnlimitedNatural()` |
+| `N_UInteger.java` | 465 | `toUUnlimitedNatural()` — *excluded anyway* |
+| `UIntegers.java` | 157 | `static toUUnlimitedNatural(UInteger)` — *excluded anyway* |
+| `UReals.java` | 330 | `static toUUnlimitedNatural(UReal)` — *excluded anyway* |
+| `UReals.java` | 334 | `static toBestUUnlimitedNatural(UReal)` — *excluded anyway* |
+
+Four of the seven sit in classes that are already outside the closure, so **only two files are really
+edited**: `UReal.java` and `UInteger.java`. Then drop `UUnlimitedNatural.java`,
+`UUnlimitedNaturals.java`, `N_UUnlimitedNatural.java`.
+
+### 5.4 Why this is invisible to the oracle
+
+`grep -rn "toUUnlimitedNatural" USE-Uncertainty/src/` returns **zero lines**, and no
+`toUUnlimitedNatural` is registered under `expr/operations/`. The differential harness drives
+*registered OCL operations* by name, so **no differential row can reach any deleted member**. The
+historical jar is unchanged and its hash still verifies; removal is source-side only.
+
+This is a **modernization/pruning** change under ground rule 4 and must not share a commit with any
+behaviour change.
+
+### 5.5 Correction to `specification.md`
+
+`specification.md:1448` and `spec-parts/15-upstream-delta.md:729-730` state that `UUnlimitedNatural`,
+**`UEnum` and `Distribution`** are "never imported but still needed on the classpath as transitive
+return types." Measured: **only `UUnlimitedNatural` is.** Neither `Distribution` nor `UEnum` is
+referenced by any class in the closure — `grep -n "Distribution\|UEnum" {UReal,UInteger,UBoolean,UString,SBoolean,UUnlimitedNatural}.java`
+returns nothing, and neither appears anywhere in `USE-Uncertainty/src/`. The spec overstates the
+transitive set by two classes. `UUnlimitedNatural` itself pulls in only `UBoolean`, `UInteger`,
+`UReal`, all already present.
+
+---
+
+## 6. The model-finder position — what may and may not be claimed
+
+Recorded because this travels into the thesis, where an imprecise version invites an easy objection.
+
+### 6.1 What is true, measured
+
+1. USE's Kodkod model finder **refuses the OCL `UnlimitedNatural` value type**:
+   `ModelValidator/trunk/src/org/tzi/use/kodkod/transform/ocl/SimpleExpressionVisitor.java:302-304`,
+   `throw new TransformationException("UnlimitedNatural not supported")`.
+2. Its type vocabulary contains no UnlimitedNatural in any form: `AnyType`, `BooleanType`, `EnumType`,
+   `IntegerType`, `ObjectType`, `RealType`, `SetType`, `StringType`, `UndefinedType`
+   (`ls src/org/tzi/kodkod/model/type/`).
+3. Refusing a construct is **normal practice** for this transformer, not an anomaly: 14 unsupported
+   sites, `oclInState` refused at the adjacent line 283.
+
+### 6.2 The caveat that must be stated with it
+
+**`*` in a multiplicity is fully supported and is a different mechanism.** The finder has its own
+`org.tzi.kodkod.model.impl.Multiplicity` with `public static final int MANY = -1` and a `Range` list,
+built by `MultiplicityTransformator` (`ModelTransformator.java:156,218`). It never routes a
+multiplicity through `UnlimitedNaturalValue`. So `0..*` associations model-find normally.
+
+A claim phrased as "the model finder does not handle `*`" is **false** and will be caught. The true
+claim is narrower: *the finder does not accept the OCL `UnlimitedNatural` **value type** in
+expressions.*
+
+### 6.3 The claim that is safe
+
+> USE's model finder does not support the OCL `UnlimitedNatural` value type in expressions; it raises
+> a transformation error. Uncertain-OCL model finding inherits no obligation to support an uncertain
+> counterpart, and `USE-Uncertainty` defines none.
+
+### 6.4 One refinement worth making instead of "we do the same"
+
+The two situations are not identical, and ours is the **more** consistent of the two:
+
+| | Evaluator | Model finder | Shape |
+|---|---|---|---|
+| Crisp USE | `UnlimitedNatural` **exists** | **refuses** it | asymmetric — a type you can write but cannot solve |
+| This work | `UUnlimitedNatural` **absent** | absent | symmetric — nothing to refuse |
+
+Upstream carries a gap between what its evaluator accepts and what its solver accepts. We do not
+reproduce that gap; we have no such type on either side. That is a defensible position and a stronger
+one than parity. Note also that `USE-Uncertainty` ships **no model finder at all** — it is an
+evaluator — so no fork behaviour is being departed from here.
+
+### 6.5 Residual, stated
+
+If uncertain multiplicities ever become a research target, the crisp type would have to be supported
+in the transformer **first** (§6.1 item 1 is the blocker), and the work belongs in the finder's type
+mapping, not the OCL lattice. Ground rule 6 puts it out of scope now.
