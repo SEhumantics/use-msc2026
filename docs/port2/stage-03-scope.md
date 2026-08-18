@@ -527,7 +527,7 @@ reachable only at an input no corpus generates stays invisible, and every covera
 
 Checked against `output/latex/robust_utype_model_finding_proposal.tex` (2571 lines) on 2026-08-18.
 
-### 9.1 UUnlimitedNatural — no change required, one addition recommended
+### 9.1 UUnlimitedNatural — no change required; clarifying addition APPLIED
 
 `grep -n "UnlimitedNatural\|UUnlimited"` over the proposal returns **zero lines**. Nothing in the aim,
 the research questions, the version-1 fragment, the studies or the success criteria depends on it, so
@@ -540,7 +540,7 @@ dispatch — "void, **the four OCL primitives sharing one arm**, enum, class, `O
 Four, not five. So the Kodkod baseline excludes `UnlimitedNatural` at the *type* layer as well as at
 the expression layer (`SimpleExpressionVisitor.java:304`). Two independent sites, same conclusion.
 
-**Recommended addition, one line.** The version-1 fragment (§4) states an "Outside version 1" column
+**APPLIED 2026-08-18.** The version-1 fragment (§4) states an "Outside version 1" column
 per area. `UnlimitedNatural` should be named there explicitly under "OCL core". Silence invites the
 question; an explicit exclusion answers it — and the answer is now strong, because the capability
 baseline does not support it either, so nothing is conceded in the comparison. This is an addition for
@@ -586,3 +586,22 @@ attribute with no `else`), a capability comparison must report *what the baselin
 not merely that it returned an answer. The proposal already names this — "a silent drop with a logged
 cause, which is worse for this thesis than a crash" — but it appears in §2 as a provenance fact rather
 than in §8 as an evaluation obligation.
+
+### 9.4 Edits applied to the proposal — 2026-08-18
+
+Applied to **both** `robust_utype_model_finding_proposal.tex` and
+`robust_utype_model_finding_proposal_vi.tex`, kept symmetric:
+
+| # | Section | Change |
+|---|---|---|
+| E-1 | §4, version-1 fragment, "OCL core" | names `UnlimitedNatural` and its `*` literal in the *Outside version 1* column |
+| E-2 | §2, "Verified U-types fork/port facts" | the fork registers a **fifth** type, `SBoolean`, outside version 1. Corrects an ambiguity — the line read "all four requested U-types", which is true of the request but not of the fork |
+| E-3 | §8, after the baseline table | the silent-drop reporting obligation: a capability comparison must report what the baseline *omitted*, not only what it returned |
+
+**Verified by compilation, not by inspection.** `xelatex -halt-on-error` exits 0 on both files (EN 27
+pages), and `pdftotext` finds the new text in both rendered PDFs.
+
+**Standing risk, unrelated to these edits:** `output/latex/` is **not under version control**
+(`git rev-parse` → *not a repository*). The proposal, its Vietnamese translation and the SOICT draft
+have no history and no recovery path. A pre-edit copy of both files is in this session's scratchpad
+only, which is not durable. This should be fixed before the next round of edits.
