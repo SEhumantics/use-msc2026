@@ -303,3 +303,125 @@ evaluator — so no fork behaviour is being departed from here.
 If uncertain multiplicities ever become a research target, the crisp type would have to be supported
 in the transformer **first** (§6.1 item 1 is the blocker), and the work belongs in the finder's type
 mapping, not the OCL lattice. Ground rule 6 puts it out of scope now.
+
+---
+
+## 7. Coverage build-out — the design, measured
+
+Directive 2026-08-18: **better test-case coverage for the U-types and SBoolean.** This section is the
+implementable design. Every signature and constant below was read from source, not assumed.
+
+### 7.1 Where coverage stands today
+
+`InputGenerator` boundary sets, counted:
+
+| Set | Entries | Known defect |
+|---|---|---|
+| `uRealBoundaries()` | 22 | — |
+| `uIntegerBoundaries()` | 13 | — |
+| `uStringBoundaries()` | 16 | **D-31**: `uSubstring(int,int)` reaches **17 measured rows of 432** |
+| `uBooleanBoundaries()` | 9 | — |
+| `stringBoundaries()` | 14 | — |
+| `booleanBoundaries()` | — | **D-42**: reports `boolean=4` for a 2-inhabitant type |
+| `zeroDivisors()` | 7 | — |
+| `indexBoundaries()` | 8 | source of D-31 |
+| **`sBooleanBoundaries()`** | **absent** | the whole of §2.1 |
+| `realBoundaries()` | — | **D-28**: a single `RealValue` |
+
+### 7.2 SBoolean marshalling — the exact route
+
+**The 4-arg constructor is package-private.** `SBooleanValue.java:18`,
+`SBooleanValue(double b, double d, double u, double a)` — no modifier. The harness must **not**
+`setAccessible`; it takes the documented public path, exactly as it already does for `UBooleanValue`
+whose `uDataTypes.UBoolean` constructor is package-private (`HistoricalOracle.java` `case UBOOLEAN`).
+
+The public path is the **Builder** (`SBooleanValue.java:28-70`):
+
+```java
+new SBooleanValue.Builder().belief(b).disbelief(d).uncertainty(u).agent(a).build()
+```
+
+**`build()` interns two points.** `belief==1 && disbelief==0 && uncertainty==0 && agent==1` returns the
+shared `TRUE` constant; `(0,1,0,1)` returns `FALSE`. Those two rows therefore take a *different code
+path* from every other opinion and must both be in the corpus — an identity-versus-equality difference
+is exactly the kind of thing this harness exists to catch.
+
+### 7.3 The validity invariant — corpus-defining
+
+`uDataTypes/SBoolean.java:43-52`, after `adjust()` on each component:
+
+```java
+if (Math.abs(this.b + this.d + this.u - 1.0D) > 0.001D ||
+    this.b < 0.0 || this.d < 0.0 || this.u < 0.0 || this.a < 0.0 ||
+    this.b > 1.0 || this.d > 1.0 || this.u > 1.0 || this.a > 1.0)
+    throw new IllegalArgumentException("SBoolean constructor: Invalid parameters. ...");
+```
+
+Three facts that a naive corpus would miss:
+
+1. **The sum tolerance is `0.001`, not exact.** `b+d+u` may miss 1.0 by up to a thousandth and still
+   construct. So `±0.0005` (constructs) and `±0.0015` (throws) are real boundaries, and any corpus that
+   only emits exact-sum triples never probes the tolerance edge.
+2. **`a` is not in the sum.** The base rate is independent; its only constraint is `[0,1]`. A corpus
+   that varies `a` while holding `(b,d,u)` fixed is therefore *free* discriminating power.
+3. **Random 4-tuples are useless.** Almost none satisfy the sum, so almost every row would throw on
+   both sides. Since D2 that scores `BOTH_THREW`, not agreement — it fails visibly rather than falsely,
+   but it is still zero evidence. **The generator must construct on the simplex**, e.g. draw
+   `(b,d,u)` from a Dirichlet-style normalisation and `a` independently on `[0,1]`.
+
+### 7.4 `sBooleanBoundaries()` — the required classes
+
+The fork exposes named predicates that partition the opinion space; each must have at least one
+witness, or that predicate's operations are single-valued and give agreement away for free (D-15):
+
+| Class | Witness `(b, d, u, a)` | Reached predicate |
+|---|---|---|
+| absolute true (interned) | `(1, 0, 0, 1)` | `isAbsolute`, `isDogmatic`, `isCertain` — **`TRUE` identity** |
+| absolute false (interned) | `(0, 1, 0, 1)` | `isAbsolute` — **`FALSE` identity** |
+| vacuous | `(0, 0, 1, a)` | `isVacuous`, `isMaximizedUncertainty` |
+| dogmatic, non-absolute | `(0.5, 0.5, 0, a)` | `isDogmatic`, not `isAbsolute` |
+| uncertain, generic | `(0.3, 0.2, 0.5, 0.5)` | `isUncertain` |
+| base-rate extremes | `(b, d, u, 0)` and `(b, d, u, 1)` | `baseRate`, `projection`, `applyOn` |
+| tolerance edge, valid | sum `= 1 ± 0.0005` | the `0.001` band |
+| tolerance edge, invalid | sum `= 1 ± 0.0015` | must throw on **both** sides |
+| non-interned unit points | `(1, 0, 0, 0.5)`, `(0, 1, 0, 0.5)` | same masses, **not** `TRUE`/`FALSE` |
+
+The last row is the one that catches an implementation that compares by identity rather than by value.
+
+### 7.5 Harness changes required
+
+| # | File | Change |
+|---|---|---|
+| C-1 | `UValue.java` | `Kind.SBOOLEAN`; a 4-component factory. **Do not widen the private constructor** — it has ten call sites on an audited file. Carry the components in the existing `elements` list as four `REAL` values, and give `canonical()` an `SBOOLEAN` branch. Type-bearing per D-18. |
+| C-2 | `HistoricalOracle.java` | `case SBOOLEAN` in `toHistorical`, via the Builder of §7.2 — never `setAccessible`. |
+| C-3 | `HistoricalOracle.java` | add `"SBooleanValue"` to `MARSHALLABLE_RECEIVERS` (`:134-136`). The comment at `:128` requires this set to stay in step with the `toHistorical` switch, so C-2 and C-3 land together or neither. |
+| C-4 | `InputGenerator.java` | `sBooleanBoundaries()` per §7.4 and `sBooleanCorpus(int)` per §7.3 item 3. |
+| C-5 | `DifferentialHarnessRegressionTest.java:149` | invert the `assertFalse(oracle.supports(...))` pin. Same commit as C-2/C-3, else the suite pins the blindspot open. |
+
+Results need no work: `fromHistorical` already routes an unmodelled `Value` to `Kind.OPAQUE` through
+`opaqueRepresentation`, which rebuilds from declared fields and so is not subject to the `%5.3f`
+rounding trap (F4).
+
+### 7.6 Sequencing — what this does and does not buy
+
+**It does not produce evidence on its own.** The ported side has no `SBooleanValue` class yet — the
+ported side today is `StubCandidate`, and the real one arrives at S9. So C-1..C-5 make SBoolean
+*drivable* and let the historical reference corpus be recorded now; the comparison becomes meaningful
+when S9 lands. That is the correct order — building the instrument before the thing it measures — and
+it is why these are S3 obligations rather than S9 ones. Doing it at S9 would mean porting 1502 lines
+with the instrument still unbuilt.
+
+### 7.7 U-type widening
+
+Separate, smaller, and independent of SBoolean:
+
+* **D-28** — `realBoundaries()` holds one `RealValue`. Widen to match `uRealBoundaries()`'s crisp
+  points (zero, negative zero, negatives, extrema).
+* **D-42** — the census prints `boolean=4` for a two-inhabitant type. That is a census bug, not a
+  corpus gap; fix the count, do not add inputs.
+* **D-31** — `uSubstring(int,int)` sits at 17 of 432 because `indexBoundaries()` is drawn for the
+  1-slot `at(int)`. A 2-slot product for the 2-slot operation is what closes it. H14 §5 already
+  records that the cell census will read near zero here until it is done.
+
+Each widening changes measured tallies, so under ground rule 4 each lands in its own commit with the
+before/after numbers in the message.
