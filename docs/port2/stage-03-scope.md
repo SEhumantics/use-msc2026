@@ -187,8 +187,8 @@ type-system work; §5 executes when vendoring does (B1).
 
 ## 5. The UUnlimitedNatural purge — recipe, and when it can run
 
-Decision 2026-08-18: **purge, not add.** §3 gives the reasons. This section gives the exact edit, and
-records that it **cannot execute yet** — `uDataTypes` has not been vendored (B1 is open), so this is a
+Decision 2026-08-18: **DECIDED — purge, not add** (user directive, "Purge it"). §3 gives the reasons.
+This section gives the exact edit, and records that it **cannot execute yet** — `uDataTypes` has not been vendored (B1 is open), so this is a
 vendoring-plan decision that lands when vendoring does.
 
 ### 5.1 Do not confuse the two types
@@ -425,3 +425,164 @@ Separate, smaller, and independent of SBoolean:
 
 Each widening changes measured tallies, so under ground rule 4 each lands in its own commit with the
 before/after numbers in the message.
+
+---
+
+## 8. Test design for the U-types — the general scheme
+
+§7 handled SBoolean because it had nothing. This section is the scheme for **all five**, and it exists
+because per-type boundary lists alone do not test the thing that makes a U-type a U-type.
+
+### 8.1 The shape of the problem
+
+Every U-type is a **pair**: a representative and a degree.
+
+| Type | Representative | Degree | Note |
+|---|---|---|---|
+| `UReal` | real | standard uncertainty ≥ 0 | normal standard deviation |
+| `UInteger` | integer | uncertainty | widens to `UReal` for comparison |
+| `UBoolean` | truth value | probability | **canonicalised** — see 8.3 |
+| `UString` | spelling | confidence | |
+| `SBoolean` | — | `(b, d, u, a)` on a simplex | 4 components, not 2 |
+
+So a unary operation has a **2-dimensional** input domain and a binary operation a **4-dimensional**
+one. A boundary list is a set of *points*; it says nothing about whether the two dimensions were ever
+varied against each other. That gap is where uncertainty-specific defects live, because the
+uncertainty-propagation rule is precisely the part that reads both dimensions at once.
+
+Current corpora are point lists (§7.1). This is the measurable weakness they share, and it is not
+fixed by making the lists longer.
+
+### 8.2 Rule 1 — vary the degree against the representative, not beside it
+
+For each type, the corpus must contain at least one **pair of inputs sharing a representative and
+differing only in degree**, and one sharing a degree and differing only in representative.
+
+Why it is not optional: an operation that silently drops the uncertainty component — returns the right
+representative with degree `0`, or copies the receiver's degree instead of propagating — agrees on
+every single-point corpus that never holds the representative fixed. This is the same species as
+D-15: the corpus, not the port, decides what can be seen.
+
+`uRealBoundaries()` has 22 entries and does contain such pairs; `uBooleanBoundaries()` at 9 is the
+thinnest. Each type's boundary set must be **audited for this property and the count reported**, not
+assumed.
+
+### 8.3 Rule 2 — the canonicalisation identities are test cases
+
+`UBoolean` canonicalises to one probability of truth: `UBoolean(false, 0.9)` becomes probability
+`0.1` (proposal §2, "Verified U-types fork/port facts"). So `UBoolean(false, p)` and
+`UBoolean(true, 1−p)` are **the same value reached by two constructions**.
+
+Both constructions must be in the corpus, and their results must be identical on every operation. A
+port that canonicalises on one path and not the other passes a corpus containing only one of them.
+The same obligation applies to `SBoolean`'s interned `TRUE`/`FALSE` (§7.2) — the non-interned twins in
+§7.4 exist for exactly this reason.
+
+### 8.4 Rule 3 — pairwise, not Cartesian
+
+Full Cartesian coverage of a binary operation over a 22-point corpus is 484 rows per operation, and
+`uSubstring(int,int)` shows where that leads: **17 measured rows of 432** (D-31). The tractable
+standard is **all-pairs over dimensions**: every pair of (dimension, equivalence-class) values appears
+together in at least one row.
+
+For a binary `UReal` operation the dimensions are ⟨receiver representative, receiver uncertainty,
+argument representative, argument uncertainty⟩. All-pairs over 4 dimensions of ~5 classes each is
+tens of rows, not hundreds — and it is a *stated, checkable* criterion, which a hand-picked list is
+not. This is the concrete form of H14's candidate C3, and D-31 is the standing evidence that the
+ad-hoc alternative under-covers by an order of magnitude.
+
+### 8.5 Rule 4 — metamorphic relations, which need no second source
+
+**This is the part that closes the SBoolean and UString blindspot without waiting for S9.** Each
+relation below is a property of the ported code checked against *itself*, so it yields evidence where
+there is no fork test and no ported counterpart yet:
+
+| # | Relation | Applies to | What it catches |
+|---|---|---|---|
+| M-1 | **Crisp embedding.** `op(U(x, 0), U(y, 0))` must carry the same representative as the crisp `op(x, y)`, degree `0` | UReal, UInteger, UBoolean, UString | a propagation rule that perturbs a certain input |
+| M-2 | **Degree monotonicity.** Raising an input's uncertainty must not lower the result's | UReal, UInteger | an inverted or dropped propagation term |
+| M-3 | **Canonicalisation.** `UBoolean(false, p)` ≡ `UBoolean(true, 1−p)` on every operation | UBoolean | 8.3 |
+| M-4 | **Widening agreement.** A `UInteger` operation and its `UReal` widening must agree where both are defined | UInteger | the documented widening (§2 of the proposal) |
+| M-5 | **Interning independence.** A value equal to `TRUE`/`FALSE` but not the interned instance behaves identically | SBoolean | identity-vs-equality comparison |
+| M-6 | **Simplex closure.** Any operation returning an `SBoolean` returns one satisfying `\|b+d+u−1\| ≤ 0.001` | SBoolean | a fusion operator that leaves the simplex |
+
+M-6 is worth singling out: SBoolean's 39 operations are mostly **fusion operators**, whose entire
+correctness condition is that they map opinions to opinions. Checking closure is a real oracle for all
+of them and costs one assertion per row. For a type with **zero** other evidence, that is the
+difference between "unverified" and "verified against its defining invariant."
+
+M-1..M-6 are ordinary JUnit tests in `use-core/src/test`, independent of the differential harness, and
+they do not need the historical jar.
+
+### 8.6 What this scheme still cannot see
+
+Unchanged from `foundation-verdict.md` §2.1 and restated so no figure travels without it: a defect
+reachable only at an input no corpus generates stays invisible, and every coverage figure here is
+**corpus- and seed-conditional**. All-pairs is a stated criterion, not a guarantee — it bounds the
+2-way interaction space, not the 3-way one. D-30 is not closed by any of this.
+
+---
+
+## 9. Impact on the thesis proposal
+
+Checked against `output/latex/robust_utype_model_finding_proposal.tex` (2571 lines) on 2026-08-18.
+
+### 9.1 UUnlimitedNatural — no change required, one addition recommended
+
+`grep -n "UnlimitedNatural\|UUnlimited"` over the proposal returns **zero lines**. Nothing in the aim,
+the research questions, the version-1 fragment, the studies or the success criteria depends on it, so
+the §5 purge invalidates no claim.
+
+The proposal already carries **independent corroboration** of §6's finding, from a different file than
+the one measured here: §2 records that `TypeConverter.convert(...)`
+(`ModelValidator/trunk/src/org/tzi/use/kodkod/transform/TypeConverter.java:63-76`) is a six-arm
+dispatch — "void, **the four OCL primitives sharing one arm**, enum, class, `OclAny`, collection".
+Four, not five. So the Kodkod baseline excludes `UnlimitedNatural` at the *type* layer as well as at
+the expression layer (`SimpleExpressionVisitor.java:304`). Two independent sites, same conclusion.
+
+**Recommended addition, one line.** The version-1 fragment (§4) states an "Outside version 1" column
+per area. `UnlimitedNatural` should be named there explicitly under "OCL core". Silence invites the
+question; an explicit exclusion answers it — and the answer is now strong, because the capability
+baseline does not support it either, so nothing is conceded in the comparison. This is an addition for
+completeness, not a correction.
+
+### 9.2 SBoolean — a genuine scope tension, for a human to settle
+
+`SBoolean` appears **twice in 2571 lines**: once at `:1040`, in the version-1 fragment's *"Outside
+version 1"* column, and once at `:2084` in related work. Against that, "four U-types" / "four-type" /
+"all four" appears **28 times**, Study A is *"four-type semantic agreement"*, and success criterion 1
+reads "All four U-types are synthesized and reconstructed".
+
+**The proposal is consistently a four-type thesis. SBoolean is explicitly out of version 1.**
+
+The port decision (B2) is *full port*, which makes S9 = SBoolean: **1502 lines, 39 operations, zero
+fork tests, and new harness marshalling** — the single largest cost item in the port — supporting **no
+version-1 thesis claim**.
+
+Both positions are defensible and this is not the porter's call:
+
+* **Keep the full port.** The port is the semantic oracle and a faithful oracle is hygiene; selective
+  porting is what made the previous attempt unauditable. SBoolean is also the natural version-2 target.
+* **Descope S9.** No version-1 claim needs it, and the proposal already excludes it in writing.
+
+**Recommendation: keep the port, but split the cost and do not let it gate anything.** The harness
+work (§7.5, C-1..C-5, ~110 lines) is cheap and should proceed — it makes SBoolean drivable and lets the
+historical reference corpus be recorded. The 1502-line port itself stays last in the order and is the
+natural thing to defer under time pressure. Nothing else in S3–S8 depends on it.
+
+Note that §8.5's M-5 and M-6 raise SBoolean from *zero* evidence to *invariant-checked* for a few
+dozen lines of test, independent of both the fork and S9. That materially changes the descope
+calculus: the cheap part of SBoolean assurance no longer depends on the expensive part.
+
+### 9.3 The Z3 / Kodkod framing is already correct
+
+No change needed. §8 already states: "Only Z3 is implemented. The baselines compare semantics and
+capabilities, not solver brands," and "The current Model Validator remains a capability baseline."
+Crisp-type support evaluated against the Kodkod finder is consistent with that as written.
+
+One consequence worth making explicit somewhere in §8: because the baseline drops U-typed attributes
+**silently** (`TypeConverter` logs and returns `null`; `ModelTransformator.java:141-151` drops the
+attribute with no `else`), a capability comparison must report *what the baseline silently omitted*,
+not merely that it returned an answer. The proposal already names this — "a silent drop with a logged
+cause, which is worse for this thesis than a crash" — but it appears in §2 as a provenance fact rather
+than in §8 as an evaluation obligation.
