@@ -92,6 +92,28 @@ public interface Type extends BufferedToString {
     boolean isKindOfReal(VoidHandling h);
 
     boolean isTypeOfReal();
+
+    // --- uncertain basic types -------------------------------------------------
+
+    boolean isKindOfUReal(VoidHandling h);
+
+    boolean isTypeOfUReal();
+
+    boolean isKindOfUInteger(VoidHandling h);
+
+    boolean isTypeOfUInteger();
+
+    boolean isKindOfUBoolean(VoidHandling h);
+
+    boolean isTypeOfUBoolean();
+
+    boolean isKindOfUString(VoidHandling h);
+
+    boolean isTypeOfUString();
+
+    boolean isKindOfSBoolean(VoidHandling h);
+
+    boolean isTypeOfSBoolean();
     
     boolean isKindOfString(VoidHandling h);
 

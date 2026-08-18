@@ -46,9 +46,19 @@ public final class TypeFactory {
     private static final BooleanType booleanType = new BooleanType();
     private static final OclAnyType oclAnyType = new OclAnyType();
     private static final VoidType voidType = new VoidType();
+    private static final URealType uRealType = new URealType();
+    private static final UIntegerType uIntegerType = new UIntegerType();
+    private static final UBooleanType uBooleanType = new UBooleanType();
+    private static final UStringType uStringType = new UStringType();
+    private static final SBooleanType sBooleanType = new SBooleanType();
     
     static {
     	buildInTypesMap.put("Integer", integerType);
+    	buildInTypesMap.put("UReal", uRealType);
+    	buildInTypesMap.put("UInteger", uIntegerType);
+    	buildInTypesMap.put("UBoolean", uBooleanType);
+    	buildInTypesMap.put("UString", uStringType);
+    	buildInTypesMap.put("SBoolean", sBooleanType);
     	buildInTypesMap.put("UnlimitedNatural", unlimitedNaturalType);
     	buildInTypesMap.put("String", stringType);
     	buildInTypesMap.put("Boolean", booleanType);
@@ -73,6 +83,26 @@ public final class TypeFactory {
     
     public static RealType mkReal() {
         return realType;
+    }
+
+    public static URealType mkUReal() {
+        return uRealType;
+    }
+
+    public static UIntegerType mkUInteger() {
+        return uIntegerType;
+    }
+
+    public static UBooleanType mkUBoolean() {
+        return uBooleanType;
+    }
+
+    public static UStringType mkUString() {
+        return uStringType;
+    }
+
+    public static SBooleanType mkSBoolean() {
+        return sBooleanType;
     }
 
     public static StringType mkString() {
