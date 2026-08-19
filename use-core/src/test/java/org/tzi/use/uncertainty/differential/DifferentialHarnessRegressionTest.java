@@ -146,16 +146,28 @@ class DifferentialHarnessRegressionTest {
     @DisplayName("a receiver type the harness cannot marshal reports UNSUPPORTED, not agreement")
     void unmarshallableReceiverTypeIsUnsupported() {
         try (HistoricalOracle oracle = HistoricalOracle.open()) {
-            assertFalse(oracle.supports(UOp.binary("SBooleanValue", "and")),
-                    "SBooleanValue.and exists on the historical class, but the harness has no "
-                            + "SBoolean marshalling, so it must not claim support");
-            assertFalse(oracle.supports(UOp.unary("SBooleanValue", "not")));
+            // Re-pointed in S3. This assertion used to name SBooleanValue, which the harness could
+            // not marshal; it now can (UValue.Kind.SBOOLEAN + the SBOOLEAN arm of toHistorical), so
+            // the invariant is carried by a receiver type that is still outside
+            // MARSHALLABLE_RECEIVERS. SetValue.includes(Value) exists on the historical class --
+            // the point of the test is that the METHOD existing is not enough, the RECEIVER must
+            // also be constructible.
+            assertFalse(oracle.supports(UOp.binary("SetValue", "includes")),
+                    "SetValue.includes exists on the historical class, but the harness cannot "
+                            + "construct a SetValue receiver, so it must not claim support");
+            assertFalse(oracle.supports(UOp.binary("BagValue", "count")));
             assertTrue(oracle.supports(UOp.binary("URealValue", "add")),
                     "a receiver type the harness does marshal must still be supported");
 
+            // The S3 flip: SBooleanValue is now marshallable, so its operations must be reachable.
+            // Before S3 all 39 of them reported UNSUPPORTED and had no evidence source at all.
+            assertTrue(oracle.supports(UOp.binary("SBooleanValue", "and")),
+                    "SBooleanValue is marshallable since S3 and must now be supported");
+            assertTrue(oracle.supports(UOp.unary("SBooleanValue", "not")));
+
             try (StubCandidate stub = StubCandidate.faithful()) {
                 DifferentialSweep.Result result = new DifferentialSweep(oracle, stub, 1L)
-                        .sweepBinary(UOp.binary("SBooleanValue", "and"),
+                        .sweepBinary(UOp.binary("SetValue", "includes"),
                                 List.of(UValue.uBoolean(true, 0.5)), List.of(UValue.uBoolean(false, 0.5)));
                 assertEquals(DiffVerdict.UNSUPPORTED, result.rows().get(0).verdict());
                 assertEquals(1, result.disagreements().size());
@@ -169,15 +181,18 @@ class DifferentialHarnessRegressionTest {
     @Test
     @DisplayName("D-3: the UNSUPPORTED note states what is true, not 'does not implement'")
     void unsupportedNoteIsNotAFalseStatement() throws Exception {
-        UOp and = UOp.binary("SBooleanValue", "and");
+        // Re-pointed in S3: SBooleanValue used to be the unmarshallable exemplar, and now it is
+        // marshallable. SetValue has the same shape -- the method exists on the historical class,
+        // the receiver cannot be constructed -- which is the distinction this test exists to check.
+        UOp and = UOp.binary("SetValue", "includes");
         try (HistoricalOracle oracle = HistoricalOracle.open();
              StubCandidate stub = StubCandidate.faithful()) {
 
             // The historical class really does declare it. If this ever stops being true the note
             // below stops being the correct note, so it is asserted rather than assumed.
-            assertNotNull(oracle.historicalClass("SBooleanValue")
-                            .getMethod("and", oracle.historicalClass("Value")),
-                    "sanity: the historical SBooleanValue declares and(Value)");
+            assertNotNull(oracle.historicalClass("SetValue")
+                            .getMethod("includes", oracle.historicalClass("Value")),
+                    "sanity: the historical SetValue declares includes(Value)");
 
             DiffRow row = new DifferentialSweep(oracle, stub, 1L)
                     .sweepBinary(and, List.of(UValue.uBoolean(true, 0.5)),
@@ -191,7 +206,7 @@ class DifferentialHarnessRegressionTest {
             assertFalse(row.note().contains("historical does not implement"),
                     "the harness wrote a demonstrably false statement into its own evidence file: "
                             + row.note());
-            assertTrue(row.note().contains("cannot marshal a SBooleanValue receiver"), row.note());
+            assertTrue(row.note().contains("cannot marshal a SetValue receiver"), row.note());
             assertTrue(row.note().contains("limit of the instrument"), row.note());
 
             // The other reason must still be reported as the other reason.
@@ -569,6 +584,7 @@ class DifferentialHarnessRegressionTest {
         samples.put(UValue.Kind.BOOLEAN, UValue.bool(true));
         samples.put(UValue.Kind.STRING, UValue.string("abc"));
         samples.put(UValue.Kind.SEQUENCE, UValue.sequence(List.of(UValue.integer(1))));
+        samples.put(UValue.Kind.SBOOLEAN, UValue.sBoolean(0.3, 0.2, 0.5, 0.5));
         samples.put(UValue.Kind.NULL, UValue.nullValue());
         samples.put(UValue.Kind.VOID, UValue.voidValue());
         samples.put(UValue.Kind.OPAQUE, UValue.opaque("uDataTypes.SBoolean", "t=1.0,f=0.0"));
@@ -1644,13 +1660,13 @@ class DifferentialHarnessRegressionTest {
              StubCandidate stub = StubCandidate.faithful()) {
 
             DiffRow row = new DifferentialSweep(oracle, stub, 1L)
-                    .sweepBinary(UOp.binary("SBooleanValue", "and"),
+                    .sweepBinary(UOp.binary("SetValue", "includes"),
                             List.of(UValue.uBoolean(true, 0.5)), List.of(UValue.uBoolean(false, 0.5)))
                     .rows().get(0);
 
             assertTrue(row.note().startsWith("no measurement. reference: "), row.note());
             assertTrue(row.note().contains(" / subject: "), row.note());
-            assertTrue(row.note().contains("cannot marshal a SBooleanValue receiver"), row.note());
+            assertTrue(row.note().contains("cannot marshal a SetValue receiver"), row.note());
             assertTrue(row.note().contains("implements only"), row.note());
         }
     }

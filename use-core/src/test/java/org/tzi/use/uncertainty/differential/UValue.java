@@ -150,6 +150,17 @@ public final class UValue {
         UBOOLEAN,
         /** {@code UStringValue}: value + confidence. */
         USTRING,
+        /**
+         * {@code SBooleanValue}: a subjective-logic opinion, four components
+         * {@code (belief, disbelief, uncertainty, apriori)} rather than the two every other
+         * uncertain kind carries.
+         *
+         * <p>The components ride in {@link UValue#elements} as four {@link #REAL} values, in that
+         * fixed order. That is deliberate: widening the private constructor would have touched ten
+         * call sites on a file three independent reviews have already audited, for no gain the
+         * existing field could not provide.
+         */
+        SBOOLEAN,
         /** {@code RealValue}. */
         REAL,
         /** {@code IntegerValue}. */
@@ -287,6 +298,20 @@ public final class UValue {
     public static UValue uString(String value, double confidence) {
         return new UValue(Kind.USTRING, Double.NaN, 0, false, Objects.requireNonNull(value, "value"),
                 confidence, null, VALUE_PACKAGE + "UStringValue");
+    }
+
+    /**
+     * A subjective-logic opinion. The historical side validates
+     * {@code |b + d + u - 1| <= 0.001} with each component in {@code [0,1]}
+     * ({@code uDataTypes/SBoolean.java:43-52}); this factory does <em>not</em> pre-validate, because
+     * rejecting an invalid opinion here would hide the historical side's own rejection behind a
+     * harness error instead of measuring it.
+     */
+    public static UValue sBoolean(double belief, double disbelief, double uncertainty,
+                                  double apriori) {
+        return new UValue(Kind.SBOOLEAN, Double.NaN, 0, false, null, Double.NaN,
+                List.of(real(belief), real(disbelief), real(uncertainty), real(apriori)),
+                VALUE_PACKAGE + "SBooleanValue");
     }
 
     public static UValue real(double value) {
@@ -519,6 +544,31 @@ public final class UValue {
         return elements;
     }
 
+    /** Subjective-logic belief mass. */
+    public double belief() {
+        requireKind(Kind.SBOOLEAN);
+        return elements.get(0).number;
+    }
+
+    /** Subjective-logic disbelief mass. */
+    public double disbelief() {
+        requireKind(Kind.SBOOLEAN);
+        return elements.get(1).number;
+    }
+
+    /** Subjective-logic uncertainty mass. Distinct from {@link #uncertainty()}, which is the
+     *  two-component kinds' degree and is not applicable to an opinion. */
+    public double uncertaintyMass() {
+        requireKind(Kind.SBOOLEAN);
+        return elements.get(2).number;
+    }
+
+    /** Subjective-logic base rate (prior probability of truth). Not constrained by the sum. */
+    public double apriori() {
+        requireKind(Kind.SBOOLEAN);
+        return elements.get(3).number;
+    }
+
     private void requireKind(Kind... allowed) {
         for (Kind k : allowed) {
             if (kind == k) {
@@ -555,6 +605,11 @@ public final class UValue {
                 return "UBOOLEAN(" + flag + "," + Double.toString(aux) + ")";
             case USTRING:
                 return "USTRING(" + quote(text) + "," + Double.toString(aux) + ")";
+            case SBOOLEAN:
+                return "SBOOLEAN(" + Double.toString(elements.get(0).number)
+                        + "," + Double.toString(elements.get(1).number)
+                        + "," + Double.toString(elements.get(2).number)
+                        + "," + Double.toString(elements.get(3).number) + ")";
             case REAL:
                 return "REAL(" + Double.toString(number) + ")";
             case INTEGER:

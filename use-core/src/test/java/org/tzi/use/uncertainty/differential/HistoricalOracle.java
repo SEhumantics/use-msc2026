@@ -71,8 +71,10 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li><b>One addressable package.</b> {@link #VALUE_PKG} is the only package
  *       {@link #load(String)} will resolve in, so {@code org.tzi.use.uml.ocl.type.*} and
  *       {@code uDataTypes.*} cannot be named as receivers or isolation-checked, by design.</li>
- *   <li><b>Eight marshallable receiver types.</b> {@link #MARSHALLABLE_RECEIVERS}; every other
- *       receiver type, {@code SBooleanValue} included, reports {@link DiffVerdict#UNSUPPORTED}.</li>
+ *   <li><b>Nine marshallable receiver types.</b> {@link #MARSHALLABLE_RECEIVERS}; every other
+ *       receiver type reports {@link DiffVerdict#UNSUPPORTED}. {@code SBooleanValue} joined the set
+ *       in S3; it was deliberately absent before that, which left all 39 of its operations with no
+ *       evidence source of any kind.</li>
  *   <li><b>Harness failures are never measurements.</b> Anything the harness itself cannot do
  *       raises {@link HarnessMarshallingException} and is scored
  *       {@link DiffVerdict#HARNESS_ERROR}, which is not an agreement.</li>
@@ -127,12 +129,14 @@ public final class HistoricalOracle implements Candidate {
      *
      * <p>This set must stay in step with the {@code switch} in {@link #toHistorical(UValue)}: it is
      * the whole basis on which {@link #supports(UOp)} decides that an operation is reachable.
-     * {@code SBooleanValue} is deliberately absent — the harness has no {@code SBoolean} marshalling
-     * and no {@code UValue.Kind} for it, so all 39 of its operations must report
-     * {@link DiffVerdict#UNSUPPORTED} rather than fail invisibly inside the marshaller.
+     * <p>{@code SBooleanValue} was deliberately absent until S3, because the harness had no
+     * {@code SBoolean} marshalling and no {@link UValue.Kind} for it, and an operation the harness
+     * cannot drive must report {@link DiffVerdict#UNSUPPORTED} rather than fail invisibly inside the
+     * marshaller. Both gaps are now closed ({@link UValue.Kind#SBOOLEAN}, and the {@code SBOOLEAN}
+     * arm of {@link #toHistorical(UValue)}), so its 39 operations are reachable.
      */
     private static final Set<String> MARSHALLABLE_RECEIVERS = Set.of(
-            "URealValue", "UIntegerValue", "UBooleanValue", "UStringValue",
+            "URealValue", "UIntegerValue", "UBooleanValue", "UStringValue", "SBooleanValue",
             "RealValue", "IntegerValue", "BooleanValue", "StringValue");
 
     /** Recursion limit for {@link #opaqueRepresentation(Object)}. */
@@ -678,6 +682,24 @@ public final class HistoricalOracle implements Candidate {
                 case USTRING:
                     return ctor("UStringValue", String.class, double.class)
                             .newInstance(value.asString(), value.confidence());
+                case SBOOLEAN: {
+                    // The 4-arg SBooleanValue constructor is package-private
+                    // (FORK/uml/ocl/value/SBooleanValue.java:18), so the documented public Builder
+                    // is used rather than setAccessible -- the same choice already made for
+                    // UBooleanValue above. Builder.build() INTERNS the two absolute opinions:
+                    // (1,0,0,1) returns the shared TRUE and (0,1,0,1) returns FALSE, so those two
+                    // rows take a different code path from every other opinion. That is a property
+                    // under test, not one to bypass.
+                    Class<?> builder = load("SBooleanValue$Builder");
+                    Object b0 = builder.getConstructor().newInstance();
+                    Object b1 = builder.getMethod("belief", double.class).invoke(b0, value.belief());
+                    Object b2 = builder.getMethod("disbelief", double.class)
+                            .invoke(b1, value.disbelief());
+                    Object b3 = builder.getMethod("uncertainty", double.class)
+                            .invoke(b2, value.uncertaintyMass());
+                    Object b4 = builder.getMethod("agent", double.class).invoke(b3, value.apriori());
+                    return builder.getMethod("build").invoke(b4);
+                }
                 case REAL:
                     return ctor("RealValue", double.class).newInstance(value.asDouble());
                 case INTEGER:

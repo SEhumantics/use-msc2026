@@ -119,6 +119,72 @@ public final class InputGenerator {
 
     // ------------------------------------------------------------------ corpora
 
+    /**
+     * Subjective-logic opinions. Boundaries first, then {@code randomCount} random opinions drawn
+     * <em>on the simplex</em>.
+     *
+     * <p>Sampling four independent components would be useless: the historical constructor requires
+     * {@code |b + d + u - 1| <= 0.001} ({@code uDataTypes/SBoolean.java:43-52}), which a random
+     * 4-tuple essentially never satisfies, so nearly every row would throw on both sides. Since D2
+     * that scores {@link DiffVerdict#BOTH_THREW} rather than agreement, so it would fail visibly --
+     * but it would still be zero evidence. The three masses are therefore drawn and normalised, and
+     * the base rate {@code a} is drawn independently on {@code [0,1]} because it is not in the sum.
+     */
+    public List<UValue> sBooleanCorpus(int randomCount) {
+        return corpus(sBooleanBoundaries(), randomCount, this::randomSBoolean);
+    }
+
+    /** One opinion, uniformly on the simplex for (b,d,u), independently on [0,1] for a. */
+    public UValue randomSBoolean() {
+        double b = random.nextDouble(), d = random.nextDouble(), u = random.nextDouble();
+        double sum = b + d + u;
+        if (sum == 0.0) {
+            b = 1.0; d = 0.0; u = 0.0; sum = 1.0;
+        }
+        return UValue.sBoolean(b / sum, d / sum, u / sum, random.nextDouble());
+    }
+
+    /**
+     * SBoolean boundaries. Every named predicate the fork exposes gets at least one witness --
+     * otherwise that predicate is single-valued over the corpus and gives agreement away for free
+     * (D-15) -- plus the two edges of the {@code 0.001} sum tolerance, on both sides of it.
+     */
+    public static List<UValue> sBooleanBoundaries() {
+        List<UValue> out = new ArrayList<>();
+        // absolute true / false. Builder.build() INTERNS these two: it returns the shared TRUE and
+        // FALSE constants rather than a fresh instance, so they take a different code path.
+        out.add(UValue.sBoolean(1.0, 0.0, 0.0, 1.0));
+        out.add(UValue.sBoolean(0.0, 1.0, 0.0, 1.0));
+        // the non-interned twins: identical masses, base rate 0.5, so NOT the interned instances.
+        // These are what catch an implementation comparing by identity rather than by value.
+        out.add(UValue.sBoolean(1.0, 0.0, 0.0, 0.5));
+        out.add(UValue.sBoolean(0.0, 1.0, 0.0, 0.5));
+        // vacuous / maximised uncertainty
+        out.add(UValue.sBoolean(0.0, 0.0, 1.0, 0.5));
+        out.add(UValue.sBoolean(0.0, 0.0, 1.0, 0.0));
+        out.add(UValue.sBoolean(0.0, 0.0, 1.0, 1.0));
+        // dogmatic (u == 0) but not absolute
+        out.add(UValue.sBoolean(0.5, 0.5, 0.0, 0.5));
+        out.add(UValue.sBoolean(0.25, 0.75, 0.0, 0.5));
+        // generic uncertain opinions
+        out.add(UValue.sBoolean(0.3, 0.2, 0.5, 0.5));
+        out.add(UValue.sBoolean(0.6, 0.1, 0.3, 0.9));
+        // base-rate extremes against a fixed mass triple: `a` is not in the sum, so varying it is
+        // free discriminating power for baseRate/projection/applyOn.
+        out.add(UValue.sBoolean(0.3, 0.2, 0.5, 0.0));
+        out.add(UValue.sBoolean(0.3, 0.2, 0.5, 1.0));
+        // the 0.001 tolerance band: these construct
+        out.add(UValue.sBoolean(0.3005, 0.2, 0.5, 0.5));
+        out.add(UValue.sBoolean(0.2995, 0.2, 0.5, 0.5));
+        // just outside it: these must throw on BOTH sides
+        out.add(UValue.sBoolean(0.3015, 0.2, 0.5, 0.5));
+        out.add(UValue.sBoolean(0.2985, 0.2, 0.5, 0.5));
+        // out of range in a single component
+        out.add(UValue.sBoolean(-0.1, 0.6, 0.5, 0.5));
+        out.add(UValue.sBoolean(0.3, 0.2, 0.5, 1.5));
+        return out;
+    }
+
     /** Boundaries first (fixed order), then {@code randomCount} random UReals. */
     public List<UValue> uRealCorpus(int randomCount) {
         return corpus(uRealBoundaries(), randomCount, this::randomUReal);

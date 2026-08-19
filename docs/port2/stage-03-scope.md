@@ -388,15 +388,15 @@ witness, or that predicate's operations are single-valued and give agreement awa
 
 The last row is the one that catches an implementation that compares by identity rather than by value.
 
-### 7.5 Harness changes required
+### 7.5 Harness changes required — **ALL FIVE DONE 2026-08-18**
 
 | # | File | Change |
 |---|---|---|
-| C-1 | `UValue.java` | `Kind.SBOOLEAN`; a 4-component factory. **Do not widen the private constructor** — it has ten call sites on an audited file. Carry the components in the existing `elements` list as four `REAL` values, and give `canonical()` an `SBOOLEAN` branch. Type-bearing per D-18. |
-| C-2 | `HistoricalOracle.java` | `case SBOOLEAN` in `toHistorical`, via the Builder of §7.2 — never `setAccessible`. |
-| C-3 | `HistoricalOracle.java` | add `"SBooleanValue"` to `MARSHALLABLE_RECEIVERS` (`:134-136`). The comment at `:128` requires this set to stay in step with the `toHistorical` switch, so C-2 and C-3 land together or neither. |
-| C-4 | `InputGenerator.java` | `sBooleanBoundaries()` per §7.4 and `sBooleanCorpus(int)` per §7.3 item 3. |
-| C-5 | `DifferentialHarnessRegressionTest.java:149` | invert the `assertFalse(oracle.supports(...))` pin. Same commit as C-2/C-3, else the suite pins the blindspot open. |
+| C-1 ✅ | `UValue.java` | `Kind.SBOOLEAN`; a 4-component factory. **Do not widen the private constructor** — it has ten call sites on an audited file. Carry the components in the existing `elements` list as four `REAL` values, and give `canonical()` an `SBOOLEAN` branch. Type-bearing per D-18. |
+| C-2 ✅ | `HistoricalOracle.java` | `case SBOOLEAN` in `toHistorical`, via the Builder of §7.2 — never `setAccessible`. |
+| C-3 ✅ | `HistoricalOracle.java` | add `"SBooleanValue"` to `MARSHALLABLE_RECEIVERS` (`:134-136`). The comment at `:128` requires this set to stay in step with the `toHistorical` switch, so C-2 and C-3 land together or neither. |
+| C-4 ✅ | `InputGenerator.java` | `sBooleanBoundaries()` per §7.4 and `sBooleanCorpus(int)` per §7.3 item 3. |
+| C-5 ✅ | `DifferentialHarnessRegressionTest.java:149` | invert the `assertFalse(oracle.supports(...))` pin. Same commit as C-2/C-3, else the suite pins the blindspot open. |
 
 Results need no work: `fromHistorical` already routes an unmodelled `Value` to `Kind.OPAQUE` through
 `opaqueRepresentation`, which rebuilds from declared fields and so is not subject to the `%5.3f`

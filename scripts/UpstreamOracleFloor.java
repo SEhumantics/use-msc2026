@@ -236,6 +236,10 @@ public class UpstreamOracleFloor {
     // methods — TupleTypeSupertypeCostTest — collected in BOTH modes. use-core/surefire goes
     // 9/85 -> 10/89 (default) and 42/356 -> 43/360 (oracle). Raised in the same commit that
     // grows the suite, per harness-contract.md sec. 0.1.
+    //
+    // RE-PINNED 2026-08-18 (Track B, SBoolean marshalling). Adds ONE Jupiter class with FOUR
+    // methods — SBooleanMarshallingTest — collected in BOTH modes. use-core/surefire goes
+    // 10/89 -> 11/93 (default) and 43/360 -> 44/364 (oracle).
     // Floors are >= : the suite may GROW, it may never shrink. No floor is 0 and no floor
     // may be lowered to make a run pass — see harness-contract.md sec. 8 step 7 clause 1,
     // "Do not lower the floor."
@@ -243,13 +247,13 @@ public class UpstreamOracleFloor {
     record Floor(int classes, int methods) { }
 
     static final Map<String, Floor> ORACLE = Map.of(
-            "use-core/surefire", new Floor(43, 360),
+            "use-core/surefire", new Floor(44, 364),
             "use-gui/surefire", new Floor(8, 17),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
 
     static final Map<String, Floor> DEFAULT = Map.of(
-            "use-core/surefire", new Floor(10, 89),
+            "use-core/surefire", new Floor(11, 93),
             "use-gui/surefire", new Floor(1, 1),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
