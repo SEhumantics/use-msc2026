@@ -103,6 +103,20 @@ public abstract class TypeImpl implements Type {
         	return null;
         }
         
+        // A tuple type's supertype set contains only tuple types, plus itself and OclAny --
+        // genAllSuperTypes (TupleType.java) constructs nothing else. A non-tuple's supertype set
+        // never contains a tuple. So the intersection below is provably exactly {OclAny} whenever
+        // the argument is a tuple and the receiver is not, and the answer is OclAny.
+        //
+        // Short-circuiting it is not merely an optimisation of a rare case: that intersection
+        // materialises the argument's ENTIRE supertype set, which is exponential in tuple arity
+        // (5^n+1 after the uncertain lattice; measured 390,626 entries and ~31 s at arity 8).
+        // TupleType overrides this method with a part-wise computation, so `this` is never a
+        // tuple here; the guard is defensive.
+        if (type.isTypeOfTupleType() && !this.isTypeOfTupleType()) {
+            return TypeFactory.mkOclAny();
+        }
+
         // determine common supertypes = intersection of all
         // supertypes of all elements
         Set<Type> cs = new HashSet<Type>();
