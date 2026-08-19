@@ -4,10 +4,13 @@ import org.tzi.use.uml.ocl.expr.EvalContext;
 import org.tzi.use.uml.ocl.type.Type;
 import org.tzi.use.uml.ocl.type.Type.VoidHandling;
 import org.tzi.use.uml.ocl.type.TypeFactory;
+import org.tzi.use.uml.ocl.type.UncertainType;
 import org.tzi.use.uml.ocl.value.BooleanValue;
 import org.tzi.use.uml.ocl.value.IntegerValue;
 import org.tzi.use.uml.ocl.value.RealValue;
 import org.tzi.use.uml.ocl.value.StringValue;
+import org.tzi.use.uml.ocl.value.UIntegerValue;
+import org.tzi.use.uml.ocl.value.URealValue;
 import org.tzi.use.uml.ocl.value.UnlimitedNaturalValue;
 import org.tzi.use.uml.ocl.value.Value;
 
@@ -65,12 +68,25 @@ abstract class ArithOperation extends OpGeneric {
 		if (params.length == 2) {
 			if (params[0].isTypeOfInteger() && params[1].isTypeOfInteger())
 				return TypeFactory.mkInteger();
+			else if (isArgIntegerOrReal(params[0]) && isArgIntegerOrReal(params[1]))
+				return TypeFactory.mkReal();
+			else if (params[0].getLeastCommonSupertype(params[1]).isTypeOfUInteger())
+				return TypeFactory.mkUInteger();
 			else if (params[0].isKindOfNumber(VoidHandling.INCLUDE_VOID)
 					&& params[1].isKindOfNumber(VoidHandling.INCLUDE_VOID))
-				return TypeFactory.mkReal();
+				return TypeFactory.mkUReal();
 		}
 		return null;
 	}
+
+	protected boolean isArgIntegerOrReal(Type arg) {
+		return arg.isTypeOfInteger() || arg.isTypeOfReal();
+	}
+
+	protected boolean isValueIntegerOrReal(Value arg) {
+		return arg.isInteger() || arg.isReal();
+	}
+
 }
 
 //--------------------------------------------------------
@@ -91,24 +107,58 @@ final class Op_number_add extends ArithOperation {
 
 	@Override
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
-		if (args[0].isInteger() && args[1].isInteger()) {
-			int res = ((IntegerValue) args[0]).value()
-					+ ((IntegerValue) args[1]).value();
-			return IntegerValue.valueOf(res);
-		} else {
-			double d1;
-			double d2;
-			if (args[0].isInteger())
-				d1 = ((IntegerValue) args[0]).value();
-			else
-				d1 = ((RealValue) args[0]).value();
+		Value result;
 
-			if (args[1].isInteger())
-				d2 = ((IntegerValue) args[1]).value();
-			else
-				d2 = ((RealValue) args[1]).value();
-			return new RealValue(d1 + d2);
+		Type common = args[0].type().getLeastCommonSupertype(args[1].type());
+
+		if (common.isTypeOfInteger()) {
+			result = evalResultInteger(args);
 		}
+		else if (common.isTypeOfReal()) {
+			result = evalResultReal(args);
+		}
+		else if (common.isTypeOfUInteger()) {
+
+			if (args[0].isUInteger())
+				result = ((UIntegerValue) args[0]).add(args[1]);
+			else
+				result = ((UIntegerValue) args[1]).add(args[0]);
+		}
+		else
+			result = evalResultUReal(args);
+
+		return result;
+	}
+
+	private Value evalResultUReal(Value[] args) {
+		Value result;
+		URealValue a, b;
+
+		a = URealValue.valueOf(args[0]);
+		b = URealValue.valueOf(args[1]);
+
+		return a.add(b);
+	}
+
+	private Value evalResultReal(Value[] args) {
+		double d1;
+		double d2;
+		if (args[0].isInteger())
+			d1 = ((IntegerValue) args[0]).value();
+		else
+			d1 = ((RealValue) args[0]).value();
+
+		if (args[1].isInteger())
+			d2 = ((IntegerValue) args[1]).value();
+		else
+			d2 = ((RealValue) args[1]).value();
+		return new RealValue(d1 + d2);
+	}
+
+	private Value evalResultInteger(Value[] args) {
+		int res = ((IntegerValue) args[0]).value()
+				+ ((IntegerValue) args[1]).value();
+		return IntegerValue.valueOf(res);
 	}
 }
 
@@ -131,25 +181,60 @@ final class Op_number_sub extends ArithOperation {
 
 	@Override
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
-		if (args[0].isInteger() && args[1].isInteger()) {
-			int res = ((IntegerValue) args[0]).value()
-					- ((IntegerValue) args[1]).value();
-			return IntegerValue.valueOf(res);
-		} else {
-			double d1;
-			double d2;
-			if (args[0].isInteger())
-				d1 = ((IntegerValue) args[0]).value();
-			else
-				d1 = ((RealValue) args[0]).value();
+		Value result;
 
-			if (args[1].isInteger())
-				d2 = ((IntegerValue) args[1]).value();
-			else
-				d2 = ((RealValue) args[1]).value();
-			return new RealValue(d1 - d2);
+		Type common = args[0].type().getLeastCommonSupertype(args[1].type());
+
+		if (common.isTypeOfInteger()) {
+			result = evalResultInteger(args);
 		}
+		else if (common.isTypeOfReal()) {
+			result = evalResultReal(args);
+		}
+		else if (common.isTypeOfUInteger()) {
+
+			if (args[0].isUInteger())
+				result = ((UIntegerValue) args[0]).minus(args[1]);
+			else
+				result = ((UIntegerValue) args[1]).minus(args[0]).neg();
+		}
+		else
+			result = evalResultUReal(args);
+
+		return result;
 	}
+
+	private Value evalResultUReal(Value[] args) {
+		URealValue a, b, result;
+
+		a = URealValue.valueOf(args[0]);
+		b = URealValue.valueOf(args[1]);
+
+		return a.minus(b);
+	}
+
+	private Value evalResultReal(Value[] args) {
+		double d1;
+		double d2;
+		if (args[0].isInteger())
+			d1 = ((IntegerValue) args[0]).value();
+		else
+			d1 = ((RealValue) args[0]).value();
+
+		if (args[1].isInteger())
+			d2 = ((IntegerValue) args[1]).value();
+		else
+			d2 = ((RealValue) args[1]).value();
+		return new RealValue(d1 - d2);
+	}
+
+	private Value evalResultInteger(Value[] args) {
+		int res = ((IntegerValue) args[0]).value()
+				- ((IntegerValue) args[1]).value();
+		return IntegerValue.valueOf(res);
+	}
+
+
 }
 
 //--------------------------------------------------------
@@ -170,25 +255,59 @@ final class Op_number_mult extends ArithOperation {
 	}
 
 	@Override
-	public Value eval(EvalContext ctx, Value[] args, Type resultType) {		
-		if (args[0].isInteger() && args[1].isInteger()) {
-			int res = ((IntegerValue) args[0]).value()
-					* ((IntegerValue) args[1]).value();
-			return IntegerValue.valueOf(res);
-		} else {
-			double d1;
-			double d2;
-			if (args[0].isInteger())
-				d1 = ((IntegerValue) args[0]).value();
-			else
-				d1 = ((RealValue) args[0]).value();
+	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
+		Value result;
 
-			if (args[1].isInteger())
-				d2 = ((IntegerValue) args[1]).value();
-			else
-				d2 = ((RealValue) args[1]).value();
-			return new RealValue(d1 * d2);
+		Type common = args[0].type().getLeastCommonSupertype(args[1].type());
+
+		if (common.isTypeOfInteger()) {
+			result = evalResultInteger(args);
 		}
+		else if (common.isTypeOfReal()) {
+			result = evalResultReal(args);
+		}
+		else if (common.isTypeOfUInteger()) {
+
+			if (args[0].isUInteger())
+				result = ((UIntegerValue) args[0]).mult(args[1]);
+			else
+				result = ((UIntegerValue) args[1]).mult(args[0]);
+		}
+		else
+			result = evalResultUReal(args);
+
+		return result;
+	}
+
+	private Value evalResultUReal(Value[] args) {
+		Value result;
+		URealValue a, b;
+
+		a = URealValue.valueOf(args[0]);
+		b = URealValue.valueOf(args[1]);
+
+		return a.mult(b);
+	}
+
+	private Value evalResultReal(Value[] args) {
+		double d1;
+		double d2;
+		if (args[0].isInteger())
+			d1 = ((IntegerValue) args[0]).value();
+		else
+			d1 = ((RealValue) args[0]).value();
+
+		if (args[1].isInteger())
+			d2 = ((IntegerValue) args[1]).value();
+		else
+			d2 = ((RealValue) args[1]).value();
+		return new RealValue(d1 * d2);
+	}
+
+	private Value evalResultInteger(Value[] args) {
+		int res = ((IntegerValue) args[0]).value()
+				* ((IntegerValue) args[1]).value();
+		return IntegerValue.valueOf(res);
 	}
 }
 
@@ -472,24 +591,49 @@ final class Op_number_max extends ArithOperation {
 
 	@Override
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
-		if (args[0].isInteger() && args[1].isInteger()) {
-			int res = Math.max(((IntegerValue) args[0]).value(),
-					((IntegerValue) args[1]).value());
-			return IntegerValue.valueOf(res);
-		} else {
-			double d1;
-			double d2;
-			if (args[0].isInteger())
-				d1 = ((IntegerValue) args[0]).value();
-			else
-				d1 = ((RealValue) args[0]).value();
+		Value value = null;
 
-			if (args[1].isInteger())
-				d2 = ((IntegerValue) args[1]).value();
-			else
-				d2 = ((RealValue) args[1]).value();
-			return new RealValue(Math.max(d1, d2));
+		if (args[0].isInteger() && args[1].isInteger()) {
+			value = evalIntegerResult(args);
 		}
+		else if (isValueIntegerOrReal(args[0]) && isValueIntegerOrReal(args[1])){
+			value = evalRealResult(args);
+		}
+		else { // UReal x (Integer + Real + UReal) or (Integer + Real + UReal) x UReal
+			value = evalURealResult(args);
+		}
+
+		return value;
+	}
+
+	private Value evalURealResult(Value[] args) {
+		URealValue result, ur1, ur2;
+
+		ur1 = URealValue.valueOf(args[0]);
+		ur2 = URealValue.valueOf(args[1]);
+
+		return ur1.max(ur2);
+	}
+
+	private Value evalRealResult(Value[] args) {
+		double d1;
+		double d2;
+		if (args[0].isInteger())
+			d1 = ((IntegerValue) args[0]).value();
+		else
+			d1 = ((RealValue) args[0]).value();
+
+		if (args[1].isInteger())
+			d2 = ((IntegerValue) args[1]).value();
+		else
+			d2 = ((RealValue) args[1]).value();
+		return new RealValue(Math.max(d1, d2));
+	}
+
+	private Value evalIntegerResult(Value[] args) {
+		int res = Math.max(((IntegerValue) args[0]).value(),
+				((IntegerValue) args[1]).value());
+		return IntegerValue.valueOf(res);
 	}
 }
 
@@ -517,24 +661,49 @@ final class Op_number_min extends ArithOperation {
 
 	@Override
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
-		if (args[0].isInteger() && args[1].isInteger()) {
-			int res = Math.min(((IntegerValue) args[0]).value(),
-					((IntegerValue) args[1]).value());
-			return IntegerValue.valueOf(res);
-		} else {
-			double d1;
-			double d2;
-			if (args[0].isInteger())
-				d1 = ((IntegerValue) args[0]).value();
-			else
-				d1 = ((RealValue) args[0]).value();
+		Value value = null;
 
-			if (args[1].isInteger())
-				d2 = ((IntegerValue) args[1]).value();
-			else
-				d2 = ((RealValue) args[1]).value();
-			return new RealValue(Math.min(d1, d2));
+		if (args[0].isInteger() && args[1].isInteger()) {
+			value = evalIntegerResult(args);
 		}
+		else if (isValueIntegerOrReal(args[0]) && isValueIntegerOrReal(args[1])){
+			value = evalRealResult(args);
+		}
+		else { // UReal x (Integer + Real + UReal) or (Integer + Real + UReal) x UReal
+			value = evalURealResult(args);
+		}
+
+		return value;
+	}
+
+	private Value evalURealResult(Value[] args) {
+		URealValue result, ur1, ur2;
+
+		ur1 = URealValue.valueOf(args[0]);
+		ur2 = URealValue.valueOf(args[1]);
+
+		return ur1.min(ur2);
+	}
+
+	private Value evalRealResult(Value[] args) {
+		double d1;
+		double d2;
+		if (args[0].isInteger())
+			d1 = ((IntegerValue) args[0]).value();
+		else
+			d1 = ((RealValue) args[0]).value();
+
+		if (args[1].isInteger())
+			d2 = ((IntegerValue) args[1]).value();
+		else
+			d2 = ((RealValue) args[1]).value();
+		return new RealValue(Math.min(d1, d2));
+	}
+
+	private Value evalIntegerResult(Value[] args) {
+		int res = Math.min(((IntegerValue) args[0]).value(),
+				((IntegerValue) args[1]).value());
+		return IntegerValue.valueOf(res);
 	}
 }
 
