@@ -74,12 +74,59 @@ produced a false `AGREE`.
 
 ---
 
-## 3. Three operations whose agreement is free, and are named as such
+## 3. Degeneracy — H15, closed
 
-`UStringValue.toBoolean()`, `toInteger()`, `toReal()` each produced **one** distinct reference value
-over the corpus. Their agreement is not evidence. They are listed in `FirstRealDifferentialTest.DEGENERATE`
-and the test **fails** if any other operation collapses to a single value — so this cannot grow
-silently. Widening the corpus for them is open work.
+Three operations agreed for free on the first run: `UStringValue.toBoolean/toInteger/toReal`, each
+with **one** distinct reference value.
+
+**The cause was the corpus, not the operations.** `uStringBoundaries()` held sixteen strings — `""`,
+`" "`, `"abc"`, tabs, quotes, unicode — and not one parsed as a boolean, an integer or a real. So
+`toBoolean()` could only ever answer false, and the other two could only ever throw, which they did
+on 20 of 22 rows. Signing them off as "genuinely single-valued" would have been wrong.
+
+Ten parseable spellings were added (`true`/`false`/`TRUE`, `0`/`42`/`-7`/`2147483647`,
+`3.14`/`-0.5`/`1e10`):
+
+| | before | after |
+|---|---|---|
+| `toBoolean()` | 1 | **2** — the whole Boolean codomain, so complete rather than improved |
+| `toInteger()` | 1 | **5** |
+| `toReal()` | 1 | **8** |
+| `uConcat()` | 373 | **863** (rows 484 → 1024) |
+
+### The one genuine exemption
+
+`UBooleanValue.value()` is single-point **by construction**, and no corpus can change it:
+
+```java
+// UBooleanValue.java:127-130, in valueOf(boolean, double)
+if (!value) { value = true; probability = 1 - probability; }
+```
+
+Every `UBooleanValue` reachable through the public factory canonicalises to *"true with probability
+p"*, so `value()` has one inhabitant. The information lives in `probability()`, which measures
+`distinctRef=10` over the same corpus. It is the sole entry in
+`FirstRealDifferentialTest.DEGENERATE`, with that reason written at the entry.
+
+That contrast is the point of the list: UString's three looked identical to this one and were not
+structural. **Widen the corpus first; exempt only what cannot be widened, in writing.**
+
+## 3a. D-52 — the type-token clause, now asserted
+
+`harness-contract.md` §7 required that the ported adapter *observe* the class of the object it
+returned rather than let a factory assume it, and made `javaTypeMismatchCount() == 0` an S4 gate
+clause. Until S4 it could not be asserted: there was no ported object to observe.
+
+`PortedCandidate` calls `UValue.observedFrom(returned)` on every result. Measured across all
+operations, including the primitive-returning accessors the contract names specifically —
+`value()`, `uncertainty()`, `probability()`, `confidence()`, where reflection hands back a boxed
+`java.lang.Double`/`Integer`/`Boolean` rather than a `Value`:
+
+**`java-type mismatches: NONE`.**
+
+The contract records that a factory-typed adapter measures **3,445** such rows across **182 of 285**
+operations *from a port with no defect in it*. Zero is therefore a statement about the adapter, and
+the assertion is now a clause in `FirstRealDifferentialTest` rather than a line in a report.
 
 ---
 
@@ -99,11 +146,9 @@ only one side existed.
 
 ## 5. Open
 
-* **`UStringValue.toBoolean/toInteger/toReal`** — degenerate corpora (§3).
 * **The remaining operation surface.** 39 operations are measured here; the full census is 285. The
   rest are S5–S8.
 * **`URealValue.compareTo` carries dead code** — a second, unreachable `else if (o instanceof
   URealValue)`. Ported as-is; it belongs on the `b7-fix-plan.md` ledger with its own justification.
-* **D-52** — with the ported type token now genuinely *observed* rather than assumed, the S4
-  obligation in `harness-contract.md` §7 to turn `javaTypeMismatchCount()` back into a gate clause is
-  now actionable.
+* **The printing corpus.** Shared opaque rendering means print fidelity is *not* established by any
+  figure here; it remains a separate obligation (`adaptation/05-printing-corpus.md`).

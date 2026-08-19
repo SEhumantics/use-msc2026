@@ -40,10 +40,25 @@ public class FirstRealDifferentialTest {
      * evidence. Widen the corpus first; only exempt an operation whose codomain is genuinely a
      * single point, and say why in writing.
      */
-    private static final java.util.Set<String> DEGENERATE = java.util.Set.of();
+    private static final java.util.Set<String> DEGENERATE = java.util.Set.of(
+            // GENUINELY single-point, and the only entry that has earned its place.
+            //
+            // UBooleanValue.valueOf(boolean,double) canonicalises every opinion to "true with
+            // probability p":
+            //     if (!value) { value = true; probability = 1 - probability; }
+            // (UBooleanValue.java:127-130). So no UBooleanValue reachable through the public
+            // factory has value() == false, and value() has ONE inhabitant by construction. No
+            // corpus can widen it; the information lives entirely in probability(), which measures
+            // distinctRef=10 over the same corpus.
+            //
+            // This is the distinction the rest of this list is for: UString's three conversions
+            // looked identical to this and were NOT structural -- they were a corpus that contained
+            // no parseable string. Widening fixed them. Widening cannot fix this one.
+            "UBooleanValue.value()");
 
     private static final java.util.List<String> diverged = new java.util.ArrayList<>();
     private static final java.util.List<String> unexpectedlyDegenerate = new java.util.ArrayList<>();
+    private static final java.util.List<String> typeMismatches = new java.util.ArrayList<>();
 
     private static void sweep(String receiver, String method, List<UValue> recv, List<UValue> arg) {
         try (HistoricalOracle oracle = HistoricalOracle.open();
@@ -64,6 +79,10 @@ public class FirstRealDifferentialTest {
             int distinct = r.distinctReferenceValues();
             System.out.printf("%-28s %4d rows  distinctRef=%-4d %s%s%n", op.key(), r.rows().size(),
                     distinct, tally, distinct <= 1 ? "   <== DEGENERATE, agreement is free" : "");
+            if (r.javaTypeMismatchCount() > 0) {
+                typeMismatches.add(op.key() + " (" + r.javaTypeMismatchCount() + " rows, observed="
+                        + r.subjectTypeObservedCount() + ", assumed=" + r.subjectTypeAssumedCount() + ")");
+            }
             int bad = tally.getOrDefault(DiffVerdict.DIFFER, 0) + tally.getOrDefault(DiffVerdict.MIXED, 0);
             if (bad > 0) {
                 diverged.add(op.key() + " (" + bad + " rows)");
@@ -106,6 +125,20 @@ public class FirstRealDifferentialTest {
         for (String m : new String[] { "add", "minus", "mult" }) {
             sweep("UIntegerValue", m, uint, uint);
         }
+        // Primitive-returning accessors. harness-contract.md sec.7 names these specifically: an
+        // adapter that types its result from the factory instead of observing the returned object
+        // measures a class mismatch on all of them, because reflection hands back a boxed
+        // java.lang.Double / Integer, not a URealValue. 3,445 such rows across 182 of 285
+        // operations, from a port with no defect in it. They are swept here so that the
+        // zero-mismatch assertion below is exercised on the case it exists for.
+        for (String m : new String[] { "value", "uncertainty" }) {
+            sweep("URealValue", m, ureal, null);
+            sweep("UIntegerValue", m, uint, null);
+        }
+        sweep("UBooleanValue", "value", ubool, null);
+        sweep("UBooleanValue", "probability", ubool, null);
+        sweep("UStringValue", "value", ustr, null);
+        sweep("UStringValue", "confidence", ustr, null);
         for (String m : new String[] { "and", "or", "not" }) {
             sweep("UBooleanValue", m, ubool, m.equals("not") ? null : ubool);
         }
@@ -119,9 +152,20 @@ public class FirstRealDifferentialTest {
         sweep("SBooleanValue", "and", sbool, sbool);
         sweep("SBooleanValue", "not", sbool, null);
         System.out.println("=========================================================");
+        System.out.println("java-type mismatches: " + (typeMismatches.isEmpty() ? "NONE" : typeMismatches));
 
         assertTrue(diverged.isEmpty(),
                 "the ported U-types diverged from the historical reference on: " + diverged);
+
+        // D-52, now assertable. Until S4 the ported side had no object to observe, so its class
+        // token was the factory's ASSUMPTION and a type-only difference had to be counted rather
+        // than scored. PortedCandidate observes the object it actually returned, so the token is
+        // real on both sides and this becomes a clause rather than a report line.
+        assertTrue(typeMismatches.isEmpty(),
+                "the two sides named different Java classes for identical content. If this fires on "
+                        + "the primitive accessors it means the adapter typed its result from the "
+                        + "factory instead of calling UValue.observedFrom(returned) -- see "
+                        + "harness-contract.md sec.7: " + typeMismatches);
         assertTrue(unexpectedlyDegenerate.isEmpty(),
                 "these operations collapsed to a single reference value, so their agreement is free "
                         + "and is not evidence -- either widen the corpus or add them to DEGENERATE "
