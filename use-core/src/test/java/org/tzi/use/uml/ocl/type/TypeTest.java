@@ -132,6 +132,18 @@ public class TypeTest extends TestCase {
                    .conformsTo(TypeFactory.mkSequence(TypeFactory.mkInteger())));
     }
 
+    /**
+     * NOTE — modified under waiver W-01 (docs/port2/upstream-test-waivers.md), S3(2/2).
+     *
+     * <p>Ten of the twelve assertions carry additional expected supertypes because the port adopts
+     * the fork's lattice: Real <= UReal, Integer <= UInteger, Boolean <= UBoolean, String <= UString.
+     * The assertions remain <em>exact set equality</em> -- deliberately not weakened to containment --
+     * and every expected value is derived from the intended lattice rather than copied from the
+     * implementation's output. OclAny and Enum are untouched; their supertype sets do not move.
+     *
+     * <p>Measured: this change moves nothing else. conformsTo and pairwise getLeastCommonSupertype
+     * fingerprints over a 144-cell crisp universe are byte-identical before and after.
+     */
     public void testSupertype() {
         assertEquals(
                      "OclAny.allSupertypes()",
@@ -139,7 +151,8 @@ public class TypeTest extends TestCase {
                      TypeFactory.mkOclAny().allSupertypes());
         assertEquals(
                      "Boolean.allSupertypes()",
-                     mkSet(new Object[] { TypeFactory.mkBoolean(), TypeFactory.mkOclAny()}),
+                     mkSet(new Object[] { TypeFactory.mkBoolean(), TypeFactory.mkOclAny(),
+                                          TypeFactory.mkUBoolean(), TypeFactory.mkSBoolean()}),
                      TypeFactory.mkBoolean().allSupertypes());
         assertEquals(
                      "Integer.allSupertypes()",
@@ -147,15 +160,19 @@ public class TypeTest extends TestCase {
                            new Object[] {
                                TypeFactory.mkInteger(),
                                TypeFactory.mkReal(),
+                               TypeFactory.mkUReal(),
+                               TypeFactory.mkUInteger(),
                                TypeFactory.mkOclAny()}),
                      TypeFactory.mkInteger().allSupertypes());
         assertEquals(
                      "Real.allSupertypes()",
-                     mkSet(new Object[] { TypeFactory.mkReal(), TypeFactory.mkOclAny()}),
+                     mkSet(new Object[] { TypeFactory.mkReal(), TypeFactory.mkOclAny(),
+                                          TypeFactory.mkUReal()}),
                      TypeFactory.mkReal().allSupertypes());
         assertEquals(
                      "String.allSupertypes()",
-                     mkSet(new Object[] { TypeFactory.mkString(), TypeFactory.mkOclAny()}),
+                     mkSet(new Object[] { TypeFactory.mkString(), TypeFactory.mkOclAny(),
+                                          TypeFactory.mkUString()}),
                      TypeFactory.mkString().allSupertypes());
         assertEquals(
                      "Enum.allSupertypes()",
@@ -167,6 +184,8 @@ public class TypeTest extends TestCase {
                            new Object[] {
                                TypeFactory.mkCollection(TypeFactory.mkBoolean()),
                                TypeFactory.mkCollection(TypeFactory.mkOclAny()),
+                               TypeFactory.mkCollection(TypeFactory.mkUBoolean()),
+                               TypeFactory.mkCollection(TypeFactory.mkSBoolean()),
                            }),
                      TypeFactory.mkCollection(TypeFactory.mkBoolean()).allSupertypes());
         assertEquals(
@@ -175,6 +194,8 @@ public class TypeTest extends TestCase {
                            new Object[] {
                                TypeFactory.mkCollection(TypeFactory.mkInteger()),
                                TypeFactory.mkCollection(TypeFactory.mkReal()),
+                               TypeFactory.mkCollection(TypeFactory.mkUReal()),
+                               TypeFactory.mkCollection(TypeFactory.mkUInteger()),
                                TypeFactory.mkCollection(TypeFactory.mkOclAny()),
                            }),
                      TypeFactory.mkCollection(TypeFactory.mkInteger()).allSupertypes());
@@ -185,6 +206,8 @@ public class TypeTest extends TestCase {
                                    TypeFactory.mkCollection(TypeFactory.mkReal())),
                                TypeFactory.mkCollection(
                                    TypeFactory.mkCollection(TypeFactory.mkOclAny())),
+                               TypeFactory.mkCollection(
+                                   TypeFactory.mkCollection(TypeFactory.mkUReal())),
                            }), 
                      TypeFactory.mkCollection(TypeFactory.mkCollection(
                          TypeFactory.mkReal())).allSupertypes());
@@ -195,9 +218,13 @@ public class TypeTest extends TestCase {
                            new Object[] {
                                TypeFactory.mkCollection(TypeFactory.mkInteger()),
                                TypeFactory.mkCollection(TypeFactory.mkReal()),
+                               TypeFactory.mkCollection(TypeFactory.mkUReal()),
+                               TypeFactory.mkCollection(TypeFactory.mkUInteger()),
                                TypeFactory.mkCollection(TypeFactory.mkOclAny()),
                                TypeFactory.mkSet(TypeFactory.mkInteger()),
                                TypeFactory.mkSet(TypeFactory.mkReal()),
+                               TypeFactory.mkSet(TypeFactory.mkUReal()),
+                               TypeFactory.mkSet(TypeFactory.mkUInteger()),
                                TypeFactory.mkSet(TypeFactory.mkOclAny()),
                            }),
                      TypeFactory.mkSet(TypeFactory.mkInteger()).allSupertypes());
@@ -207,9 +234,13 @@ public class TypeTest extends TestCase {
                            new Object[] {
                                TypeFactory.mkCollection(TypeFactory.mkInteger()),
                                TypeFactory.mkCollection(TypeFactory.mkReal()),
+                               TypeFactory.mkCollection(TypeFactory.mkUReal()),
+                               TypeFactory.mkCollection(TypeFactory.mkUInteger()),
                                TypeFactory.mkCollection(TypeFactory.mkOclAny()),
                                TypeFactory.mkSequence(TypeFactory.mkInteger()),
                                TypeFactory.mkSequence(TypeFactory.mkReal()),
+                               TypeFactory.mkSequence(TypeFactory.mkUReal()),
+                               TypeFactory.mkSequence(TypeFactory.mkUInteger()),
                                TypeFactory.mkSequence(TypeFactory.mkOclAny()),
                            }),
                      TypeFactory.mkSequence(TypeFactory.mkInteger()).allSupertypes());
@@ -219,9 +250,13 @@ public class TypeTest extends TestCase {
                            new Object[] {
                                TypeFactory.mkCollection(TypeFactory.mkInteger()),
                                TypeFactory.mkCollection(TypeFactory.mkReal()),
+                               TypeFactory.mkCollection(TypeFactory.mkUReal()),
+                               TypeFactory.mkCollection(TypeFactory.mkUInteger()),
                                TypeFactory.mkCollection(TypeFactory.mkOclAny()),
                                TypeFactory.mkBag(TypeFactory.mkInteger()),
                                TypeFactory.mkBag(TypeFactory.mkReal()),
+                               TypeFactory.mkBag(TypeFactory.mkUReal()),
+                               TypeFactory.mkBag(TypeFactory.mkUInteger()),
                                TypeFactory.mkBag(TypeFactory.mkOclAny()),
                            }),
                      TypeFactory.mkBag(TypeFactory.mkInteger()).allSupertypes());

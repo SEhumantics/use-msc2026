@@ -221,6 +221,16 @@ public class UpstreamOracleFloor {
     // Correctness beats a round number: 211 is the honest count of a gate that cannot be
     // silenced, 210 was the count of one that could.
     //
+    //
+    // RE-PINNED 2026-08-18 (S3 2/2). The lattice commit adds ONE test class with FIVE test
+    // methods — UncertainTypeLatticeTest — to use-core/src/test. It is a Jupiter test, so it
+    // is collected in BOTH modes. use-core/surefire goes 8/80 -> 9/85 (default) and
+    // 41/351 -> 42/356 (oracle); totals go 11/211 -> 12/216 and 51/498 -> 52/503. Raised in
+    // the same commit that grows the suite, per harness-contract.md sec. 0.1.
+    //
+    // The class exists because TypeTest#testSupertype was modified under waiver W-01. A
+    // modified oracle is a weaker oracle unless something independent pins the behaviour the
+    // modification was made for, and this floor is what stops that pin being quietly removed.
     // Floors are >= : the suite may GROW, it may never shrink. No floor is 0 and no floor
     // may be lowered to make a run pass — see harness-contract.md sec. 8 step 7 clause 1,
     // "Do not lower the floor."
@@ -228,13 +238,13 @@ public class UpstreamOracleFloor {
     record Floor(int classes, int methods) { }
 
     static final Map<String, Floor> ORACLE = Map.of(
-            "use-core/surefire", new Floor(41, 351),
+            "use-core/surefire", new Floor(42, 356),
             "use-gui/surefire", new Floor(8, 17),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
 
     static final Map<String, Floor> DEFAULT = Map.of(
-            "use-core/surefire", new Floor(8, 80),
+            "use-core/surefire", new Floor(9, 85),
             "use-gui/surefire", new Floor(1, 1),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
