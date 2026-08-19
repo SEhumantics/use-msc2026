@@ -39,7 +39,15 @@ import org.tzi.use.util.StringUtil;
  * @author      Mark Richters 
  */
 public final class TupleType extends TypeImpl {
-    private Map<String, Part> fParts = new TreeMap<String, Part>();
+    private final Map<String, Part> fParts = new TreeMap<String, Part>();
+
+    /**
+     * Memoised {@link #allSupertypes()}. Safe because a TupleType is immutable after construction:
+     * {@link #fParts} is final, is populated only in the constructor, and {@link #getParts()} hands
+     * out an unmodifiable view. Written once, never invalidated; {@code volatile} so a racing reader
+     * either sees null and recomputes (idempotent) or sees a fully published immutable set.
+     */
+    private volatile Set<Type> fAllSupertypes;
 
     public static class Part implements BufferedToString {
         private final int position;
@@ -120,7 +128,7 @@ public final class TupleType extends TypeImpl {
      * @return A map of the type Map&lt;String, Part&gt;
      */
     public Map<String, Part> getParts() {
-        return fParts;
+        return Collections.unmodifiableMap(fParts);
     }
 
     /** 
@@ -228,6 +236,10 @@ public final class TupleType extends TypeImpl {
      * Returns the set of all supertypes (including this type).
      */
     public Set<Type> allSupertypes() {
+        Set<Type> cached = fAllSupertypes;
+        if (cached != null) {
+            return cached;
+        }
         Set<Type> res = new HashSet<Type>(1);
         res.add(this);
         res.add(TypeFactory.mkOclAny());
@@ -235,7 +247,9 @@ public final class TupleType extends TypeImpl {
         List<Part> remainingTypes = new LinkedList<Part>();
         remainingTypes.addAll(fParts.values());
         genAllSuperTypes(selectedSupertypes, remainingTypes, res);
-        return res;
+        cached = Collections.unmodifiableSet(res);
+        fAllSupertypes = cached;
+        return cached;
     }
     
     private void genAllSuperTypes(List<Part> selectedSupertypes, List<Part> remainingTypes, Set<Type> result) {
