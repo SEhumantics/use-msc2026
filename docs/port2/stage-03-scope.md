@@ -185,10 +185,16 @@ type-system work; §5 executes when vendoring does (B1).
 
 ---
 
-## 5. The UUnlimitedNatural purge — recipe, and when it can run
+## 5. The UUnlimitedNatural purge — DONE (`94309dbf`)
 
-Decision 2026-08-18: **DECIDED — purge, not add** (user directive, "Purge it"). §3 gives the reasons.
-This section gives the exact edit, and records that it **cannot execute yet** — `uDataTypes` has not been vendored (B1 is open), so this is a
+> **Executed 2026-08-18.** Vendored as `org.tzi.use.uncertainty.datatypes` (B1: relocate), five
+> classes, three methods purged. The compiler confirms the closure: `use-core` compiles with exactly
+> those five, so `Distribution` and `UEnum` were never transitive needs — see §5.5. The relocation
+> created a class-loader trap in the differential harness, which was found and closed in the same
+> commit; see the commit message and `HistoricalOracleIsolationTest`.
+
+Decision 2026-08-18: **DECIDED and EXECUTED** at `94309dbf` (user directive, "Purge it"). §3 gives the
+reasons. The recipe below was written when it **could not execute yet** — `uDataTypes` has not been vendored (B1 is open), so this is a
 vendoring-plan decision that lands when vendoring does.
 
 ### 5.1 Do not confuse the two types
