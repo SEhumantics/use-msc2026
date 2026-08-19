@@ -51,6 +51,24 @@ final class IsolatedJarClassLoader extends URLClassLoader {
     private static final List<String> ISOLATED_PREFIXES =
             List.of("org.tzi.use.", "uDataTypes.");
 
+    /**
+     * Carved out of {@link #ISOLATED_PREFIXES}, and checked first.
+     *
+     * <p>{@code org.tzi.use.uncertainty.} is entirely <em>this project's own</em> code: the
+     * differential harness itself, and — since B1 — the vendored uncertainty datatypes, which were
+     * relocated out of package {@code uDataTypes} into
+     * {@code org.tzi.use.uncertainty.datatypes}. It is a strict subtree of {@code org.tzi.use.},
+     * so without this carve-out the loader would claim those names, fail to find them in the jars,
+     * and — being parent-last with no fallback — throw {@link ClassNotFoundException} rather than
+     * delegate.
+     *
+     * <p>The carve-out is safe because the subtree exists in <em>neither</em> historical jar, so
+     * there is nothing there to isolate. That is not an assumption:
+     * {@code HistoricalOracleIsolationTest} asserts it against the jars on every run.
+     */
+    private static final List<String> NON_ISOLATED_PREFIXES =
+            List.of("org.tzi.use.uncertainty.");
+
     IsolatedJarClassLoader(String name, URL[] urls) {
         // Platform loader as parent: supplies java.* and the JDK modules, contains no application
         // classes of its own. The parent-last override below is what actually enforces isolation.
@@ -59,12 +77,22 @@ final class IsolatedJarClassLoader extends URLClassLoader {
 
     /** True if {@code className} must be resolved from this loader's jars rather than delegated. */
     static boolean isIsolated(String className) {
+        for (String prefix : NON_ISOLATED_PREFIXES) {
+            if (className.startsWith(prefix)) {
+                return false;
+            }
+        }
         for (String prefix : ISOLATED_PREFIXES) {
             if (className.startsWith(prefix)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** The prefixes carved out of {@link #isolatedPrefixes()}. Exposed so tests can assert on it. */
+    static List<String> nonIsolatedPrefixes() {
+        return NON_ISOLATED_PREFIXES;
     }
 
     /** The prefixes this loader refuses to delegate. Exposed so tests can assert on the policy. */

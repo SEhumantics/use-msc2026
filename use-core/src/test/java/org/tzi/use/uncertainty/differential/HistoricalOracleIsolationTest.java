@@ -274,4 +274,51 @@ class HistoricalOracleIsolationTest {
             Files.deleteIfExists(dir);
         }
     }
+
+    // ------------------------------------------------------------------ B1 relocation carve-out
+
+    /**
+     * The vendored uncertainty datatypes were relocated out of package {@code uDataTypes} into
+     * {@code org.tzi.use.uncertainty.datatypes} (B1). That is a strict subtree of
+     * {@code org.tzi.use.}, which {@link IsolatedJarClassLoader} isolates — so without a carve-out
+     * the loader would claim those names, not find them in the jars, and throw rather than delegate.
+     *
+     * <p>The carve-out is only safe while the historical jars contain nothing under that prefix.
+     * That is checked here against the jars themselves, so the safety argument cannot rot.
+     */
+    @Test
+    @DisplayName("the org.tzi.use.uncertainty carve-out is safe: neither jar contains that subtree")
+    void carveOutSubtreeIsAbsentFromBothHistoricalJars() throws Exception {
+        for (Path jar : new Path[] { oracle.useJarPath(), oracle.uncertaintyJarPath() }) {
+            try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(jar.toFile())) {
+                java.util.List<String> offenders = zip.stream()
+                        .map(java.util.zip.ZipEntry::getName)
+                        .filter(n -> n.startsWith("org/tzi/use/uncertainty/"))
+                        .toList();
+                assertTrue(offenders.isEmpty(),
+                        jar.getFileName() + " contains " + offenders.size() + " entry/entries under "
+                                + "org/tzi/use/uncertainty/, so the carve-out in "
+                                + "IsolatedJarClassLoader would silently stop isolating them: "
+                                + offenders);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("the carve-out overrides the org.tzi.use. prefix, and only for that subtree")
+    void carveOutAppliesOnlyToOurOwnSubtree() {
+        assertFalse(IsolatedJarClassLoader.isIsolated(
+                        "org.tzi.use.uncertainty.datatypes.UReal"),
+                "the relocated vendored datatypes must be delegated, not isolated");
+        assertFalse(IsolatedJarClassLoader.isIsolated(
+                        "org.tzi.use.uncertainty.differential.UValue"),
+                "the harness's own classes must be delegated, not isolated");
+
+        assertTrue(IsolatedJarClassLoader.isIsolated("org.tzi.use.uml.ocl.value.URealValue"),
+                "the product classes the harness compares against must still be isolated");
+        assertTrue(IsolatedJarClassLoader.isIsolated("org.tzi.use.uml.ocl.type.TypeFactory"));
+        assertTrue(IsolatedJarClassLoader.isIsolated("uDataTypes.UReal"),
+                "the ORIGINAL package is what the historical jar carries, and stays isolated");
+        assertTrue(IsolatedJarClassLoader.isIsolated("uDataTypes.SBoolean"));
+    }
 }

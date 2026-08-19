@@ -240,6 +240,10 @@ public class UpstreamOracleFloor {
     // RE-PINNED 2026-08-18 (Track B, SBoolean marshalling). Adds ONE Jupiter class with FOUR
     // methods — SBooleanMarshallingTest — collected in BOTH modes. use-core/surefire goes
     // 10/89 -> 11/93 (default) and 43/360 -> 44/364 (oracle).
+    //
+    // RE-PINNED 2026-08-18 (B1 vendoring). Adds TWO methods to the existing
+    // HistoricalOracleIsolationTest guarding the org.tzi.use.uncertainty carve-out. No new class.
+    // use-core/surefire methods 93 -> 95 (default) and 364 -> 366 (oracle).
     // Floors are >= : the suite may GROW, it may never shrink. No floor is 0 and no floor
     // may be lowered to make a run pass — see harness-contract.md sec. 8 step 7 clause 1,
     // "Do not lower the floor."
@@ -247,13 +251,13 @@ public class UpstreamOracleFloor {
     record Floor(int classes, int methods) { }
 
     static final Map<String, Floor> ORACLE = Map.of(
-            "use-core/surefire", new Floor(44, 364),
+            "use-core/surefire", new Floor(44, 366),
             "use-gui/surefire", new Floor(8, 17),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
 
     static final Map<String, Floor> DEFAULT = Map.of(
-            "use-core/surefire", new Floor(11, 93),
+            "use-core/surefire", new Floor(11, 95),
             "use-gui/surefire", new Floor(1, 1),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
