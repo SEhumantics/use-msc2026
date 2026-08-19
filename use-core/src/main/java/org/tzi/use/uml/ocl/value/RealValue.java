@@ -83,4 +83,25 @@ public final class RealValue extends Value {
         } else
             return toString().compareTo(o.toString());
     }
+
+    /**
+     * Widens {@code value} to a {@code RealValue}, or {@code null} if it is neither real nor
+     * integer.
+     *
+     * <p>Added by the uncertainty fork, which needs a uniform widening when an uncertain operation
+     * takes a crisp numeric argument. {@code null} rather than an exception is the fork's contract:
+     * callers test it.
+     */
+    public static RealValue valueOf(Value value) {
+        RealValue ur1;
+
+        if (value.isReal())
+            ur1 = new RealValue(((RealValue) value).value());
+        else if (value.isInteger()) {
+            ur1 = new RealValue(((IntegerValue) value).value());
+        } else
+            ur1 = null;
+
+        return ur1;
+    }
 }

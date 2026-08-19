@@ -90,4 +90,21 @@ public class MathUtil {
 		
 		return min;
 	}
+
+	/**
+	 * Rounds {@code value} to {@code digits} decimal places.
+	 *
+	 * <p>Added by the uncertainty fork. The uncertain values use it to compare and print at a fixed
+	 * precision so that accumulated double error does not make two equal quantities unequal.
+	 *
+	 * @param value  value to be rounded
+	 * @param digits digits to be adjusted
+	 * @return value rounded at the given number of digits
+	 *
+	 * @author Víctor Manuel Ortiz
+	 */
+	public static double round(double value, int digits) {
+		double exp = Math.pow(10, digits);
+		return Math.round(value * exp) / exp;
+	}
 }

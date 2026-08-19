@@ -74,6 +74,34 @@ public abstract class Value implements Comparable<Value>, BufferedToString {
     }
 
     /**
+     * True if this value is a <code>{@link URealValue}</code>.
+     */
+    public boolean isUReal() {
+        return false;
+    }
+
+    /**
+     * True if this value is a <code>{@link UIntegerValue}</code>.
+     */
+    public boolean isUInteger() {
+        return false;
+    }
+
+    /**
+     * True if this value is a <code>{@link UBooleanValue}</code>.
+     */
+    public boolean isUBoolean() {
+        return false;
+    }
+
+    /**
+     * True if this value is a <code>{@link SBooleanValue}</code>.
+     */
+    public boolean isSBoolean() {
+        return false;
+    }
+
+    /**
      * True if value is a <code>{@link BooleanValue}</code> 
      * @return True if value is an instance of <code>{@link BooleanValue}</code>
      */

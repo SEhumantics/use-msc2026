@@ -148,20 +148,33 @@ class HistoricalOracleIsolationTest {
     }
 
     @Test
-    @DisplayName("the U-types come from the jars and are absent from the application loader at S1")
-    void uTypesResolveOnlyThroughTheOracle() {
+    @DisplayName("the ported U-types and the historical ones are distinct classes of the same name")
+    void uTypesResolveOnlyThroughTheOracle() throws Exception {
         ClassLoader app = HistoricalOracleIsolationTest.class.getClassLoader();
-        for (String simple : new String[] { "URealValue", "UIntegerValue", "UBooleanValue", "UStringValue" }) {
+
+        // INVERTED AT S4, exactly as the S1 version of this test instructed. Until the port landed
+        // the assertion was that these names do NOT resolve on the application loader. They now do,
+        // because S4 wrote them -- so the property that matters is no longer ABSENCE but
+        // DISTINCTNESS: two classes, one name, two loaders, neither assignable to the other. That is
+        // the whole basis on which the harness can compare a port against its reference in one JVM.
+        for (String simple : new String[] { "URealValue", "UIntegerValue", "UBooleanValue",
+                                            "UStringValue", "SBooleanValue" }) {
+            String fqn = "org.tzi.use.uml.ocl.value." + simple;
+
             Class<?> historical = oracle.historicalClass(simple);
             assertSame(oracle.loader(), historical.getClassLoader(),
                     simple + " must be defined by the isolated loader");
-            // At S1 there is no port, so this must not resolve. When S4 lands, this assertion is
-            // expected to be inverted; sameNameDistinctClasses() is the assertion that survives.
-            assertThrows(ClassNotFoundException.class,
-                    () -> Class.forName("org.tzi.use.uml.ocl.value." + simple, false, app),
-                    simple + " unexpectedly resolves on the application loader. If the port has "
-                            + "landed, this test must be updated to assert distinctness instead of absence "
-                            + "-- do NOT delete it.");
+
+            Class<?> ported = Class.forName(fqn, false, app);
+            assertNotSame(oracle.loader(), ported.getClassLoader(),
+                    simple + " (ported) must NOT come from the isolated loader");
+
+            assertNotSame(historical, ported,
+                    simple + " resolved to the SAME Class object on both sides; the isolation has "
+                            + "collapsed and every differential row would be comparing the reference "
+                            + "against itself");
+            assertEquals(historical.getName(), ported.getName(),
+                    "sanity: the two sides are the same fully qualified name");
         }
     }
 
