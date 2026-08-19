@@ -36,6 +36,20 @@ public interface ExpressionVisitor {
 	void visitConstEnum (ExpConstEnum exp);
 	void visitConstInteger (ExpConstInteger exp);
 	void visitConstReal (ExpConstReal exp);
+
+	// --- uncertain constants ---
+
+	void visitConstUBoolean(ExpConstUBoolean exp);
+
+	void visitConstSBoolean(ExpConstSBoolean exp);
+
+	void visitConstUInteger(ExpConstUInteger exp);
+
+	void visitConstUReal(ExpConstUReal exp);
+
+	void visitConstUString(ExpConstUString exp);
+
+	void visitDefSBoolean(ExpDefSBoolean exp);
 	void visitConstString (ExpConstString exp);
 	void visitEmptyCollection (ExpEmptyCollection exp);
 	void visitExists (ExpExists exp);

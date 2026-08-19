@@ -582,4 +582,34 @@ public class ExpressionPrintVisitor implements ExpressionVisitor {
 		exp.getEnd().processWithVisitor(this);
 	}
 
+
+	@Override
+	public void visitConstUBoolean(ExpConstUBoolean exp) {
+		writer.write(literal(exp.toString(), exp));
+	}
+
+	@Override
+	public void visitConstSBoolean(ExpConstSBoolean exp) {
+		writer.write(literal(exp.toString(), exp));
+	}
+
+	@Override
+	public void visitConstUInteger(ExpConstUInteger exp) {
+		writer.write(literal(exp.toString(), exp));
+	}
+
+	@Override
+	public void visitConstUReal(ExpConstUReal exp) {
+		writer.write(literal(exp.toString(), exp));
+	}
+
+	@Override
+	public void visitConstUString(ExpConstUString exp) {
+		writer.write(literal(exp.toString(), exp));
+	}
+
+	@Override
+	public void visitDefSBoolean(ExpDefSBoolean exp) {
+		writer.write(literal(exp.toString(), exp));
+	}
 }

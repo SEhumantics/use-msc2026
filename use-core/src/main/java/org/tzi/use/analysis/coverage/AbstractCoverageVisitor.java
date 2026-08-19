@@ -349,4 +349,30 @@ public abstract class AbstractCoverageVisitor implements ExpressionVisitor {
 		exp.getStart().processWithVisitor(this);
 		exp.getEnd().processWithVisitor(this);
 	}
+
+	// Uncertain constants cover nothing: a literal navigates no association and reads no
+	// attribute. Empty in the fork for the same reason the crisp constants are.
+	@Override
+	public void visitConstUBoolean(org.tzi.use.uml.ocl.expr.ExpConstUBoolean exp) {
+	}
+
+	@Override
+	public void visitConstSBoolean(org.tzi.use.uml.ocl.expr.ExpConstSBoolean exp) {
+	}
+
+	@Override
+	public void visitConstUInteger(org.tzi.use.uml.ocl.expr.ExpConstUInteger exp) {
+	}
+
+	@Override
+	public void visitConstUReal(org.tzi.use.uml.ocl.expr.ExpConstUReal exp) {
+	}
+
+	@Override
+	public void visitConstUString(org.tzi.use.uml.ocl.expr.ExpConstUString exp) {
+	}
+
+	@Override
+	public void visitDefSBoolean(org.tzi.use.uml.ocl.expr.ExpDefSBoolean exp) {
+	}
 }
