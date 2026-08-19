@@ -65,9 +65,24 @@ public class ASTIterationStatement extends ASTStatement {
 		fRange = range;
 		fBody = body;
 		
-		int type = fRange.getStartToken().getType();
-		// 44 is Bag, 48 is Set
-		if(type == SoilLexer.T__44 || type == SoilLexer.T__48) {
+		// Compare the token TEXT, not an ANTLR-generated token number.
+		//
+		// This used to read `type == SoilLexer.T__44 || type == SoilLexer.T__48`, with the comment
+		// "44 is Bag, 48 is Set". Those constants are assigned by ANTLR in grammar order, so ANY
+		// literal added to the grammar renumbers them and the condition silently starts testing for
+		// different tokens. Adding the five uncertain literals did exactly that: T__44/T__48 came to
+		// mean Sequence, and USE began warning that `for x in Sequence{1..9}` iterates a NON-ORDERED
+		// collection -- which is false, and which broke shell test t086.
+		//
+		// Nothing exercised the warning (no shell test iterates a Bag or Set literal, and none
+		// asserts the message), which is why the rot was invisible until the grammar grew.
+		//
+		// The fork's answer was to DELETE the warning. That is not adopted here: the warning is
+		// upstream 7.5.0 behaviour, not uncertainty semantics, and its removal was collateral damage
+		// from this same defect rather than a decision. Matching on text preserves the warning and
+		// makes it immune to further grammar growth.
+		String rangeStart = fRange.getStartToken().getText();
+		if ("Bag".equals(rangeStart) || "Set".equals(rangeStart)) {
 			System.out.println(
 					"Warning: Iteration over a non-ordered collection. Order of the result might not be as expected. "
 					+ "(" + toString() + ")");

@@ -487,6 +487,17 @@ literal returns [ASTExpression n]
     | nEColIt=emptyCollectionLiteral { $n = $nEColIt.n; }
     | nUndLit=undefinedLiteral {$n = $nUndLit.n; }
     | nTupleLit=tupleLiteral {$n = $nTupleLit.n; }
+    | 'UString' LPAREN usve=additiveExpression COMMA usue=additiveExpression RPAREN
+        { $n = new ASTUStringLiteral($usve.n, $usue.n); }
+    | 'UReal' LPAREN urve=additiveExpression COMMA urue=additiveExpression RPAREN
+        { $n = new ASTURealLiteral($urve.n, $urue.n); }
+    | 'UBoolean' LPAREN ubve=conditionalImpliesExpression COMMA ubpe=additiveExpression RPAREN
+        { $n = new ASTUBooleanLiteral($ubve.n, $ubpe.n); }
+    | 'UInteger' LPAREN uive=additiveExpression COMMA uiue=additiveExpression RPAREN
+        { $n = new ASTUIntegerLiteral($uive.n, $uiue.n); }
+    | 'SBoolean' LPAREN sbb=additiveExpression COMMA sbd=additiveExpression COMMA
+                        sbu=additiveExpression COMMA sba=additiveExpression RPAREN
+        { $n = new ASTSBooleanLiteral($sbb.n, $sbd.n, $sbu.n, $sba.n); }
     | un=STAR { $n = new ASTUnlimitedNaturalLiteral($un); }
     ;
 
@@ -608,7 +619,23 @@ type returns [ASTType n]
     | nTCollection=collectionType { $n = $nTCollection.n; if ($n != null) $n.setStartToken(tok); }
     | nTTuple=tupleType { $n = $nTTuple.n; if ($n != null) $n.setStartToken(tok); }
     | nTModelQualifiedType=modelQualifiedType { $n = $nTModelQualifiedType.n; if ($n != null) $n.setStartToken(tok); }
+    | nTUncertainty=uncertaintyType { $n = $nTUncertainty.n; if ($n != null) $n.setStartToken(tok); }
     )
+    ;
+
+
+/* ------------------------------------
+  uncertaintyType ::= "UReal" | "UInteger" | "UBoolean" | "UString" | "SBoolean"
+
+  These five must be named explicitly even though simpleType already accepts any IDENT.
+  Adding them to `literal` above makes ANTLR lex them as KEYWORDS, and a keyword no longer
+  matches IDENT -- so without this rule, adding the literals would silently break every
+  model that declares an attribute of one of these types.
+*/
+uncertaintyType returns [ASTType n]
+:
+    name=('UReal' | 'UInteger' | 'UBoolean' | 'UString' | 'SBoolean')
+        { $n = new ASTSimpleType($name); }
     ;
 
 
