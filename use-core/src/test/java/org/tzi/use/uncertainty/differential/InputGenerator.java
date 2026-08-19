@@ -312,6 +312,21 @@ public final class InputGenerator {
                 UValue.uString("\"quoted\"", 0.5),
                 UValue.uString("back\\slash", 0.5),
                 UValue.uString("é中", 0.5),
+                // Parseable spellings. Without these the conversion operations are DEGENERATE:
+                // measured at S4, toBoolean() produced ONE distinct reference value over the whole
+                // corpus and toInteger()/toReal() threw on 20 of 22 rows, because not one string
+                // here parsed as anything. Agreement on a single-point codomain is free and is not
+                // evidence (D-15) -- the corpus, not the port, was the limit.
+                UValue.uString("true", 1.0),
+                UValue.uString("false", 1.0),
+                UValue.uString("TRUE", 0.5),
+                UValue.uString("0", 1.0),
+                UValue.uString("42", 0.5),
+                UValue.uString("-7", 0.5),
+                UValue.uString("2147483647", 0.5),
+                UValue.uString("3.14", 0.5),
+                UValue.uString("-0.5", 0.5),
+                UValue.uString("1e10", 0.5),
                 UValue.uString("abc", Double.NaN),
                 UValue.uString("abc", -1.0)));
     }

@@ -25,9 +25,22 @@ import org.junit.jupiter.api.Test;
  */
 public class FirstRealDifferentialTest {
 
-    /** Operations measured to have a single-point codomain: their agreement is free, not evidence. */
-    private static final java.util.Set<String> DEGENERATE = java.util.Set.of(
-            "UStringValue.toBoolean()", "UStringValue.toInteger()", "UStringValue.toReal()");
+    /**
+     * Operations whose agreement is free because their codomain is a single point (D-15).
+     *
+     * <p><strong>Empty, and it should stay that way.</strong> It held three entries when this test
+     * was written — {@code UStringValue.toBoolean/toInteger/toReal} — but that turned out to be a
+     * property of the CORPUS, not of the operations: {@code uStringBoundaries()} contained no string
+     * that parsed as a boolean, an integer or a real, so {@code toBoolean()} could only ever answer
+     * false and the other two could only ever throw. Ten parseable spellings were added and the
+     * three now discriminate (2, 5 and 8 distinct reference values respectively; 2 is the whole
+     * Boolean codomain, so that one is complete rather than merely improved).
+     *
+     * <p>Adding an entry here is an admission that an operation is being counted as agreeing without
+     * evidence. Widen the corpus first; only exempt an operation whose codomain is genuinely a
+     * single point, and say why in writing.
+     */
+    private static final java.util.Set<String> DEGENERATE = java.util.Set.of();
 
     private static final java.util.List<String> diverged = new java.util.ArrayList<>();
     private static final java.util.List<String> unexpectedlyDegenerate = new java.util.ArrayList<>();
