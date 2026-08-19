@@ -16,6 +16,8 @@ import org.tzi.use.uml.ocl.value.CollectionValue;
 import org.tzi.use.uml.ocl.value.IntegerValue;
 import org.tzi.use.uml.ocl.value.RealValue;
 import org.tzi.use.uml.ocl.value.UndefinedValue;
+import org.tzi.use.uml.ocl.value.UIntegerValue;
+import org.tzi.use.uml.ocl.value.URealValue;
 import org.tzi.use.uml.ocl.value.Value;
 import org.tzi.use.util.Log;
 import org.tzi.use.util.StringUtil;
@@ -428,35 +430,85 @@ final class Op_collection_sum extends OpGeneric {
 				return TypeFactory.mkInteger();
 			else if (c.elemType().isTypeOfReal())
 				return TypeFactory.mkReal();
+			else if (c.elemType().isTypeOfUInteger())
+				return TypeFactory.mkUInteger();
+			else if (c.elemType().isTypeOfUReal())
+				return TypeFactory.mkUReal();
 		}
 		return null;
 	}
 
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
 		CollectionValue coll = (CollectionValue) args[0];
-		boolean isIntegerCollection = coll.elemType().isTypeOfInteger();
+		Value result = null;
 
-		if (isIntegerCollection) {
-			int isum = 0;
-			for (Value v : coll) {
-				if (v.isUndefined())
-					return UndefinedValue.instance;
-				isum += ((IntegerValue) v).value();
-			}
-			return IntegerValue.valueOf(isum);
-		} else {
-			double rsum = 0.0;
+		if (resultType.isTypeOfInteger())
+			result = evalIntegerResult(coll);
+		else if (resultType.isTypeOfReal())
+			result = evalRealResult(coll);
+		else if (resultType.isTypeOfUInteger())
+			result = evalUIntegerResult(coll);
+		else
+			result = evalURealResult(coll);
 
-			for (Value v : coll) {
-				if (v.isUndefined())
-					return UndefinedValue.instance;
-				if (v.isInteger())
-					rsum += ((IntegerValue) v).value();
-				else
-					rsum += ((RealValue) v).value();
+		return result;
+	}
+
+	private Value evalUIntegerResult(CollectionValue coll) {
+		UIntegerValue uisum = new UIntegerValue(0, 0);
+		UIntegerValue aux;
+
+		for (Value v : coll) {
+
+			if (v.isUndefined())
+				return UndefinedValue.instance;
+			else {
+				aux = UIntegerValue.valueOf(v);
+				uisum = new UIntegerValue(uisum.getuInteger().add(aux.getuInteger()));
 			}
-			return new RealValue(rsum);
 		}
+
+		return uisum;
+	}
+
+	private Value evalURealResult(CollectionValue coll) {
+		URealValue ursum = new URealValue(0, 0);
+		URealValue aux;
+
+		for (Value v : coll) {
+
+			if (v.isUndefined())
+				return UndefinedValue.instance;
+			else
+				ursum = ursum.add(v);
+
+		}
+
+		return ursum;
+	}
+
+	private Value evalRealResult(CollectionValue coll) {
+		double rsum = 0.0;
+
+		for (Value v : coll) {
+			if (v.isUndefined())
+				return UndefinedValue.instance;
+			if (v.isInteger())
+				rsum += ((IntegerValue) v).value();
+			else
+				rsum += ((RealValue) v).value();
+		}
+		return new RealValue(rsum);
+	}
+
+	private Value evalIntegerResult(CollectionValue coll) {
+		int isum = 0;
+		for (Value v : coll) {
+			if (v.isUndefined())
+				return UndefinedValue.instance;
+			isum += ((IntegerValue) v).value();
+		}
+		return IntegerValue.valueOf(isum);
 	}
 }
 

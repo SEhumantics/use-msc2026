@@ -256,6 +256,9 @@ public class UpstreamOracleFloor {
     // RE-PINNED 2026-08-18 (S8 arithmetic). Adds ONE Jupiter class with FIVE methods —
     // UncertainExpressionTypingTest — collected in BOTH modes. use-core/surefire 13/98 -> 14/103
     // (default) and 46/369 -> 47/374 (oracle).
+    //
+    // RE-PINNED 2026-08-18 (S8 collection sum). UncertainExpressionTypingTest grows 5 -> 8 methods.
+    // use-core/surefire 14/103 -> 14/106 (default) and 47/374 -> 47/377 (oracle). No new class.
     // Floors are >= : the suite may GROW, it may never shrink. No floor is 0 and no floor
     // may be lowered to make a run pass — see harness-contract.md sec. 8 step 7 clause 1,
     // "Do not lower the floor."
@@ -263,13 +266,13 @@ public class UpstreamOracleFloor {
     record Floor(int classes, int methods) { }
 
     static final Map<String, Floor> ORACLE = Map.of(
-            "use-core/surefire", new Floor(47, 374),
+            "use-core/surefire", new Floor(47, 377),
             "use-gui/surefire", new Floor(8, 17),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
 
     static final Map<String, Floor> DEFAULT = Map.of(
-            "use-core/surefire", new Floor(14, 103),
+            "use-core/surefire", new Floor(14, 106),
             "use-gui/surefire", new Floor(1, 1),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));

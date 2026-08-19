@@ -9,9 +9,12 @@ import java.io.StringWriter;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
+import org.tzi.use.uml.ocl.expr.Evaluator;
 import org.tzi.use.uml.ocl.expr.Expression;
 import org.tzi.use.uml.ocl.value.VarBindings;
+import org.tzi.use.uml.sys.MSystem;
 
 /**
  * End-to-end typing of uncertain OCL expressions: text in, {@code Type} out, through the real
@@ -85,5 +88,50 @@ public class UncertainExpressionTypingTest {
     @DisplayName("an unknown operation is still an error")
     void unknownOperationsStillFail() {
         assertNull(typeOf("UReal(2,0.5)->noSuchOperation()"));
+    }
+
+    /** Compiles and EVALUATES {@code expr}, returning USE's own "value : Type" rendering. */
+    private static String evalOf(String expr) throws Exception {
+        MModel model = new ModelFactory().createModel("m");
+        MSystem sys = new MSystem(model);
+        StringWriter err = new StringWriter();
+        Expression e = OCLCompiler.compileExpression(
+                model, expr, "test", new PrintWriter(err), new VarBindings());
+        assertNotNull(e, "did not compile: " + expr + " -- " + err);
+        return new Evaluator().eval(e, sys.state()).toStringWithType();
+    }
+
+    /**
+     * The worked example, evaluated rather than merely typed.
+     *
+     * <p>A type is half the claim. These are the exact strings measured on BOTH sides in
+     * {@code adaptation-policy-refutation.md}, so this is the narrowest end-to-end statement that
+     * the port reproduces the fork: the same value, printed the same way, from the same source text.
+     */
+    @Test
+    @DisplayName("the worked example evaluates to the fork's measured VALUE, not just its type")
+    void workedExampleEvaluatesToTheForkResult() throws Exception {
+        assertEquals("Set{1,2.5,UReal(2.0, 0.5)} : Set(UReal)",
+                evalOf("Set{UReal(2,0.5), 1, 2.5}"));
+        assertEquals("UReal(5.5, 0.5) : UReal",
+                evalOf("Set{UReal(2,0.5), 1, 2.5}->sum()"));
+    }
+
+    @Test
+    @DisplayName("uncertainty propagates through arithmetic with the right magnitude")
+    void uncertaintyPropagatesWithTheRightMagnitude() throws Exception {
+        // adding an exact quantity shifts the value and leaves the uncertainty alone
+        assertEquals("UReal(5.0, 0.5) : UReal", evalOf("UReal(2,0.5) + 3"));
+        // scaling by an exact factor scales the uncertainty by the same factor
+        assertEquals("UReal(4.0, 1.0) : UReal", evalOf("UReal(2,0.5) * 2"));
+        assertEquals("UInteger(5, 0.25) : UInteger", evalOf("UInteger(4,0.25) + 1"));
+    }
+
+    @Test
+    @DisplayName("crisp evaluation is unchanged")
+    void crispEvaluationIsUnchanged() throws Exception {
+        assertEquals("3.5 : Real", evalOf("Set{1, 2.5}->sum()"));
+        assertEquals("3 : Integer", evalOf("Set{1, 2}->sum()"));
+        assertEquals("3 : Integer", evalOf("1 + 2"));
     }
 }
