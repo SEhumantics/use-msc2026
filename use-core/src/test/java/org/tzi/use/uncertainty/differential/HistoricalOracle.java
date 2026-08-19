@@ -847,13 +847,25 @@ public final class HistoricalOracle implements Candidate {
      * approximately right is worse than no representation, because it still populates a report
      * column that a reader will treat as measured.
      */
-    public String opaqueRepresentation(Object target) {
+    /**
+     * Made {@code static} at S4 so the ported side can render through the <em>same</em> code.
+     *
+     * <p>That is deliberate and it is a design choice with a cost. The rendering is the
+     * <em>instrument</em>, not the port's behaviour: if the two sides formatted independently, a
+     * formatting difference alone would read as a behavioural divergence. Sharing it means a
+     * comparison is about content. The cost is that a bug in this renderer hides itself on both
+     * sides equally -- so print fidelity is NOT established here, it is a separate obligation
+     * (docs/port2/adaptation/05-printing-corpus.md).
+     *
+     * <p>Uses no instance state, which is why it can be shared at all.
+     */
+    public static String opaqueRepresentation(Object target) {
         StringBuilder sb = new StringBuilder();
         appendOpaque(sb, target, 0, java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>()));
         return sb.toString();
     }
 
-    private void appendOpaque(StringBuilder sb, Object target, int depth, Set<Object> seen) {
+    private static void appendOpaque(StringBuilder sb, Object target, int depth, Set<Object> seen) {
         if (target == null) {
             sb.append("null");
             return;
@@ -909,7 +921,7 @@ public final class HistoricalOracle implements Candidate {
             sb.append(']');
             return;
         }
-        if (!IsolatedJarClassLoader.isIsolated(target.getClass().getName())) {
+        if (!isRenderable(target.getClass().getName())) {
             // Deliberately narrow. A java.util.HashSet, for instance, has no stable iteration order,
             // and guessing at one would make the report irreproducible without saying so.
             throw new HarnessMarshallingException("cannot represent " + target.getClass().getName()
@@ -921,7 +933,14 @@ public final class HistoricalOracle implements Candidate {
                     + " exactly: the object graph contains a cycle.");
         }
         try {
-            sb.append(target.getClass().getName()).append('{');
+            // SIMPLE name, not the fully qualified one. The vendored uncertainty datatypes live in
+            // `uDataTypes` on the historical side and in org.tzi.use.uncertainty.datatypes on the
+            // ported side (B1), so a fully qualified token would make EVERY row carrying one differ
+            // -- a difference in where the file lives, not in what the operation answered. This is
+            // the same policy, and the same stated cost, as UValue's type token: two distinct
+            // classes sharing a simple name would compare equal. Field declarations below have
+            // always used the simple name, so this makes the rendering internally consistent too.
+            sb.append(target.getClass().getSimpleName()).append('{');
             boolean first = true;
             for (java.lang.reflect.Field field : opaqueFields(target.getClass())) {
                 if (!first) {
@@ -950,6 +969,20 @@ public final class HistoricalOracle implements Candidate {
         } finally {
             seen.remove(target);
         }
+    }
+
+    /**
+     * Types {@link #appendOpaque} will walk field-by-field.
+     *
+     * <p>The historical classes, plus the vendored uncertainty datatypes on the ported side. The
+     * latter are NOT isolated -- they are this project's own code and are deliberately carved out of
+     * {@link IsolatedJarClassLoader}'s prefixes -- but they are structurally known, so refusing to
+     * render them would leave every SBoolean-valued row a HARNESS_ERROR rather than a measurement.
+     * Anything else is still refused rather than fall back to {@code toString()}.
+     */
+    static boolean isRenderable(String className) {
+        return IsolatedJarClassLoader.isIsolated(className)
+                || className.startsWith("org.tzi.use.uncertainty.datatypes.");
     }
 
     /** Declared instance fields, superclass-first, name-sorted within each declaring class. */

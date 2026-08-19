@@ -1705,8 +1705,18 @@ class DifferentialHarnessRegressionTest {
             assertFalse(opaque.canonical().contains(String.valueOf(sbooleanTrue)),
                     "the OPAQUE canonical form must no longer embed the foreign toString(): "
                             + opaque.canonical());
-            assertTrue(opaque.canonical().contains("uDataTypes.SBoolean"),
+            // Updated at S4. This used to look for the fully qualified "uDataTypes.SBoolean" as its
+            // marker of a field-derived rendering. The renderer now emits the SIMPLE class name,
+            // because the vendored datatypes sit in `uDataTypes` on the historical side and in
+            // org.tzi.use.uncertainty.datatypes on the ported side (B1) and a qualified token would
+            // make every row carrying one differ on package alone. The marker is therefore the
+            // field structure itself, which is a more direct statement of what is being asserted
+            // than the package name ever was.
+            assertTrue(opaque.canonical().contains("SBoolean{SBoolean.a="),
                     "it must be built from the declared fields instead: " + opaque.canonical());
+            assertFalse(opaque.canonical().contains("uDataTypes."),
+                    "the rendering must not carry a package-qualified token, or the two sides can "
+                            + "never agree after the B1 relocation: " + opaque.canonical());
 
             Locale original = Locale.getDefault();
             try {
