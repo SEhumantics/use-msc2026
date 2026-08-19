@@ -88,7 +88,17 @@ public abstract class OpGeneric {
 		StandardOperationsNumber.registerTypeOperations(opmap);
 		StandardOperationsString.registerTypeOperations(opmap);
 		StandardOperationsBoolean.registerTypeOperations(opmap);
-		
+
+		// Uncertain basic types. Registration ORDER is the fork's, preserved deliberately:
+		// UReal, UBoolean, UInteger, UString, SBoolean, inserted after the crisp basic types and
+		// before the collections. OpGeneric dispatch walks the entries for a name, so the order in
+		// which two overloads of one name are registered decides which is tried first.
+		StandardOperationsUReal.registerTypeOperations(opmap);
+		StandardOperationsUBoolean.registerTypeOperations(opmap);
+		StandardOperationsUInteger.registerTypeOperations(opmap);
+		StandardOperationsUString.registerTypeOperations(opmap);
+		StandardOperationsSBoolean.registerTypeOperations(opmap);
+
 		// Collections
 		StandardOperationsCollection.registerTypeOperations(opmap);
 		StandardOperationsSet.registerTypeOperations(opmap);
