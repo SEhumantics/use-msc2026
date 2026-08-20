@@ -19,8 +19,9 @@ UString defects (two static-type lies, one that crashed with a raw `NullPointerE
 equally severe `SBoolean` defect of the identical class discovered while closing a coverage gap the
 audits also found, and zero-to-thin test coverage across three types: all 6 `UReal` trig operations,
 all 20 `UString` operations (no dedicated test file existed at all), and 11 named `SBoolean`
-operations. Six ungrammared dead methods were also found and removed. All of it is fixed, tested, or
-(in one case) explicitly deferred to the user in this stage.
+operations. ~26 dead methods were also found and removed (6 ungrammared operations, plus ~20 more in
+the vendored library once the user was asked and chose to remove them too). All of it is fixed and
+tested in this stage.
 
 ---
 
@@ -188,7 +189,7 @@ code" this project's standing dead-code rule already removed once, for `ExpDefSB
 `MetamorphicRelationsTest`'s M6SimplexClosure. Confirmed zero remaining callers of any removed method,
 anywhere in `use-core` or `use-gui`, before removing.
 
-### 5.2 Found, not removed: ~20 methods in the vendored `uncertainty.datatypes` library
+### 5.2 The user was asked, and chose to remove the remaining ~20 methods too
 
 Covariance-aware arithmetic overloads (`add(UInteger, double covariance)` and its siblings across
 `UInteger`/`UReal`), `*Zero()` boolean-comparison variants, two `hashcode()` methods (lower-case, not
@@ -199,8 +200,22 @@ version"*), and a further dead subgraph in `SBoolean.java`'s own fusion methods 
 removed in §5.1). None of these has even a commented-out grammar-registration path pointing at it —
 they are unused API surface of a vendored library this project has otherwise kept deliberately close
 to upstream (one prior, narrowly-justified exception: `UUnlimitedNatural`, `stage-03-scope.md` §5), not
-"semantics code that lost its grammar binding" in the sense the standing rule targets. Left for the
-user to decide; not removed here.
+"semantics code that lost its grammar binding" in the sense the standing rule targets. Rather than
+decide this unilaterally, the user was asked directly; they chose to remove all of it.
+
+**Re-verifying before deleting caught a real flaw in the earlier audit's own methodology.** That
+audit's dead/alive calls were built on grep for `receiver.method(` — a pattern blind to implicit-`this`
+self-calls. Two genuinely live methods were misclassified as dead: `UInteger.equals(UInteger)` and
+`.lt(UInteger)` are called by `compareTo`/`min`/`max` via a bare `this.equals(other)`, and
+`.le`/`.ge(UInteger)` are called externally from `UIntegerValue.java` — none of which a
+`"uInteger\.equals("`-shaped grep would ever find. Both were kept. Every other candidate was
+re-confirmed with a broader search (both explicit and implicit-receiver call sites) and, for the
+trickiest cluster — `SBoolean.java`'s single-argument fusion overloads, which call an
+identically-named static `Collection`-argument sibling rather than each other or themselves — by
+reading the actual method bodies, not just grepping their names. A full reactor compile after each
+file's edits served as the final check: a real caller left behind would have produced a compile error
+naming itself. None did. ~610 lines removed, 0 lines of behaviour changed, confirmed by the isolated
+gate (§6) coming back with test counts exactly unchanged.
 
 ---
 
@@ -214,10 +229,12 @@ user to decide; not removed here.
 | oracle, `use-core` surefire | 103 (floor 92 → **re-pinned 103**) | 664 (floor 623 → **re-pinned 664**) | 1252 | 0 |
 | default/oracle, `use-gui` | unchanged: 1/1 surefire, 8/17 oracle surefire, 1/129 failsafe both modes | — | — | 0 |
 
-Six commits this stage: `ca5f727f` (uSelectC print + EvalNode substitution), `93049b15` (UReal trig
+Seven commits this stage: `ca5f727f` (uSelectC print + EvalNode substitution), `93049b15` (UReal trig
 coverage), `ea05efbc` (UString: 3 defects fixed, full 20-op test), `b8fef925` (SBoolean: 13-op coverage,
 conjunctiveCertainty/degreeOfConflict fix), `d6ff1f18` (dead fusion code removed), `0e1e1372` (floor
-re-pin). `use-gui` untouched by all six — no `use-gui` source file changed.
+re-pin), `70728431` (~20 more vendored-library dead methods removed, §5.2). `use-gui` untouched by all
+seven — no `use-gui` source file changed. Test counts (§6 table) are unchanged by `70728431`: deleting
+dead main code cannot change what the test suite exercises, and the isolated gate confirmed it didn't.
 
 **Waivers: unchanged at four** (W-01–W-04). No `.java` test file was edited to make ported code pass.
 
@@ -236,10 +253,12 @@ the actual running code rather than from this project's own accumulated document
 
 That is itself evidence for a general point, not a one-time fact about this stage: an audit finds what
 its methodology can see, and a different, independent methodology will usually see something the
-first one didn't. §5.2's ~20 remaining vendored-library dead methods are a known, named, deliberately
-undecided residual — not a claim that nothing else remains. Coverage is corpus- and test-conditional,
-same as every prior stage's own stated limitation (`stage-03-scope.md` §8.6): a defect reachable only
-at an input nothing here exercises stays invisible to this or any test-based methodology.
+first one didn't. §5.2's re-verification itself is a second instance of the same point one layer
+down — the deep dead-code audit's own grep-based methodology had a real blind spot (implicit-`this`
+self-calls), caught only by re-deriving each claim from the actual call graph before acting on it.
+Coverage is corpus- and test-conditional, same as every prior stage's own stated limitation
+(`stage-03-scope.md` §8.6): a defect reachable only at an input nothing here exercises stays invisible
+to this or any test-based methodology.
 
 ---
 
