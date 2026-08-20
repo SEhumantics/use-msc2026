@@ -284,6 +284,15 @@ public class UpstreamOracleFloor {
     //
     // RE-PINNED 2026-08-20 (uEquals coverage). Adds ONE Jupiter test file, UEqualsCoverageTest,
     // with 6 methods. use-core/surefire 40/194 -> 41/200 (default) and 73/465 -> 74/471 (oracle).
+    //
+    // RE-PINNED 2026-08-20 (uSelect/uSelectC, uncertainty-aware collection membership, and the
+    // ExpQuery multi-variable forAll/exists accumulation fix). Adds ONE Jupiter test file,
+    // UncertainQueryAndMembershipTest, with 5 methods across 5 @Nested classes (USelect,
+    // USelectC, ForAllExists, Membership, MultiVariableAccumulation — each @Nested class is its
+    // own surefire report). use-core/surefire 41/200 -> 46/216 (default) and 74/471 -> 79/487
+    // (oracle). use-gui is unmeasured by this change (no use-gui source file was touched); its
+    // floors are unchanged, and use-gui/failsafe methods=129 continues to hold because the
+    // ExpQuery accumulation fix corrected t049/t022 rather than adding new shell fixtures.
     // Floors are >= : the suite may GROW, it may never shrink. No floor is 0 and no floor
     // may be lowered to make a run pass — see harness-contract.md sec. 8 step 7 clause 1,
     // "Do not lower the floor."
@@ -291,13 +300,13 @@ public class UpstreamOracleFloor {
     record Floor(int classes, int methods) { }
 
     static final Map<String, Floor> ORACLE = Map.of(
-            "use-core/surefire", new Floor(74, 471),
+            "use-core/surefire", new Floor(79, 487),
             "use-gui/surefire", new Floor(8, 17),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
 
     static final Map<String, Floor> DEFAULT = Map.of(
-            "use-core/surefire", new Floor(41, 200),
+            "use-core/surefire", new Floor(46, 216),
             "use-gui/surefire", new Floor(1, 1),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));

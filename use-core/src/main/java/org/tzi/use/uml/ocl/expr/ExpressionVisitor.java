@@ -73,6 +73,12 @@ public interface ExpressionVisitor {
 	void visitSetLiteral (ExpSetLiteral exp);
 	void visitSortedBy (ExpSortedBy exp);
 	void visitStdOp (ExpStdOp exp);
+
+	// --- uncertain query expressions ---
+
+	void visitUSelect(ExpUSelect exp);
+
+	void visitUSelectC(ExpUSelectC exp);
 	void visitTupleLiteral (ExpTupleLiteral exp);
 	void visitTupleSelectOp (ExpTupleSelectOp exp);
 	void visitUndefined (ExpUndefined exp);

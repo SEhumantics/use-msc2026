@@ -321,14 +321,18 @@ propertyCall[ASTExpression source, boolean followsArrow] returns [ASTExpression 
     ("select" | "reject" | "collect" | "exists" | "forAll" | "isUnique" | "sortedBy" ) 
     "(" [ elemVarsDeclaration "|" ] expression ")"
 */
-queryExpression[ASTExpression range] returns [ASTExpression n]	
-@init {ASTElemVarsDeclaration decl = new ASTElemVarsDeclaration(); }:
-    op=IDENT 
-    LPAREN 
+queryExpression[ASTExpression range] returns [ASTExpression n]
+@init {
+        ASTElemVarsDeclaration decl = new ASTElemVarsDeclaration();
+        ASTExpression uncer = null;
+    }:
+    op=IDENT
+    LPAREN
     ( decls=elemVarsDeclaration {decl = $decls.n;} BAR )?
     nExp=expression
+    ( COMMA uncerExp=additiveExpression { uncer = $uncerExp.n;} )?
     RPAREN
-    { $n = new ASTQueryExpression($op, $range, decl, $nExp.n); }
+    { $n = new ASTQueryExpression($op, $range, decl, $nExp.n, uncer); }
     ;
 
 

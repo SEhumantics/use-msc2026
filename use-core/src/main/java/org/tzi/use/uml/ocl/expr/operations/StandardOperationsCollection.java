@@ -11,10 +11,12 @@ import org.tzi.use.uml.ocl.type.TupleType.Part;
 import org.tzi.use.uml.ocl.type.Type;
 import org.tzi.use.uml.ocl.type.Type.VoidHandling;
 import org.tzi.use.uml.ocl.type.TypeFactory;
+import org.tzi.use.uml.ocl.type.UncertainType;
 import org.tzi.use.uml.ocl.value.BooleanValue;
 import org.tzi.use.uml.ocl.value.CollectionValue;
 import org.tzi.use.uml.ocl.value.IntegerValue;
 import org.tzi.use.uml.ocl.value.RealValue;
+import org.tzi.use.uml.ocl.value.UncertainValue;
 import org.tzi.use.uml.ocl.value.UndefinedValue;
 import org.tzi.use.uml.ocl.value.UIntegerValue;
 import org.tzi.use.uml.ocl.value.URealValue;
@@ -100,12 +102,27 @@ final class Op_collection_includes extends OpGeneric {
 		return false;
 	}
 
+	/**
+	 * Ported from USE-Uncertainty, StandardOperationsCollection.java:97-110. Semantics unchanged,
+	 * INCLUDING one fork oddity kept byte-for-byte rather than silently corrected: the fork's second
+	 * disjunct is {@code params[1] instanceof UncertainValue}, but {@code params[1]} has static type
+	 * {@code Type}, and {@code Type} and {@code Value} are unrelated hierarchies -- the instanceof
+	 * can never hold, so that disjunct is dead and the effective condition is just
+	 * {@code elemType instanceof UncertainType}. This is not one of the 33 B7 ledger rows and is not
+	 * silently "fixed" here; it is reproduced exactly, since only a ledger-driven decision changes
+	 * fork behaviour on this port. Kept for a future finding, not acted on now.
+	 */
 	public Type matches(Type params[]) {
-		if (params.length == 2 && params[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)) {			
+		if (params.length == 2 && params[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)) {
 			CollectionType coll = (CollectionType) params[0];
-			if (params[1].getLeastCommonSupertype(coll.elemType()) != null)
-				return TypeFactory.mkBoolean();
-			
+			Type elemType = params[1].getLeastCommonSupertype(coll.elemType());
+
+			if (elemType != null) {
+				if (!(elemType instanceof UncertainType || params[1] instanceof UncertainValue))
+					return TypeFactory.mkBoolean();
+				else
+					return TypeFactory.mkUBoolean();
+			}
 		}
 		return null;
 	}
@@ -113,10 +130,15 @@ final class Op_collection_includes extends OpGeneric {
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
 		if (args[0].isUndefined())
 			return BooleanValue.FALSE;
-		
+
 		CollectionValue coll = (CollectionValue) args[0];
-		boolean res = coll.includes(args[1]);
-		return BooleanValue.get(res);
+
+		if (resultType.isTypeOfBoolean()) {
+			boolean res = coll.includes(args[1]);
+			return BooleanValue.get(res);
+		}
+		else
+			return coll.uIncludes(args[1]);
 	}
 	
 	@Override
@@ -152,11 +174,23 @@ final class Op_collection_excludes extends OpGeneric {
 		return false;
 	}
 
+	/**
+	 * Ported from USE-Uncertainty, StandardOperationsCollection.java:159-166. Note this arm's guard
+	 * is written the OPPOSITE way round from Op_collection_includes.matches -- the fork tests
+	 * {@code leastCommonSupertype instanceof UncertainType} directly, with no second disjunct at
+	 * all, so there is no dead-code oddity to reproduce here.
+	 */
 	public Type matches(Type params[]) {
 		if (params.length == 2 && params[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)) {
 			CollectionType coll = (CollectionType) params[0];
-			if (params[1].getLeastCommonSupertype(coll.elemType()) != null)
-				return TypeFactory.mkBoolean();
+			Type elemType = params[1].getLeastCommonSupertype(coll.elemType());
+
+			if (elemType != null) {
+				if (elemType instanceof UncertainType)
+					return TypeFactory.mkUBoolean();
+				else
+					return TypeFactory.mkBoolean();
+			}
 		}
 		return null;
 	}
@@ -165,8 +199,13 @@ final class Op_collection_excludes extends OpGeneric {
 		if (args[0].isUndefined())
 			return BooleanValue.FALSE;
 		CollectionValue coll = (CollectionValue) args[0];
-		boolean res = !coll.includes(args[1]);
-		return BooleanValue.get(res);
+
+		if (resultType.isTypeOfBoolean()) {
+			boolean res = !coll.includes(args[1]);
+			return BooleanValue.get(res);
+		}
+		else
+			return coll.uExcludes(args[1]);
 	}
 	
 	@Override
@@ -251,15 +290,23 @@ final class Op_collection_includesAll extends OpGeneric {
 		return false;
 	}
 
+	/** As Op_collection_includes.matches; see its comment. */
 	public Type matches(Type params[]) {
 		if (params.length == 2 && 
 			params[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID) && 
 			params[1].isKindOfCollection(VoidHandling.EXCLUDE_VOID)) {
 			CollectionType coll1 = (CollectionType) params[0];
 			CollectionType coll2 = (CollectionType) params[1];
+			Type commonType = coll2.getLeastCommonSupertype(coll1);
 
-			if (coll2.getLeastCommonSupertype(coll1) != null)
-				return TypeFactory.mkBoolean();
+			if (commonType != null) {
+				Type elemType = ((CollectionType) commonType).elemType();
+
+				if (!(elemType instanceof UncertainType))
+					return TypeFactory.mkBoolean();
+				else
+					return TypeFactory.mkUBoolean();
+			}
 		}
 		return null;
 	}
@@ -267,8 +314,13 @@ final class Op_collection_includesAll extends OpGeneric {
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
 		CollectionValue coll1 = (CollectionValue) args[0];
 		CollectionValue coll2 = (CollectionValue) args[1];
-		boolean res = coll1.includesAll(coll2);
-		return BooleanValue.get(res);
+
+		if (resultType.isTypeOfBoolean()) {
+			boolean res = coll1.includesAll(coll2);
+			return BooleanValue.get(res);
+		}
+		else
+			return coll1.uIncludesAll(coll2);
 	}
 	
 	@Override
@@ -308,6 +360,7 @@ final class Op_collection_excludesAll extends OpGeneric {
 		return false;
 	}
 
+	/** As Op_collection_includes.matches; see its comment. */
 	public Type matches(Type params[]) {
 		if (params.length == 2 && 
 			params[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID) &&
@@ -315,9 +368,16 @@ final class Op_collection_excludesAll extends OpGeneric {
 			
 			CollectionType coll1 = (CollectionType) params[0];
 			CollectionType coll2 = (CollectionType) params[1];
+			Type commonType = coll2.getLeastCommonSupertype(coll1);
 
-			if (coll2.getLeastCommonSupertype(coll1) != null)
-				return TypeFactory.mkBoolean();
+			if (commonType != null) {
+				Type elemType = ((CollectionType) commonType).elemType();
+
+				if (!(elemType instanceof UncertainType))
+					return TypeFactory.mkBoolean();
+				else
+					return TypeFactory.mkUBoolean();
+			}
 		}
 		return null;
 	}
@@ -325,8 +385,13 @@ final class Op_collection_excludesAll extends OpGeneric {
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
 		CollectionValue coll1 = (CollectionValue) args[0];
 		CollectionValue coll2 = (CollectionValue) args[1];
-		boolean res = coll1.excludesAll(coll2);
-		return BooleanValue.get(res);
+
+		if (resultType.isTypeOfBoolean()) {
+			boolean res = coll1.excludesAll(coll2);
+			return BooleanValue.get(res);
+		}
+		else
+			return coll1.uExcludesAll(coll2);
 	}
 	
 	@Override

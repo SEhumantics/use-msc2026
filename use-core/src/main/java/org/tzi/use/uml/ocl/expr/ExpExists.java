@@ -41,7 +41,7 @@ public class ExpExists extends ExpQuery {
         super(TypeFactory.mkBoolean(), elemVarDecls, rangeExp, queryExp);
     
         // queryExp must be a boolean expression
-        assertBooleanQuery();
+        assertKindOfUBoolean();
     }
 
     /**

@@ -96,8 +96,91 @@ public abstract class CollectionValue extends Value implements Iterable<Value> {
     public abstract CollectionValue flatten(Type resultType);
 
     protected abstract Integer getClassCompareNr();
-    
+
     public abstract Collection<Value> collection();
+
+    /**
+     * Ported from USE-Uncertainty (github.com/atenearesearchgroup/uncertainty @ 74acd0d),
+     * src/main/org/tzi/use/uml/ocl/value/CollectionValue.java:112-195. Semantics unchanged.
+     *
+     * <p>The uncertainty-aware counterparts of {@link #includes}/{@link #includesAll}/
+     * {@link #excludesAll} (and {@code excludes}, which the crisp side has no abstract counterpart
+     * for at all — it is computed as {@code !includes(v)} at the call site in
+     * {@code Op_collection_excludes}). Each walks the collection comparing every element to the
+     * argument through {@link UncertainValue#uEquals}/{@code uDistinct} wherever either side is
+     * uncertain, and combines the per-element degrees with {@link UBooleanValue#and} — the same
+     * pattern {@code CollectionValue.equals} already uses for element-wise uncertain equality.
+     *
+     * <p>{@code includes} takes the MAXIMUM per-element {@code uEquals} degree (any one match is
+     * enough); {@code excludes} takes the AND of every per-element {@code uDistinct} (every element
+     * must be distinct). {@code includesAll}/{@code excludesAll} fold the single-value form over the
+     * second collection with AND — every element of {@code coll2} must (in)clude, for the whole
+     * collection to (in)clude.
+     */
+    public UBooleanValue uIncludes(Value v) {
+        UBooleanValue res = UBooleanValue.FALSE, aux;
+
+        for (Value elemVal : this) {
+            if (res.probability() >= 1)
+                break;
+
+            if (elemVal instanceof UncertainValue)
+                aux = UBooleanValue.valueOf(((UncertainValue) elemVal).uEquals(v));
+            else if (v instanceof UncertainValue)
+                aux = UBooleanValue.valueOf(((UncertainValue) v).uEquals(elemVal));
+            else
+                aux = UBooleanValue.valueOf(v.equals(elemVal), 1);
+
+            if (aux.probability() > res.probability())
+                res = aux;
+        }
+
+        return res;
+    }
+
+    public UBooleanValue uIncludesAll(CollectionValue coll2) {
+        if (coll2.size() > size())
+            return UBooleanValue.FALSE;
+
+        UBooleanValue result = UBooleanValue.TRUE;
+        for (Value elemVal : coll2) {
+            if (result.probability() <= 0)
+                break;
+            result = result.and(uIncludes(elemVal));
+        }
+        return result;
+    }
+
+    public UBooleanValue uExcludes(Value v) {
+        UBooleanValue result = UBooleanValue.TRUE;
+        UncertainBooleanValue aux;
+
+        for (Value elemVal : this) {
+            if (result.probability() <= 0)
+                break;
+
+            if (elemVal instanceof UncertainValue)
+                aux = ((UncertainValue) elemVal).uDistinct(v);
+            else if (v instanceof UncertainValue)
+                aux = ((UncertainValue) v).uDistinct(elemVal);
+            else
+                aux = UBooleanValue.valueOf(!v.equals(elemVal), 1);
+
+            result = result.and(aux);
+        }
+
+        return result;
+    }
+
+    public UBooleanValue uExcludesAll(CollectionValue coll2) {
+        UBooleanValue result = UBooleanValue.TRUE;
+        for (Value elemVal : coll2) {
+            if (result.probability() <= 0)
+                break;
+            result = result.and(uExcludes(elemVal));
+        }
+        return result;
+    }
 
     @Override
     public boolean isCollection() {

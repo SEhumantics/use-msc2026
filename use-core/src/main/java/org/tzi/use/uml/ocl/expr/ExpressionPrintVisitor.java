@@ -427,6 +427,16 @@ public class ExpressionPrintVisitor implements ExpressionVisitor {
 	}
 
 	@Override
+	public void visitUSelect(ExpUSelect exp) {
+		visitQuery(exp);
+	}
+
+	@Override
+	public void visitUSelectC(ExpUSelectC exp) {
+		visitQuery(exp);
+	}
+
+	@Override
 	public void visitStdOp(ExpStdOp exp) {
 		Expression[] args = exp.args();
 		String operationName;

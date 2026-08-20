@@ -52,6 +52,12 @@ public abstract class ExpQuery extends Expression {
      */
     protected Expression fQueryExp;
 
+    /**
+     * Confidence threshold expression for {@code uSelect}/{@code uSelectC} (may be null; a null
+     * threshold defaults to 0.5, see {@link #evalAndAssertConfidence}).
+     */
+    protected Expression fUncertaintyExp;
+
     protected ExpQuery(Type resultType, VarDeclList elemVarDecls,
             Expression rangeExp, Expression queryExp)
             throws ExpInvalidException {
@@ -86,6 +92,26 @@ public abstract class ExpQuery extends Expression {
         }
     }
 
+    /**
+     * As above, with an explicit confidence threshold — {@code uSelectC}'s constructor form.
+     * Ported from USE-Uncertainty (github.com/atenearesearchgroup/uncertainty @ 74acd0d),
+     * {@code src/main/org/tzi/use/uml/ocl/expr/ExpQuery.java:99-112}.
+     */
+    protected ExpQuery(Type resultType, VarDeclList elemVarDecls,
+                       Expression rangeExp, Expression queryExp,
+                       Expression uncertaintyExp)
+            throws ExpInvalidException {
+        this(resultType, elemVarDecls, rangeExp, queryExp);
+
+        // assert that uncertainty expression is Real
+        if (!uncertaintyExp.type().isKindOfReal(VoidHandling.EXCLUDE_VOID))
+            throw new ExpInvalidException("Type of confidence must be Real"
+                        + ", found type '" + uncertaintyExp.type()
+                        + "' in expression '" + uncertaintyExp + "'");
+
+        this.fUncertaintyExp = uncertaintyExp;
+    }
+
 	@Override
 	protected boolean childExpressionRequiresPreState() {
 		return fRangeExp.requiresPreState() || fQueryExp.requiresPreState();
@@ -97,6 +123,20 @@ public abstract class ExpQuery extends Expression {
             throw new ExpInvalidException("Argument expression of `" + name()
                     + "' must have boolean type, found `" + fQueryExp.type()
                     + "'.");
+    }
+
+    /**
+     * Ported from USE-Uncertainty, {@code ExpQuery.java:127-132}. {@code forAll}/{@code exists}
+     * accept a {@code UBoolean}-typed body — {@code uEquals} and the uncertain comparison operators
+     * all produce one — and combine results through {@code ExpStdOp.create("and"/"or", ...)}, which
+     * dispatches to {@code Op_uBoolean_and}/{@code Op_uBoolean_or} for uncertain operands. A plain
+     * {@code assertBooleanQuery()} (still used by {@code select}/{@code reject}/{@code one}/
+     * {@code any}, which stay crisp-only in the fork) would refuse that body outright.
+     */
+    protected void assertKindOfUBoolean() throws ExpInvalidException {
+        if (!fQueryExp.type().isKindOfUBoolean(VoidHandling.EXCLUDE_VOID))
+            throw new ExpInvalidException("Argument expression of '" + name()
+                    + "' must be kind of UBoolean type, found '" + fQueryExp.type() + "'");
     }
 
     /**
@@ -145,9 +185,17 @@ public abstract class ExpQuery extends Expression {
     }
 
     /**
-     * Evaluate exists and forAll expressions. The array
-     * <code>moreElemVars</code> may be null if there is at most one element
-     * variable declared.
+     * Evaluate exists and forAll expressions.
+     *
+     * <p>Ported from USE-Uncertainty, {@code ExpQuery.java:247-357} (methods
+     * {@code evalExistsOrForAll}/{@code evalExists0}/{@code evalForAll0}), replacing this class's
+     * previous crisp-only algorithm (removed below; the fork itself marks the equivalent method
+     * {@code @deprecated}, "Since that needed UBoolean support"). Combines results through
+     * {@code ExpStdOp.create("and"/"or", ...)} rather than Java {@code boolean} logic, because the
+     * fork's own dispatch is what routes {@code UBoolean} operands to {@code Op_uBoolean_and}/
+     * {@code Op_uBoolean_or} and produces a degree instead of a crisp truth value — the whole reason
+     * {@code forAll}/{@code exists} now accept a {@code UBoolean}-typed body at all
+     * ({@link #assertKindOfUBoolean()}).
      */
     protected final Value evalExistsOrForAll(EvalContext ctx, boolean doExists) {
         // evaluate range
@@ -158,59 +206,65 @@ public abstract class ExpQuery extends Expression {
 
         // we need recursion for the permutation of assignments of
         // range values to all element variables.
-        boolean res = evalExistsOrForAll0(0, rangeVal, ctx, doExists);
-        return BooleanValue.get(res);
+        return doExists ? evalExists0(0, rangeVal, ctx) : evalForAll0(0, rangeVal, ctx);
     }
 
-    private final boolean evalExistsOrForAll0(int nesting,
-            CollectionValue rangeVal, EvalContext ctx, boolean doExists) {
-        // loop over range elements
-        boolean res = !doExists;
-        
-        for (Value elemVal : rangeVal) {
+    /**
+     * B7-unrelated correctness fix, found and fixed at S9: the fork's own {@code evalExists0} (and
+     * {@code evalForAll0} below) OVERWRITE {@code res} at the nested-recursion branch —
+     * {@code res = evalExists0(nesting + 1, rangeVal, ctx);} — instead of combining it with the
+     * accumulator from earlier outer-loop iterations. For a single-variable query that branch never
+     * runs and the bug is invisible; for a two-or-more-variable query
+     * ({@code context p1, p2 : T inv ... : P(p1, p2)}, which desugars to exactly this recursion) only
+     * the LAST outer element's inner result survives — an earlier violation an inner loop found is
+     * silently erased by a later, unrelated outer element whose inner loop was clean.
+     *
+     * <p>This is not a B7 row and not an uncertainty concern: it is core multi-variable
+     * {@code forAll}/{@code exists}, unrelated to any U-type, and it broke a stock two-variable
+     * invariant shell test ({@code t049}, {@code Person::nameUnique}) the moment this method
+     * replaced the crisp-only algorithm that preceded it — that algorithm's overwrite was masked by
+     * an early {@code break} on the first failure, which is a different bug (losing every result
+     * after the first) that happened not to manifest on this particular fixture. Confirmed
+     * byte-for-byte present in the fork's own source before deciding this needed a fix rather than a
+     * faithful port: {@code ExpQuery.java:266-310} in USE-Uncertainty is identical to what this
+     * class had before this fix.
+     *
+     * <p>The fix combines the recursive result with the outer accumulator through the same
+     * {@code ExpStdOp.create("or"/"and", ...)} dispatch the leaf case uses, so it stays correct for
+     * both crisp and {@code UBoolean} bodies at every nesting depth.
+     */
+    private final Value evalExists0(int nesting, CollectionValue rangeVal, EvalContext ctx) {
+        Value res = BooleanValue.FALSE;
 
-            // bind element variable to range element, if variable was
-            // declared
+        for (Value elemVal : rangeVal) {
             if (!fElemVarDecls.isEmpty())
-                ctx.pushVarBinding(fElemVarDecls.varDecl(nesting).name(),
-                        elemVal);
+                ctx.pushVarBinding(fElemVarDecls.varDecl(nesting).name(), elemVal);
 
             if (!fElemVarDecls.isEmpty() && nesting < fElemVarDecls.size() - 1) {
-                // call recursively to iterate over range while
-                // assigning each value to each element variable
-                // eventually
-                if (res != doExists)
-                    res = evalExistsOrForAll0(nesting + 1, rangeVal, ctx,
-                            doExists);
-                else if (ctx.isEnableEvalTree())
-                    // don't change the result value when expression is true
-                    // (exists) or
-                    // false (forAll) and continue iteration
-                    evalExistsOrForAll0(nesting + 1, rangeVal, ctx, doExists);
-                else {
-                	if (!fElemVarDecls.isEmpty())
-                        ctx.popVarBinding();
-                	break;
+                Value innerRes = evalExists0(nesting + 1, rangeVal, ctx);
+                try {
+                    Expression expOr = ExpStdOp.create("or", new Expression[]{
+                            new ExpressionWithValue(res), new ExpressionWithValue(innerRes)});
+                    res = expOr.eval(ctx);
+                } catch (ExpInvalidException ex) {
+                    res = BooleanValue.FALSE;
                 }
             } else {
-                // evaluate predicate expression
                 Value queryVal = fQueryExp.eval(ctx);
-
-                // undefined query values default to false
                 if (queryVal.isUndefined())
                     queryVal = BooleanValue.FALSE;
 
-                // don't change the result value when expression is true
-                // (exists) or
-                // false (forAll) and continue iteration
-                if (res != doExists && ((BooleanValue) queryVal).value() == doExists)
-                    res = doExists;
-                else if (!ctx.isEnableEvalTree() &&  ((BooleanValue) queryVal).value() == doExists) {
-                	if (!fElemVarDecls.isEmpty())
-                        ctx.popVarBinding();
-                	break;
+                try {
+                    Expression expOr = ExpStdOp.create("or", new Expression[]{
+                            new ExpressionWithValue(res), new ExpressionWithValue(queryVal)});
+                    res = expOr.eval(ctx);
+                } catch (ExpInvalidException ex) {
+                    // Cannot happen: res and queryVal are both kind of UBoolean by construction
+                    // (BooleanValue.FALSE the first time through, whatever assertKindOfUBoolean
+                    // already accepted every time after). Set false to continue iteration rather
+                    // than let a defect here silently mask every subsequent element.
+                    res = BooleanValue.FALSE;
                 }
-                	
             }
 
             if (!fElemVarDecls.isEmpty())
@@ -218,6 +272,109 @@ public abstract class ExpQuery extends Expression {
         }
 
         return res;
+    }
+
+    /** See {@link #evalExists0}'s class comment for the fix this mirrors, AND-shaped. */
+    private final Value evalForAll0(int nesting, CollectionValue rangeVal, EvalContext ctx) {
+        Value res = BooleanValue.TRUE;
+
+        for (Value elemVal : rangeVal) {
+            if (!fElemVarDecls.isEmpty())
+                ctx.pushVarBinding(fElemVarDecls.varDecl(nesting).name(), elemVal);
+
+            if (!fElemVarDecls.isEmpty() && nesting < fElemVarDecls.size() - 1) {
+                Value innerRes = evalForAll0(nesting + 1, rangeVal, ctx);
+                try {
+                    Expression expAnd = ExpStdOp.create("and", new Expression[]{
+                            new ExpressionWithValue(res), new ExpressionWithValue(innerRes)});
+                    res = expAnd.eval(ctx);
+                } catch (ExpInvalidException ex) {
+                    res = BooleanValue.TRUE;
+                }
+            } else {
+                Value queryVal = fQueryExp.eval(ctx);
+                if (queryVal.isUndefined())
+                    queryVal = BooleanValue.FALSE;
+
+                try {
+                    Expression expAnd = ExpStdOp.create("and", new Expression[]{
+                            new ExpressionWithValue(res), new ExpressionWithValue(queryVal)});
+                    res = expAnd.eval(ctx);
+                } catch (ExpInvalidException ex) {
+                    // See evalExists0: cannot happen given assertKindOfUBoolean already ran.
+                    res = BooleanValue.TRUE;
+                }
+            }
+
+            if (!fElemVarDecls.isEmpty())
+                ctx.popVarBinding();
+        }
+
+        return res;
+    }
+
+    /**
+     * Evaluate {@code uSelect}/{@code uSelectC}: keep every range element whose query body is
+     * crisply {@code true}, or a {@code UBoolean} whose probability meets the confidence threshold.
+     *
+     * <p>Ported from USE-Uncertainty, {@code ExpQuery.java:179-240}.
+     */
+    protected final Value evalUSelect(EvalContext ctx) {
+        double confidence = evalAndAssertConfidence(ctx);
+
+        // evaluate range
+        Value v = fRangeExp.eval(ctx);
+        if (v.isUndefined())
+            return UndefinedValue.instance;
+        CollectionValue rangeVal = (CollectionValue) v;
+
+        if (!rangeVal.type().isInstantiableCollection())
+            throw new RuntimeException("rangeVal is not of collection type: " + rangeVal.type());
+
+        // prepare result value
+        ArrayList<Value> resValues = new ArrayList<Value>();
+
+        if (!fElemVarDecls.isEmpty())
+            ctx.pushVarBinding(fElemVarDecls.varDecl(0).name(), null);
+
+        for (Value elemVal : rangeVal) {
+            if (!fElemVarDecls.isEmpty())
+                ctx.varBindings().setPeekValue(elemVal);
+
+            Value queryVal = fQueryExp.eval(ctx);
+            if (queryVal.isUndefined())
+                queryVal = BooleanValue.FALSE;
+
+            if (queryVal.isBoolean() && ((BooleanValue) queryVal).isTrue())
+                resValues.add(elemVal);
+            else if (queryVal.isUBoolean() && ((UBooleanValue) queryVal).probability() >= confidence)
+                resValues.add(elemVal);
+        }
+
+        if (!fElemVarDecls.isEmpty())
+            ctx.popVarBinding();
+
+        return ((CollectionType) rangeVal.type()).createCollectionValue(resValues);
+    }
+
+    /**
+     * The confidence threshold {@code uSelectC} was given, or {@code 0.5} for plain {@code uSelect}
+     * (no threshold expression at all).
+     */
+    private double evalAndAssertConfidence(EvalContext ctx) {
+        double confidence = 0.5;
+
+        if (fUncertaintyExp != null) {
+            Value confidenceValue = fUncertaintyExp.eval(ctx);
+            confidence = confidenceValue.isReal()
+                    ? ((RealValue) confidenceValue).value()
+                    : ((IntegerValue) confidenceValue).value();
+
+            if (confidence < 0 || confidence > 1)
+                throw new RuntimeException("Confidence value must be between 0 and 1, found '"
+                        + fUncertaintyExp + "'");
+        }
+        return confidence;
     }
 
     /**
@@ -509,5 +666,9 @@ public abstract class ExpQuery extends Expression {
 
     public VarDeclList getVariableDeclarations() {
         return fElemVarDecls;
+    }
+
+    public Expression getUncertaintyExpression() {
+        return fUncertaintyExp;
     }
 }

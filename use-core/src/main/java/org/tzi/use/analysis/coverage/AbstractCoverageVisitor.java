@@ -260,6 +260,16 @@ public abstract class AbstractCoverageVisitor implements ExpressionVisitor {
 	}
 
 	@Override
+	public void visitUSelect(ExpUSelect exp) {
+		visitQuery(exp);
+	}
+
+	@Override
+	public void visitUSelectC(ExpUSelectC exp) {
+		visitQuery(exp);
+	}
+
+	@Override
 	public void visitStdOp(ExpStdOp exp) {
 		for (Expression expArg : exp.args()) {
 			expArg.processWithVisitor(this);
