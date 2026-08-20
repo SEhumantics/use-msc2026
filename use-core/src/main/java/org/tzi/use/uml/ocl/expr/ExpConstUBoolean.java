@@ -32,6 +32,32 @@ public class ExpConstUBoolean extends Expression {
         return eProbability.toString();
     }
 
+    /**
+     * B7 / ledger M-29 — <strong>behaviour deliberately changed from the fork.</strong>
+     *
+     * <p>The fork's guard was {@code if (probability.isUndefined())}. An undefined {@code value}
+     * was not checked at all: {@code value.toString()} on an {@code UndefinedValue} is the literal
+     * text {@code "Undefined"}, {@code Boolean.valueOf("Undefined")} is {@code false} (no exception
+     * — {@code Boolean.valueOf} accepts any string and only recognises {@code "true"}), and
+     * {@code UBooleanValue.valueOf(false, p)} normalises that to {@code (true, 1-p)}. So
+     * {@code UBoolean(Undefined, 0.8)} silently produced a <strong>defined</strong> {@code UBoolean}
+     * — a value manufactured from an operand that was not there.
+     *
+     * <p>Both operands are now checked, matching {@code ExpConstUInteger} and {@code ExpConstUReal},
+     * which already guard both of theirs.
+     *
+     * <p><strong>M-28 is unaffected and deliberately not revisited here</strong>: the
+     * {@code Boolean.valueOf(value.toString())} round-trip stays, because it is also what converts a
+     * malformed string into the {@code NumberFormatException} the surrounding {@code catch} turns
+     * into {@code Undefined} — see the class comment on the parameter-shaped ledger row M-28.
+     *
+     * <p><strong>Declared consequence.</strong> {@code VALUE} — an undefined value operand now
+     * yields {@code Undefined} instead of a fabricated {@code UBoolean}. <strong>Unreachable from the
+     * corpus</strong>: {@code UBoolean(3 + 2, 1)} and {@code UBoolean(3 / 0, 1)} are both compile
+     * errors at the constructor's own type guard above, so neither corpus attempt reaches {@code eval}.
+     *
+     * <p>Decided by the user on 2026-08-17 (B7); {@code docs/port2/b7-fix-plan.md} section 2 M-29.
+     */
     @Override
     public Value eval(EvalContext ctx) {
         Value res = null;
@@ -41,7 +67,7 @@ public class ExpConstUBoolean extends Expression {
         value = eValue.eval(ctx);
         probability = eProbability.eval(ctx);
 
-        if (probability.isUndefined())
+        if (value.isUndefined() || probability.isUndefined())
             res = UndefinedValue.instance;
         else try {
             res = UBooleanValue.valueOf(Boolean.valueOf(value.toString()), Double.valueOf(probability.toString()));

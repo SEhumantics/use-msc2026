@@ -318,14 +318,87 @@ could be passed where an `Integer` was expected and was refused where a `UIntege
 This is **not** a B7 correction. It moves the port *towards* the fork, so no `IntendedDepartures`
 entry adjudicates it, and the sweep is unchanged by it.
 
+### 4.3c Dead code removed: `ExpDefSBoolean` and `ASTSBooleanDefExpression`
+
+The user's follow-up instruction (2026-08-20): dead code, including semantics code with no
+grammatical binding, is removed rather than fixed or kept. `ExpDefSBoolean` and its constructing AST
+node `ASTSBooleanDefExpression` are exactly that population, and they are also M-26 and M-27's site.
+
+**Confirmed unreachable, mechanically.** `grep` for `ASTSBooleanDefExpression` across
+`use-core/src/main/resources/grammars/` returns nothing — no grammar production constructs it, ever.
+The only other reference besides the class's own definition was `ExpressionVisitor` (the visitor
+method) and its two implementers. No corpus entry, no shell test, no `.soil` script can reach this
+code, because nothing in the parser can build the node that would call it.
+
+**Removed:**
+
+| File | |
+|---|---|
+| `use-core/src/main/java/org/tzi/use/parser/ocl/ASTSBooleanDefExpression.java` | deleted |
+| `use-core/src/main/java/org/tzi/use/uml/ocl/expr/ExpDefSBoolean.java` | deleted |
+| `ExpressionVisitor.visitDefSBoolean(ExpDefSBoolean)` | interface method removed |
+| `ExpressionPrintVisitor.visitDefSBoolean` | implementation removed |
+| `AbstractCoverageVisitor.visitDefSBoolean` | implementation removed |
+
+**M-26 and M-27 are moot, not fixed and not deferred.** M-26 was a missing `ctx.exit` before the
+return in `ExpDefSBoolean.eval`; M-27 was an inverted guard in the constructor. Both die with the
+class. `b7-fix-plan.md` §2 already anticipated this outcome under B10 ("MOOT — do not port the
+class"); what changed today is that the class had in fact been ported anyway, and B10's "drop" is now
+executed rather than merely decided.
+
+**Verified no other dead uncertainty code exists on the same surface.** Every grammar-bound AST
+literal (`ASTURealLiteral`, `ASTUIntegerLiteral`, `ASTUBooleanLiteral`, `ASTUStringLiteral`,
+`ASTSBooleanLiteral`) maps one-to-one to a constructing `Exp*` class
+(`ExpConstUReal`/`ExpConstUInteger`/`ExpConstUBoolean`/`ExpConstUString`/`ExpConstSBoolean`); with
+`ExpDefSBoolean` gone, that is now an exact five-to-five correspondence and nothing is left over on
+either side.
+
+`mvn -o -pl use-core compile` and `mvn -o -pl use-gui -am compile` both succeed with these removed;
+`use-gui` was checked because `VoidType` (§4.3b) and `ExpressionVisitor` are both touched by this
+stage and `use-gui` is out of scope by ground rule 5 unless a compile break forces otherwise — it
+does not.
+
+### 4.3d M-29, M-30, M-32, M-33 — the parser and literal-constant layer
+
+`b7-fix-plan.md` §3 marks every one of these as reaching a compile error before the corrected line,
+or as having no corpus example at all — a different way of saying nothing that already exists
+exercises the code. `B7ParserAndConstantsTest`, 12 tests, driven end to end through
+`OCLCompiler.compileExpression`, the same production path `UncertainExpressionTypingTest` uses.
+
+| Row | The defect | Witness |
+|---|---|---|
+| **M-29** | `ExpConstUBoolean` checked only `probability.isUndefined()`. An undefined **value** operand's `toString()` is the literal text `"Undefined"`; `Boolean.valueOf("Undefined")` is `false` (no exception); `UBooleanValue.valueOf(false, p)` normalises that to `(true, 1-p)` — a defined result manufactured from an operand that was not there. | `UBoolean((let b : Boolean = Undefined in b), 0.8)` |
+| **M-30** | `ExpConstUString.eval` had an unguarded `(StringValue)` cast and an unguarded `Double.valueOf(confidence.toString())`. A **statically** well-typed operand can still evaluate to `Undefined` at runtime, and both raised uncaught exceptions when it did. | `UString((let s : String = Undefined in s), 0.9)` |
+| **M-32** | `ASTURealLiteral.gen` called `eValue.gen(ctx)` and `eUncertainty.gen(ctx)` each **twice** — once for the type check, again at construction — building two distinct graphs and installing the second. | `UReal((let x : Integer = 3 in x), (let y : Real = 0.5 in y))` |
+| **M-33** | `ASTUStringLiteral` had no `toString()` override at all, unlike its four siblings; it fell through to `Object.toString()`, an identity hash. | direct construction with a stub operand, asserting the rendered text |
+
+#### Finding the right witness took two tries, for reasons worth recording
+
+The first draft used `Undefined.oclAsType(Boolean)` to get an undefined operand statically typed
+`Boolean`. It does not compile: `oclAsType` refuses to widen `OclVoid` to a declared subtype, so
+every M-29/M-30 test failed at the `compile()` step rather than reaching `eval`. The working idiom is
+a `let`-declaration with an explicit type ascription — `(let b : Boolean = Undefined in b)` — which
+gives exactly "undefined value, declared type." M-32's witness needed parentheses around each `let`
+for an unrelated grammar-precedence reason: an unparenthesized `let ... in ...` is not a valid
+function-call argument in this grammar.
+
+#### A stale classpath produced a false negative worth recording
+
+Debugging the M-30 witness against a manually assembled classpath first reported the **old**
+`ClassCastException` even after the source fix had landed, because `~/.m2`'s installed `use-core`
+artifact was earlier on the classpath than the freshly compiled `target/classes`. Reordering the
+classpath — `target/classes` first — reproduced the fix immediately. Recorded because it is exactly
+the failure shape this whole project keeps finding: a signal that looks like a result but is actually
+measuring the wrong artifact.
+
 ### 4.4 The gate
 
 `bash scripts/upstream-oracle-gate.sh both` → **PASS**.
 
 | mode | classes | methods | executions | failures |
 |---|---|---|---|---|
-| default, `use-core` surefire | 36 (floor 15 → **re-pinned 36**) | 182 (floor 107 → **re-pinned 182**) | 182 | 0 |
-| oracle, `use-core` surefire | 69 (floor 48 → **re-pinned 69**) | 453 (floor 378 → **re-pinned 453**) | 1041 | 0 |
+| default, `use-core` surefire | 40 (floor 15 → **re-pinned 40**) | 194 (floor 107 → **re-pinned 194**) | 194 | 0 |
+| oracle, `use-core` surefire | 73 (floor 48 → **re-pinned 73**) | 465 (floor 378 → **re-pinned 465**) | 1053 | 0 |
 
 The jump is 13 classes, not 2: surefire counts each `@Nested` class as its own report, and the two
 new files carry 6 and 7 nested classes. Floors may grow and may never shrink.
@@ -347,12 +420,14 @@ read before the goldens were updated.
 |---|---|
 | M-11, M-8, M-9, M-10, M-12, M-18, F-2, F-3, F-4, F-10, bundle A | **done**, evidenced above |
 | M-21, M-22, M-37, M-38 | **done**, evidenced in §4.3b |
+| M-26, M-27 | **moot**: `ExpDefSBoolean` deleted as dead code, §4.3c |
+| M-29, M-30, M-32, M-33 | **done**, evidenced in §4.3d |
 | **M-29, M-30, M-32, M-33** (expression/parser layer) | not started |
 | **M-26, M-27** (`ExpDefSBoolean`) | the class was ported although B10 decided "drop"; unreachable from any grammar rule. Needs a decision, not a fix |
 | **M-6, M-28, M-31, M-43, M-48b, M-51** | "fix = do not change the code". Each still needs its written justification **at the site** |
 | **CF-5, CF-7, CF-8, CF-9, M-44, M-45, M-49b** | the test-harness rows. None started |
 
-**15 of 33 rows are discharged.** That is the honest count; the previous record said 1.
+**21 of 33 rows are discharged** (15 fixed, 2 moot by deletion, 4 more fixed this batch). That is the honest count; the previous record said 1.
 
 ---
 
@@ -372,6 +447,13 @@ mvn -o -pl use-core test -Dtest=MathUtilRoundSaturationTest
 
 # section 4.3b
 mvn -o -pl use-core test -Dtest=B7TypeAndDispatchTest
+
+# section 4.3c -- confirm the two files are gone and nothing references them
+git log --oneline -1 -- use-core/src/main/java/org/tzi/use/parser/ocl/ASTSBooleanDefExpression.java
+grep -rn 'ExpDefSBoolean\|ASTSBooleanDefExpression' use-core/src/main use-gui/src/main 2>/dev/null || echo "none found"
+
+# section 4.3d
+mvn -o -pl use-core test -Dtest=B7ParserAndConstantsTest
 
 # section 1.1 / 1.3
 mvn -o -pl use-core test -Dtest=IntendedDeparturesTest

@@ -277,6 +277,10 @@ public class UpstreamOracleFloor {
     // RE-PINNED 2026-08-20 (B7 type and dispatch layers). Adds ONE Jupiter test file,
     // B7TypeAndDispatchTest, with 12 methods across 5 @Nested classes. use-core/surefire
     // 31/170 -> 36/182 (default) and 64/441 -> 69/453 (oracle).
+    //
+    // RE-PINNED 2026-08-20 (B7 parser/constant layer, M-29/M-30/M-32/M-33). Adds ONE Jupiter test
+    // file, B7ParserAndConstantsTest, with 12 methods across 4 @Nested classes. use-core/surefire
+    // 36/182 -> 40/194 (default) and 69/453 -> 73/465 (oracle).
     // Floors are >= : the suite may GROW, it may never shrink. No floor is 0 and no floor
     // may be lowered to make a run pass — see harness-contract.md sec. 8 step 7 clause 1,
     // "Do not lower the floor."
@@ -284,13 +288,13 @@ public class UpstreamOracleFloor {
     record Floor(int classes, int methods) { }
 
     static final Map<String, Floor> ORACLE = Map.of(
-            "use-core/surefire", new Floor(69, 453),
+            "use-core/surefire", new Floor(73, 465),
             "use-gui/surefire", new Floor(8, 17),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
 
     static final Map<String, Floor> DEFAULT = Map.of(
-            "use-core/surefire", new Floor(36, 182),
+            "use-core/surefire", new Floor(40, 194),
             "use-gui/surefire", new Floor(1, 1),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
