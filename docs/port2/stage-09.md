@@ -422,12 +422,13 @@ read before the goldens were updated.
 | M-21, M-22, M-37, M-38 | **done**, evidenced in §4.3b |
 | M-26, M-27 | **moot**: `ExpDefSBoolean` deleted as dead code, §4.3c |
 | M-29, M-30, M-32, M-33 | **done**, evidenced in §4.3d |
-| **M-29, M-30, M-32, M-33** (expression/parser layer) | not started |
-| **M-26, M-27** (`ExpDefSBoolean`) | the class was ported although B10 decided "drop"; unreachable from any grammar rule. Needs a decision, not a fix |
 | **M-6, M-28, M-31, M-43, M-48b, M-51** | "fix = do not change the code". Each still needs its written justification **at the site** |
 | **CF-5, CF-7, CF-8, CF-9, M-44, M-45, M-49b** | the test-harness rows. None started |
+| **`uSelect`/`uSelectC`, uncertainty-aware collection membership, `uCount`/`uCountC`, metamorphic tests M-1..M-6** | outside the 33-row ledger; separate open items from the adversarial audit |
 
-**21 of 33 rows are discharged** (15 fixed, 2 moot by deletion, 4 more fixed this batch). That is the honest count; the previous record said 1.
+**21 of 33 rows are discharged**: 15 fixed at the value, type and dispatch layers (sections 3–4.3b),
+2 moot by the deletion of `ExpDefSBoolean` (M-26, M-27; section 4.3c), and 4 more fixed at the parser
+and literal-constant layer (M-29, M-30, M-32, M-33; section 4.3d). The previous record said 1.
 
 ---
 
