@@ -113,4 +113,34 @@ class SBooleanFusionValueTest {
                     0.0, 0.0, 1.0, 0.5);
         }
     }
+
+    @Nested
+    @DisplayName("discount: multi-edge trust discounting, receiver NOT prepended to the collection")
+    class Discount {
+
+        @Test
+        @DisplayName("p = product of the trust chain's projections; formula applied to the receiver")
+        void multiEdgeChain() {
+            // Trust chain is {B, C}, NOT {A, B, C} -- discount does not prepend the receiver.
+            // p = B.projection * C.projection = 0.32 * 0.25 = 0.08
+            // belief    = p * A.belief     = 0.08 * 0.5 = 0.04
+            // disbelief = p * A.disbelief  = 0.08 * 0.3 = 0.024
+            // uncertainty = 1 - p*(A.disbelief + A.belief) = 1 - 0.08*0.8 = 0.936
+            // baseRate = A.baseRate = 0.5
+            // sanity: 0.04 + 0.024 + 0.936 = 1.0
+            assertOpinion(A + ".discount(Set{" + B + "," + C + "})",
+                    0.04, 0.024, 0.936, 0.5);
+        }
+
+        @Test
+        @DisplayName("a single fully-trusted intermediary (projection 1.0) passes the opinion through unchanged")
+        void fullTrustPassesThrough() {
+            // H = SBoolean(1, 0, 0, 0.5) -- projection = 1.0, a dogmatic-true trust opinion.
+            // p = 1.0, so belief=A.belief, disbelief=A.disbelief, uncertainty=1-1*(0.3+0.5)=0.2,
+            // matching A's own uncertainty exactly.
+            String H = "SBoolean(1, 0, 0, 0.5)";
+            assertOpinion(A + ".discount(Set{" + H + "})",
+                    0.5, 0.3, 0.2, 0.5);
+        }
+    }
 }
