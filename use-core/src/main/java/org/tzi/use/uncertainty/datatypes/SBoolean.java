@@ -22,6 +22,15 @@
  *      No differential row can reach a removed member: `toUUnlimitedNatural` is
  *      registered nowhere under expr/operations.
  *
+ *   4. PURGED of `union(SBoolean)`, `weightedUnion(SBoolean)`, `weightedUnion(Collection<SBoolean>)`,
+ *      and the binary `ccFusion(SBoolean)`. Like the six fusion wrappers documented in
+ *      StandardOperationsSBoolean.java:1313-1328, none of these four had an OCL registration in
+ *      either the old fork or this port (grep confirms no UNION or WEIGHTEDUNION operation was
+ *      ever registered), and their only callers in the old fork were the standalone
+ *      uDataTypes/SBooleans.java facade and a library unit test — neither part of USE-Uncertainty.
+ *      Correctly dangling; this note closes the audit-trail gap the six-fusion-wrapper removal note
+ *      already set the precedent for. Found during the 2026-08-21 completeness review.
+ *
  * Otherwise byte-for-byte upstream. Do not reformat: the port's auditability depends
  * on this file staying diffable against its origin.
  */
