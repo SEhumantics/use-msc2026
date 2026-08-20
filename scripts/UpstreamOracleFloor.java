@@ -362,6 +362,20 @@ public class UpstreamOracleFloor {
     // RealValue runtime behaviour, a genuine pre-existing fork defect found incidentally, not
     // fixed here, documented in the test file). use-core/surefire 53/338 -> 59/352 (default) and
     // 86/609 -> 92/623 (oracle). use-gui unchanged.
+    //
+    // RE-PINNED 2026-08-21 (S10, docs/port2/stage-10.md — an independent audit dispatched to
+    // double-check the port's completeness, not a B7 ledger row). Two new Jupiter test files, each
+    // with @Nested classes (surefire counts each as its own report): UStringExpOpsTest (7 @Nested
+    // classes, 19 methods — UString had zero prior OCL-level coverage) and SBooleanExpOpsTest
+    // (4 @Nested classes, 13 methods — closes the 13 SBoolean operations found untested). +11
+    // classes total. Plus methods added to two EXISTING files, no new classes: 6 in
+    // URealExpOpsTest (the trig operations sin/cos/tan/asin/acos/atan, zero coverage anywhere
+    // before now) and 3 in UncertainQueryAndMembershipTest (regression tests for the uSelectC print
+    // fix and the EvalNode substitution fix, K-14/K-15). +19+13+6+3 = +41 methods total.
+    // use-core/surefire 59/352 -> 70/393 (default) and 92/623 -> 103/664 (oracle) — both numbers
+    // are the isolated gate's own words, not estimated. use-gui unchanged. Six dead SBoolean fusion
+    // operations removed in the same stage (ungrammared semantics code, stage-10.md §5.1) — no
+    // test count change, nothing was ever exercising them.
     // Floors are >= : the suite may GROW, it may never shrink. No floor is 0 and no floor
     // may be lowered to make a run pass — see harness-contract.md sec. 8 step 7 clause 1,
     // "Do not lower the floor."
@@ -369,13 +383,13 @@ public class UpstreamOracleFloor {
     record Floor(int classes, int methods) { }
 
     static final Map<String, Floor> ORACLE = Map.of(
-            "use-core/surefire", new Floor(92, 623),
+            "use-core/surefire", new Floor(103, 664),
             "use-gui/surefire", new Floor(8, 17),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
 
     static final Map<String, Floor> DEFAULT = Map.of(
-            "use-core/surefire", new Floor(59, 352),
+            "use-core/surefire", new Floor(70, 393),
             "use-gui/surefire", new Floor(1, 1),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
