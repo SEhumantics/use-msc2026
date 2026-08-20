@@ -79,7 +79,9 @@ regression test are both in `904e4576`.
 
 ## 2. The acceptance gate — both profiles, real output
 
-Run from the repository root, per this review's own instructions:
+Run from the repository root, per this review's own instructions (the `cd use-core` below scopes
+each hand-typed `mvn verify` to that one module only; it does not cover `use-gui`. The full-reactor
+evidence, covering both `use-core` and `use-gui`, is §2.3's gate-script run below):
 
 ```
 cd use-core && mvn verify
@@ -15213,9 +15215,14 @@ project's actual acceptance evidence is `scripts/upstream-oracle-gate.sh`'s
 own `[gate] PASS` banner, not a hand-typed `mvn` invocation's `[floor] PASS`
 alone. A task review of this closeout caught that gap; this subsection
 closes it without removing the evidence above, which stays as real,
-useful context (and the `[floor] PASS` lines it captured are exactly what
-the gate script's own run reproduces below, just wrapped in the script's
-additional freshness/tamper/partial-reactor checks).
+useful context (and the `[floor] PASS` lines it captured reach the same
+verdict against the same pinned floors as the gate script's own run below —
+not byte-identical output, since separate runs carry their own freshness
+timestamps and stale-ignored counts (e.g. §2.1 above shows
+`stale-ignored=47` for `use-core` surefire where §2.3 below shows
+`stale-ignored=0` for the same classes/methods counts), just the same
+PASS/floor numbers, wrapped in the script's additional freshness/tamper/
+partial-reactor checks).
 
 ```
 $ bash scripts/upstream-oracle-gate.sh both
@@ -15355,7 +15362,10 @@ harness/build-infrastructure-level concerns, and this review left them exactly a
   the ported types. They are named here, per this review's brief, and not re-examined.
 
 This review's own gate run (§2 above) did not attempt to re-measure D-29/D-30/D-52's open figures, and
-did not re-run or re-audit `scripts/upstream-oracle-gate.sh` itself (§2.1's `mvn verify` /
-`mvn verify -Pupstream-oracle` were run directly, per this review's own Step 1 instructions, rather
-than through the wrapper script) — so H-01/H-02/H-03, which are specifically about that script, are
-unconfirmed and unrefuted by anything run here.
+did not re-*audit* `scripts/upstream-oracle-gate.sh` itself's own logic or threat model (per
+`docs/port2/gate-threat-model.md`) — that deeper audit is genuinely out of scope here. A run of the
+script did happen: §2.3 executed `bash scripts/upstream-oracle-gate.sh both` directly and captured its
+`[gate] PASS` banner, in addition to §2.1/§2.2's hand-typed `mvn verify` / `mvn verify -Pupstream-oracle`
+invocations run per this review's own Step 1 instructions. But §2.3's run only exercised the script's
+normal, successful path; it did not probe the harder edge cases below — so H-01/H-02/H-03, which are
+specifically about those edge cases, remain unconfirmed and unrefuted by anything run here.

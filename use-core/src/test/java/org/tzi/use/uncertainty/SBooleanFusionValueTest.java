@@ -27,6 +27,12 @@ import org.tzi.use.parser.ocl.OCLCompiler;
  * {@code datatypes/SBoolean.java}), not by calling the port and trusting it, so a wrong port
  * implementation would fail these tests even though it would pass the simplex-closure check.
  *
+ * <p>One deliberate exception: the {@code ConsensusAndCompromiseFusion} tests below are
+ * property/hazard checks (a fixed-point, a genuine-fusion, and an n=6 scale probe), not
+ * formula-derived exact values. {@code consensusAndCompromiseFusion}'s algorithm is O(4^n) over the
+ * opinion count, which makes hand-deriving an exact expected value impractical beyond the smallest
+ * cases; this was a deliberate, sanctioned scope choice for that operation rather than an oversight.
+ *
  * <p>All three constant opinions below are used throughout this file and are chosen so no two of
  * their projections tie (avoiding {@code majorityFusion}'s tie case, which {@link MajorityFusion}
  * tests separately with its own opinions):
@@ -441,7 +447,12 @@ class SBooleanFusionValueTest {
         @Test
         @DisplayName("fusing N identical opinions returns that same opinion")
         void identicalOpinionsAreAFixedPoint() {
-            String expr = A + ".consensusAndCompromiseFusion(Set{" + A + "," + A + "," + A + "})";
+            // Sequence{}, not Set{}: SBooleanValue has value-based equals/hashCode, so a HashSet-backed
+            // Set{A,A,A} would silently collapse the three identical literals to one element, leaving
+            // ccFusion to see n=2 opinions (receiver + the single surviving element) rather than the
+            // n=4 this test is meant to exercise. Sequence{} permits duplicates, so all three copies of
+            // A reach ccFusion alongside the receiver.
+            String expr = A + ".consensusAndCompromiseFusion(Sequence{" + A + "," + A + "," + A + "})";
             assertOpinion(expr, 0.5, 0.3, 0.2, 0.5);
         }
 

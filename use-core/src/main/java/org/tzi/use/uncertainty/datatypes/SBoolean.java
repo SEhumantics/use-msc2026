@@ -7,7 +7,7 @@
  *   licence:  GNU General Public License v2 (the upstream COPYING), the same licence
  *             as USE itself, so vendoring is licence-clean.
  *
- * Three deliberate changes from upstream, recorded in
+ * Four deliberate changes from upstream, recorded in
  * docs/port2/stage-03-scope.md and this completeness review:
  *
  *   1. RELOCATED from package `uDataTypes` to `org.tzi.use.uncertainty.datatypes`
@@ -31,8 +31,17 @@
  *      Correctly dangling; this note closes the audit-trail gap the six-fusion-wrapper removal note
  *      already set the precedent for. Found during the 2026-08-21 completeness review.
  *
- * Otherwise byte-for-byte upstream. Do not reformat: the port's auditability depends
- * on this file staying diffable against its origin.
+ *   4. FIXED `weightedFusion`'s all-vacuous branch, which averages base rates across every fused
+ *      opinion. Unlike bullets 1-3 above, which are pure removals or a relocation, this is a
+ *      BEHAVIORAL change: the accumulation loop used to carry a stray `if (first)` guard that only
+ *      ever added the receiver's own base rate before dividing by the full opinion count, silently
+ *      dropping every other opinion's base rate from what the method's own comment calls a "plain
+ *      average". Found and fixed during the 2026-08-21 completeness review's TDD test-writing; see
+ *      the fix site below for the full account and its disposition note.
+ *
+ * Otherwise byte-for-byte upstream except for bullet 4's behavioral fix, cited at its call site
+ * below. Do not reformat: the port's auditability depends on this file staying diffable against
+ * its origin.
  */
 package org.tzi.use.uncertainty.datatypes;
 
@@ -867,6 +876,9 @@ public class SBoolean implements Cloneable, Comparable<SBoolean> {
 
 			// all confidences are zero, so the weight for each opinion is the same -> use a
 			// plain average for the resultAtomicity
+			//
+			// Not a B7 ledger row (the B7 ledger closed at Stage 9): found and fixed here during
+			// the 2026-08-21 completeness review.
 			//
 			// Fix (2026-08-21 completeness review): this loop used to carry a stray `if (first)`
 			// guard that only ever accumulated the FIRST opinion's baseRate -- since callers
