@@ -299,6 +299,14 @@ public class UpstreamOracleFloor {
     // replays all 1427 entries of the ported UBooleanExpression.in/UCollectionOperations.in/
     // UIntegerExpression.in/URealExpression.in corpus. use-core/surefire 46/216 -> 47/217
     // (default) and 79/487 -> 80/488 (oracle). use-gui unchanged.
+    //
+    // RE-PINNED 2026-08-20 (B7 M-43, UBooleanValueTest). Adds ONE Jupiter test file with 5
+    // methods, no @Nested classes. Two of the five are the fork's own out-of-range-probability
+    // checks, revived LIVE (not @Disabled, as the ledger anticipated) after probing the real
+    // historical jar directly and finding it also throws IllegalArgumentException on
+    // valueOf(true, -2) and valueOf(true, 2) — see the test file's own javadoc for the full
+    // evidence. use-core/surefire 47/217 -> 48/222 (default) and 80/488 -> 81/493 (oracle).
+    // use-gui unchanged.
     // Floors are >= : the suite may GROW, it may never shrink. No floor is 0 and no floor
     // may be lowered to make a run pass — see harness-contract.md sec. 8 step 7 clause 1,
     // "Do not lower the floor."
@@ -306,13 +314,13 @@ public class UpstreamOracleFloor {
     record Floor(int classes, int methods) { }
 
     static final Map<String, Floor> ORACLE = Map.of(
-            "use-core/surefire", new Floor(80, 488),
+            "use-core/surefire", new Floor(81, 493),
             "use-gui/surefire", new Floor(8, 17),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
 
     static final Map<String, Floor> DEFAULT = Map.of(
-            "use-core/surefire", new Floor(47, 217),
+            "use-core/surefire", new Floor(48, 222),
             "use-gui/surefire", new Floor(1, 1),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
