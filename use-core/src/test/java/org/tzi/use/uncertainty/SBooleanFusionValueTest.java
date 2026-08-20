@@ -143,4 +143,61 @@ class SBooleanFusionValueTest {
                     0.5, 0.3, 0.2, 0.5);
         }
     }
+
+    @Nested
+    @DisplayName("beliefConstraintFusion: receiver-prepended, Dempster's-rule belief-constraint combination")
+    class BeliefConstraintFusion {
+
+        @Test
+        @DisplayName("two mostly-believing opinions reinforce belief beyond either input (harmony, low conflict)")
+        void agreementReinforcesBelief() {
+            // bcFusion(this, opinion) per SBoolean.java:1257-1273 (implemented using equation 12.2
+            // of Josang's Subjective Logic book):
+            //   harmony  = b1*u2 + u1*b2 + b1*b2
+            //   conflict = b1*d2 + d1*b2
+            //   b = harmony / (1 - conflict)
+            //   u = (u1*u2) / (1 - conflict)
+            //   d = 1 - b - u
+            //   a = (a1*(1-u1) + a2*(1-u2)) / (2 - u1 - u2)     [since u1+u2 != 2 here]
+            //
+            // X = SBoolean(0.7, 0.1, 0.2, 0.5), Y = SBoolean(0.6, 0.2, 0.2, 0.5) -- both mostly
+            // believing (b > d for each). beliefConstraintFusion prepends the receiver, so the
+            // collection is [X, Y] and cbFusion's pairwise fold reduces to a single X.bcFusion(Y).
+            // harmony  = 0.7*0.2 + 0.2*0.6 + 0.7*0.6 = 0.14 + 0.12 + 0.42 = 0.68
+            // conflict = 0.7*0.2 + 0.1*0.6 = 0.14 + 0.06 = 0.20
+            // b = 0.68 / (1 - 0.20) = 0.68 / 0.80 = 0.85
+            // u = (0.2*0.2) / 0.80 = 0.04 / 0.80 = 0.05
+            // d = 1 - 0.85 - 0.05 = 0.10
+            // a = (0.5*(1-0.2) + 0.5*(1-0.2)) / (2 - 0.2 - 0.2) = (0.4 + 0.4) / 1.6 = 0.8 / 1.6 = 0.5
+            String X = "SBoolean(0.7, 0.1, 0.2, 0.5)";
+            String Y = "SBoolean(0.6, 0.2, 0.2, 0.5)";
+            assertOpinion(X + ".beliefConstraintFusion(Set{" + Y + "})",
+                    0.85, 0.10, 0.05, 0.5);
+        }
+
+        @Test
+        @DisplayName("direct conflict does NOT average -- renormalizing by (1-conflict) sharply cuts uncertainty")
+        void directConflictDoesNotAverage() {
+            // X = SBoolean(0.9, 0.05, 0.05, 0.5) strongly believing,
+            // Y = SBoolean(0.05, 0.9, 0.05, 0.5) strongly disbelieving (mirror image of X: b1=d2,
+            // d1=b2, u1=u2, a1=a2). Receiver prepended -> collection [X, Y] -> X.bcFusion(Y).
+            // harmony  = 0.9*0.05 + 0.05*0.05 + 0.9*0.05 = 0.045 + 0.0025 + 0.045 = 0.0925
+            // conflict = 0.9*0.9 + 0.05*0.05 = 0.81 + 0.0025 = 0.8125
+            // b = 0.0925 / (1 - 0.8125) = 0.0925 / 0.1875 = 37/75 = 0.49333...
+            // u = (0.05*0.05) / 0.1875 = 0.0025 / 0.1875 = 1/75 = 0.01333...
+            // d = 1 - 37/75 - 1/75 = 1 - 38/75 = 37/75 = 0.49333...
+            // a = (0.5*0.95 + 0.5*0.95) / (2 - 0.05 - 0.05) = 0.95 / 1.9 = 0.5
+            //
+            // Contrast with naive averaging (what a wrong "average instead of constraint-fuse" port
+            // would produce): avg belief = avg disbelief = 0.475, avg uncertainty = 0.05. The real
+            // Dempster's-rule result instead renormalizes by (1 - conflict) = 0.1875, pushing
+            // belief/disbelief up to 0.4933 (not 0.475) and crushing uncertainty down to 0.0133
+            // (not 0.05) -- exactly the non-averaging behavior belief-constraint fusion must exhibit
+            // under strong conflict.
+            String X = "SBoolean(0.9, 0.05, 0.05, 0.5)";
+            String Y = "SBoolean(0.05, 0.9, 0.05, 0.5)";
+            assertOpinion(X + ".beliefConstraintFusion(Set{" + Y + "})",
+                    0.4933, 0.4933, 0.0133, 0.5);
+        }
+    }
 }
