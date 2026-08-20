@@ -15233,11 +15233,33 @@ $ bash scripts/upstream-oracle-gate.sh both
 [gate] mvn -B verify -Djava.awt.headless=true
 [gate] mvn EXIT=0, log: /tmp/use-upstream-oracle-gate/default.log (7539 lines)
 [gate] the floor's own words for default:
+[gate]   [floor] initialize: requested profiles (none), declared in this reactor [upstream-oracle], allow-profiles (-Duse.floor.allowProfiles) (none)
+[gate]   [floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.stamp
+[gate]   [floor] ===== upstream-oracle floor check: use-core =====
+[gate]   [floor] requested profiles (reactor-wide, from the command line): (none)
+[gate]   [floor] this module's upstream-oracle profile effective: false
+[gate]   [floor] mode: DEFAULT
+[gate]   [floor] allow-profiles (-Duse.floor.allowProfiles): (none)
+[gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
+[gate]   [floor] freshness stamp: 2026-08-20T23:13:00.964Z — reports older than this are stale and are NOT counted
 [gate]   [floor] surefire  use-core  classes=81  (floor 70 )  methods=414  (floor 393 )  executions=414  failures=0 errors=0 skipped=0 stale-ignored=0
 [gate]   [floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: absent
+[gate]   [floor] wrote receipt /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.receipt (verdict=PASS)
 [gate]   [floor] PASS — use-core met every pinned floor in DEFAULT mode.
+[gate]   [floor] initialize: requested profiles (none), declared in this reactor [upstream-oracle], allow-profiles (-Duse.floor.allowProfiles) (none)
+[gate]   [floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.stamp
+[gate]   [floor] ===== upstream-oracle floor check: use-gui =====
+[gate]   [floor] requested profiles (reactor-wide, from the command line): (none)
+[gate]   [floor] this module's upstream-oracle profile effective: false
+[gate]   [floor] mode: DEFAULT
+[gate]   [floor] allow-profiles (-Duse.floor.allowProfiles): (none)
+[gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
+[gate]   [floor] freshness stamp: 2026-08-20T23:14:54.583Z — reports older than this are stale and are NOT counted
 [gate]   [floor] surefire  use-gui   classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
 [gate]   [floor] failsafe  use-gui   classes=1   (floor 1  )  methods=129  (floor 129 )  executions=129  failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] vintage-only sentinel org.tzi.use.gui.views.diagrams.util.DirectedLineTest: absent
+[gate]   [floor] wrote receipt /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.receipt (verdict=PASS)
 [gate]   [floor] PASS — use-gui met every pinned floor in DEFAULT mode.
 
 [gate] ----- oracle : expecting mode ORACLE in every module -----
@@ -15245,13 +15267,33 @@ $ bash scripts/upstream-oracle-gate.sh both
 [gate] mvn -B verify -Djava.awt.headless=true -Pupstream-oracle
 [gate] mvn EXIT=0, log: /tmp/use-upstream-oracle-gate/oracle.log (7867 lines)
 [gate] the floor's own words for oracle:
+[gate]   [floor] initialize: requested profiles [upstream-oracle], declared in this reactor [upstream-oracle], allow-profiles (-Duse.floor.allowProfiles) (none)
+[gate]   [floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.stamp
+[gate]   [floor] ===== upstream-oracle floor check: use-core =====
+[gate]   [floor] requested profiles (reactor-wide, from the command line): [upstream-oracle]
+[gate]   [floor] this module's upstream-oracle profile effective: true
+[gate]   [floor] mode: ORACLE
+[gate]   [floor] allow-profiles (-Duse.floor.allowProfiles): (none)
+[gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
+[gate]   [floor] freshness stamp: 2026-08-20T23:15:33.136Z — reports older than this are stale and are NOT counted
 [gate]   [floor] surefire  use-core  classes=114 (floor 103)  methods=685  (floor 664 )  executions=1273 failures=0 errors=0 skipped=0 stale-ignored=0
 [gate]   [floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
 [gate]   [floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: collected
+[gate]   [floor] wrote receipt /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.receipt (verdict=PASS)
 [gate]   [floor] PASS — use-core met every pinned floor in ORACLE mode.
+[gate]   [floor] initialize: requested profiles [upstream-oracle], declared in this reactor [upstream-oracle], allow-profiles (-Duse.floor.allowProfiles) (none)
+[gate]   [floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.stamp
+[gate]   [floor] ===== upstream-oracle floor check: use-gui =====
+[gate]   [floor] requested profiles (reactor-wide, from the command line): [upstream-oracle]
+[gate]   [floor] this module's upstream-oracle profile effective: true
+[gate]   [floor] mode: ORACLE
+[gate]   [floor] allow-profiles (-Duse.floor.allowProfiles): (none)
+[gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
+[gate]   [floor] freshness stamp: 2026-08-20T23:17:34.987Z — reports older than this are stale and are NOT counted
 [gate]   [floor] surefire  use-gui   classes=8   (floor 8  )  methods=17   (floor 17  )  executions=17   failures=0 errors=0 skipped=0 stale-ignored=0
 [gate]   [floor] failsafe  use-gui   classes=1   (floor 1  )  methods=129  (floor 129 )  executions=129  failures=0 errors=0 skipped=0 stale-ignored=0
 [gate]   [floor] vintage-only sentinel org.tzi.use.gui.views.diagrams.util.DirectedLineTest: collected
+[gate]   [floor] wrote receipt /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.receipt (verdict=PASS)
 [gate]   [floor] PASS — use-gui met every pinned floor in ORACLE mode.
 
 [gate] =================================================================
