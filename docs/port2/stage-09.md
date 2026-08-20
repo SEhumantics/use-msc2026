@@ -540,11 +540,12 @@ Two more rows close as a side effect of the JUnit 5 port itself, not a targeted 
   not pin surefire order... fixing M-45 removes the leak"*), CF-5's underlying hazard does not exist in
   this port.
 
-**M-43 and M-44 remain open.** Both apply to fork test files not ported this stage — `UBooleanValueTest`
-(M-43, two commented-out `try/fail/catch` blocks to revive as `@Disabled`) and four files including
-`ExpQueryUncertaintyTest` (M-44, 40 JUnit-3 `try/fail/catch` idiom sites). Porting them was judged out
-of scope for this stage: the corpus and its own harness were the immediate goal, and neither M-43 nor
-M-44 blocks anything the corpus exercises.
+**M-43 and M-44 remain open as of this commit.** Both apply to fork test files not ported yet —
+`UBooleanValueTest` (M-43, two commented-out `try/fail/catch` blocks the ledger recommended reviving as
+`@Disabled`) and four files including `ExpQueryUncertaintyTest` (M-44, 40 JUnit-3 `try/fail/catch`
+idiom sites). Neither blocked anything the corpus exercises, so both were left for their own commits.
+**M-43 is closed two commits later, §4.3j — and not the way the ledger predicted.** M-44 remains open;
+see §5.
 
 W-02, W-03 and W-04 (`docs/port2/upstream-test-waivers.md`) record the three categories of fixture
 correction the first full run found — 79 entries expecting `Undefined : OclVoid` where the port
@@ -560,25 +561,70 @@ $ mvn -o -pl use-core test -Dtest=USECompilerUncertaintyTest
 Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
 ```
 
+### 4.3j B7 M-43 — `UBooleanValueTest`, and a ledger prediction the real historical jar refutes
+
+The fork's `UBooleanValueTest.java` (`org.tzi.use.uml.ocl.value`) left two assertions commented out,
+each guarded by `// FIXME: When It will be fixed in atenea library`:
+
+```java
+try {
+    uBoolean = UBooleanValue.valueOf(true, -2);
+    fail("Exception expected\n");
+}
+catch (Exception ex) { }
+```
+
+`b7-fix-plan.md`'s own recommendation for M-43 was to revive both as `@Disabled` Jupiter tests,
+reasoning — from the FIXME text alone, not from running anything — that the vendored library's
+constructor clamped out-of-range probabilities rather than throwing, so a live revival would fail and
+turn the suite red.
+
+**That reasoning does not hold, checked directly rather than assumed.** Probed against this port's own
+`UBooleanValue.valueOf(true, -2)`/`(true, 2)`: both throw `IllegalArgumentException`. More importantly,
+probed against the **real historical jar**, via `HistoricalOracle` reflection — invoked, not read from
+source:
+
+```
+HISTORICAL valueOf(true,-2) THREW java.lang.IllegalArgumentException: Invalid parameters
+HISTORICAL valueOf(true,2) THREW java.lang.IllegalArgumentException: Invalid parameters
+```
+
+The vendored `org.tzi.use.uncertainty.datatypes.UBoolean(boolean, double)` constructor validates
+`c < 0 || c > 1` and throws before `UBooleanValue`'s own constructor guard ever runs — confirmed
+byte-identical to the fork's own vendored source
+(`.git/reference-repositories/uncertainty/uDataTypes/Libraries/Java/src/uDataTypes/UBoolean.java:35-36`),
+unchanged by this port's vendoring (B1). Whatever prompted the fork author's FIXME either did not apply
+to this code path or was already fixed by the `74acd0d` snapshot this port is built from. The two
+blocks are therefore revived **live** — `valueOfRejectsProbabilityBelowZero()`,
+`valueOfRejectsProbabilityAboveOne()` — not `@Disabled`. The remaining three test methods (`values`,
+`isTypeOf`, `testEquals`) port unchanged; none of their assertions compare a `UBooleanValue` against a
+`BooleanValue`, so none touch M-8's `equals()` fix, and nothing in the file was expected to move.
+
+```
+$ mvn -o -pl use-core test -Dtest=UBooleanValueTest
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0
+```
+
 ### 4.4 The gate
 
 `bash scripts/upstream-oracle-gate.sh both` → **PASS**. Numbers below are the state at the end of this
-stage, after three re-pins: the B7 corrections phase (§3–4.3f), the `uSelect`/collection-membership
-commit (§4.3h), and the CF-8 corpus-port commit (§4.3i).
+stage, after four re-pins: the B7 corrections phase (§3–4.3f), the `uSelect`/collection-membership
+commit (§4.3h), the CF-8 corpus-port commit (§4.3i), and the M-43 commit (§4.3j).
 
 | mode | classes | methods | executions | failures |
 |---|---|---|---|---|
-| default, `use-core` surefire | 47 (floor 15 → **re-pinned 47**) | 217 (floor 107 → **re-pinned 217**) | 217 | 0 |
-| oracle, `use-core` surefire | 80 (floor 48 → **re-pinned 80**) | 488 (floor 378 → **re-pinned 488**) | 1076 | 0 |
+| default, `use-core` surefire | 48 (floor 15 → **re-pinned 48**) | 222 (floor 107 → **re-pinned 222**) | 222 | 0 |
+| oracle, `use-core` surefire | 81 (floor 48 → **re-pinned 81**) | 493 (floor 378 → **re-pinned 493**) | 1081 | 0 |
 | default/oracle, `use-gui` | unchanged: 1/1 surefire, 1/129 failsafe | — | — | 0 |
 
-The three re-pins, in order: **+13 classes / +54 methods** for the B7 pre-registration mechanism and
+The four re-pins, in order: **+13 classes / +54 methods** for the B7 pre-registration mechanism and
 its two correction test files (`IntendedDeparturesTest`, `B7CorrectionsTest` — surefire counts each
 `@Nested` class as its own report, and the two files carry 6 and 7 nested classes between them), then
 **+5 classes / +16 methods** for `UncertainQueryAndMembershipTest`'s 5 `@Nested` classes, then
-**+1 class / +1 method** for `USECompilerUncertaintyTest`. `use-gui` is untouched by any of the three —
-no `use-gui` source file changed this stage, and the `ExpQuery` accumulation fix (§4.3h) corrected two
-existing `ShellIT` fixtures rather than adding new ones. Floors may grow and may never shrink.
+**+1 class / +1 method** for `USECompilerUncertaintyTest`, then **+1 class / +5 methods** for
+`UBooleanValueTest`. `use-gui` is untouched by all four — no `use-gui` source file changed this stage,
+and the `ExpQuery` accumulation fix (§4.3h) corrected two existing `ShellIT` fixtures rather than
+adding new ones. Floors may grow and may never shrink.
 
 **Waivers: four** (W-01–W-04). No `.java` test file was edited to make ported code pass — every waiver
 this stage (W-02, W-03, W-04) alters only the ported `.in` fixture *data* the tests read, never the
@@ -605,18 +651,20 @@ read before the goldens were updated.
 | CF-8, CF-9, M-45, M-48b, M-49b, M-51 | **done**, evidenced in §4.3i |
 | CF-5 | **discharged structurally** — the fork's order-pinning `AllTests` suites were never ported (this port relies on Surefire's own classpath discovery), and M-45 lands in the same stage as the ledger itself recommends. §4.3i |
 | CF-7 | **partially discharged** — the 2 sites inside the ported `USECompilerUncertaintyTest` are correct by construction (JUnit 5 argument order from the start); the other 10 sites (`UIntegerExpOpsTest.java`) apply to a file not yet ported. §4.3i |
-| **M-43, M-44** | apply to fork test files not yet ported (`UBooleanValueTest.java`; `URealExpOpsTest.java`/`UIntegerExpOpsTest.java`/`UBooleanExpOpsTest.java`/`ExpQueryUncertaintyTest.java`). Judged out of scope for this stage — neither blocks anything the ported corpus exercises |
+| M-43 | **done**, evidenced in §4.3j — and not the way the ledger predicted (revived live, not `@Disabled`; the real historical jar throws too) |
+| **M-44** | applies to four fork test files not yet ported (`URealExpOpsTest.java`/`UIntegerExpOpsTest.java`/`UBooleanExpOpsTest.java`/`ExpQueryUncertaintyTest.java`, ~8,700 lines combined). Judged out of scope for this stage; the largest remaining unit of B7/CF work by a wide margin |
 | **`uCount`/`uCountC`, metamorphic tests M-1..M-6** | outside the 33-row ledger; separate open items from the adversarial audit. `uSelect`/`uSelectC` and uncertainty-aware collection membership, previously in this category, are now done — §4.3h |
 
-**30 of 33 rows are discharged, one more (CF-7) partially so** — counted directly by row name, not by
+**31 of 33 rows are discharged, one more (CF-7) partially so** — counted directly by row name, not by
 group arithmetic: M-8, M-9, M-10, M-11, M-12, M-18, F-2, F-3, F-4, F-10 (10, value layer, prior
 sessions) + M-21, M-22, M-37, M-38 (4, type/dispatch layer, section 4.3b) + M-26, M-27 (2, moot by the
 deletion of `ExpDefSBoolean`, section 4.3c) + M-29, M-30, M-32, M-33 (4, parser/literal-constant
 layer, section 4.3d) + M-6, M-28, M-31 (3, written justification at the site, section 4.3e) + CF-8,
 CF-9, M-45, M-48b, M-49b, M-51 (6, the historical corpus's own test harness, section 4.3i) + CF-5 (1,
-discharged structurally, section 4.3i) = 30. CF-7 is half discharged (2 of its 12 sites; the other 10
-await a file not yet ported). Only M-43 and M-44 have had no work done on them at all — both apply
-exclusively to fork test files this stage did not port. The previous record said 24.
+discharged structurally, section 4.3i) + M-43 (1, section 4.3j) = 31. CF-7 is half discharged (2 of
+its 12 sites; the other 10 await a file not yet ported). **Only M-44 has had no work done on it at
+all** — it applies exclusively to four fork test files this stage did not port. The previous record
+(before this session) said 1; it said 24 at the start of this commit sequence.
 
 ---
 
@@ -667,6 +715,9 @@ mvn -o -pl use-gui verify -Dit.test=ShellIT -DfailIfNoTests=false
 
 # section 4.3i -- the historical corpus test harness, and the three waivers it required
 mvn -o -pl use-core test -Dtest=USECompilerUncertaintyTest
+
+# section 4.3j -- M-43, and the two out-of-range-probability tests revived live
+mvn -o -pl use-core test -Dtest=UBooleanValueTest
 
 # section 1.1 / 1.3
 mvn -o -pl use-core test -Dtest=IntendedDeparturesTest
