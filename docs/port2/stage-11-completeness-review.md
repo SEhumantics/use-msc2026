@@ -15205,6 +15205,66 @@ SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
 [INFO] ------------------------------------------------------------------------
 ```
 
+### 2.3 Gate script confirmation
+
+Section 2.1/2.2 above quote raw, hand-typed `mvn verify` output. Per
+`docs/port2/harness-contract.md` §0.1, "THE GATE IS A SCRIPT" — the
+project's actual acceptance evidence is `scripts/upstream-oracle-gate.sh`'s
+own `[gate] PASS` banner, not a hand-typed `mvn` invocation's `[floor] PASS`
+alone. A task review of this closeout caught that gap; this subsection
+closes it without removing the evidence above, which stays as real,
+useful context (and the `[floor] PASS` lines it captured are exactly what
+the gate script's own run reproduces below, just wrapped in the script's
+additional freshness/tamper/partial-reactor checks).
+
+```
+$ bash scripts/upstream-oracle-gate.sh both
+[gate] =================================================================
+[gate] upstream-oracle acceptance gate — mode: both
+[gate] reactor root: /home/xoruser/msc-4/use-msc2026
+[gate] profile id (hard-coded here, not typed): upstream-oracle
+[gate] git status --porcelain BEFORE:
+[gate]   ?? docs/superpowers/
+[gate]   (nothing above == clean)
+[gate] =================================================================
+
+[gate] ----- default : expecting mode DEFAULT in every module -----
+[gate] mvn -q clean
+[gate] mvn -B verify -Djava.awt.headless=true
+[gate] mvn EXIT=0, log: /tmp/use-upstream-oracle-gate/default.log (7539 lines)
+[gate] the floor's own words for default:
+[gate]   [floor] surefire  use-core  classes=81  (floor 70 )  methods=414  (floor 393 )  executions=414  failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] PASS — use-core met every pinned floor in DEFAULT mode.
+[gate]   [floor] surefire  use-gui   classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] failsafe  use-gui   classes=1   (floor 1  )  methods=129  (floor 129 )  executions=129  failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] PASS — use-gui met every pinned floor in DEFAULT mode.
+
+[gate] ----- oracle : expecting mode ORACLE in every module -----
+[gate] mvn -q clean
+[gate] mvn -B verify -Djava.awt.headless=true -Pupstream-oracle
+[gate] mvn EXIT=0, log: /tmp/use-upstream-oracle-gate/oracle.log (7867 lines)
+[gate] the floor's own words for oracle:
+[gate]   [floor] surefire  use-core  classes=114 (floor 103)  methods=685  (floor 664 )  executions=1273 failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: collected
+[gate]   [floor] PASS — use-core met every pinned floor in ORACLE mode.
+[gate]   [floor] surefire  use-gui   classes=8   (floor 8  )  methods=17   (floor 17  )  executions=17   failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] failsafe  use-gui   classes=1   (floor 1  )  methods=129  (floor 129 )  executions=129  failures=0 errors=0 skipped=0 stale-ignored=0
+[gate]   [floor] vintage-only sentinel org.tzi.use.gui.views.diagrams.util.DirectedLineTest: collected
+[gate]   [floor] PASS — use-gui met every pinned floor in ORACLE mode.
+
+[gate] =================================================================
+[gate] git status --porcelain AFTER:
+[gate]   ?? docs/superpowers/
+[gate]   (nothing above == clean; report anything you did not write, never commit it)
+[gate] PASS — mode 'both': every check above held.
+[gate] =================================================================
+```
+
+This is the project's canonical acceptance evidence for this review:
+`[gate] PASS — mode 'both': every check above held.`
+
 ---
 
 ## 3. What this review did not re-verify
