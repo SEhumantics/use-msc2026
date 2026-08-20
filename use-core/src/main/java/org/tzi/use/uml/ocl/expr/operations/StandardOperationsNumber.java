@@ -537,6 +537,20 @@ final class Op_number_unaryminus extends OpGeneric {
 
 // --------------------------------------------------------
 
+/**
+ * Porting regression, found and fixed at S9 (not a B7 row): an earlier session (S8) guarded this
+ * operation with {@code UncertainOperand.present}. {@code Op_number_pow} and {@code Op_number_sqrt}
+ * needed exactly that guard — the fork gives {@code UReal}/{@code UInteger} their OWN dedicated
+ * {@code Op_ureal_power}/{@code Op_ureal_sqrt}/{@code Op_uInteger_power}/{@code Op_uInteger_sqrt}
+ * (already ported, in {@code StandardOperationsUReal.java} and {@code StandardOperationsUInteger.java}),
+ * so the generic Number version must decline uncertain operands or the two would collide under
+ * {@code OpGeneric}'s name-keyed dispatch. Unary {@code +} has no such dedicated replacement anywhere
+ * in the fork — {@code Op_number_unaryplus} IS the fork's only handler for it, on every numeric type
+ * including the uncertain ones (fork {@code StandardOperationsNumber.java:553-570}), and its body is
+ * a total no-op: {@code return args[0];}. The guard was applied here by the same blanket reasoning
+ * that correctly applied to {@code pow}/{@code sqrt} and incorrectly applied to this one, blocking
+ * {@code +UReal(2,0.5)} from compiling at all. Found running the ported historical corpus.
+ */
 /* + : Number -> Number */
 final class Op_number_unaryplus extends OpGeneric {
 	@Override
@@ -556,7 +570,6 @@ final class Op_number_unaryplus extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
-		if (UncertainOperand.present(params)) return null;
 		return (params.length == 1 && params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? params[0] : null;
 	}
 
@@ -1287,6 +1300,21 @@ final class Op_number_sqrt extends OpGeneric {
 // --------------------------------------------------------
 
 /* toString : Number -> String */
+/**
+ * Porting regression, found and fixed at S9 (not a B7 row): an earlier session (S8) guarded this
+ * operation with {@code UncertainOperand.present}, refusing {@code UReal}/{@code UInteger} operands
+ * at compile time with "Undefined operation". That guard was meant for operations the fork does NOT
+ * define on uncertain operands (7.5.0-only additions); {@code toString} is not one of them. The
+ * fork's own {@code Op_number_toString.matches} has no such guard
+ * (fork {@code StandardOperationsNumber.java:1229-1234}) — {@code UReal}/{@code UInteger} are
+ * {@code isKindOfNumber}, so it accepts them, and {@code eval}'s generic {@code args[0].toString()}
+ * already renders correctly for any {@code Value}, including the uncertain ones: {@code Value.toString()}
+ * delegates to the type-specific {@code toString(StringBuilder)} every value class implements, so
+ * {@code UReal(-2, 0).toString()} was always going to produce {@code "UReal(-2.0, 0.0)"} without any
+ * uncertain-specific code in this class at all. Found running the ported historical corpus
+ * ({@code UIntegerExpression.in}, {@code URealExpression.in}) against the port for the first time —
+ * every {@code .toString()} corpus entry failed with a compile error instead of the expected string.
+ */
 final class Op_number_toString extends OpGeneric {
 	@Override
 	public String name() {
@@ -1305,7 +1333,6 @@ final class Op_number_toString extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
-		if (UncertainOperand.present(params)) return null;
 		return (params.length == 1 && params[0]
 				.isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? TypeFactory
 				.mkString() : null;
