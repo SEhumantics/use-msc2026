@@ -1168,7 +1168,10 @@ class UnwrittenPortInvariantTest {
         return new ArrayList<>(out);
     }
 
-    private static List<List<UValue>> domains(UOp op, Map<String, List<UValue>> corpora,
+    /* package-private: PortedFidelitySweepTest reuses this so the two sweeps cover
+       identical input domains -- if they drifted, the comparison between them would
+       stop meaning anything. */
+    static List<List<UValue>> domains(UOp op, Map<String, List<UValue>> corpora,
                                               List<UValue> argumentCorpus) {
         List<List<UValue>> domains = new ArrayList<>(op.arity());
         domains.add(allValues(corpora));

@@ -236,10 +236,34 @@ public final class PortedCandidate implements Candidate {
             out = UValue.string(c.toString());
         } else {
             // Same renderer as the reference side -- see the class comment.
-            out = UValue.opaque(raw.getClass().getName(),
+            out = UValue.opaque(historicalName(raw.getClass().getName()),
                     HistoricalOracle.opaqueRepresentation(raw));
         }
         return out.observedFrom(raw);
+    }
+
+    /**
+     * The name the REFERENCE would use for a class this port vendored under a different package.
+     *
+     * <p>Narrow on purpose. The OPAQUE branch is package-SENSITIVE by design — defect D-44, asserted
+     * in {@code DifferentialHarnessRegressionTest#theTypeTokenIsPackageInsensitiveOnPurpose}: the
+     * fully qualified name is part of the compared content, so a port that relocated a class really
+     * does diverge on every OPAQUE row. That property is deliberate and must survive.
+     *
+     * <p>But {@code org.tzi.use.uncertainty.datatypes.UInteger} is not a relocated port of some other
+     * class: it is the SAME source file as {@code uDataTypes.UInteger}, vendored under a new package
+     * by decision B1, recorded in docs/port2/stage-03-scope.md §5. Declaring that one identity is not
+     * hiding a difference; it is stating a choice we made. Measured cost of not doing it: 120 false
+     * DIFFER rows on {@code UIntegerValue.getuInteger()}.
+     *
+     * <p>Exactly one prefix is rewritten. Any other package difference still diverges, so D-44 keeps
+     * its teeth.
+     */
+    static String historicalName(String portedClassName) {
+        String vendored = "org.tzi.use.uncertainty.datatypes.";
+        return portedClassName.startsWith(vendored)
+                ? "uDataTypes." + portedClassName.substring(vendored.length())
+                : portedClassName;
     }
 
     // ------------------------------------------------------------------ invocation
@@ -284,23 +308,45 @@ public final class PortedCandidate implements Candidate {
         return fromPorted(raw);
     }
 
+    /**
+     * Mirrors {@link HistoricalOracle}'s {@code marshal}/{@code numeric} pair EXACTLY.
+     *
+     * <p>The first version of this dispatched on the reflected parameter type and called
+     * {@code v.asInt()} straight away, which throws {@link IllegalStateException} for a
+     * {@code UREAL}. The reference does not: it routes primitives through a numeric widener that
+     * accepts {@code INTEGER}/{@code UINTEGER}/{@code REAL}/{@code UREAL} and then narrows. The
+     * asymmetry produced 693 false divergences across {@code UStringValue.at(int)},
+     * {@code uAt(int)} and {@code uSubstring(int,int)} — the reference answering, the port
+     * "throwing" — on a port with no defect in it. Found by the full-census sweep; the hand-picked
+     * 46-operation sweep never drove these.
+     *
+     * <p>Dispatch is on the declared {@link UOp.ParamKind}, not on reflection, for the same reason:
+     * it is the same thing the reference dispatches on.
+     */
     private static Object marshalParam(UOp op, Method method, int index, UValue v) {
-        Class<?> declared = method.getParameterTypes()[index - 1];
-        if (declared == int.class || declared == Integer.class) {
-            return v.asInt();
+        UOp.ParamKind kind = op.params().get(index - 1);
+        switch (kind) {
+            case VALUE:  return toPorted(v);
+            case INT:    return numeric(v).intValue();
+            case DOUBLE: return numeric(v).doubleValue();
+            case FLOAT:  return numeric(v).floatValue();
+            default:
+                throw new HarnessMarshallingException("unhandled param kind " + kind);
         }
-        if (declared == double.class || declared == Double.class) {
-            return v.asDouble();
+    }
+
+    /** The numeric widener, matching {@link HistoricalOracle}'s. */
+    private static Number numeric(UValue value) {
+        switch (value.kind()) {
+            case INTEGER:
+            case UINTEGER:
+                return value.asInt();
+            case REAL:
+            case UREAL:
+                return value.asDouble();
+            default:
+                throw new HarnessMarshallingException(
+                        "a primitive parameter needs a numeric UValue, got " + value.canonical());
         }
-        if (declared == float.class || declared == Float.class) {
-            return (float) v.asDouble();
-        }
-        if (declared == boolean.class || declared == Boolean.class) {
-            return v.asBoolean();
-        }
-        if (declared == String.class) {
-            return v.asString();
-        }
-        return toPorted(v);
     }
 }

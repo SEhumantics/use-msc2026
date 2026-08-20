@@ -59,6 +59,8 @@ public class FirstRealDifferentialTest {
     private static final java.util.List<String> diverged = new java.util.ArrayList<>();
     private static final java.util.List<String> unexpectedlyDegenerate = new java.util.ArrayList<>();
     private static final java.util.List<String> typeMismatches = new java.util.ArrayList<>();
+    private static int sweptOperations = 0;
+    private static long sweptRows = 0;
 
     private static void sweep(String receiver, String method, List<UValue> recv, List<UValue> arg) {
         try (HistoricalOracle oracle = HistoricalOracle.open();
@@ -76,6 +78,8 @@ public class FirstRealDifferentialTest {
             for (DiffRow row : r.rows()) {
                 tally.merge(row.verdict(), 1, Integer::sum);
             }
+            sweptOperations++;
+            sweptRows += r.rows().size();
             int distinct = r.distinctReferenceValues();
             System.out.printf("%-28s %4d rows  distinctRef=%-4d %s%s%n", op.key(), r.rows().size(),
                     distinct, tally, distinct <= 1 ? "   <== DEGENERATE, agreement is free" : "");
@@ -153,6 +157,18 @@ public class FirstRealDifferentialTest {
         sweep("SBooleanValue", "not", sbool, null);
         System.out.println("=========================================================");
         System.out.println("java-type mismatches: " + (typeMismatches.isEmpty() ? "NONE" : typeMismatches));
+
+        // COVERAGE FLOOR, added after an audit found this test would stay green with the port
+        // DELETED: sweep() returns silently when ported.supports(op) is false, which is exactly how a
+        // missing class reports, so all 46 operations would have printed SKIPPED and the three
+        // emptiness assertions below would still have held. An emptiness assertion over an empty
+        // population is not evidence. PortedFidelitySweepTest carries the full census; this test
+        // keeps the readable per-operation table, and now cannot silently stop measuring.
+        assertTrue(sweptOperations >= 35,
+                "this sweep must actually reach the operations it claims to cover, got "
+                        + sweptOperations + ". A SKIPPED operation is not a passing one.");
+        assertTrue(sweptRows >= 10_000,
+                "expected a five-figure row count, got " + sweptRows);
 
         assertTrue(diverged.isEmpty(),
                 "the ported U-types diverged from the historical reference on: " + diverged);
