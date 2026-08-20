@@ -442,19 +442,147 @@ of the same library method is what computes that.
 Every test in the file drives the historical jar as well as the port, so it would fail if either half
 of this answer stopped being true.
 
+### 4.3g Two regressions found while porting the historical corpus
+
+Porting the fork's own test-harness files (§4.3i) meant running 1427 corpus entries against the port
+for the first time. Two of them exposed real regressions in `StandardOperationsNumber`, not corpus
+problems: `Op_number_toString` and `Op_number_unaryplus` both wrongly refused an uncertain operand,
+because an earlier session (S8) applied `UncertainOperand.present`'s guard to all four of
+`unaryplus`/`pow`/`sqrt`/`toString`, when only `pow` and `sqrt` genuinely need it — the fork provides
+dedicated `UReal`/`UInteger` replacement operations for those two only. `toString`'s `matches()` in the
+fork carries no such guard, and `unaryplus` has no dedicated uncertain replacement at all. Fixed by
+removing the guard from both, with javadoc at each site citing the exact fork line numbers that show
+the asymmetry. Committed separately (`e37abb2b`) from the corpus port that found them, per the ground
+rule that behaviour changes and modernization land in separate commits.
+
+### 4.3h `uSelect`/`uSelectC`, uncertainty-aware collection membership, and a quantifier bug
+
+Two features the port was missing entirely, both ported from the fork this stage:
+
+- **`uSelect`/`uSelectC`** (`ExpUSelect`, `ExpUSelectC`, ported verbatim): `collection->uSelect(e | body)`
+  keeps elements whose body evaluates to a crisp `true` or a `UBoolean` with probability ≥ 0.5;
+  `uSelectC` takes an explicit confidence threshold instead of the 0.5 default. The grammar
+  (`OCLBase.gpart`), `ParserHelper`, and `ASTQueryExpression` all needed a generic optional trailing
+  `, confidence` clause on `queryExpression`, matching the fork's own grammar shape rather than a
+  special case for just these two operations.
+- **Uncertainty-aware collection membership** (`CollectionValue.uIncludes`/`uIncludesAll`/`uExcludes`/
+  `uExcludesAll`, ported verbatim): `StandardOperationsCollection`'s `includes`/`excludes`/
+  `includesAll`/`excludesAll` now branch `mkBoolean()` vs `mkUBoolean()` by element/argument
+  uncertainty. One fork dead-code oddity was deliberately preserved byte-for-byte in `includes`'s
+  `matches()` — `params[1] instanceof UncertainValue`, where `params[1]` is actually `Type[]`, so the
+  check is always `false` since `Type` and `Value` are unrelated hierarchies. Not a B7 row, not
+  silently fixed: left as-is, flagged in a code comment for a future finding.
+
+Making `ExpForAll`/`ExpExists` accept a `UBoolean`-valued body (needed so `uSelect`'s body type-checks
+against the same machinery) forced replacing `evalExistsOrForAll`/`evalExistsOrForAll0` — crisp-only,
+with a short-circuiting `break` — with ported `evalExists0`/`evalForAll0` using `ExpStdOp.create`
+dispatch. Building the regression tests for that replacement surfaced a genuine, **pre-existing** defect
+in the fork's own `evalForAll0`/`evalExists0`: at nested recursion (2 or more element variables),
+`res = evalForAll0(nesting+1, ...)` **overwrites** the outer accumulator instead of combining with it,
+so only the last outer iteration's inner result survives. Universal/existential quantification over 2+
+variables is silently wrong whenever the outer variable ranges over more than one element.
+
+Confirmed byte-for-byte present in the fork's own shipped source before deciding to fix rather than
+reproduce it — this is core crisp OCL semantics, not uncertainty-specific — and it broke two of
+`use-gui`'s own inherited `ShellIT` fixtures, both passing on stock USE 7.5.0:
+
+- `t049` (`Person::nameUnique`, a 2-variable invariant)
+- `t022` (2-variable `exists` in `transitiveClosure`)
+
+Per ground rule 3's spirit ("if an upstream test fails after a change, the change is wrong"), that rule
+binds this port's own new code, not license to edit the test: `evalForAll0`/`evalExists0` now
+AND/OR-combine the recursive result with the outer accumulator via `ExpStdOp.create` dispatch at every
+nesting level, not just the leaf. No `use-gui` source file was touched to fix this — only
+`use-core/ExpQuery.java` — so ground rule 5 is unaffected; this was a test failure, not a compile break.
+
+```
+$ mvn -o -pl use-gui verify -Dit.test=ShellIT
+Tests run: 129, Failures: 0, Errors: 0, Skipped: 0
+```
+
+`UncertainQueryAndMembershipTest` (16+ tests, nested classes `USelect`/`USelectC`/`ForAllExists`/
+`Membership`/`MultiVariableAccumulation`) covers both features; the last nested class regression-tests
+the accumulation fix specifically, with `forAllAccumulatesAcrossOuterIterations`,
+`existsAccumulatesAcrossOuterIterations`, and `twoVariableInvariantCatchesDuplicate` (mirroring `t049`).
+Committed as `7da9de10`.
+
+### 4.3i CF-8 and neighbours — the historical corpus test harness, ported
+
+`USECompilerUncertaintyTest` (`org.tzi.use.parser.uncertainty`) replays all 1427 entries of the fork's
+`UBooleanExpression.in`/`UCollectionOperations.in`/`UIntegerExpression.in`/`URealExpression.in` corpus
+through the port's own OCL compiler and evaluator. The four `.in` files were copied byte-identically
+from the fork (sha256-verified against `.git/reference-repositories/uncertainty/USE-Uncertainty`),
+then adjusted only where W-01–W-04 (below) required it.
+
+Porting the JUnit-3 `TestCase` to JUnit 5 closed six ledger rows in one file:
+
+| Row | What changed | Evidence |
+|---|---|---|
+| **CF-8** | `File.listFiles` on a `user.dir`-relative path (fails or passes vacuously under Maven) → a fixed, sorted array of the four corpus filenames resolved by `Class.getResourceAsStream`. A literal directory listing via `Class.getResource(".")` was tried first and confirmed to return `null` under this project's JPMS module (`use.core`, patched by Surefire via `--patch-module`) — the fixed-array approach sidesteps that rather than fighting it, since the corpus is a known, unchanging set of four files, not something that grows between runs | test passes, reports exactly 1427 entries executed |
+| **CF-9** | platform-default charset on the fixture read and on `expression.getBytes()` → `StandardCharsets.UTF_8` explicitly on both | source at `USECompilerUncertaintyTest.java` |
+| **M-45** | `Options.explicitVariableDeclarations = false` set once, never restored | saved in `@BeforeEach`, restored in `@AfterEach` |
+| **M-48b** | `ExpressionTest` was a non-static inner class with `Object.toString()` (an identity hash in failure messages) | `private static final class` with an explicit `toString()` returning the expression text |
+| **M-49b** | `split("\n(\r\n)")` is not a line-separator alternation (parentheses are a capturing group, `\|` is missing) — it never matches, so the 5 error-path entries were adjudicated against the *entire* captured stderr, not the intended line | `split("\r?\n")` plus a `lastNonBlank` helper; all 5 error-path entries (`UBooleanExpression.in:8,11,14`, `URealExpression.in:62,65`) still pass under the corrected split, confirmed by the full 1427/1427 run below |
+| **M-51** | `catch (IOException ex) { throw new RuntimeException(msg); }` dropped the cause | `new RuntimeException(msg, ex)` |
+
+Two more rows close as a side effect of the JUnit 5 port itself, not a targeted fix:
+
+- **CF-7** (2 of its 12 sites): the fork's `TestCase.assertEquals(message, expected, actual)` vs
+  JUnit 5's `assertEquals(expected, actual, message)` — all-`String` arguments meant the fork's two
+  calls at `:90,94` silently rebound under a naive migration. Writing the port's `assertEquals` calls
+  with the JUnit 5 argument order from the start avoids the hazard entirely; there is nothing to
+  regress. The other 10 CF-7 sites (`UIntegerExpOpsTest.java`) apply to a fork test file not yet
+  ported, so CF-7 is only partially discharged.
+- **CF-5**: the fork's three JUnit-3 `AllTests` suites, which pinned execution order to keep the
+  `Options.explicitVariableDeclarations` leak survivable, were never ported — this port relies on
+  Surefire's own classpath discovery, so there is no suite class to delete and no order dependency to
+  remove. Combined with M-45's fix landing in the same commit (as the ledger itself recommends: *"Do
+  not pin surefire order... fixing M-45 removes the leak"*), CF-5's underlying hazard does not exist in
+  this port.
+
+**M-43 and M-44 remain open.** Both apply to fork test files not ported this stage — `UBooleanValueTest`
+(M-43, two commented-out `try/fail/catch` blocks to revive as `@Disabled`) and four files including
+`ExpQueryUncertaintyTest` (M-44, 40 JUnit-3 `try/fail/catch` idiom sites). Porting them was judged out
+of scope for this stage: the corpus and its own harness were the immediate goal, and neither M-43 nor
+M-44 blocks anything the corpus exercises.
+
+W-02, W-03 and W-04 (`docs/port2/upstream-test-waivers.md`) record the three categories of fixture
+correction the first full run found — 79 entries expecting `Undefined : OclVoid` where the port
+correctly gives `null : OclVoid` (W-02, a pre-existing finding from earlier this stage, re-confirmed
+against this freshly-ported corpus); 8 entries expecting a `UBoolean` probability with more decimal
+digits than any implementation of `UBooleanValue.toString` ever prints, confirmed against each
+expression's raw, unrounded `probability()` (W-03); and 5 entries writing `.equals(...)` directly on a
+`Collection`-typed `iterate` result where OCL requires `->equals(...)` (W-04). After all three waivers,
+the corpus is 1427/1427:
+
+```
+$ mvn -o -pl use-core test -Dtest=USECompilerUncertaintyTest
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+```
+
 ### 4.4 The gate
 
-`bash scripts/upstream-oracle-gate.sh both` → **PASS**.
+`bash scripts/upstream-oracle-gate.sh both` → **PASS**. Numbers below are the state at the end of this
+stage, after three re-pins: the B7 corrections phase (§3–4.3f), the `uSelect`/collection-membership
+commit (§4.3h), and the CF-8 corpus-port commit (§4.3i).
 
 | mode | classes | methods | executions | failures |
 |---|---|---|---|---|
-| default, `use-core` surefire | 41 (floor 15 → **re-pinned 41**) | 200 (floor 107 → **re-pinned 200**) | 200 | 0 |
-| oracle, `use-core` surefire | 74 (floor 48 → **re-pinned 74**) | 471 (floor 378 → **re-pinned 471**) | 1059 | 0 |
+| default, `use-core` surefire | 47 (floor 15 → **re-pinned 47**) | 217 (floor 107 → **re-pinned 217**) | 217 | 0 |
+| oracle, `use-core` surefire | 80 (floor 48 → **re-pinned 80**) | 488 (floor 378 → **re-pinned 488**) | 1076 | 0 |
+| default/oracle, `use-gui` | unchanged: 1/1 surefire, 1/129 failsafe | — | — | 0 |
 
-The jump is 13 classes, not 2: surefire counts each `@Nested` class as its own report, and the two
-new files carry 6 and 7 nested classes. Floors may grow and may never shrink.
+The three re-pins, in order: **+13 classes / +54 methods** for the B7 pre-registration mechanism and
+its two correction test files (`IntendedDeparturesTest`, `B7CorrectionsTest` — surefire counts each
+`@Nested` class as its own report, and the two files carry 6 and 7 nested classes between them), then
+**+5 classes / +16 methods** for `UncertainQueryAndMembershipTest`'s 5 `@Nested` classes, then
+**+1 class / +1 method** for `USECompilerUncertaintyTest`. `use-gui` is untouched by any of the three —
+no `use-gui` source file changed this stage, and the `ExpQuery` accumulation fix (§4.3h) corrected two
+existing `ShellIT` fixtures rather than adding new ones. Floors may grow and may never shrink.
 
-**Waivers: still one** (W-01). No upstream test was edited.
+**Waivers: four** (W-01–W-04). No `.java` test file was edited to make ported code pass — every waiver
+this stage (W-02, W-03, W-04) alters only the ported `.in` fixture *data* the tests read, never the
+test's own assertions.
 
 ### 4.5 Two golden reports changed, by two lines each
 
@@ -474,14 +602,21 @@ read before the goldens were updated.
 | M-26, M-27 | **moot**: `ExpDefSBoolean` deleted as dead code, §4.3c |
 | M-29, M-30, M-32, M-33 | **done**, evidenced in §4.3d |
 | M-6, M-28, M-31 | **done**, evidenced in §4.3e |
-| **M-43, M-48b, M-51** | apply to fork test files not yet ported; blocked on the CF-8-family porting work, not actionable yet |
-| **CF-5, CF-7, CF-8, CF-9, M-44, M-45, M-49b** | the test-harness rows. None started |
-| **`uSelect`/`uSelectC`, uncertainty-aware collection membership, `uCount`/`uCountC`, metamorphic tests M-1..M-6** | outside the 33-row ledger; separate open items from the adversarial audit |
+| CF-8, CF-9, M-45, M-48b, M-49b, M-51 | **done**, evidenced in §4.3i |
+| CF-5 | **discharged structurally** — the fork's order-pinning `AllTests` suites were never ported (this port relies on Surefire's own classpath discovery), and M-45 lands in the same stage as the ledger itself recommends. §4.3i |
+| CF-7 | **partially discharged** — the 2 sites inside the ported `USECompilerUncertaintyTest` are correct by construction (JUnit 5 argument order from the start); the other 10 sites (`UIntegerExpOpsTest.java`) apply to a file not yet ported. §4.3i |
+| **M-43, M-44** | apply to fork test files not yet ported (`UBooleanValueTest.java`; `URealExpOpsTest.java`/`UIntegerExpOpsTest.java`/`UBooleanExpOpsTest.java`/`ExpQueryUncertaintyTest.java`). Judged out of scope for this stage — neither blocks anything the ported corpus exercises |
+| **`uCount`/`uCountC`, metamorphic tests M-1..M-6** | outside the 33-row ledger; separate open items from the adversarial audit. `uSelect`/`uSelectC` and uncertainty-aware collection membership, previously in this category, are now done — §4.3h |
 
-**24 of 33 rows are discharged**: 15 fixed at the value, type and dispatch layers (sections 3–4.3b),
-2 moot by the deletion of `ExpDefSBoolean` (M-26, M-27; section 4.3c), 4 fixed at the parser and
-literal-constant layer (M-29, M-30, M-32, M-33; section 4.3d), and 3 more discharged by written
-justification at the site (M-6, M-28, M-31; section 4.3e). The previous record said 1.
+**30 of 33 rows are discharged, one more (CF-7) partially so** — counted directly by row name, not by
+group arithmetic: M-8, M-9, M-10, M-11, M-12, M-18, F-2, F-3, F-4, F-10 (10, value layer, prior
+sessions) + M-21, M-22, M-37, M-38 (4, type/dispatch layer, section 4.3b) + M-26, M-27 (2, moot by the
+deletion of `ExpDefSBoolean`, section 4.3c) + M-29, M-30, M-32, M-33 (4, parser/literal-constant
+layer, section 4.3d) + M-6, M-28, M-31 (3, written justification at the site, section 4.3e) + CF-8,
+CF-9, M-45, M-48b, M-49b, M-51 (6, the historical corpus's own test harness, section 4.3i) + CF-5 (1,
+discharged structurally, section 4.3i) = 30. CF-7 is half discharged (2 of its 12 sites; the other 10
+await a file not yet ported). Only M-43 and M-44 have had no work done on them at all — both apply
+exclusively to fork test files this stage did not port. The previous record said 24.
 
 ---
 
@@ -520,6 +655,18 @@ grep -c 'ledger M-6\|ledger M-28\|ledger M-31' \
 
 # section 4.3f
 mvn -o -pl use-core test -Dtest=UEqualsCoverageTest
+
+# section 4.3g -- the two StandardOperationsNumber regressions and their fix, at the site
+grep -n 'Op_number_toString\|Op_number_unaryplus' -A 3 \
+  use-core/src/main/java/org/tzi/use/uml/ocl/expr/operations/StandardOperationsNumber.java | head -40
+git show --stat e37abb2b
+
+# section 4.3h -- uSelect/uSelectC, uncertain collection membership, and the accumulation fix
+mvn -o -pl use-core test -Dtest=UncertainQueryAndMembershipTest
+mvn -o -pl use-gui verify -Dit.test=ShellIT -DfailIfNoTests=false
+
+# section 4.3i -- the historical corpus test harness, and the three waivers it required
+mvn -o -pl use-core test -Dtest=USECompilerUncertaintyTest
 
 # section 1.1 / 1.3
 mvn -o -pl use-core test -Dtest=IntendedDeparturesTest
