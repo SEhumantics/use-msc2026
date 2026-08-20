@@ -200,4 +200,237 @@ class SBooleanFusionValueTest {
                     0.4933, 0.4933, 0.0133, 0.5);
         }
     }
+
+    @Nested
+    @DisplayName("averageBeliefFusion: receiver-prepended, equation (32) of JWZ2017-FUSION (not the book formula)")
+    class AverageFusion {
+
+        @Test
+        @DisplayName("ordinary 3-opinion case, all uncertainties > 0 (averagingFusion's 'case I')")
+        void ordinaryThreeOpinionCase() {
+            // averagingFusion per SBoolean.java (case I -- PU = product of uncertainties != 0):
+            //   PU = u1*u2*u3
+            //   for each o: u += PU/o.u ; b += o.belief * PU/o.u ; a += o.baseRate
+            //   belief = b/u ; atomicity = a/N ; uncertainty = N*PU/u ; disbelief = 1-belief-uncertainty
+            //
+            // averageBeliefFusion prepends the receiver, so the collection is [A, B, C].
+            // PU = 0.2*0.3*0.3 = 0.018
+            // PU/u_A = 0.018/0.2 = 0.09 ; PU/u_B = 0.018/0.3 = 0.06 ; PU/u_C = 0.018/0.3 = 0.06
+            // u_sum = 0.09+0.06+0.06 = 0.21
+            // b_sum = 0.5*0.09 + 0.2*0.06 + 0.1*0.06 = 0.045+0.012+0.006 = 0.063
+            // belief = 0.063/0.21 = 0.3
+            // uncertainty = 3*0.018/0.21 = 0.054/0.21 = 0.257143
+            // disbelief = 1 - 0.3 - 0.257143 = 0.442857
+            // baseRate = (0.5+0.4+0.5)/3 = 1.4/3 = 0.466667
+            // sanity: 0.3+0.442857+0.257143 = 1.0
+            assertOpinion(A + ".averageBeliefFusion(Set{" + B + "," + C + "})",
+                    0.3, 0.4429, 0.2571, 0.4667);
+        }
+
+        @Test
+        @DisplayName("dogmatic short-circuit: when any opinion is dogmatic, non-dogmatic opinions are ignored entirely")
+        void dogmaticShortCircuitIgnoresUncertainOpinions() {
+            // averagingFusion's 'case II' triggers when PU (product of uncertainties) == 0, i.e. at
+            // least one opinion is dogmatic (u==0). In that branch, ONLY opinions with u==0 are
+            // summed; non-dogmatic opinions contribute nothing at all (not even partially).
+            //
+            // Ad = SBoolean(0.7, 0.3, 0, 0.5) (dogmatic, receiver)
+            // Ed = SBoolean(0.9, 0.1, 0, 0.3) (dogmatic)
+            // B  = SBoolean(0.2, 0.5, 0.3, 0.4) (NOT dogmatic, u=0.3 -- must be fully excluded)
+            // count = 2 (Ad, Ed) ; b = 0.7+0.9 = 1.6 ; a = 0.5+0.3 = 0.8
+            // belief = 1.6/2 = 0.8 ; atomicity = 0.8/2 = 0.4 ; uncertainty = 0 ; disbelief = 1-0.8-0 = 0.2
+            String Ad = "SBoolean(0.7, 0.3, 0, 0.5)";
+            String Ed = "SBoolean(0.9, 0.1, 0, 0.3)";
+            assertOpinion(Ad + ".averageBeliefFusion(Set{" + Ed + "," + B + "})",
+                    0.8, 0.2, 0.0, 0.4);
+        }
+    }
+
+    @Nested
+    @DisplayName("aleatoryCumulativeBeliefFusion: receiver-prepended, Josang's cumulative fusion for i.i.d. sources")
+    class AleatoryCumulativeFusion {
+
+        @Test
+        @DisplayName("ordinary 3-opinion case, no dogmatic opinions (Eq16 of 10.23919/ICIF.2017.8009820)")
+        void ordinaryThreeOpinionCase() {
+            // aleatoryCumulativeFusion per SBoolean.java, non-dogmatic branch:
+            //   PU = product of all uncertainties
+            //   for each o: prod = PU/o.u ; beliefAcc += prod*o.belief ; disbeliefAcc += prod*o.disbelief
+            //               numerator += prod
+            //   numerator -= (N-1)*PU
+            //   belief = beliefAcc/numerator ; disbelief = disbeliefAcc/numerator ; uncertainty = PU/numerator
+            //   atomicity = baseRate of the FIRST opinion in iteration order (always the prepended
+            //   receiver, since it is added to the LinkedList before the passed-in Set's elements)
+            //
+            // aleatoryCumulativeBeliefFusion prepends the receiver: collection = [A, B, C].
+            // PU = 0.2*0.3*0.3 = 0.018
+            // prod_A = 0.018/0.2 = 0.09 ; prod_B = 0.018/0.3 = 0.06 ; prod_C = 0.018/0.3 = 0.06
+            // beliefAcc    = 0.5*0.09 + 0.2*0.06 + 0.1*0.06 = 0.045+0.012+0.006 = 0.063
+            // disbeliefAcc = 0.3*0.09 + 0.5*0.06 + 0.6*0.06 = 0.027+0.030+0.036 = 0.093
+            // numerator = (0.09+0.06+0.06) - 2*0.018 = 0.21 - 0.036 = 0.174
+            // belief = 0.063/0.174 = 0.362069
+            // disbelief = 0.093/0.174 = 0.534483
+            // uncertainty = 0.018/0.174 = 0.103448
+            // baseRate = A.baseRate = 0.5 (receiver is first in iteration order)
+            // sanity: 0.362069+0.534483+0.103448 = 1.0
+            assertOpinion(A + ".aleatoryCumulativeBeliefFusion(Set{" + B + "," + C + "})",
+                    0.3621, 0.5345, 0.1034, 0.5);
+        }
+
+        @Test
+        @DisplayName("dogmatic branch: non-dogmatic receiver is entirely excluded from belief/disbelief")
+        void dogmaticBranchExcludesNonDogmaticReceiver() {
+            // When at least one fused opinion is dogmatic (u==0), the algorithm switches to a
+            // relative-weight-weighted average over ONLY the dogmatic opinions; non-dogmatic
+            // opinions (including a non-dogmatic receiver) contribute nothing to belief/disbelief.
+            //
+            // D1 = SBoolean(0.9, 0.1, 0, 0.5) (dogmatic), D2 = SBoolean(0.3, 0.7, 0, 0.6) (dogmatic)
+            // A (receiver, u=0.2, NOT dogmatic) is prepended but excluded from the weighted average.
+            // Both D1, D2 have default relativeWeight = 1 (getRelativeWeight() returns relativeWeight
+            // when isDogmatic(), else 0), so totalWeight = 2.
+            // belief    = (1/2)*0.9 + (1/2)*0.3 = 0.45+0.15 = 0.6
+            // disbelief = (1/2)*0.1 + (1/2)*0.7 = 0.05+0.35 = 0.4
+            // uncertainty = 0
+            // baseRate = A.baseRate = 0.5 (receiver is still first in iteration order, dogmatic or not)
+            String D1 = "SBoolean(0.9, 0.1, 0, 0.5)";
+            String D2 = "SBoolean(0.3, 0.7, 0, 0.6)";
+            assertOpinion(A + ".aleatoryCumulativeBeliefFusion(Set{" + D1 + "," + D2 + "})",
+                    0.6, 0.4, 0.0, 0.5);
+        }
+    }
+
+    @Nested
+    @DisplayName("epistemicCumulativeBeliefFusion: same accumulation as aleatory, then projected onto the uncertainty-maximized boundary")
+    class EpistemicCumulativeFusion {
+
+        @Test
+        @DisplayName("ordinary 3-opinion case: intermediate result matches aleatory's, but uncertaintyMaximized() then redistributes b/d/u")
+        void ordinaryThreeOpinionCase() {
+            // epistemicCumulativeFusion per SBoolean.java: computes an IDENTICAL intermediate
+            // result to aleatoryCumulativeFusion (same non-dogmatic-branch Eq16 accumulation --
+            // see AleatoryCumulativeFusion.ordinaryThreeOpinionCase above for that arithmetic),
+            // but then returns intermediate.uncertaintyMaximized() instead of the intermediate
+            // directly. uncertaintyMaximized() preserves the projection p = b + a*u and the
+            // atomicity a, but pushes all evidence to the uncertainty-maximized boundary:
+            //   if p < a: belief=0, disbelief=1-p/a, uncertainty=p/a
+            //   else:     belief=(p-a)/(1-a), disbelief=0, uncertainty=(1-p)/(1-a)
+            //
+            // Intermediate (identical to aleatory): belief=0.362069, disbelief=0.534483,
+            // uncertainty=0.103448, atomicity=0.5 (A's baseRate, receiver is first in iteration).
+            // p = 0.362069 + 0.5*0.103448 = 0.362069+0.051724 = 0.413793
+            // p < a (0.413793 < 0.5), so:
+            //   belief = 0
+            //   disbelief = 1 - p/a = 1 - 0.413793/0.5 = 1 - 0.827586 = 0.172414
+            //   uncertainty = p/a = 0.827586
+            // sanity: 0+0.172414+0.827586 = 1.0 ; projection check: 0+0.5*0.827586 = 0.413793 = p (preserved)
+            assertOpinion(A + ".epistemicCumulativeBeliefFusion(Set{" + B + "," + C + "})",
+                    0.0, 0.1724, 0.8276, 0.5);
+        }
+
+        @Test
+        @DisplayName("dogmatic branch: same intermediate as aleatory's dogmatic case, then uncertainty-maximized")
+        void dogmaticBranchThenUncertaintyMaximized() {
+            // Same D1, D2 as AleatoryCumulativeFusion.dogmaticBranchExcludesNonDogmaticReceiver:
+            // the dogmatic-branch intermediate is IDENTICAL: belief=0.6, disbelief=0.4,
+            // uncertainty=0, atomicity=0.5 (A's baseRate). Then uncertaintyMaximized() is applied:
+            // p = 0.6 + 0.5*0 = 0.6 ; a = 0.5 ; p >= a, so:
+            //   belief = (p-a)/(1-a) = (0.6-0.5)/0.5 = 0.2
+            //   disbelief = 0
+            //   uncertainty = (1-p)/(1-a) = (1-0.6)/0.5 = 0.8
+            // sanity: 0.2+0+0.8 = 1.0 ; projection check: 0.2+0.5*0.8 = 0.6 = p (preserved)
+            String D1 = "SBoolean(0.9, 0.1, 0, 0.5)";
+            String D2 = "SBoolean(0.3, 0.7, 0, 0.6)";
+            assertOpinion(A + ".epistemicCumulativeBeliefFusion(Set{" + D1 + "," + D2 + "})",
+                    0.2, 0.0, 0.8, 0.5);
+        }
+    }
+
+    @Nested
+    @DisplayName("aleatoryCumulativeBeliefFusion vs epistemicCumulativeBeliefFusion: same input must diverge")
+    class AleatoryVsEpistemicDivergence {
+
+        @Test
+        @DisplayName("same {A,B,C} input set produces materially different belief and uncertainty under each rule")
+        void divergesOnSameInput() {
+            // Both calls fuse the SAME opinion set {A, B, C} (receiver A prepended in both, per
+            // AleatoryCumulativeFusion.ordinaryThreeOpinionCase and
+            // EpistemicCumulativeFusion.ordinaryThreeOpinionCase above):
+            //   aleatory:  belief=0.362069, uncertainty=0.103448
+            //   epistemic: belief=0.000000, uncertainty=0.827586
+            // These differ by ~0.36 on belief and ~0.72 on uncertainty -- far beyond floating-point
+            // noise. This guards against a port bug where epistemicCumulativeBeliefFusion
+            // accidentally delegates to (or copies) aleatoryCumulativeBeliefFusion, which would
+            // otherwise pass every other check in this plan (both algorithms share the same
+            // non-dogmatic accumulation step, so a missing uncertaintyMaximized() call would only
+            // be caught by comparing the two side by side on identical input).
+            SBooleanValue aleatory = (SBooleanValue) run(A + ".aleatoryCumulativeBeliefFusion(Set{" + B + "," + C + "})");
+            SBooleanValue epistemic = (SBooleanValue) run(A + ".epistemicCumulativeBeliefFusion(Set{" + B + "," + C + "})");
+
+            double beliefDiff = Math.abs(aleatory.belief().value() - epistemic.belief().value());
+            double uncertaintyDiff = Math.abs(aleatory.uncertainty().value() - epistemic.uncertainty().value());
+
+            assertTrue(beliefDiff > 0.1,
+                    "belief should diverge materially: aleatory=" + aleatory.belief().value()
+                            + " epistemic=" + epistemic.belief().value());
+            assertTrue(uncertaintyDiff > 0.1,
+                    "uncertainty should diverge materially: aleatory=" + aleatory.uncertainty().value()
+                            + " epistemic=" + epistemic.uncertainty().value());
+        }
+    }
+
+    @Nested
+    @DisplayName("weightedBeliefFusion: receiver-prepended, confidence-weighted averaging (FUSION-2018 van der Heijden et al.)")
+    class WeightedFusion {
+
+        @Test
+        @DisplayName("ordinary 3-opinion case, no dogmatic opinions, not all vacuous ('case 1')")
+        void ordinaryThreeOpinionCase() {
+            // weightedFusion per SBoolean.java ('case 1' -- dogmatic set empty, at least one
+            // opinion has certainty > 0):
+            //   PU = product of uncertainties ; sumU = sum of uncertainties
+            //   for each o: prod = PU/o.u
+            //     beliefAcc += prod*o.belief*o.certainty ; disbeliefAcc += prod*o.disbelief*o.certainty
+            //     atomicityAcc += o.baseRate*o.certainty ; numerator += prod
+            //   numerator -= N*PU
+            //   belief = beliefAcc/numerator ; disbelief = disbeliefAcc/numerator
+            //   uncertainty = (N-sumU)*PU/numerator ; atomicity = atomicityAcc/(N-sumU)
+            //
+            // weightedBeliefFusion prepends the receiver: collection = [A, B, C].
+            // PU = 0.2*0.3*0.3 = 0.018 ; sumU = 0.2+0.3+0.3 = 0.8
+            // prod_A = 0.09, prod_B = 0.06, prod_C = 0.06 (same as prior fusions)
+            // certainty_A = 1-0.2 = 0.8 ; certainty_B = 1-0.3 = 0.7 ; certainty_C = 1-0.3 = 0.7
+            // beliefAcc    = 0.09*0.5*0.8 + 0.06*0.2*0.7 + 0.06*0.1*0.7 = 0.036+0.0084+0.0042 = 0.0486
+            // disbeliefAcc = 0.09*0.3*0.8 + 0.06*0.5*0.7 + 0.06*0.6*0.7 = 0.0216+0.021+0.0252 = 0.0678
+            // atomicityAcc = 0.5*0.8 + 0.4*0.7 + 0.5*0.7 = 0.4+0.28+0.35 = 1.03
+            // numerator = (0.09+0.06+0.06) - 3*0.018 = 0.21 - 0.054 = 0.156
+            // belief = 0.0486/0.156 = 0.311538
+            // disbelief = 0.0678/0.156 = 0.434615
+            // uncertainty = (3-0.8)*0.018/0.156 = 2.2*0.018/0.156 = 0.0396/0.156 = 0.253846
+            // atomicity = 1.03/(3-0.8) = 1.03/2.2 = 0.468182
+            // sanity: 0.311538+0.434615+0.253846 = 1.0 (within rounding)
+            assertOpinion(A + ".weightedBeliefFusion(Set{" + B + "," + C + "})",
+                    0.3115, 0.4346, 0.2538, 0.4682);
+        }
+
+        @Test
+        @DisplayName("all-vacuous case ('case 3'): resultAtomicity should be the PLAIN AVERAGE of all baseRates per the code's own comment")
+        void allVacuousCaseAveragesBaseRates() {
+            // weightedFusion's 'case 3' triggers when every opinion has uncertainty == 1 (fully
+            // vacuous). Per SBoolean.java's own comment immediately above the accumulation loop:
+            //   "all confidences are zero, so the weight for each opinion is the same -> use a
+            //    plain average for the resultAtomicity"
+            // i.e. resultAtomicity should be (sum of all N baseRates) / N.
+            //
+            // R  = SBoolean(0, 0, 1, 0.5) (vacuous, receiver)
+            // V1 = SBoolean(0, 0, 1, 0.3) (vacuous)
+            // V2 = SBoolean(0, 0, 1, 0.4) (vacuous)
+            // Intended per the comment: atomicity = (0.5+0.3+0.4)/3 = 1.2/3 = 0.4
+            // belief = 0, disbelief = 0, uncertainty = 1 (both branches of case 3 agree on these)
+            String R = "SBoolean(0, 0, 1, 0.5)";
+            String V1 = "SBoolean(0, 0, 1, 0.3)";
+            String V2 = "SBoolean(0, 0, 1, 0.4)";
+            assertOpinion(R + ".weightedBeliefFusion(Set{" + V1 + "," + V2 + "})",
+                    0.0, 0.0, 1.0, 0.4);
+        }
+    }
 }

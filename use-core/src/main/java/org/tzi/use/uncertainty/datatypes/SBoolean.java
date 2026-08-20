@@ -864,16 +864,22 @@ public class SBoolean implements Cloneable, Comparable<SBoolean> {
 			resultBelief = 0;
 			resultDisbelief = 0;
 			resultUncertainty = 1;
-			boolean first = true;
 
 			// all confidences are zero, so the weight for each opinion is the same -> use a
 			// plain average for the resultAtomicity
+			//
+			// Fix (2026-08-21 completeness review): this loop used to carry a stray `if (first)`
+			// guard that only ever accumulated the FIRST opinion's baseRate -- since callers
+			// always prepend the receiver before the rest of the collection, that meant every
+			// non-receiver opinion's baseRate was silently dropped from what the comment above
+			// documents as a "plain average". A TDD test written during this review
+			// (SBooleanFusionValueTest$WeightedFusion.allVacuousCaseAveragesBaseRates) caught the
+			// mismatch before any production code shipped with the bug undetected: for baseRates
+			// {0.5, 0.3, 0.4} the documented-correct average is 0.4, but the buggy code produced
+			// 0.166667 (= 0.5 / 3, the receiver's own baseRate diluted by an unrelated divisor).
 			resultAtomicity = 0;
 			for (SBoolean o : opinions) {
-				if (first) {
-					resultAtomicity = resultAtomicity + o.baseRate();
-					first = false;
-				}
+				resultAtomicity = resultAtomicity + o.baseRate();
 			}
 			resultAtomicity = resultAtomicity / ((double) opinions.size());
 
