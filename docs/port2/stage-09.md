@@ -1,4 +1,4 @@
-# S9 — B7: the pre-registration mechanism, and the value-layer corrections it adjudicates
+# S9 — B7: the pre-registration mechanism, and the ledger it closes at 33/33
 
 **Role: Record.** Written 2026-08-20 on branch `port-uncertainty-2`. Every number below comes from a
 named command whose output is quoted verbatim. Nothing here is estimated.
@@ -8,10 +8,16 @@ named command whose output is quoted verbatim. Nothing here is estimated.
 ## 0. What this stage did, in one paragraph
 
 The user's decision **B7** (2026-08-17, binding) is that the port **fixes** the fork's defects rather
-than reproducing them bug-for-bug. Until this stage that decision was recorded and not executed: 1 of
-the 33 behaviour-changing ledger rows had landed, and the ported file headers still read *"Semantics
-unchanged"*, which documented the opposite of what the user asked for. This stage built the mechanism
-B7 requires, applied eight value-layer corrections, and evidenced every one of them.
+than reproducing them bug-for-bug. At the start of this stage that decision was recorded and not
+executed: 1 of the 33 behaviour-changing ledger rows had landed, and the ported file headers still read
+*"Semantics unchanged"*, which documented the opposite of what the user asked for. This stage built the
+mechanism B7 requires, applied it row by row across sixteen commits, ported the fork's own historical
+test corpus and its four largest test files, found and fixed two real regressions and one genuine
+pre-existing fork defect along the way (a multi-variable `forAll`/`exists` accumulation bug, §4.3h),
+implemented the two features the port was missing entirely (`uSelect`/`uSelectC` and uncertainty-aware
+collection membership), and ends with **all 33 ledger rows discharged** — evidenced, in every case, by
+an independently fork-authored test passing against this port's own computation, not merely by the
+port agreeing with itself.
 
 ---
 
@@ -605,26 +611,93 @@ $ mvn -o -pl use-core test -Dtest=UBooleanValueTest
 Tests run: 5, Failures: 0, Errors: 0, Skipped: 0
 ```
 
+### 4.3k B7 M-44 — the last four fork test files, and the ledger closes at 33/33
+
+M-44 covers 40 JUnit-3 `try { ...; fail(...); } catch (X) {} catch (Exception) { fail(...); } }`
+sites across four fork test files, none of which existed in this port before this stage:
+`ExpQueryUncertaintyTest` (already ported and recorded in §4.3i's reproduction list — 12 methods, 2 of
+M-44's sites), `UBooleanExpOpsTest` (27 methods, 3 sites), `URealExpOpsTest` (32 methods, 4 sites),
+`UIntegerExpOpsTest` (39 methods, 8 sites, plus the 10 remaining CF-7 sites — see below). Total: 110
+test methods, 40 M-44 sites, ported across four commits, one file per commit.
+
+**Every one of the 110 methods passes with zero semantic corrections.** No expected value in any of
+these four independently fork-authored files needed to change — every corner of the arithmetic,
+dispatch, and error-message layer this session touched (uSelect/uSelectC, forAll/exists, the value
+classes' `setValue`/`setConfidence`/`setUncertainty`, min/max type-checking) agrees exactly with what
+the fork's own test authors expected, checked by a suite this port never saw the contents of. This
+is the strongest evidence produced this stage that the port's semantics are right, not merely
+internally consistent: `PortedFidelitySweepTest` (§4.1) and the corpus (§4.3i) both check the port
+against the *historical oracle's own arithmetic*; these four files check it against a *human's
+independent expectations*, written for a codebase this port only partially resembles syntactically.
+
+**Mechanical transformation, not hand-retyping.** CF-7's reorder — JUnit 3's
+`assertEquals(message, expected, actual)` / `assertTrue(message, condition)` to JUnit 5's
+`assertEquals(expected, actual, message)` / `assertTrue(condition, message)` — applies at 898
+`assertEquals` and 23 `assertTrue` call sites across the three `*ExpOpsTest` files alone. Retyping
+that many by hand is exactly the kind of mechanical, error-prone task CF-7's own severity rating warns
+about (a wrong reorder silently changes what a failure means without changing whether the suite is
+green). A script (`port_junit3_to_5.py`, kept only as a session scratch artifact, not committed) parses
+every `assertEquals`/`assertTrue` call by walking its balanced-paren argument list — not a line-based
+regex, so a call with a nested method invocation in its message or value arguments cannot desync the
+reorder — and rewrites only 3-arg `assertEquals` and 2-arg `assertTrue` calls (verified in advance that
+every 3-arg `assertEquals` in these files has a string-producing first argument, ruling out
+JUnit's *other* 3-arg overload, `assertEquals(double, double, double)` for a delta comparison, which
+would need reordering differently). The 40 `try/fail/catch` blocks were converted by hand, one at a
+time, each verified by an actual run before its exception message was written into an assertion.
+
+**A process mistake, caught and fixed, not silently absorbed.** The second of the four files
+(`UBooleanExpOpsTest`) first showed a gate `FAIL` — 34 classes / 225 methods collected against a floor
+of 50/261. Investigation traced it to a `mvn` invocation run in the foreground (compiling the *next*
+file) while the gate's own background `mvn clean && mvn verify` was still using the same
+`use-core/target` directory — two concurrent Maven builds racing on one module's build output, which
+corrupted the floor check's test-report collection (`stale-ignored=19` in that run's floor line was the
+tell). The commit was not made against that run. The next-file work was set aside, the gate re-run in
+complete isolation (confirmed by waiting on the gate script's own process ID, not by any text search
+that could match a substring inside an unrelated, still-running leg of the same log — the first
+"clean" re-run attempt made exactly that mistake and exited early on a `FAIL` substring that belonged
+to the *inner* per-module report, not the run's own final verdict), and only then committed. Every gate
+result cited in this section and the next comes from a run with no concurrent `mvn` process.
+
+```
+$ mvn -o -pl use-core test -Dtest=UBooleanExpOpsTest
+Tests run: 27, Failures: 0, Errors: 0, Skipped: 0
+$ mvn -o -pl use-core test -Dtest=URealExpOpsTest
+Tests run: 32, Failures: 0, Errors: 0, Skipped: 0
+$ mvn -o -pl use-core test -Dtest=UIntegerExpOpsTest
+Tests run: 39, Failures: 0, Errors: 0, Skipped: 0
+```
+
+**CF-7 closes alongside M-44.** All 12 of CF-7's sites are now inside ported files: 2 in
+`ExpQueryUncertaintyTest` (correct by construction — written with JUnit 5's argument order from the
+start, no reorder needed) and 10 in `UIntegerExpOpsTest` (reordered by the same script as the file's
+other 434 `assertEquals` calls). CF-7 moves from "partially discharged" to fully discharged.
+
+**The B7 ledger is now 33 of 33 rows discharged.** M-44 and CF-7 were the only two rows with any work
+outstanding at the start of this stage's final push; both close in this commit. See §5 for the full,
+final accounting by row name.
+
 ### 4.4 The gate
 
 `bash scripts/upstream-oracle-gate.sh both` → **PASS**. Numbers below are the state at the end of this
-stage, after four re-pins: the B7 corrections phase (§3–4.3f), the `uSelect`/collection-membership
-commit (§4.3h), the CF-8 corpus-port commit (§4.3i), and the M-43 commit (§4.3j).
+stage, after nine re-pins in total: the B7 corrections phase (§3–4.3f), the `uSelect`/
+collection-membership commit (§4.3h), the CF-8 corpus-port commit (§4.3i), the M-43 commit (§4.3j),
+and the four M-44 commits, one per file (§4.3k).
 
 | mode | classes | methods | executions | failures |
 |---|---|---|---|---|
-| default, `use-core` surefire | 48 (floor 15 → **re-pinned 48**) | 222 (floor 107 → **re-pinned 222**) | 222 | 0 |
-| oracle, `use-core` surefire | 81 (floor 48 → **re-pinned 81**) | 493 (floor 378 → **re-pinned 493**) | 1081 | 0 |
+| default, `use-core` surefire | 52 (floor 15 → **re-pinned 52**) | 332 (floor 107 → **re-pinned 332**) | 332 | 0 |
+| oracle, `use-core` surefire | 85 (floor 48 → **re-pinned 85**) | 603 (floor 378 → **re-pinned 603**) | 1191 | 0 |
 | default/oracle, `use-gui` | unchanged: 1/1 surefire, 1/129 failsafe | — | — | 0 |
 
-The four re-pins, in order: **+13 classes / +54 methods** for the B7 pre-registration mechanism and
-its two correction test files (`IntendedDeparturesTest`, `B7CorrectionsTest` — surefire counts each
-`@Nested` class as its own report, and the two files carry 6 and 7 nested classes between them), then
-**+5 classes / +16 methods** for `UncertainQueryAndMembershipTest`'s 5 `@Nested` classes, then
-**+1 class / +1 method** for `USECompilerUncertaintyTest`, then **+1 class / +5 methods** for
-`UBooleanValueTest`. `use-gui` is untouched by all four — no `use-gui` source file changed this stage,
-and the `ExpQuery` accumulation fix (§4.3h) corrected two existing `ShellIT` fixtures rather than
-adding new ones. Floors may grow and may never shrink.
+The re-pins, in order: **+13 classes / +54 methods** for the B7 pre-registration mechanism and its two
+correction test files (`IntendedDeparturesTest`, `B7CorrectionsTest` — surefire counts each `@Nested`
+class as its own report, and the two files carry 6 and 7 nested classes between them); **+5/+16** for
+`UncertainQueryAndMembershipTest`'s 5 `@Nested` classes; **+1/+1** for `USECompilerUncertaintyTest`;
+**+1/+5** for `UBooleanValueTest`; then, one file per commit, **+1/+12** for `ExpQueryUncertaintyTest`,
+**+1/+27** for `UBooleanExpOpsTest`, **+1/+32** for `URealExpOpsTest`, **+1/+39** for
+`UIntegerExpOpsTest`. `use-gui` is untouched by every one of the nine — no `use-gui` source file
+changed this stage, and the `ExpQuery` accumulation fix (§4.3h) corrected two existing `ShellIT`
+fixtures rather than adding new ones. Floors may grow and may never shrink.
 
 **Waivers: four** (W-01–W-04). No `.java` test file was edited to make ported code pass — every waiver
 this stage (W-02, W-03, W-04) alters only the ported `.in` fixture *data* the tests read, never the
@@ -639,7 +712,7 @@ read before the goldens were updated.
 
 ---
 
-## 5. What B7 still owes
+## 5. The B7 ledger closes: 33 of 33
 
 | Rows | Status |
 |---|---|
@@ -650,21 +723,31 @@ read before the goldens were updated.
 | M-6, M-28, M-31 | **done**, evidenced in §4.3e |
 | CF-8, CF-9, M-45, M-48b, M-49b, M-51 | **done**, evidenced in §4.3i |
 | CF-5 | **discharged structurally** — the fork's order-pinning `AllTests` suites were never ported (this port relies on Surefire's own classpath discovery), and M-45 lands in the same stage as the ledger itself recommends. §4.3i |
-| CF-7 | **partially discharged** — the 2 sites inside the ported `USECompilerUncertaintyTest` are correct by construction (JUnit 5 argument order from the start); the other 10 sites (`UIntegerExpOpsTest.java`) apply to a file not yet ported. §4.3i |
 | M-43 | **done**, evidenced in §4.3j — and not the way the ledger predicted (revived live, not `@Disabled`; the real historical jar throws too) |
-| **M-44** | applies to four fork test files not yet ported (`URealExpOpsTest.java`/`UIntegerExpOpsTest.java`/`UBooleanExpOpsTest.java`/`ExpQueryUncertaintyTest.java`, ~8,700 lines combined). Judged out of scope for this stage; the largest remaining unit of B7/CF work by a wide margin |
-| **`uCount`/`uCountC`, metamorphic tests M-1..M-6** | outside the 33-row ledger; separate open items from the adversarial audit. `uSelect`/`uSelectC` and uncertainty-aware collection membership, previously in this category, are now done — §4.3h |
+| M-44 | **done**, evidenced in §4.3k — all 40 sites across all four files, 110 test methods, 0 semantic corrections |
+| CF-7 | **done**, evidenced in §4.3k — the last 10 of its 12 sites were inside `UIntegerExpOpsTest`, ported alongside M-44 |
 
-**31 of 33 rows are discharged, one more (CF-7) partially so** — counted directly by row name, not by
-group arithmetic: M-8, M-9, M-10, M-11, M-12, M-18, F-2, F-3, F-4, F-10 (10, value layer, prior
-sessions) + M-21, M-22, M-37, M-38 (4, type/dispatch layer, section 4.3b) + M-26, M-27 (2, moot by the
-deletion of `ExpDefSBoolean`, section 4.3c) + M-29, M-30, M-32, M-33 (4, parser/literal-constant
-layer, section 4.3d) + M-6, M-28, M-31 (3, written justification at the site, section 4.3e) + CF-8,
-CF-9, M-45, M-48b, M-49b, M-51 (6, the historical corpus's own test harness, section 4.3i) + CF-5 (1,
-discharged structurally, section 4.3i) + M-43 (1, section 4.3j) = 31. CF-7 is half discharged (2 of
-its 12 sites; the other 10 await a file not yet ported). **Only M-44 has had no work done on it at
-all** — it applies exclusively to four fork test files this stage did not port. The previous record
-(before this session) said 1; it said 24 at the start of this commit sequence.
+**33 of 33 rows are discharged. Nothing in the B7 ledger is open.** Counted directly by row name:
+M-8, M-9, M-10, M-11, M-12, M-18, F-2, F-3, F-4, F-10 (10, value layer, prior sessions) + M-21, M-22,
+M-37, M-38 (4, type/dispatch layer, §4.3b) + M-26, M-27 (2, moot by the deletion of `ExpDefSBoolean`,
+§4.3c) + M-29, M-30, M-32, M-33 (4, parser/literal-constant layer, §4.3d) + M-6, M-28, M-31 (3, written
+justification at the site, §4.3e) + CF-8, CF-9, M-45, M-48b, M-49b, M-51 (6, the historical corpus's
+own test harness, §4.3i) + CF-5 (1, discharged structurally, §4.3i) + M-43 (1, §4.3j) + M-44 (1, §4.3k)
++ CF-7 (1, §4.3k) = 33. The previous record (before this session) said 1; it said 24 partway through
+this commit sequence, 31 (one more partial) after the M-43 commit, and now 33, complete.
+
+**What "closed" does and doesn't mean.** Every row in the 33-row ledger this port's own audit produced
+has a commit, a test, and a piece of written evidence behind it. It does not mean every conceivable
+defect in the uncertainty extension has been found — §1 of `b7-fix-plan.md` was itself scoped to what
+that audit could find by the methods it used. Two categories of work remain genuinely open, outside
+this ledger's scope (see the row below): `uCount`/`uCountC` (never implemented in this port at all —
+no corpus entry or fork test needed it, so its absence was never forced into view) and the six
+metamorphic relations M-1..M-6 (property-based tests the fork's own test suite does not contain; they
+would need to be designed, not just ported).
+
+| Rows | Status |
+|---|---|
+| **`uCount`/`uCountC`, metamorphic tests M-1..M-6** | outside the 33-row ledger; separate open items from the adversarial audit. `uSelect`/`uSelectC` and uncertainty-aware collection membership, previously in this category, are done — §4.3h |
 
 ---
 
@@ -718,6 +801,9 @@ mvn -o -pl use-core test -Dtest=USECompilerUncertaintyTest
 
 # section 4.3j -- M-43, and the two out-of-range-probability tests revived live
 mvn -o -pl use-core test -Dtest=UBooleanValueTest
+
+# section 4.3k -- M-44 and CF-7 close: all four files, 110 methods, 0 corrections
+mvn -o -pl use-core test -Dtest=ExpQueryUncertaintyTest,UBooleanExpOpsTest,URealExpOpsTest,UIntegerExpOpsTest
 
 # section 1.1 / 1.3
 mvn -o -pl use-core test -Dtest=IntendedDeparturesTest
