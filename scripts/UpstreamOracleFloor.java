@@ -332,6 +332,16 @@ public class UpstreamOracleFloor {
     // (M-44's own note that a two-statement try body needs the lambda to wrap both).
     // use-core/surefire 50/261 -> 51/293 (default) and 83/532 -> 84/564 (oracle). use-gui
     // unchanged.
+    //
+    // RE-PINNED 2026-08-20 (B7 M-44, file 4 of 4: UIntegerExpOpsTest — the row is now closed).
+    // Adds ONE Jupiter test file with 39 methods, no @Nested classes. All 39 pass with zero
+    // semantic corrections; 444 assertEquals calls reordered mechanically (CF-7, same script; 3
+    // pre-existing 2-arg calls needed no reorder). 8 try/fail/catch blocks converted to
+    // assertThrows; 3 preserve a message assertion already present in the fork verbatim, 5 gained
+    // one read from an actual run. Two dead imports from the fork's own source dropped
+    // (com.ximpleware.Expr, org.tzi.use.uml.ocl.type.UncertainType — neither referenced anywhere
+    // in the file). use-core/surefire 51/293 -> 52/332 (default) and 84/564 -> 85/603 (oracle).
+    // use-gui unchanged.
     // Floors are >= : the suite may GROW, it may never shrink. No floor is 0 and no floor
     // may be lowered to make a run pass — see harness-contract.md sec. 8 step 7 clause 1,
     // "Do not lower the floor."
@@ -339,13 +349,13 @@ public class UpstreamOracleFloor {
     record Floor(int classes, int methods) { }
 
     static final Map<String, Floor> ORACLE = Map.of(
-            "use-core/surefire", new Floor(84, 564),
+            "use-core/surefire", new Floor(85, 603),
             "use-gui/surefire", new Floor(8, 17),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
 
     static final Map<String, Floor> DEFAULT = Map.of(
-            "use-core/surefire", new Floor(51, 293),
+            "use-core/surefire", new Floor(52, 332),
             "use-gui/surefire", new Floor(1, 1),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
