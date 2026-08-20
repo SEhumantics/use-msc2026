@@ -13,11 +13,13 @@
 # rows.javaTypeMismatch	0
 # rows.subjectTypeObserved	0
 # rows.subjectTypeAssumed	0
+# rows.intendedDeparture	0
 # verdict.AGREE	784
 # op.URealValue.add(value).rows	784
 # op.URealValue.add(value).measured	784
 # op.URealValue.add(value).agreement	784
 # op.URealValue.add(value).disagreement	0
+# op.URealValue.add(value).intendedDeparture	0
 # op.URealValue.add(value).javaTypeMismatch	0
 # op.URealValue.add(value).subjectTypeObserved	0
 # op.URealValue.add(value).subjectTypeAssumed	0

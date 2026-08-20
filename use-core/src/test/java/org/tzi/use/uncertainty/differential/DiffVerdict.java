@@ -80,6 +80,36 @@ public enum DiffVerdict {
     DIFFER,
 
     /**
+     * Both sides returned a value, the values differ, and a caller-supplied
+     * {@link IntendedDepartures} pre-registration names this exact pair — operation, ledger row,
+     * both canonical forms, and the direction the answer was predicted to move — together with a
+     * written rationale.
+     *
+     * <p><strong>Not an agreement.</strong> The two sides did not agree, and saying they did would
+     * be the {@code AGREE_THROWN} mistake in a fourth costume. {@link DifferentialSweep.Result#agreementCount()}
+     * does not move when a row lands here.
+     *
+     * <p><strong>Is a measurement.</strong> Two values were observed and compared. It belongs in
+     * {@link DifferentialSweep.Result#measurementCount()} because it <em>is</em> evidence — evidence
+     * of a difference that was predicted in writing before the run. This is the one point where it
+     * parts company with {@link #ACCEPTED_THROW}, which is an agreement that measured nothing.
+     *
+     * <p><strong>Excluded from one gate clause and no others.</strong> It is not counted as a
+     * disagreement by clause 2 of
+     * {@link DifferentialSweep.Result#isStagePass(int, AcceptedDegenerateOperations, IntendedDepartures)}.
+     * It does not relax clause 1 (the measurement floor) or clause 3 (discriminating power): a sweep
+     * every row of which is an intended departure still fails clause 3. And it brings a clause of its
+     * own — clause 4 refuses a stage whose pre-registration was written but never fired, because a
+     * mechanism that only ever permits differences would let an unfixed defect pass as agreement.
+     *
+     * <p>Exists because of B7 (user decision 2026-08-17): the port deliberately corrects historical
+     * defects rather than reproducing them, so on those operations divergence from the oracle is the
+     * intended outcome. See {@link IntendedDepartures} and {@code docs/port2/b7-fix-plan.md} section
+     * 4.3.
+     */
+    INTENDED_DEPARTURE,
+
+    /**
      * Both sides threw and no allowlist adjudicated the pair. <strong>Not an agreement</strong>,
      * whether or not the throwable classes match: see the class comment.
      *
@@ -161,6 +191,6 @@ public enum DiffVerdict {
      * does.
      */
     public boolean isMeasurement() {
-        return this == AGREE || this == DIFFER;
+        return this == AGREE || this == DIFFER || this == INTENDED_DEPARTURE;
     }
 }

@@ -29,16 +29,18 @@ public final class DifferentialSweep {
     private final Candidate subject;
     private final long seed;
     private final AcceptedThrowPairs acceptedThrowPairs;
+    private final IntendedDepartures intendedDepartures;
 
     /**
-     * The ordinary constructor: no throw-pair is an agreement.
+     * The ordinary constructor: no throw-pair is an agreement, and every difference is a porting
+     * error.
      *
      * @param reference the historical side (its output populates the {@code historical} column)
      * @param subject   the ported side (its output populates the {@code ported} column)
      * @param seed      the seed that produced the inputs, recorded in the report header
      */
     public DifferentialSweep(Candidate reference, Candidate subject, long seed) {
-        this(reference, subject, seed, AcceptedThrowPairs.none());
+        this(reference, subject, seed, AcceptedThrowPairs.none(), IntendedDepartures.none());
     }
 
     /**
@@ -47,16 +49,35 @@ public final class DifferentialSweep {
      */
     public DifferentialSweep(Candidate reference, Candidate subject, long seed,
                              AcceptedThrowPairs acceptedThrowPairs) {
+        this(reference, subject, seed, acceptedThrowPairs, IntendedDepartures.none());
+    }
+
+    /**
+     * As above, with the departures a stage pre-registered before running — the B7 mechanism. A
+     * {@code DIFFER} row whose exact pair one of them names, in the direction it predicted, becomes
+     * {@link DiffVerdict#INTENDED_DEPARTURE}; everything else stays a difference. See
+     * {@link IntendedDepartures}.
+     */
+    public DifferentialSweep(Candidate reference, Candidate subject, long seed,
+                             AcceptedThrowPairs acceptedThrowPairs,
+                             IntendedDepartures intendedDepartures) {
         this.reference = reference;
         this.subject = subject;
         this.seed = seed;
         this.acceptedThrowPairs = Objects.requireNonNull(acceptedThrowPairs,
                 "acceptedThrowPairs (use AcceptedThrowPairs.none())");
+        this.intendedDepartures = Objects.requireNonNull(intendedDepartures,
+                "intendedDepartures (use IntendedDepartures.none())");
     }
 
     /** The reviewed throw-pairs this sweep will adjudicate; empty unless a caller supplied some. */
     public AcceptedThrowPairs acceptedThrowPairs() {
         return acceptedThrowPairs;
+    }
+
+    /** The departures this sweep will adjudicate; empty unless a caller pre-registered some. */
+    public IntendedDepartures intendedDepartures() {
+        return intendedDepartures;
     }
 
     public long seed() {
@@ -80,9 +101,23 @@ public final class DifferentialSweep {
             throw new IllegalArgumentException(
                     op.key() + " has arity " + op.arity() + " but " + domains.size() + " domains were given");
         }
+        return run(op, tuplesOf(domains));
+    }
+
+    /**
+     * The cartesian product {@link #sweep} would drive, without driving it.
+     *
+     * <p>Exposed so a caller can build ONE result per operation out of several domain sets instead of
+     * one result per domain set. That distinction is not cosmetic: {@link IntendedDepartures} keys a
+     * population declaration on an exact row count, and a count is only meaningful over the
+     * population a human actually looked at. A caller that sweeps eight corpora separately gets eight
+     * results, each holding a slice, and a declaration written against the operation as a whole
+     * matches none of them.
+     */
+    public static List<List<UValue>> tuplesOf(List<List<UValue>> domains) {
         List<List<UValue>> tuples = new ArrayList<>();
         buildTuples(domains, 0, new ArrayList<>(), tuples);
-        return run(op, tuples);
+        return tuples;
     }
 
     /** Convenience for a unary operation. */
@@ -143,9 +178,51 @@ public final class DifferentialSweep {
 
             Outcome refOutcome = apply(reference, op, tuple);
             Outcome subOutcome = apply(subject, op, tuple);
-            rows.add(classify(i, op, inputs, refOutcome, subOutcome, acceptedThrowPairs));
+            rows.add(classify(i, op, inputs, refOutcome, subOutcome, acceptedThrowPairs,
+                    intendedDepartures));
         }
-        return new Result(op, seed, reference.name(), subject.name(), rows);
+        applyPopulationDepartures(op, rows);
+        return new Result(op, seed, reference.name(), subject.name(), rows, intendedDepartures);
+    }
+
+    /**
+     * The second half of the {@link IntendedDepartures} mechanism, run once the population is
+     * complete.
+     *
+     * <p>A per-pair declaration can be evaluated the instant a row is classified, because its key is
+     * the row. A <em>bounded</em> declaration cannot: it names its population by an exact count and a
+     * digest over the whole set, so nothing can be decided until the last row is in. Hence a
+     * post-pass rather than a branch inside {@link #classify}.
+     *
+     * <p>It runs over the rows that are still {@link DiffVerdict#DIFFER} after per-pair adjudication,
+     * which is what makes the two forms compose: a stage may write three pairs out by hand and cover
+     * what remains with a population declaration, and the population is the set that actually
+     * remained rather than the set before per-pair adjudication ran.
+     */
+    private void applyPopulationDepartures(UOp op, List<DiffRow> rows) {
+        if (intendedDepartures.isEmpty()) {
+            return;
+        }
+        List<Integer> residual = new ArrayList<>();
+        List<String> pairs = new ArrayList<>();
+        for (int i = 0; i < rows.size(); i++) {
+            DiffRow row = rows.get(i);
+            if (row.verdict() == DiffVerdict.DIFFER) {
+                residual.add(i);
+                pairs.add(row.historical() + '\t' + row.ported());
+            }
+        }
+        IntendedDepartures.Declaration d = intendedDepartures.adjudicatePopulation(op.key(), pairs);
+        if (d == null) {
+            return;
+        }
+        for (int i : residual) {
+            DiffRow row = rows.get(i);
+            rows.set(i, new DiffRow(row.index(), row.operation(), row.inputs(), row.historical(),
+                    row.ported(), DiffVerdict.INTENDED_DEPARTURE,
+                    d.note() + (row.note().isEmpty() ? "" : " " + row.note()),
+                    row.subjectTypeProvenance()));
+        }
     }
 
     /**
@@ -193,7 +270,7 @@ public final class DifferentialSweep {
     }
 
     private static DiffRow classify(int index, UOp op, List<String> inputs, Outcome ref, Outcome sub,
-                                    AcceptedThrowPairs accepted) {
+                                    AcceptedThrowPairs accepted, IntendedDepartures intended) {
         if (ref.harnessError != null || sub.harnessError != null) {
             // Checked first and never merged with the throw population below: a harness failure is
             // the absence of a measurement, not a measurement that two sides happen to share.
@@ -266,6 +343,18 @@ public final class DifferentialSweep {
         if (ref.value.content().equals(sub.value.content())) {
             return new DiffRow(index, op.key(), inputs, ref.value.canonical(), sub.value.canonical(),
                     DiffVerdict.AGREE, typeNote(ref.value, sub.value),
+                    subjectTypeProvenance(sub));
+        }
+        // The last stop before a difference is reported as a porting error: did a stage write this
+        // exact pair down, in this direction, before the run? An undeclared pair, or a declared pair
+        // that moved the way the declaration did NOT predict, falls straight through to DIFFER.
+        IntendedDepartures.Declaration declaration = intended.adjudicate(
+                op.key(), ref.value.canonical(), sub.value.canonical());
+        if (declaration != null) {
+            String note = typeNote(ref.value, sub.value);
+            return new DiffRow(index, op.key(), inputs, ref.value.canonical(), sub.value.canonical(),
+                    DiffVerdict.INTENDED_DEPARTURE,
+                    declaration.note() + (note.isEmpty() ? "" : " " + note),
                     subjectTypeProvenance(sub));
         }
         return new DiffRow(index, op.key(), inputs, ref.value.canonical(), sub.value.canonical(),
@@ -449,12 +538,22 @@ public final class DifferentialSweep {
         private final String subjectName;
         private final List<DiffRow> rows;
         private final Map<DiffVerdict, Integer> tally;
+        /**
+         * The pre-registration the sweep actually ran under, carried on the result so the gate
+         * adjudicates against the same list that produced the verdicts. Passing a different one to
+         * the gate would measure a list that never touched a row, which is how a pre-registration
+         * mechanism turns into decoration.
+         */
+        private final IntendedDepartures intendedDepartures;
 
-        Result(UOp op, long seed, String referenceName, String subjectName, List<DiffRow> rows) {
+        Result(UOp op, long seed, String referenceName, String subjectName, List<DiffRow> rows,
+               IntendedDepartures intendedDepartures) {
             this.op = op;
             this.seed = seed;
             this.referenceName = referenceName;
             this.subjectName = subjectName;
+            this.intendedDepartures = Objects.requireNonNull(intendedDepartures,
+                    "intendedDepartures (use IntendedDepartures.none())");
             this.rows = java.util.Collections.unmodifiableList(new ArrayList<>(rows));
             Map<DiffVerdict, Integer> counts = new EnumMap<>(DiffVerdict.class);
             for (DiffVerdict v : DiffVerdict.values()) {
@@ -576,6 +675,97 @@ public final class DifferentialSweep {
             return out;
         }
 
+        // ------------------------------------------------------- pre-registered departures (B7)
+
+        /** The pre-registration this sweep ran under. {@link IntendedDepartures#none()} by default. */
+        public IntendedDepartures intendedDepartures() {
+            return intendedDepartures;
+        }
+
+        /**
+         * Rows on which the two sides differed and a pre-registration said they would, in the
+         * direction it predicted.
+         *
+         * <p>Published separately from {@link #disagreements()} — which still contains them, because
+         * they are still not agreements — so that a reader can see at a glance how much of a run was
+         * adjudicated by a human in advance rather than matched by the instrument.
+         */
+        public int intendedDepartureCount() {
+            return count(DiffVerdict.INTENDED_DEPARTURE);
+        }
+
+        /**
+         * Non-agreeing rows that <em>no</em> pre-registration covers: the population gate clause 2
+         * refuses on. Exactly {@link #disagreements()} minus the intended departures.
+         */
+        public List<DiffRow> unintendedDisagreements() {
+            List<DiffRow> out = new ArrayList<>();
+            for (DiffRow row : disagreements()) {
+                if (row.verdict() != DiffVerdict.INTENDED_DEPARTURE) {
+                    out.add(row);
+                }
+            }
+            return out;
+        }
+
+        /**
+         * Ledger row id -&gt; how many rows that row's declarations adjudicated. Sorted, and it
+         * carries a zero entry for every declared row that never fired, so the report cannot print a
+         * tidy list of departures that quietly omits the ones which did not happen.
+         */
+        public java.util.SortedMap<String, Integer> departuresByLedgerRow() {
+            java.util.SortedMap<String, Integer> out = new java.util.TreeMap<>();
+            for (IntendedDepartures.Declaration d : intendedDepartures.declarationsFor(op.key())) {
+                out.putIfAbsent(d.ledgerRowId(), 0);
+            }
+            for (DiffRow row : rows) {
+                if (row.verdict() != DiffVerdict.INTENDED_DEPARTURE) {
+                    continue;
+                }
+                String id = ledgerRowOf(row.note());
+                if (id != null) {
+                    out.merge(id, 1, Integer::sum);
+                }
+            }
+            return java.util.Collections.unmodifiableSortedMap(out);
+        }
+
+        /**
+         * <strong>Declarations that were written and never fired.</strong> Non-empty is a stage-gate
+         * failure (clause 4), and it is the half of the mechanism that is easy to leave out.
+         *
+         * <p>A pre-registration list that only ever <em>permits</em> differences lets an unfixed
+         * defect through: declare the departure, forget to write the fix, and the sweep is green
+         * because the port still agrees with the defective reference. Every entry here is one of two
+         * things — a fix that did not land, or a prediction that was wrong — and both are failures.
+         *
+         * <p>Scoped to <em>this</em> operation: a sweep of {@code UStringValue.equals} is not held to
+         * a declaration written against {@code UIntegerValue.compareTo}.
+         */
+        public List<IntendedDepartures.Declaration> unusedDeclarations() {
+            java.util.SortedMap<String, Integer> fired = departuresByLedgerRow();
+            List<IntendedDepartures.Declaration> out = new ArrayList<>();
+            for (IntendedDepartures.Declaration d : intendedDepartures.declarationsFor(op.key())) {
+                if (fired.getOrDefault(d.ledgerRowId(), 0) == 0) {
+                    out.add(d);
+                }
+            }
+            return java.util.Collections.unmodifiableList(out);
+        }
+
+        /**
+         * Recovers the ledger row from the note {@link IntendedDepartures.Declaration#note()} wrote.
+         * The note format is fixed by that method and by nothing else, so the two stay together.
+         */
+        private static String ledgerRowOf(String note) {
+            String prefix = "intended departure ";
+            if (note == null || !note.startsWith(prefix)) {
+                return null;
+            }
+            int end = note.indexOf(' ', prefix.length());
+            return end < 0 ? null : note.substring(prefix.length(), end);
+        }
+
         /**
          * <strong>Necessary and not sufficient</strong>: something was measured, and nothing
          * disagreed.
@@ -691,6 +881,18 @@ public final class DifferentialSweep {
         }
 
         /**
+         * The four-clause form, for a sweep that ran under a {@link IntendedDepartures}
+         * pre-registration. Clause 4 is {@link #unusedDeclarations()} being empty.
+         *
+         * @param intended must be the same list the sweep ran under; see
+         *                 {@link #requireStagePass(int, AcceptedDegenerateOperations, IntendedDepartures)}
+         */
+        public boolean isStagePass(int minimumMeasurements, AcceptedDegenerateOperations acknowledged,
+                                   IntendedDepartures intended) {
+            return stageGateFailures(minimumMeasurements, acknowledged, intended).isEmpty();
+        }
+
+        /**
          * {@link #isStagePass(int, AcceptedDegenerateOperations)}, but throws with <em>every</em>
          * failing clause and the numbers behind it rather than returning a bare {@code false}.
          *
@@ -710,7 +912,26 @@ public final class DifferentialSweep {
          */
         public Result requireStagePass(int minimumMeasurements,
                                        AcceptedDegenerateOperations acknowledged) {
-            List<String> failures = stageGateFailures(minimumMeasurements, acknowledged);
+            return requireStagePass(minimumMeasurements, acknowledged, intendedDepartures);
+        }
+
+        /**
+         * As above, naming the pre-registration the sweep ran under.
+         *
+         * <p><strong>The third parameter is never defaulted</strong>, for the same reason
+         * {@link AcceptedDegenerateOperations} is not: a caller must be unable to reach a pass over
+         * deliberately-diverging rows without writing down the mechanism that let them. The two-argument
+         * form above therefore <em>refuses</em> a sweep that ran with a non-empty pre-registration
+         * rather than silently adjudicating it — see {@link #requireSamePreregistration}.
+         *
+         * @param intended the same list the sweep ran under. A different one is rejected outright: it
+         *                 would measure a list that never touched a row, which is how a
+         *                 pre-registration mechanism turns into decoration.
+         */
+        public Result requireStagePass(int minimumMeasurements,
+                                       AcceptedDegenerateOperations acknowledged,
+                                       IntendedDepartures intended) {
+            List<String> failures = stageGateFailures(minimumMeasurements, acknowledged, intended);
             if (!failures.isEmpty()) {
                 StringBuilder sb = new StringBuilder("sweep of ").append(op.key())
                         .append(" is not a stage pass:");
@@ -726,8 +947,23 @@ public final class DifferentialSweep {
         /** Every clause of the stage gate this result fails, in order; empty means pass. */
         public List<String> stageGateFailures(int minimumMeasurements,
                                               AcceptedDegenerateOperations acknowledged) {
+            if (!intendedDepartures.isEmpty()) {
+                throw new IllegalStateException("this sweep ran under a non-empty IntendedDepartures ("
+                        + intendedDepartures + "), so the two-argument stage gate must not be used: it "
+                        + "would let a caller reach a pass over deliberately-diverging rows without "
+                        + "naming the mechanism that permitted them. Call the three-argument form and "
+                        + "pass the same pre-registration the sweep was built with.");
+            }
+            return stageGateFailures(minimumMeasurements, acknowledged, intendedDepartures);
+        }
+
+        /** Every clause of the four-clause stage gate this result fails, in order; empty means pass. */
+        public List<String> stageGateFailures(int minimumMeasurements,
+                                              AcceptedDegenerateOperations acknowledged,
+                                              IntendedDepartures intended) {
             Objects.requireNonNull(acknowledged,
                     "acknowledged (use AcceptedDegenerateOperations.none())");
+            requireSamePreregistration(intended);
             if (minimumMeasurements < 1) {
                 throw new IllegalArgumentException("minimumMeasurements must be at least 1, got "
                         + minimumMeasurements + ": a floor of zero is not a floor, and a sweep that "
@@ -739,9 +975,12 @@ public final class DifferentialSweep {
                 failures.add("measured " + measured + " row(s) of " + rowCount() + ", needed at least "
                         + minimumMeasurements + ". A result with too little evidence is not evidence.");
             }
-            int disagreed = disagreements().size();
+            int disagreed = unintendedDisagreements().size();
             if (disagreed > 0) {
-                failures.add(disagreed + " row(s) did not agree.");
+                failures.add(disagreed + " row(s) did not agree"
+                        + (intendedDepartureCount() == 0 ? "."
+                                : ", over and above the " + intendedDepartureCount()
+                                  + " pre-registered as intended departures."));
             }
             int distinct = distinctReferenceValues();
             if (distinct < DISCRIMINATING_MINIMUM) {
@@ -759,7 +998,52 @@ public final class DifferentialSweep {
                             + "into the report, so the weakness travels with the number.");
                 }
             }
+            // Clause 4. The half of the pre-registration mechanism that is easy to leave out, and is
+            // the whole point: a list that only ever PERMITS differences lets an unfixed defect pass
+            // as agreement. Declare the departure, forget to write the fix, and the port still agrees
+            // with the defective reference -- green, and wrong.
+            List<IntendedDepartures.Declaration> unused = unusedDeclarations();
+            if (!unused.isEmpty()) {
+                StringBuilder sb = new StringBuilder(unused.size())
+                        .append(" pre-registered departure(s) never fired on this operation. Each is "
+                                + "either a fix that did not land or a prediction that was wrong, and "
+                                + "both are failures:");
+                for (IntendedDepartures.Declaration d : unused) {
+                    sb.append("\n      * ").append(d.id())
+                      .append(" [expected ").append(d.direction().describeExpectation()).append(']');
+                }
+                failures.add(sb.toString());
+            }
             return failures;
+        }
+
+        /**
+         * Refuses a gate call whose pre-registration is not the one the sweep ran under.
+         *
+         * <p>Compared by declaration identity rather than by object identity, so a list rebuilt from
+         * the same source is accepted and a list with one entry added, removed or reworded is not.
+         * Without this the third parameter would be a label a caller writes next to a number it did
+         * not come from.
+         */
+        private void requireSamePreregistration(IntendedDepartures intended) {
+            Objects.requireNonNull(intended, "intended (use IntendedDepartures.none())");
+            if (intended == intendedDepartures) {
+                return;
+            }
+            List<String> mine = new ArrayList<>();
+            for (IntendedDepartures.Declaration d : intendedDepartures.declarations()) {
+                mine.add(d.id());
+            }
+            List<String> theirs = new ArrayList<>();
+            for (IntendedDepartures.Declaration d : intended.declarations()) {
+                theirs.add(d.id());
+            }
+            if (!mine.equals(theirs)) {
+                throw new IllegalArgumentException("the stage gate was given a different "
+                        + "IntendedDepartures than the sweep ran under, so it would adjudicate a list "
+                        + "that never touched a row.\n  sweep ran under: " + mine
+                        + "\n  gate was given:  " + theirs);
+            }
         }
 
         /**
@@ -789,7 +1073,10 @@ public final class DifferentialSweep {
                     .append(": ").append(rowCount()).append(" rows, ")
                     .append(measurementCount()).append(" measured, ")
                     .append(agreementCount()).append(" agreed, ")
-                    .append(disagreements().size()).append(" disagreed, ")
+                    .append(unintendedDisagreements().size()).append(" disagreed, ")
+                    .append(intendedDepartureCount()).append(" intended departure(s)")
+                    .append(departuresByLedgerRow().isEmpty() ? ""
+                            : " " + departuresByLedgerRow()).append(", ")
                     .append(javaTypeMismatchCount()).append(" java-type mismatch(es) (subject token ")
                     .append("OBSERVED on ").append(subjectTypeObservedCount()).append(", ASSUMED on ")
                     .append(subjectTypeAssumedCount()).append("), ")

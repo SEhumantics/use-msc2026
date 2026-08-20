@@ -33,6 +33,7 @@ import java.util.Map;
  * # rows.javaTypeMismatch   0
  * # rows.subjectTypeObserved 0
  * # rows.subjectTypeAssumed  0
+ * # rows.intendedDeparture   0
  * # verdict.AGREE           484
  * # op.URealValue.add(value).rows                     484
  * # op.URealValue.add(value).measured                 484
@@ -273,6 +274,28 @@ public final class DiffReportWriter {
             // claim a stage needs to be able to make. They sum to rows.javaTypeMismatch exactly.
             header(out, "rows.subjectTypeObserved", Integer.toString(subjectTypeObserved));
             header(out, "rows.subjectTypeAssumed", Integer.toString(subjectTypeAssumed));
+            // B7. Rows on which the two sides differed and a human said in advance that they would.
+            // Written unconditionally, including when it is 0, for the reason the two lines above
+            // are: "no divergence was pre-adjudicated" is a claim a stage needs to be able to make,
+            // and a header that prints the line only when it is non-zero cannot support it.
+            //
+            // These rows are inside rows.disagreement -- they are NOT agreements -- and inside
+            // rows.measured, because two values really were observed and compared. The only place
+            // they are excluded is clause 2 of the stage gate. Subtracting the two lines gives the
+            // population that gate refuses on.
+            int intendedDepartures = 0;
+            java.util.SortedMap<String, Integer> departuresByRow = new java.util.TreeMap<>();
+            for (DifferentialSweep.Result r : results) {
+                intendedDepartures += r.intendedDepartureCount();
+                r.departuresByLedgerRow().forEach((row, n) -> departuresByRow.merge(row, n, Integer::sum));
+            }
+            header(out, "rows.intendedDeparture", Integer.toString(intendedDepartures));
+            // One line per LEDGER ROW of b7-fix-plan.md section 2, including the zeros. A declared row
+            // that adjudicated nothing is either a fix that did not land or a prediction that was
+            // wrong, and printing only the non-zero rows would render exactly that case invisible.
+            for (Map.Entry<String, Integer> e : departuresByRow.entrySet()) {
+                header(out, "intendedDeparture." + e.getKey(), Integer.toString(e.getValue()));
+            }
             for (Map.Entry<DiffVerdict, Integer> e : tally.entrySet()) {
                 header(out, "verdict." + e.getKey().name(), Integer.toString(e.getValue()));
             }
@@ -305,6 +328,13 @@ public final class DiffReportWriter {
                 header(out, "op." + key + ".agreement", Integer.toString(r.agreementCount()));
                 header(out, "op." + key + ".disagreement",
                         Integer.toString(r.disagreements().size()));
+                header(out, "op." + key + ".intendedDeparture",
+                        Integer.toString(r.intendedDepartureCount()));
+                // The clause-4 population, per operation and by name. A stage that pre-registered a
+                // departure and never triggered it must not be able to read this file as a pass.
+                for (IntendedDepartures.Declaration d : r.unusedDeclarations()) {
+                    header(out, "op." + key + ".intendedDeparture.unused", d.id());
+                }
                 // Per operation as well as in the file total, for the D-21 reason the rest of this
                 // block exists: a file-level 0 can hide a per-operation finding, and vice versa.
                 header(out, "op." + key + ".javaTypeMismatch",
