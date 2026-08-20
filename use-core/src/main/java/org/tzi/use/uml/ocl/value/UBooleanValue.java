@@ -21,9 +21,20 @@
  * Ported from USE-Uncertainty (github.com/atenearesearchgroup/uncertainty @ 74acd0d),
  * src/main/org/tzi/use/uml/ocl/value/UBooleanValue.java.
  *
- * Semantics unchanged. The only edit is the import of the uncertainty datatypes, which were
- * vendored into org.tzi.use.uncertainty.datatypes rather than the original package `uDataTypes`
- * (B1); see docs/port2/stage-03-scope.md sec. 5.
+ * The import of the uncertainty datatypes is edited: they were vendored into
+ * org.tzi.use.uncertainty.datatypes rather than the original package `uDataTypes` (B1); see
+ * docs/port2/stage-03-scope.md sec. 5.
+ *
+ * SEMANTICS ARE NOT UNCHANGED. This header said "Semantics unchanged" until 2026-08-20, which
+ * documented the reverse of a binding user decision: B7 (2026-08-17) is that the port FIXES the
+ * fork's defects rather than reproducing them bug-for-bug. The rows corrected in this file are
+ * below, each justified in full at its own site, and each is a deliberate divergence from the
+ * historical oracle:
+ *
+ *   M-8   equals()'s false-arm carried a dead conjunct (!this.value()), which valueOf's
+ *         normalisation makes unsatisfiable, so UBoolean(true, 0) never equalled Boolean false
+ *
+ * See docs/port2/stage-09.md sec. 3 and docs/port2/b7-fix-plan.md.
  */
 package org.tzi.use.uml.ocl.value;
 
@@ -257,8 +268,23 @@ public class UBooleanValue extends UncertainBooleanValue {
         if (obj instanceof BooleanValue) {
             BooleanValue other = (BooleanValue) obj;
 
+            // B7 / ledger M-8 -- behaviour deliberately changed from the fork.
+            //
+            // The second disjunct was `other.isFalse() && probability() == 0 && !this.value()`
+            // (fork src/main/org/tzi/use/uml/ocl/value/UBooleanValue.java:233-234). Its last
+            // conjunct is dead: valueOf normalises EVERY value to value == true (:100-103), turning
+            // (false, p) into (true, 1-p), so !this.value() is false for every instance this class
+            // can produce and UBooleanValue.FALSE.equals(BooleanValue.FALSE) answered false.
+            //
+            // Deleting `&& !this.value()` leaves `other.isFalse() && probability() == 0`, which IS
+            // the normalised encoding of false -- the same statement the surviving first disjunct
+            // makes about true. Do NOT instead "fix" the normalisation: F-7 and F-8 pin valueOf's
+            // exact arithmetic and four value-test assertions depend on it.
+            //
+            // Declared consequence: VALUE. OCL `UBoolean(true, 0) = false` flips false -> true.
+            // Decided by the user on 2026-08-17 (B7); docs/port2/b7-fix-plan.md section 2 M-8.
             equals = (other.isTrue() && this.probability() == 1 && this.value() ) ||
-                     (other.isFalse() && this.probability() == 0 && !this.value());
+                     (other.isFalse() && this.probability() == 0);
 
         }
         else if (obj instanceof UBooleanValue) {

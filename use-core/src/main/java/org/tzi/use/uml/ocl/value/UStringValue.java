@@ -21,9 +21,22 @@
  * Ported from USE-Uncertainty (github.com/atenearesearchgroup/uncertainty @ 74acd0d),
  * src/main/org/tzi/use/uml/ocl/value/UStringValue.java.
  *
- * Semantics unchanged. The only edit is the import of the uncertainty datatypes, which were
- * vendored into org.tzi.use.uncertainty.datatypes rather than the original package `uDataTypes`
- * (B1); see docs/port2/stage-03-scope.md sec. 5.
+ * The import of the uncertainty datatypes is edited: they were vendored into
+ * org.tzi.use.uncertainty.datatypes rather than the original package `uDataTypes` (B1); see
+ * docs/port2/stage-03-scope.md sec. 5.
+ *
+ * SEMANTICS ARE NOT UNCHANGED. This header said "Semantics unchanged" until 2026-08-20, which
+ * documented the reverse of a binding user decision: B7 (2026-08-17) is that the port FIXES the
+ * fork's defects rather than reproducing them bug-for-bug. The rows corrected in this file are
+ * below, each justified in full at its own site, and each is a deliberate divergence from the
+ * historical oracle:
+ *
+ *   M-11  equals() was the constant false: String.equals(UString) can never hold, and the second
+ *         conjunct compared the receiver's confidence to itself
+ *   M-12  compareTo() compared the receiver's bare string against the argument's WRAPPER
+ *         rendering, so every plain String sorted after every UString
+ *
+ * See docs/port2/stage-09.md sec. 3 and docs/port2/b7-fix-plan.md.
  */
 package org.tzi.use.uml.ocl.value;
 
@@ -102,6 +115,43 @@ public class UStringValue extends UncertainValue {
         return wrapper.hashCode();
     }
 
+    /**
+     * B7 / ledger M-11 — <strong>behaviour deliberately changed from the fork.</strong>
+     *
+     * <p>The fork's body was:
+     * <pre>
+     *   eq = wrapper.getString().equals(ustring.wrapper) &amp;&amp;
+     *           wrapper.getsConf() == wrapper.getsConf();
+     * </pre>
+     * (fork {@code src/main/org/tzi/use/uml/ocl/value/UStringValue.java:79-91}), and it carries two
+     * independent defects in one expression:
+     * <ol>
+     *   <li>{@code wrapper.getString()} is a {@code java.lang.String} and {@code ustring.wrapper} is a
+     *       {@code UString}, so {@code String.equals(Object)} is {@code false} for <em>every</em>
+     *       argument;</li>
+     *   <li>the second conjunct compares the receiver's confidence <strong>to itself</strong> — the
+     *       argument is never read.</li>
+     * </ol>
+     * Net effect: {@code equals} is the constant {@code false}. {@code a.equals(a)} is {@code false},
+     * reflexivity is broken, and no {@code UStringValue} can be found in any {@code HashSet},
+     * {@code HashMap} or {@code SetValue} — even though {@link #hashCode()} delegates correctly, so
+     * the two were never consistent.
+     *
+     * <p>The port delegates to {@code UString.equals}, which compares the string and the confidence
+     * (vendored {@code org.tzi.use.uncertainty.datatypes.UString}, from
+     * {@code uDataTypes/UString.java:111-119}). That is the only body under which this class's own
+     * {@code hashCode} is contract-correct.
+     *
+     * <p><strong>Declared consequence.</strong> {@link #valueOf(Value)} lifts a {@link StringValue}
+     * to confidence {@code 1.0}, so the fix makes {@code UString('x', 1.0) = 'x'} evaluate
+     * <em>true</em> where the fork gave <em>false</em>. {@link StringValue#equals(Object)} has no
+     * {@code UStringValue} arm and is not edited here, so the relation stays asymmetric across the
+     * String/UString boundary. That asymmetry is a declared residual, not an oversight —
+     * {@code docs/port2/b7-fix-plan.md} section 7.2 item 2.
+     *
+     * <p>Decided by the user on 2026-08-17 (B7: fix the historical defects rather than reproduce them
+     * bug-for-bug). Designed in {@code docs/port2/b7-fix-plan.md} section 1 C1.
+     */
     @Override
     public boolean equals(Object obj) {
         boolean eq = false;
@@ -110,14 +160,41 @@ public class UStringValue extends UncertainValue {
             UStringValue ustring = valueOf((Value) obj);
 
             if (ustring != null)
-                eq = wrapper.getString().equals(ustring.wrapper) &&
-                        wrapper.getsConf() == wrapper.getsConf();
+                eq = wrapper.equals(ustring.wrapper);
 
         }
 
         return eq;
     }
 
+    /**
+     * B7 / ledger M-12 — <strong>behaviour deliberately changed from the fork</strong>, in one of the
+     * two places the ledger names.
+     *
+     * <p><strong>What changed.</strong> The last line was
+     * {@code wrapper.getString().compareTo(valueOf(o).toString())} (fork
+     * {@code src/main/org/tzi/use/uml/ocl/value/UStringValue.java:103}). The receiver contributes its
+     * bare string; the argument — already known to be a {@link StringValue} by the guard above —
+     * contributes {@code valueOf(o).toString()}, which is the <em>wrapper rendering</em>
+     * {@code UString('x', 1.0)}. So {@code UString('x',1) . compareTo('x')} compared {@code "x"}
+     * against {@code "UString('x', 1.0)"} and answered a large negative number. Every plain string
+     * sorts after every {@code UString}, whatever the strings are. Both sides now contribute their
+     * bare string.
+     *
+     * <p><strong>What deliberately did not change.</strong> The guard is
+     * {@code !(o instanceof StringValue)}, so a {@code UStringValue} argument does <em>not</em> reach
+     * the line below — it is diverted to the {@code toString().compareTo(...)} route on the line
+     * above, comparing two full wrapper renderings. That is odd, but it is total, self-consistent,
+     * and orders {@code UString} against {@code UString} by string and then by confidence, which is a
+     * defensible order. Widening the guard is a separate decision with its own consequences and is
+     * not taken here. See {@code docs/port2/b7-fix-plan.md} section 2 M-12.
+     *
+     * <p><strong>Declared consequence.</strong> {@code SET} (order) — the sort position of a
+     * {@code UString} relative to a plain {@code String}. No {@code .in} corpus entry contains a
+     * {@code UString} token, so no recorded expectation moves.
+     *
+     * <p>Decided by the user on 2026-08-17 (B7).
+     */
     @Override
     public int compareTo(Value o) {
         if (o == this )
@@ -127,7 +204,7 @@ public class UStringValue extends UncertainValue {
         if (! (o instanceof StringValue) )
             return toString().compareTo(o.toString());
 
-        return wrapper.getString().compareTo(valueOf(o).toString());
+        return wrapper.getString().compareTo(((StringValue) o).value());
     }
 
 

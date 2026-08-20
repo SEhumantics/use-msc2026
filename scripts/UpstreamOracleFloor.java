@@ -263,6 +263,12 @@ public class UpstreamOracleFloor {
     // RE-PINNED 2026-08-20 (full-census fidelity sweep). Adds ONE Jupiter class with ONE method —
     // PortedFidelitySweepTest — collected in BOTH modes. use-core/surefire 14/106 -> 15/107
     // (default) and 47/377 -> 48/378 (oracle).
+    //
+    // RE-PINNED 2026-08-20 (B7 pre-registration and the corrections it adjudicates). Adds TWO
+    // Jupiter test files, IntendedDeparturesTest and B7CorrectionsTest, with 28 and 26 methods.
+    // They count as THIRTEEN classes rather than two: surefire counts each @Nested class as its own
+    // report, and the two files carry 6 and 7 nested classes. So use-core/surefire
+    // 15/107 -> 28/161 (default) and 48/378 -> 61/432 (oracle), in both modes, both measured.
     // Floors are >= : the suite may GROW, it may never shrink. No floor is 0 and no floor
     // may be lowered to make a run pass — see harness-contract.md sec. 8 step 7 clause 1,
     // "Do not lower the floor."
@@ -270,13 +276,13 @@ public class UpstreamOracleFloor {
     record Floor(int classes, int methods) { }
 
     static final Map<String, Floor> ORACLE = Map.of(
-            "use-core/surefire", new Floor(48, 378),
+            "use-core/surefire", new Floor(61, 432),
             "use-gui/surefire", new Floor(8, 17),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
 
     static final Map<String, Floor> DEFAULT = Map.of(
-            "use-core/surefire", new Floor(15, 107),
+            "use-core/surefire", new Floor(28, 161),
             "use-gui/surefire", new Floor(1, 1),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
