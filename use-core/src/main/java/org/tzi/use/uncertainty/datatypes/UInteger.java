@@ -7,8 +7,8 @@
  *   licence:  GNU General Public License v2 (the upstream COPYING), the same licence
  *             as USE itself, so vendoring is licence-clean.
  *
- * Two deliberate changes from upstream, both recorded in
- * docs/port2/stage-03-scope.md:
+ * Three deliberate changes from upstream, all recorded in
+ * docs/port2/stage-03-scope.md or this task's work log:
  *
  *   1. RELOCATED from package `uDataTypes` to `org.tzi.use.uncertainty.datatypes`
  *      (B1). The historical jar used by the differential harness still carries the
@@ -22,12 +22,20 @@
  *      No differential row can reach a removed member: `toUUnlimitedNatural` is
  *      registered nowhere under expr/operations.
  *
+ *   3. DROPPED the `Cloneable` declaration. The upstream `clone()` override
+ *      (uDataTypes/UInteger.java:544) had zero callers anywhere in USE-Uncertainty/src and was
+ *      correctly not ported (sec. 5 policy: delete if dangling). The class still declared
+ *      `implements Cloneable` after that drop, which is a broken contract (Object.clone() is
+ *      protected, so external code could never actually call it) rather than a real capability;
+ *      removing the declaration is the honest fix. Found and fixed during the 2026-08-21
+ *      completeness review.
+ *
  * Otherwise byte-for-byte upstream. Do not reformat: the port's auditability depends
  * on this file staying diffable against its origin.
  */
 package org.tzi.use.uncertainty.datatypes;
 
-public class UInteger implements Cloneable,Comparable<UInteger> {
+public class UInteger implements Comparable<UInteger> {
 	
 	protected int x = 0; 
 	protected double u = 0.0;
