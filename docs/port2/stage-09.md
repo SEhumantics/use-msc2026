@@ -901,3 +901,13 @@ grep -n 'types\[i\] == valueClass' -A 8 \
 # section 4.4 -- waiver count
 grep -c '^# W-' docs/port2/upstream-test-waivers.md
 ```
+
+---
+
+**Addendum, 2026-08-21:** §5's "nothing from the adversarial audit's original findings remains open" is
+a claim about this stage's specific 33-row backlog, not a claim that the five uncertain types were
+exhaustively verified — §5 says as much itself, citing the `conjunctiveCertainty`/`degreeOfConflict`
+finding as a named counter-example. A follow-up independent audit (fresh subagents, no memory of this
+session) found six more real defects and 24 more untested operations that this stage's methodology
+did not surface. See `docs/port2/stage-10.md`. This file's own content above is left as originally
+written — a record of what this stage did, not a continuously-updated status page.
