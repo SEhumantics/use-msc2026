@@ -372,7 +372,4 @@ public abstract class AbstractCoverageVisitor implements ExpressionVisitor {
 	public void visitConstUString(org.tzi.use.uml.ocl.expr.ExpConstUString exp) {
 	}
 
-	@Override
-	public void visitDefSBoolean(org.tzi.use.uml.ocl.expr.ExpDefSBoolean exp) {
-	}
 }

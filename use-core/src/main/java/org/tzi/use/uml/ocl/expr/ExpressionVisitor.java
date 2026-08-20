@@ -49,7 +49,6 @@ public interface ExpressionVisitor {
 
 	void visitConstUString(ExpConstUString exp);
 
-	void visitDefSBoolean(ExpDefSBoolean exp);
 	void visitConstString (ExpConstString exp);
 	void visitEmptyCollection (ExpEmptyCollection exp);
 	void visitExists (ExpExists exp);

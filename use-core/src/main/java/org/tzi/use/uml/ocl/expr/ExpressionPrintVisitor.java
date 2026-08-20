@@ -608,8 +608,4 @@ public class ExpressionPrintVisitor implements ExpressionVisitor {
 		writer.write(literal(exp.toString(), exp));
 	}
 
-	@Override
-	public void visitDefSBoolean(ExpDefSBoolean exp) {
-		writer.write(literal(exp.toString(), exp));
-	}
 }
