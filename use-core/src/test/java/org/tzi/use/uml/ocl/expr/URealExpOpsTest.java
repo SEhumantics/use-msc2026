@@ -481,6 +481,113 @@ class URealExpOpsTest {
     }
 
     /**
+     * Test sin, cos, tan, asin, acos, atan: UReal -> UReal.
+     *
+     * <p>Not a B7 ledger row: found untested by an independent audit at S9 (this stage) rather than
+     * by the fork's own test suite, which has no coverage for any of these six either. Each
+     * delegates to {@code UReal}'s own error-propagation formula (uncertainty scaled by the
+     * derivative's magnitude at the receiver's value) — see {@code uDataTypes/UReal.java:206-245}.
+     * Values are computed by the JDK's {@code Math} trig functions and asserted against, not
+     * hand-derived: the exact {@code URealValue} equality (which rounds via {@code MathUtil.round})
+     * would otherwise risk a silently-wrong expected literal.
+     */
+
+    @Test
+    void testURealSin() throws ExpInvalidException {
+        Expression [] args;
+        ExpStdOp op;
+
+        // UReal(0, 1).sin() -> UReal(sin(0), 1*cos(0)) = UReal(0.0, 1.0)
+        args = new Expression[] { new ExpConstUReal(new ExpConstInteger(0), new ExpConstReal(1))};
+        op = ExpStdOp.create("sin", args);
+        assertEquals(new URealValue(Math.sin(0), 1 * Math.cos(0)), e.eval(op, state), op.toString());
+
+        // UReal(pi/6, 0.4).sin() -> UReal(sin(pi/6), 0.4*cos(pi/6))
+        double x = Math.PI / 6;
+        args = new Expression[] { new ExpConstUReal(new ExpConstReal(x), new ExpConstReal(0.4))};
+        op = ExpStdOp.create("sin", args);
+        assertEquals(new URealValue(Math.sin(x), 0.4 * Math.cos(x)), e.eval(op, state), op.toString());
+    }
+
+    @Test
+    void testURealCos() throws ExpInvalidException {
+        Expression [] args;
+        ExpStdOp op;
+
+        // UReal(0, 1).cos() -> UReal(cos(0), 1*sin(0)) = UReal(1.0, 0.0)
+        args = new Expression[] { new ExpConstUReal(new ExpConstInteger(0), new ExpConstReal(1))};
+        op = ExpStdOp.create("cos", args);
+        assertEquals(new URealValue(Math.cos(0), 1 * Math.sin(0)), e.eval(op, state), op.toString());
+
+        // UReal(pi/6, 0.4).cos() -> UReal(cos(pi/6), 0.4*sin(pi/6))
+        double x = Math.PI / 6;
+        args = new Expression[] { new ExpConstUReal(new ExpConstReal(x), new ExpConstReal(0.4))};
+        op = ExpStdOp.create("cos", args);
+        assertEquals(new URealValue(Math.cos(x), 0.4 * Math.sin(x)), e.eval(op, state), op.toString());
+    }
+
+    @Test
+    void testURealTan() throws ExpInvalidException {
+        Expression [] args;
+        ExpStdOp op;
+
+        // UReal(0, 1).tan() -> sin(0,1).divideBy(cos(0,1)) = UReal(0,1).divideBy(UReal(1,0))
+        args = new Expression[] { new ExpConstUReal(new ExpConstInteger(0), new ExpConstReal(1))};
+        op = ExpStdOp.create("tan", args);
+        Value expected = new URealValue(Math.sin(0), 1 * Math.cos(0))
+                .divideBy(new URealValue(Math.cos(0), 1 * Math.sin(0)));
+        assertEquals(expected, e.eval(op, state), op.toString());
+    }
+
+    @Test
+    void testURealAsin() throws ExpInvalidException {
+        Expression [] args;
+        ExpStdOp op;
+
+        // UReal(0, 1).asin() -> UReal(asin(0), 1/sqrt(1-0^2)) = UReal(0.0, 1.0)
+        args = new Expression[] { new ExpConstUReal(new ExpConstInteger(0), new ExpConstReal(1))};
+        op = ExpStdOp.create("asin", args);
+        assertEquals(new URealValue(Math.asin(0), 1 / Math.sqrt(1 - 0 * 0)), e.eval(op, state), op.toString());
+
+        // UReal(0.5, 0.4).asin() -> UReal(asin(0.5), 0.4/sqrt(1-0.5^2))
+        args = new Expression[] { new ExpConstUReal(new ExpConstReal(0.5), new ExpConstReal(0.4))};
+        op = ExpStdOp.create("asin", args);
+        assertEquals(new URealValue(Math.asin(0.5), 0.4 / Math.sqrt(1 - 0.5 * 0.5)), e.eval(op, state), op.toString());
+    }
+
+    @Test
+    void testURealAcos() throws ExpInvalidException {
+        Expression [] args;
+        ExpStdOp op;
+
+        // UReal(0, 1).acos() -> UReal(acos(0), 1/sqrt(1-0^2)) = UReal(pi/2, 1.0)
+        args = new Expression[] { new ExpConstUReal(new ExpConstInteger(0), new ExpConstReal(1))};
+        op = ExpStdOp.create("acos", args);
+        assertEquals(new URealValue(Math.acos(0), 1 / Math.sqrt(1 - 0 * 0)), e.eval(op, state), op.toString());
+
+        // UReal(0.5, 0.4).acos() -> UReal(acos(0.5), 0.4/sqrt(1-0.5^2))
+        args = new Expression[] { new ExpConstUReal(new ExpConstReal(0.5), new ExpConstReal(0.4))};
+        op = ExpStdOp.create("acos", args);
+        assertEquals(new URealValue(Math.acos(0.5), 0.4 / Math.sqrt(1 - 0.5 * 0.5)), e.eval(op, state), op.toString());
+    }
+
+    @Test
+    void testURealAtan() throws ExpInvalidException {
+        Expression [] args;
+        ExpStdOp op;
+
+        // UReal(0, 1).atan() -> UReal(atan(0), 1/(1+0^2)) = UReal(0.0, 1.0)
+        args = new Expression[] { new ExpConstUReal(new ExpConstInteger(0), new ExpConstReal(1))};
+        op = ExpStdOp.create("atan", args);
+        assertEquals(new URealValue(Math.atan(0), 1 / (1 + 0 * 0)), e.eval(op, state), op.toString());
+
+        // UReal(1, 0.4).atan() -> UReal(atan(1), 0.4/(1+1^2))
+        args = new Expression[] { new ExpConstUReal(new ExpConstInteger(1), new ExpConstReal(0.4))};
+        op = ExpStdOp.create("atan", args);
+        assertEquals(new URealValue(Math.atan(1), 0.4 / (1 + 1 * 1)), e.eval(op, state), op.toString());
+    }
+
+    /**
      * Test value : UReal -> Real
      */
 
