@@ -285,7 +285,7 @@ final class Op_uString_uConcat extends OpGeneric {
 }
 
 
-// indexOf : UString x String -> UString
+// indexOf : UString x String -> Integer
 final class Op_uString_indexOf extends OpGeneric {
 
     @Override
@@ -303,10 +303,21 @@ final class Op_uString_indexOf extends OpGeneric {
         return false;
     }
 
+    /*
+     * Found while adding test coverage at S9 (not a B7 ledger row): matches() declared mkUString()
+     * while eval() below always returns an IntegerValue (delegating to UStringValue.indexOf(String),
+     * uml/ocl/value/UStringValue.java:329-331, which wraps IntegerValue.valueOf(...)). Byte-identical
+     * to the fork, so pre-existing there too. Same defect class as the already-fixed ledger row M-37
+     * (UInteger.value()/toInteger() declared mkUInteger() while returning IntegerValue) — fixed the
+     * same way, by correcting the declared static type to match the real runtime type. TYPE only: no
+     * corpus entry uses indexOf (specification.md 6.5), so no recorded expectation moves; an enclosing
+     * expression that consumes indexOf(...)'s result as an Integer (e.g. `x.indexOf('a') + 1`) now
+     * type-checks, where it previously failed at compile time expecting a UString operand.
+     */
     @Override
     public Type matches(Type[] params) {
         return params.length == 2 && params[0].isTypeOfUString() &&
-                params[1].isTypeOfString() ? TypeFactory.mkUString() : null;
+                params[1].isTypeOfString() ? TypeFactory.mkInteger() : null;
     }
 
     @Override
@@ -480,10 +491,18 @@ final class Op_uString_toString extends OpGeneric {
         return false;
     }
 
+    /*
+     * Found while adding test coverage at S9 (not a B7 ledger row): matches() declared mkUString()
+     * while eval() below always returns a StringValue (delegating to UStringValue.uToString(),
+     * uml/ocl/value/UStringValue.java:285-287, which wraps StringValue). This class's own leading
+     * comment already said "-> String", agreeing with eval(); matches() was the outlier. Same defect
+     * class as the already-fixed ledger row M-37 — see Op_uString_indexOf's comment above for the
+     * full account. TYPE only, same reasoning: no corpus entry uses toString() on a UString.
+     */
     @Override
     public Type matches(Type[] params) {
         return params.length == 1 && params[0].isTypeOfUString()
-                ? TypeFactory.mkUString() : null;
+                ? TypeFactory.mkString() : null;
     }
 
     @Override
@@ -518,19 +537,29 @@ final class Op_uString_toInteger extends OpGeneric {
                 ? TypeFactory.mkInteger() : null;
     }
 
+    /*
+     * Found while adding test coverage at S9 (not a B7 ledger row): on a failed conversion (e.g.
+     * "abc".toInteger()) this returned a bare Java null instead of UndefinedValue.instance. Unlike
+     * ExpConstUString's M-30 (an unguarded exception that ESCAPED eval entirely), this exception was
+     * already caught -- but the catch produced a Value-typed null, which ExpStdOp.eval (:271-317)
+     * assigns straight through to its own result and returns unwrapped. Any enclosing expression that
+     * evaluates an operand and then calls isUndefined() on it (ExpStdOp.java:291, the ordinary
+     * strict-operand-undefined check every OPERATION-kind op goes through) dereferences that null and
+     * crashes with a real NullPointerException -- reproduced with `1 + UString('abc', 1).toInteger()`.
+     * Byte-identical to the fork, so pre-existing there too. Same class of defect as the already-fixed
+     * M-30 (an unguarded/uncaught failure must become Undefined, not escape or propagate as null);
+     * fixed the same way, by returning UndefinedValue.instance on failure instead of null.
+     */
     @Override
     public Value eval(EvalContext ctx, Value[] args, Type resultType) {
         UStringValue ustringA = UStringValue.valueOf(args[0]);
-        IntegerValue result = null;
 
         try {
-            result = ustringA.toInteger();
+            return ustringA.toInteger();
         }
         catch (Exception ex) {
-            result = null;
+            return UndefinedValue.instance;
         }
-
-        return result;
     }
 }
 
@@ -559,19 +588,20 @@ final class Op_uString_toReal extends OpGeneric {
                 ? TypeFactory.mkReal() : null;
     }
 
+    /*
+     * Found while adding test coverage at S9: same null-instead-of-Undefined defect as
+     * Op_uString_toInteger above -- see its comment for the full account. Fixed the same way.
+     */
     @Override
     public Value eval(EvalContext ctx, Value[] args, Type resultType) {
         UStringValue ustringA = UStringValue.valueOf(args[0]);
-        RealValue result;
 
         try {
-            result = ustringA.toReal();
+            return ustringA.toReal();
         }
         catch (Exception ex) {
-            result = null;
+            return UndefinedValue.instance;
         }
-
-        return result;
     }
 }
 
@@ -600,19 +630,20 @@ final class Op_uString_toBoolean extends OpGeneric {
                 ? TypeFactory.mkBoolean() : null;
     }
 
+    /*
+     * Found while adding test coverage at S9: same null-instead-of-Undefined defect as
+     * Op_uString_toInteger above -- see its comment for the full account. Fixed the same way.
+     */
     @Override
     public Value eval(EvalContext ctx, Value[] args, Type resultType) {
         UStringValue ustringA = UStringValue.valueOf(args[0]);
-        BooleanValue result;
 
         try {
-            result = ustringA.toBoolean();
+            return ustringA.toBoolean();
         }
         catch (Exception ex) {
-            result = null;
+            return UndefinedValue.instance;
         }
-
-        return result;
     }
 }
 
@@ -641,19 +672,20 @@ final class Op_uString_toUBoolean extends OpGeneric {
                 ? TypeFactory.mkUBoolean() : null;
     }
 
+    /*
+     * Found while adding test coverage at S9: same null-instead-of-Undefined defect as
+     * Op_uString_toInteger above -- see its comment for the full account. Fixed the same way.
+     */
     @Override
     public Value eval(EvalContext ctx, Value[] args, Type resultType) {
         UStringValue ustringA = UStringValue.valueOf(args[0]);
-        UBooleanValue result;
 
         try {
-            result = ustringA.toUBoolean();
+            return ustringA.toUBoolean();
         }
         catch (Exception ex) {
-            result = null;
+            return UndefinedValue.instance;
         }
-
-        return result;
     }
 }
 
