@@ -9,6 +9,7 @@ import org.tzi.use.uml.ocl.value.BooleanValue;
 import org.tzi.use.uml.ocl.value.IntegerValue;
 import org.tzi.use.uml.ocl.value.RealValue;
 import org.tzi.use.uml.ocl.value.StringValue;
+import org.tzi.use.uml.ocl.value.UBooleanValue;
 import org.tzi.use.uml.ocl.value.UIntegerValue;
 import org.tzi.use.uml.ocl.value.URealValue;
 import org.tzi.use.uml.ocl.value.UnlimitedNaturalValue;
@@ -332,13 +333,77 @@ final class Op_number_div extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
-		return (params.length == 2 && 
-				params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID) && 
-				params[1].isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? TypeFactory.mkReal() : null;
+		Type type = null;
+		boolean bothNumerical = false;
+		boolean someOfThemIsUncertainty = false;
+
+		if (params.length == 2) {
+			bothNumerical = params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID) && params[1].isKindOfNumber(VoidHandling.EXCLUDE_VOID);
+			someOfThemIsUncertainty = params[0] instanceof UncertainType || params[1] instanceof UncertainType;
+
+			if (bothNumerical)
+
+				if (someOfThemIsUncertainty)
+					type = TypeFactory.mkUReal();
+				else
+					type = TypeFactory.mkReal();
+
+		}
+
+		return type;
 	}
 
 	@Override
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
+		Value result;
+
+		if (resultType.isTypeOfUReal()) {
+			Type common = args[0].type().getLeastCommonSupertype(args[1].type());
+
+			if (common.isTypeOfUInteger())
+				result = evalUIntegerResult(args);
+			else
+				result = evalURealResult(args);
+
+		}
+		else
+			result = evalRealResult(args);
+
+		return result;
+	}
+
+	private Value evalUIntegerResult(Value [] args) {
+		URealValue result = null;
+
+		result = UIntegerValue.valueOf(args[0]).divideByR(args[1]);
+
+		if (Double.isInfinite(result.value()) || Double.isNaN(result.value()))
+			throw new ArithmeticException();
+
+		if (Double.isInfinite(result.uncertainty()) || Double.isNaN(result.uncertainty()))
+			throw new ArithmeticException();
+
+		return result;
+	}
+
+	private Value evalURealResult(Value[] args) {
+		URealValue a, b;
+		URealValue result;
+
+		a = URealValue.valueOf(args[0]);
+		b = URealValue.valueOf(args[1]);
+		result = a.divideBy(b);
+
+		if (Double.isInfinite(result.value()) || Double.isNaN(result.value()))
+			throw new ArithmeticException();
+
+		if (Double.isInfinite(result.uncertainty()) || Double.isNaN(result.uncertainty()))
+			throw new ArithmeticException();
+
+		return result;
+	}
+
+	private Value evalRealResult(Value[] args) {
 		double d1;
 		double d2;
 		if (args[0].isInteger())
@@ -449,13 +514,23 @@ final class Op_number_unaryminus extends OpGeneric {
 	@Override
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
 		Value res;
+
 		if (args[0].isInteger()) {
 			int i = ((IntegerValue) args[0]).value();
 			res = IntegerValue.valueOf(-i);
-		} else {
+		}
+		else if (args[0].isReal()) {
 			double d = ((RealValue) args[0]).value();
 			res = new RealValue(-d);
 		}
+		else if (args[0].isUInteger()) {
+			res = ((UIntegerValue) args[0]).neg();
+		}
+		else {
+			URealValue ur = (URealValue) args[0];
+			res = ur.neg();
+		}
+
 		return res;
 	}
 }
@@ -481,6 +556,7 @@ final class Op_number_unaryplus extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
+		if (UncertainOperand.present(params)) return null;
 		return (params.length == 1 && params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? params[0] : null;
 	}
 
@@ -513,19 +589,39 @@ final class Op_real_floor extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
-		return (params.length == 1 && params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? TypeFactory
-				.mkInteger() : null;
+		Type result = null;
+
+		if (params.length == 1) {
+
+			if (params[0].isTypeOfUReal())
+				result = TypeFactory.mkUReal();
+			else if (params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID))
+				result = TypeFactory.mkInteger();
+
+		}
+
+		return result;
 	}
 
 	@Override
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
-		double d1;
-		if (args[0].isInteger())
-			d1 = ((IntegerValue) args[0]).value();
-		else
-			d1 = ((RealValue) args[0]).value();
+		Value value;
 
-		return IntegerValue.valueOf((int) Math.floor(d1));
+		if (args[0].isUReal()) {
+			URealValue uRealValue = ((URealValue) args[0]);
+			value = uRealValue.floor();
+		}
+		else {
+			double d1;
+			if (args[0].isInteger())
+				d1 = ((IntegerValue) args[0]).value();
+			else
+				d1 = ((RealValue) args[0]).value();
+
+			value = IntegerValue.valueOf((int) Math.floor(d1));
+		}
+
+		return value;
 	}
 }
 
@@ -551,19 +647,40 @@ final class Op_real_round extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
-		return (params.length == 1 && params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? TypeFactory
-				.mkInteger() : null;
+		Type result = null;
+
+		if (params.length == 1) {
+
+
+			if (params[0].isTypeOfUReal())
+				result = TypeFactory.mkUReal();
+			else if (params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID))
+				result = TypeFactory.mkInteger();
+
+		}
+
+		return result;
 	}
 
 	@Override
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
-		double d1;
-		if (args[0].isInteger())
-			d1 = ((IntegerValue) args[0]).value();
-		else
-			d1 = ((RealValue) args[0]).value();
+		Value result;
 
-		return IntegerValue.valueOf((int) Math.round(d1));
+		if (args[0].isUReal()) {
+			URealValue uRealValue = (URealValue) args[0];
+			result = uRealValue.round();
+		}
+		else {
+			double d1;
+			if (args[0].isInteger())
+				d1 = ((IntegerValue) args[0]).value();
+			else
+				d1 = ((RealValue) args[0]).value();
+
+			result = IntegerValue.valueOf((int) Math.round(d1));
+		}
+
+		return result;
 	}
 }
 
@@ -794,17 +911,46 @@ final class Op_number_less extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
-		return (params.length == 2
-				&& params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID) && params[1]
-					.isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? TypeFactory
-				.mkBoolean() : null;
+		boolean bothKindOfNumber = false;
+		boolean someOfthemUncertainty = false;
+		Type result = null;
+
+		if (params.length == 2) {
+			bothKindOfNumber = params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID) && params[1].isKindOfNumber(VoidHandling.EXCLUDE_VOID);
+			someOfthemUncertainty = params[0] instanceof UncertainType || params[1] instanceof UncertainType;
+
+			if (bothKindOfNumber && someOfthemUncertainty)
+				result = TypeFactory.mkUBoolean();
+			else if (bothKindOfNumber)
+				result = TypeFactory.mkBoolean();
+
+		}
+
+		return result;
 	}
 
 	@Override
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
+		Value result = null;
+
+		if (resultType.isTypeOfBoolean())
+			result = evalBooleanResult(args);
+		else
+			result = evalUBooleanResult(args);
+
+		return result;
+	}
+
+	public UBooleanValue evalUBooleanResult(Value [] args) {
+		URealValue a = URealValue.valueOf(args[0]);
+
+		return a.lt(args[1]);
+	}
+
+	public BooleanValue evalBooleanResult(Value [] args) {
 		double d1;
 		double d2;
-		
+
 		if (args[0].isUnlimitedNatural())
 			d1 = ((UnlimitedNaturalValue) args[0]).value();
 		else if (args[0].isInteger())
@@ -843,14 +989,43 @@ final class Op_number_greater extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
-		return (params.length == 2
-				&& params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID) && params[1]
-					.isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? TypeFactory
-				.mkBoolean() : null;
+		boolean bothKindOfNumber = false;
+		boolean someOfthemUncertainty = false;
+		Type result = null;
+
+		if (params.length == 2) {
+			bothKindOfNumber = params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID) && params[1].isKindOfNumber(VoidHandling.EXCLUDE_VOID);
+			someOfthemUncertainty = params[0] instanceof UncertainType || params[1] instanceof UncertainType;
+
+			if (bothKindOfNumber && someOfthemUncertainty)
+				result = TypeFactory.mkUBoolean();
+			else if (bothKindOfNumber)
+				result = TypeFactory.mkBoolean();
+
+		}
+
+		return result;
 	}
 
 	@Override
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
+		Value result = null;
+
+		if (resultType.isTypeOfBoolean())
+			result = evalBooleanResult(args);
+		else
+			result = evalUBooleanResult(args);
+
+		return result;
+	}
+
+	public UBooleanValue evalUBooleanResult(Value [] args) {
+		URealValue a = URealValue.valueOf(args[0]);
+
+		return a.gt(args[1]);
+	}
+
+	public BooleanValue evalBooleanResult(Value [] args) {
 		double d1;
 		double d2;
 		if (args[0].isUnlimitedNatural())
@@ -891,16 +1066,46 @@ final class Op_number_lessequal extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
-		return (params.length == 2
-				&& params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID) && params[1]
-					.isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? TypeFactory
-				.mkBoolean() : null;
+		boolean bothKindOfNumber = false;
+		boolean someOfthemUncertainty = false;
+		Type result = null;
+
+		if (params.length == 2) {
+			bothKindOfNumber = params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID) && params[1].isKindOfNumber(VoidHandling.EXCLUDE_VOID);
+			someOfthemUncertainty = params[0] instanceof UncertainType || params[1] instanceof UncertainType;
+
+			if (bothKindOfNumber && someOfthemUncertainty)
+				result = TypeFactory.mkUBoolean();
+			else if (bothKindOfNumber)
+				result = TypeFactory.mkBoolean();
+
+		}
+
+		return result;
 	}
 
 	@Override
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
+		Value result = null;
+
+		if (resultType.isTypeOfBoolean())
+			result = evalBooleanResult(args);
+		else
+			result = evalUBooleanResult(args);
+
+		return result;
+	}
+
+	public UBooleanValue evalUBooleanResult(Value [] args) {
+		URealValue a = URealValue.valueOf(args[0]);
+
+		return a.le(args[1]);
+	}
+
+	public BooleanValue evalBooleanResult(Value [] args) {
 		double d1;
 		double d2;
+
 		if (args[0].isUnlimitedNatural())
 			d1 = ((UnlimitedNaturalValue) args[0]).value();
 		else if (args[0].isInteger())
@@ -939,16 +1144,46 @@ final class Op_number_greaterequal extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
-		return (params.length == 2
-				&& params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID) && params[1]
-					.isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? TypeFactory
-				.mkBoolean() : null;
+		boolean bothKindOfNumber = false;
+		boolean someOfthemUncertainty = false;
+		Type result = null;
+
+		if (params.length == 2) {
+			bothKindOfNumber = params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID) && params[1].isKindOfNumber(VoidHandling.EXCLUDE_VOID);
+			someOfthemUncertainty = params[0] instanceof UncertainType || params[1] instanceof UncertainType;
+
+			if (bothKindOfNumber && someOfthemUncertainty)
+				result = TypeFactory.mkUBoolean();
+			else if (bothKindOfNumber)
+				result = TypeFactory.mkBoolean();
+
+		}
+
+		return result;
 	}
 
 	@Override
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
+		Value result = null;
+
+		if (resultType.isTypeOfBoolean())
+			result = evalBooleanResult(args);
+		else
+			result = evalUBooleanResult(args);
+
+		return result;
+	}
+
+	public UBooleanValue evalUBooleanResult(Value [] args) {
+		URealValue a = URealValue.valueOf(args[0]);
+
+		return a.ge(args[1]);
+	}
+
+	public BooleanValue evalBooleanResult(Value [] args) {
 		double d1;
 		double d2;
+
 		if (args[0].isUnlimitedNatural())
 			d1 = ((UnlimitedNaturalValue) args[0]).value();
 		else if (args[0].isInteger())
@@ -986,6 +1221,7 @@ final class Op_number_pow extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
+		if (UncertainOperand.present(params)) return null;
 		return (params.length == 2 &&
 				params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID) &&
 				params[1].isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? TypeFactory.mkReal() : null;
@@ -1032,6 +1268,7 @@ final class Op_number_sqrt extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
+		if (UncertainOperand.present(params)) return null;
 		return (params.length == 1 && params[0].isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? TypeFactory
 				.mkInteger() : null;
 	}
@@ -1068,6 +1305,7 @@ final class Op_number_toString extends OpGeneric {
 
 	@Override
 	public Type matches(Type params[]) {
+		if (UncertainOperand.present(params)) return null;
 		return (params.length == 1 && params[0]
 				.isKindOfNumber(VoidHandling.EXCLUDE_VOID)) ? TypeFactory
 				.mkString() : null;
@@ -1077,4 +1315,33 @@ final class Op_number_toString extends OpGeneric {
 	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
 		return new StringValue(args[0].toString());
 	}
+}
+
+/**
+ * True if any parameter is an uncertain type.
+ *
+ * <p>The crisp numeric operations accept anything answering {@code isKindOfNumber}, and
+ * {@code URealType}/{@code UIntegerType} answer true -- deliberately, because that is what lets the
+ * arithmetic above widen. The consequence is that a crisp operation with no uncertainty handling
+ * will still MATCH an uncertain operand and then cast it to {@code RealValue} in {@code eval},
+ * throwing {@code ClassCastException} at runtime.
+ *
+ * <p>Four operations are in that position and none of them exists in the fork -- 7.5.0 added them
+ * after the fork's base, so there is no fork behaviour to reproduce. Declining the operand is the
+ * conservative choice: {@code sqrt} then dispatches to {@code Op_ureal_sqrt}, which is registered
+ * and correct, and the other three report "undefined operation" at COMPILE time instead of crashing
+ * at run time. A visible, attributable limit beats a crash, and both beat a wrong answer.
+ */
+final class UncertainOperand {
+    private UncertainOperand() { }
+
+    static boolean present(Type[] params) {
+        for (Type t : params) {
+            if (t.isTypeOfUReal() || t.isTypeOfUInteger() || t.isTypeOfUBoolean()
+                    || t.isTypeOfUString() || t.isTypeOfSBoolean()) {
+                return true;
+            }
+        }
+        return false;
+    }
 }
