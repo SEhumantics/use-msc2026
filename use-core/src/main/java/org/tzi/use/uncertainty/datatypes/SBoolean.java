@@ -7,8 +7,8 @@
  *   licence:  GNU General Public License v2 (the upstream COPYING), the same licence
  *             as USE itself, so vendoring is licence-clean.
  *
- * Two deliberate changes from upstream, both recorded in
- * docs/port2/stage-03-scope.md:
+ * Three deliberate changes from upstream, recorded in
+ * docs/port2/stage-03-scope.md and this completeness review:
  *
  *   1. RELOCATED from package `uDataTypes` to `org.tzi.use.uncertainty.datatypes`
  *      (B1). The historical jar used by the differential harness still carries the
@@ -22,7 +22,7 @@
  *      No differential row can reach a removed member: `toUUnlimitedNatural` is
  *      registered nowhere under expr/operations.
  *
- *   4. PURGED of `union(SBoolean)`, `weightedUnion(SBoolean)`, `weightedUnion(Collection<SBoolean>)`,
+ *   3. PURGED of `union(SBoolean)`, `weightedUnion(SBoolean)`, `weightedUnion(Collection<SBoolean>)`,
  *      and the binary `ccFusion(SBoolean)`. Like the six fusion wrappers documented in
  *      StandardOperationsSBoolean.java:1313-1328, none of these four had an OCL registration in
  *      either the old fork or this port (grep confirms no UNION or WEIGHTEDUNION operation was
