@@ -256,113 +256,13 @@ public class UReal implements Cloneable,Comparable<UReal> {
 		return new UReal(Math.round(this.getX()),this.getU());
 	}
 
-	 /*********
-     * 
-     * Type Operations with correlated variables
-     */
-	public UReal add(UReal r, double covariance) {
-		UReal result = new UReal();
-		result.setX(this.getX() + r.getX());
-		result.setU( Math.sqrt((this.getU() * this.getU()) + (r.getU() * r.getU()) + 2 * covariance));
-		return result;
-	}
-
-	public UReal minus(UReal r, double covariance) {
-		UReal result = new UReal();
-		result.setX(this.getX() - r.getX());
-		if (r==this) result.setU(0.0);
-		else result.setU(Math.sqrt((this.getU()*this.getU()) + (r.getU()*r.getU() - 2 * covariance)));
-		return result;
-	}
-	
-	public UReal mult(UReal r, double covariance) {
-		UReal result = new UReal();
-		
-		result.setX(this.getX() * r.getX());
-		double a = r.getX()*r.getX()*this.getU()*this.getU();
-		double b = this.getX()*this.getX()*r.getU()*r.getU();
-		double c = 2 * this.getX() * r.getX() * covariance;
-		result.setU(Math.sqrt(a + b + c));
-		return result;
-	}
-	
-	public UReal divideBy(UReal r, double covariance) {
-		UReal result = new UReal();
-	
-		if (r==this) { // pathological cases x/x. Covariance should be 1!
-			result.setX(1.0);
-			result.setU(0.0);
-			return result;
-		}
-		if (r.getU()==0.0) { // r is a scalar
-			result.setX(this.getX() / r.getX());
-			result.setU(this.getU() / r.getX()); // "this" may be a scalar, too
-			return result;
-		}
-		if (this.getU()==0.0) { // "this is a scalar, r is not
-			result.setX(this.getX() / r.getX());
-			result.setU(r.getU()/(r.getX()*r.getX()));
-			return result;
-		}
-		// both variables have associated uncertainty
-
-		double a = this.getX() / r.getX();
-//		double b = (this.getX()*r.getU()*r.getU())/(Math.pow(r.getX(), 3));
-		double b = (this.getX()*r.getU()*r.getU())/(r.getX()*r.getX()*r.getX());
-		result.setX(a + b);
-		
-		double c = ((u*u)/Math.abs(r.getX()));
-//		double d = (this.getX()*this.getX()*r.getU()*r.getU()) / Math.pow(r.getX(), 4);
-		double d = (this.getX()*this.getX()*r.getU()*r.getU()) / (r.getX()*r.getX()*r.getX()*r.getX());
-		double e = (this.getX()*covariance)/Math.abs(r.getX()*r.getX()*r.getX());
-		result.setU(Math.sqrt(c + d - e));
-		
-		return result;
-	}
-	
-
 
 	/***
 	 * comparison operations
 	 * 	These operations, that return a boolean, have been superseded by the
-	 * corresponding UBoolean-returning operations -- except equals() and
-	 * distinct, since they have another meaning in Java!.
+	 * corresponding UBoolean-returning operations -- except equals(), since
+	 * it has another meaning in Java!.
      */
-//	public boolean lt(UReal number) {
-//		// we compute the separation factor of the two distributions considered as a mixture
-//		// see http://faculty.washington.edu/tamre/IsHumanHeightBimodal.pdf
-	//		double s1 = this.getU();
-	//	double s2 = number.getU();
-	//	// non-UReal cases first
-	//	if ((s1==0.0) || (s2==0.0)) 
-	//		return (this.getX() < number.getX());
-	//	// if both numbers have some uncertainty
-	//	double r = (s1*s1)/(s2*s2);
-	//	double S = Math.sqrt(-2.0 + 3*r + 3*r*r - 2*r*r*r + 2*Math.pow(1-r+r*r, 1.5) )/(Math.sqrt(r)*(1+Math.sqrt(r)));
-	//	double separation =  S*(s1+s2);
-	//	if (Double.isNaN(S)) // similar to s1==0 or s2==0. No way to compute the separation test 
-	//		return (this.getX() < number.getX());
-	//	double diff = number.getX() - this.getX();
-	//	return  (diff > 0) && (diff > separation); // they are distinguishable
-	//	/** previous implementation
-	//	  boolean result = false;
-	//	   result = (this.getX() < number.getX()) &&
-	//      ((this.getX() + this.getU())  < (number.getX() - number.getU()));
-	//	   return result; */
-	//	}
-	
-//	public boolean le(UReal r) {
-	//		return (this.lt(r) || this.equals(r));
-	//	}
-	
-	//	public boolean gt(UReal r) {
-	//	return r.lt(this);
-	//}
-	//
-	//
-	//	public boolean ge(UReal r) {
-	//		return (this.gt(r) || this.equals(r));
-	//	}
 
 	public boolean equals(UReal number) {
 		// we compute the separation factor of the two distributions considered as a mixture
@@ -390,39 +290,7 @@ public class UReal implements Cloneable,Comparable<UReal> {
 		 */
 	}
 
-	public boolean distinct(UReal r) {
-		return !(this.equals(r));
-	}
-	//
-
-	//	/***
-	// * comparison operations WITH ZERO = UReal(0.0)
-	// */
-	//public boolean ltZero() {
-	//	return this.lt(new UReal());
-	//}
-	//	
-	//public boolean leZero() {
-	//	return this.le(new UReal());
-	//}
-	//
-	//public boolean gtZero() {
-	//	return this.gt(new UReal());
-	//}
-	//	
-	//public boolean geZero() {
-	//	return this.ge(new UReal());
-	//}
-	//
-	public boolean equalsZero(double u) {
-		return this.equals(new UReal(0.0,u));
-	}
-	
-	public boolean distinctZero(double u) {
-		return this.distinct(new UReal(0.0,u));
-	}
-	//
-	/*** 
+	/***
 	 *   FUZZY COMPARISON OPERATIONS
 	 *   Assume UReal values (x,u) represent standard uncertainty values, i.e., they follow a Normal distribution
 	 *   of mean x and standard deviation \sigma = u
@@ -580,10 +448,6 @@ public class UReal implements Cloneable,Comparable<UReal> {
 		return new UBoolean(true,r.eq);
 	}
 
-	public UBoolean uDistinct(UReal r) {
-		return this.uEquals(r).not();
-	}
-
 	public UBoolean lt(UReal number) {
 		Result r = this.calculate(number);
 		return new UBoolean(true,r.lt);
@@ -609,41 +473,6 @@ public class UReal implements Cloneable,Comparable<UReal> {
 	 *   END OF FUZZY COMPARISON OPERATIONS
 	 */
 
-
-	/*** 
-	 *   FUZZY COMPARISON OPERATIONS WITH ZERO=UReal(0.0,0.0)
-	 *   Assume UReal values (x,u) represent standard uncertainty values, i.e., they follow a Normal distribution
-	 *   of mean x and standard deviation \sigma = u
-	 */
-	
-
-	public UBoolean uEqualsZero(double u) {
-		return this.uEquals(new UReal(0.0,u));
-	}
-
-	public UBoolean uDistinctZero(double u) {
-		return this.uDistinct(new UReal(0.0,u));
-	}
-
-	public UBoolean ltZero() {
-		return this.lt(new UReal());
-	}
-	
-	public UBoolean leZero() {
-		return this.le(new UReal());
-	}
-
-	public UBoolean gtZero() {
-		return this.gt(new UReal());
-	}
-
-	public UBoolean geZero() {
-		return this.ge(new UReal());
-	}
-    
-	/*** 
-	 *   END OF FUZZY COMPARISON OPERATIONS WITH ZERO
-	 */
 
 	@Override
 	public int compareTo(UReal other) {
@@ -687,24 +516,6 @@ public class UReal implements Cloneable,Comparable<UReal> {
 		return r;
 	}
 
-	public UInteger toBestUInteger() {
-		UInteger r = new UInteger();
-		r.setX((int)Math.round(this.getX()));
-		r.setU(Math.sqrt((this.getU()*this.getU())+(this.getX()-r.getX())*(this.getX()-r.getX())));
-		return r;		
-	}
-
 	// PURGED: toUUnlimitedNatural() and toBestUUnlimitedNatural() -- see the file header. UUnlimitedNatural is not bound
 	// to the OCL language in the fork and is registered as no operation, so nothing can reach it.
-
-	/**
-	 * Other Methods 
-	 */
- 	public int hashcode(){ //required for equals()
-		return Math.round((float)x);
-	}
-
- 	public UReal clone() {
-		return new UReal(this.getX(),this.getU());
-	}
 }

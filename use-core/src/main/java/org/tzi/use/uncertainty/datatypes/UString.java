@@ -66,11 +66,6 @@ public class UString {
         return this.string.length()*(1 - this.sConf);
     }
 
-    public double confToDist(double conf, int size){
-    	if ((conf < 0.0) || (conf > 1.0) ) throw new IllegalArgumentException("Invalid parameters");
-      return size *(1 - conf);
-    }
-
     public double distToConf(double dist, int size){
         return Math.max(1-dist/size, 0.0d);
     }
@@ -78,27 +73,6 @@ public class UString {
     @Override
     public String toString() {
         return String.format("UString(%s, %5.3f)", string, sConf);
-    }
-
-    public static int levenshteinDist(String a, String b) {
-        a = a.toLowerCase();
-        b = b.toLowerCase();
-        // i == 0
-        int [] costs = new int [b.length() + 1];
-        for (int j = 0; j < costs.length; j++)
-            costs[j] = j;
-        for (int i = 1; i <= a.length(); i++) {
-            // j == 0; nw = lev(i - 1, j)
-            costs[0] = i;
-            int nw = i - 1;
-            for (int j = 1; j <= b.length(); j++) {
-                int cj = Math.min(1 + Math.min(costs[j], costs[j - 1]), a.charAt(i - 1) == b.charAt(j - 1) ? nw : nw + 1);
-                nw = costs[j];
-                costs[j] = cj;
-            }
-        }
-        // System.out.println("Distance "+a+" to " + b+ ": "+costs[b.length()]);
-        return costs[b.length()];
     }
 
     /***
@@ -261,12 +235,4 @@ public class UString {
         return conf;
     }
 
-    /*
-     * Posible implementacion alternativa, limitando para los casos peores a conf = 0.5
-     * No se usa en la ultima version
-     */
-    private double calculateConf_05(UString u) {
-        double conf = this.sConf * u.sConf; // conf producto de las confianzas de cada string
-        return Double.compare(conf,0.5d) >= 0 ? conf : 0.5d ;
-    }
 }

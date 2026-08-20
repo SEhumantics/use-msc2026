@@ -204,143 +204,6 @@ public class UInteger implements Cloneable,Comparable<UInteger> {
 		return result;
 	}
 
-	   /*********
-     * 
-     * Type Operations on correlated variables
-     */
-	
-	public UInteger add(UInteger r, double covariance) {
-		UInteger result = new UInteger();
-		result.setX(this.getX() + r.getX());
-		result.setU( Math.sqrt((this.getU() * this.getU()) + (r.getU() * r.getU())+ 2 * covariance ));
-		return result;
-	}
-	
-
-	public UInteger minus(UInteger r, double covariance) {
-		UInteger result = new UInteger();
-			result.setX(this.getX() - r.getX());
-			if (r==this) result.setU(0.0); // pathological case, x-x
-			else result.setU(Math.sqrt((this.getU()*this.getU()) + (r.getU()*r.getU()) - 2 * covariance));
-			return result;
-	}
-
-	
-	public UInteger mult(UInteger r, double covariance) {
-		UInteger result = new UInteger();
-		
-		result.setX(this.getX() * r.getX());
-		
-		double a = r.getX()*r.getX()*this.getU()*this.getU();
-		double b = this.getX()*this.getX()*r.getU()*r.getU();
-		double c = 2 * this.getX() * r.getX() * covariance;
-		result.setU(Math.sqrt(a + b + c));
-		return result;
-	}
-	
-	
-	public UInteger divideBy(UInteger r, double covariance) {
-		UInteger result = new UInteger();
-	
-		if (r==this) { // pathological cases x/x
-			result.setX(1);
-			result.setU(0.0);
-			return result;
-		}
-		if (r.getU()==0.0) { // r is a scalar
-			result.setX(this.getX() / r.getX());
-			result.setU(this.getU() / r.getX()); // "this" may be a scalar, too
-			return result;
-		}
-		if (this.getU()==0.0) { // "this is a scalar, r is not
-			result.setX(this.getX() / r.getX());
-			result.setU(r.getU()/(r.getX()*r.getX()));
-			return result;
-		}
-		// both variables have associated uncertainty
-		
-		double a = this.getX() / r.getX();
-//		double b = (this.getX()*r.getU()*r.getU())/(Math.pow(r.getX(), 3));
-		double b = 0.0; //(this.getX()*r.getU()*r.getU())/(r.getX()*r.getX()*r.getX());
-		result.setX((int)Math.floor(a + b));
-		
-		double c = Math.abs(((this.getU()*this.getU())/r.getX()));
-//		double d = (this.getX()*this.getX()*r.getU()*r.getU()) / Math.pow(r.getX(), 4);
-		double d = (this.getX()*this.getX()*r.getU()*r.getU()) / (r.getX()*r.getX()*r.getX()*r.getX());
-		double e = Math.abs((this.getX()*covariance)/(r.getX()*r.getX()*r.getX()));
-		result.setU(Math.sqrt(c + d - e));
-		
-		return result;
-	}
-	
-	/** this operation returns a UReal
-	 */
-	public UReal divideByR(UInteger r, double covariance) {
-		UReal result = new UReal();
-	
-		if (r==this) { // pathological cases x/x
-			result.setX(1.0);
-			result.setU(0.0);
-			return result;
-		}
-		if (r.getU()==0.0) { // r is a scalar
-			result.setX(this.getX() / r.getX());
-			result.setU(this.getU() / r.getX()); // "this" may be a scalar, too
-			return result;
-		}
-		if (this.getU()==0.0) { // "this is a scalar, r is not
-			result.setX(this.getX() / r.getX());
-			result.setU(r.getU()/(r.getX()*r.getX()));
-			return result;
-		}
-		
-		double a = this.getX() / r.getX();
-//		double b = (this.getX()*r.getU()*r.getU())/(Math.pow(r.getX(), 3));
-		double b = 0.0; //(this.getX()*r.getU()*r.getU())/(r.getX()*r.getX()*r.getX());
-		result.setX((int)Math.floor(a + b));
-		
-		double c = Math.abs(((this.getU()*this.getU())/r.getX()));
-//		double d = (this.getX()*this.getX()*r.getU()*r.getU()) / Math.pow(r.getX(), 4);
-		double d = (this.getX()*this.getX()*r.getU()*r.getU()) / (r.getX()*r.getX()*r.getX()*r.getX());
-		double e = Math.abs((this.getX()*covariance)/(r.getX()*r.getX()*r.getX()));
-		result.setU(Math.sqrt(c + d - e));
-		
-		return result;
-	}
-
-	public UInteger mod(UInteger r, double covariance) {
-		UInteger result = new UInteger();
-	
-		if (r==this) { // pathological cases x % x
-			result.setX(0);
-			result.setU(0.0);
-			return result;
-		}
-		if (r.getU()==0.0) { // r is a scalar
-			result.setX(this.getX() % r.getX());
-			result.setU(this.getU() / r.getX()); // "this" may be a scalar, too
-			return result;
-		}
-		if (this.getU()==0.0) { // "this is a scalar, r is not
-			result.setX(this.getX() % r.getX());
-			result.setU(r.getU()/(r.getX()*r.getX()));
-			return result;
-		}
-		// both variables have associated uncertainty
-		
-		double a = this.getX() % r.getX();
-		double b = 0.0; //(this.getX()*r.getU()*r.getU())/(r.getX()*r.getX()*r.getX());
-		result.setX((int)Math.floor(a + b));
-		
-		double c = Math.abs(((this.getU()*this.getU())/r.getX()));
-		double d = (this.getX()*this.getX()*r.getU()*r.getU()) / (r.getX()*r.getX()*r.getX()*r.getX());
-		double e = Math.abs((this.getX()*covariance)/(r.getX()*r.getX()*r.getX()));
-		result.setU(Math.sqrt(c + d - e));
-		
-		return result;
-	}
-
-		
 	/***
 	 * Rest of the type operations
 	 * 
@@ -381,83 +244,14 @@ public class UInteger implements Cloneable,Comparable<UInteger> {
 	
 
 	/***
-	 * comparison operations
-	 * These operations, that return a boolean, have been superseded by the
-	 * corresponding UBoolean-returning operations.
-	 * 
-	public boolean lt(UInteger r) {
-			return this.toUReal().lt(r.toUReal());	
-	}
-
-	public boolean le(UInteger r) {
-		return (this.lt(r) || this.equals(r));
-	}
-
-	public boolean gt(UInteger r) {
-		return r.lt(this);
-	}
-
-	public boolean ge(UInteger r) {
-		return  (this.gt(r) || this.equals(r)); 
-	}
-	
-
-	public boolean equals(UInteger r) {
-		return this.toUReal().equals(r.toUReal());
-	}
-
-	public boolean distinct(UInteger r) {
-		return ( !(this.equals(r)) );
-	}
-	 */
-
-	/***
-	 * comparison operations WITH ZERO = UInteger(0.0)
-	 * 
-	 * These operations have been superseded too.
-
-	public boolean ltZero() {
-		return this.lt(new UInteger());
-	}
-	
-	
-	public boolean leZero() {
-		return this.le(new UInteger());
-	}
-
-	
-	public boolean gtZero() {
-		return this.gt(new UInteger());
-	}
-	
-	
-	public boolean geZero() {
-		return this.ge(new UInteger());
-	}
-	
-
-	public boolean equalsZero() {
-		return this.equals(new UInteger());
-	}
-
-	public boolean distinctZero() {
-		return this.distinct(new UInteger());
-	}
-	 */
-
-	/*** 
 	 *   FUZZY COMPARISON OPERATIONS
 	 *   Assume UReal values (x,u) represent standard uncertainty values, i.e., they follow a Normal distribution
 	 *   of mean x and standard deviation \sigma = u
 	 */
-	
+
 
 	public UBoolean equals(UInteger number) {
 		return this.toUReal().uEquals(number.toUReal());
-	}
-
-	public UBoolean distinct(UInteger r) {
-		return this.equals(r).not();
 	}
 
 	public UBoolean lt(UInteger number) {
@@ -481,41 +275,6 @@ public class UInteger implements Cloneable,Comparable<UInteger> {
 	 *   END OF FUZZY COMPARISON OPERATIONS
 	 */
 
-
-	/*** 
-	 *   FUZZY COMPARISON OPERATIONS WITH ZERO=UReal(0.0,0.0)
-	 *   Assume UReal values (x,u) represent standard uncertainty values, i.e., they follow a Normal distribution
-	 *   of mean x and standard deviation \sigma = u
-	 */
-	
-
-	public UBoolean equalsZero() {
-		return this.equals(new UInteger());
-	}
-
-	public UBoolean distinctZero() {
-		return this.distinct(new UInteger());
-	}
-
-	public UBoolean ltZero() {
-		return this.lt(new UInteger());
-	}
-	
-	public UBoolean leZero() {
-		return this.le(new UInteger());
-	}
-
-	public UBoolean gtZero() {
-		return this.gt(new UInteger());
-	}
-
-	public UBoolean geZero() {
-		return this.ge(new UInteger());
-	}
-    
-	/*** 
-	 *   END OF FUZZY COMPARISON OPERATIONS WITH ZERO
-	 */
 
 	@Override
 	public int compareTo(UInteger other) {
@@ -558,18 +317,6 @@ public class UInteger implements Cloneable,Comparable<UInteger> {
 
 	// PURGED: toUUnlimitedNatural() -- see the file header. UUnlimitedNatural is not bound
 	// to the OCL language in the fork and is registered as no operation, so nothing can reach it.
-	/**
-	 * Other Methods 
-	 */
-
- 	public int hashcode(){ //required for equals()
-		return Math.round((float)x);
-	}
-
- 	public UInteger clone() {
-		return new UInteger(this.getX(),this.getU());
-	}
-
 
 
 }

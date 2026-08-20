@@ -156,10 +156,6 @@ public class UBoolean implements Cloneable, Comparable<UBoolean> {
 		//return this.equivalent(b).not();
 	}
 
-    public UBoolean uEquals(UBoolean b) {
-		return this.equivalent(b);
-	}
-
 	/***
 	 * comparison operations
 	 */
@@ -172,10 +168,6 @@ public class UBoolean implements Cloneable, Comparable<UBoolean> {
 
 		if (getB() != uBoolean.getB()) return false;
 		return Math.abs(uBoolean.getC()-getC()) < 0.001D; // Double.compare(uBoolean.getC(), getC()) == 0;
-	}
-
-	public boolean distinct(UBoolean b) {
-		return !this.equals(b);
 	}
 
 	public boolean equalsC(UBoolean b, double confidence) {
@@ -224,10 +216,6 @@ public class UBoolean implements Cloneable, Comparable<UBoolean> {
 		if (x<0) return -1;
 		return 1;
 		// return (int)(this.c-other.c);
-	}
-
- 	public UBoolean clone() {
-		return new UBoolean(this.getB(),this.getC());
 	}
 
 }
