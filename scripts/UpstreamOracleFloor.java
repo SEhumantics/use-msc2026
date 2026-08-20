@@ -342,6 +342,13 @@ public class UpstreamOracleFloor {
     // (com.ximpleware.Expr, org.tzi.use.uml.ocl.type.UncertainType — neither referenced anywhere
     // in the file). use-core/surefire 51/293 -> 52/332 (default) and 84/564 -> 85/603 (oracle).
     // use-gui unchanged.
+    //
+    // RE-PINNED 2026-08-20 (uCount/uCountC implemented from scratch — a real fork feature, absent
+    // from the port until now, found by an earlier adversarial audit, not a B7 ledger row). Adds
+    // ONE Jupiter test file, UCountCoverageTest, with 6 methods, no @Nested classes. Replaces the
+    // fork's own vacuous coverage (UCollectionExpOpTest.testUCount evaluates one expression and
+    // asserts nothing) with assertions on the actual returned count. use-core/surefire 52/332 ->
+    // 53/338 (default) and 85/603 -> 86/609 (oracle). use-gui unchanged.
     // Floors are >= : the suite may GROW, it may never shrink. No floor is 0 and no floor
     // may be lowered to make a run pass — see harness-contract.md sec. 8 step 7 clause 1,
     // "Do not lower the floor."
@@ -349,13 +356,13 @@ public class UpstreamOracleFloor {
     record Floor(int classes, int methods) { }
 
     static final Map<String, Floor> ORACLE = Map.of(
-            "use-core/surefire", new Floor(85, 603),
+            "use-core/surefire", new Floor(86, 609),
             "use-gui/surefire", new Floor(8, 17),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
 
     static final Map<String, Floor> DEFAULT = Map.of(
-            "use-core/surefire", new Floor(52, 332),
+            "use-core/surefire", new Floor(53, 338),
             "use-gui/surefire", new Floor(1, 1),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));

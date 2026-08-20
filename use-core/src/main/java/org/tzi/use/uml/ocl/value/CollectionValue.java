@@ -182,6 +182,34 @@ public abstract class CollectionValue extends Value implements Iterable<Value> {
         return result;
     }
 
+    /**
+     * Ported from USE-Uncertainty (github.com/atenearesearchgroup/uncertainty @ 74acd0d),
+     * src/main/org/tzi/use/uml/ocl/value/CollectionValue.java:188-206. Semantics unchanged.
+     *
+     * <p>{@code count}'s uncertain-equality analogue: counts an element as matching {@code value}
+     * when the {@link UBooleanValue#and uEquals} degree between them meets {@code confidence},
+     * rather than requiring crisp {@link Object#equals}. Backs {@code uCount} (fixed at confidence
+     * {@code 0.5}) and {@code uCountC} (explicit threshold) in {@code StandardOperationsCollection}.
+     */
+    public int uCountC(Value value, double confidence) {
+        int result = 0;
+        UBooleanValue equals;
+
+        for (Value v : this) {
+            if (v instanceof UncertainValue)
+                equals = UBooleanValue.valueOf(((UncertainValue) v).uEquals(value));
+            else if (value instanceof UncertainValue)
+                equals = UBooleanValue.valueOf(((UncertainValue) value).uEquals(v));
+            else
+                equals = UBooleanValue.valueOf(v.equals(value), 1);
+
+            if (equals.probability() >= confidence)
+                result++;
+        }
+
+        return result;
+    }
+
     @Override
     public boolean isCollection() {
     	return true;

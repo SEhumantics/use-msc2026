@@ -33,6 +33,8 @@ public class StandardOperationsCollection {
 		OpGeneric.registerOperation(new Op_collection_includes(), opmap);
 		OpGeneric.registerOperation(new Op_collection_excludes(), opmap);
 		OpGeneric.registerOperation(new Op_collection_count(), opmap);
+		OpGeneric.registerOperation(new Op_collection_uCount(), opmap);
+		OpGeneric.registerOperation(new Op_collection_uCountC(), opmap);
 		OpGeneric.registerOperation(new Op_collection_includesAll(), opmap);
 		OpGeneric.registerOperation(new Op_collection_excludesAll(), opmap);
 		OpGeneric.registerOperation(new Op_collection_isEmpty(), opmap);
@@ -269,7 +271,138 @@ final class Op_collection_count extends OpGeneric {
 					 "because the element type " + StringUtil.inQuotes(col.elemType()) + 
 					 " and the parameter type " + StringUtil.inQuotes(args[1].type()) + " are unrelated.";
 		}
-		
+
+		return null;
+	}
+}
+
+// --------------------------------------------------------
+
+/**
+ * uCount : Collection(T) x T -> Integer
+ *
+ * <p>Ported from USE-Uncertainty (github.com/atenearesearchgroup/uncertainty @ 74acd0d),
+ * src/main/org/tzi/use/uml/ocl/expr/operations/StandardOperationsCollection.java (the
+ * {@code Op_collection_uCount} class). Semantics unchanged: {@code count}'s uncertain-equality
+ * analogue, with the confidence threshold fixed at {@code 0.5} — see
+ * {@link org.tzi.use.uml.ocl.value.CollectionValue#uCountC}.
+ */
+final class Op_collection_uCount extends OpGeneric {
+	public String name() {
+		return "uCount";
+	}
+
+	// may count occurrences of undefined in the collection
+	public int kind() {
+		return SPECIAL;
+	}
+
+	public boolean isInfixOrPrefix() {
+		return false;
+	}
+
+	public Type matches(Type params[]) {
+		if (params.length == 2 && params[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID)) {
+			CollectionType coll = (CollectionType) params[0];
+			if (params[1].getLeastCommonSupertype(coll.elemType()) != null)
+				return TypeFactory.mkInteger();
+		}
+		return null;
+	}
+
+	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
+		if (args[0].isUndefined())
+			return IntegerValue.valueOf(0);
+		CollectionValue coll = (CollectionValue) args[0];
+		int res = coll.uCountC(args[1], 0.5);
+		return IntegerValue.valueOf(res);
+	}
+
+	@Override
+	public String checkWarningUnrelatedTypes(Expression args[]) {
+		CollectionType  col = (CollectionType) args[0].type();
+		Type commonElementType = col.elemType().getLeastCommonSupertype(args[1].type());
+
+		if (!(col.elemType().isTypeOfOclAny() || args[1].type().isTypeOfOclAny()) && commonElementType.isTypeOfOclAny()) {
+			return "Expression " + StringUtil.inQuotes(this.stringRep(args, "")) +
+					" will always evaluate to true, " + StringUtil.NEWLINE +
+					"because the element type " + StringUtil.inQuotes(col.elemType()) +
+					" and the parameter type " + StringUtil.inQuotes(args[1].type()) + " are unrelated.";
+		}
+
+		return null;
+	}
+}
+
+// --------------------------------------------------------
+
+/**
+ * uCountC : Collection(T) x T x Real -> Integer
+ *
+ * <p>Ported from USE-Uncertainty (github.com/atenearesearchgroup/uncertainty @ 74acd0d),
+ * src/main/org/tzi/use/uml/ocl/expr/operations/StandardOperationsCollection.java (the
+ * {@code Op_collection_uCountC} class). Semantics unchanged: {@code uCount} with an explicit
+ * confidence threshold instead of the fixed {@code 0.5} default.
+ */
+final class Op_collection_uCountC extends OpGeneric {
+
+	public String name() {
+		return "uCountC";
+	}
+
+	// may count occurrences of undefined in the collection
+	public int kind() {
+		return SPECIAL;
+	}
+
+	public boolean isInfixOrPrefix() {
+		return false;
+	}
+
+	public Type matches(Type params[]) {
+		if (params.length == 3 && params[0].isKindOfCollection(VoidHandling.EXCLUDE_VOID) &&
+		    params[2].isKindOfReal(VoidHandling.EXCLUDE_VOID))
+		{
+			CollectionType coll = (CollectionType) params[0];
+			if (params[1].getLeastCommonSupertype(coll.elemType()) != null)
+				return TypeFactory.mkInteger();
+		}
+		return null;
+	}
+
+	public Value eval(EvalContext ctx, Value[] args, Type resultType) {
+		double confident;
+
+		// get the confident...
+		if (args[2] instanceof IntegerValue)
+			confident = ((IntegerValue) args[2]).value();
+		else
+			confident = ((RealValue) args[2]).value();
+
+		// assert confident between 0 and 1
+		if (confident < 0 || confident > 1)
+			throw new RuntimeException("Expression '" + name() + "' needs confident between 0 and 1, found " + confident);
+
+		if (args[0].isUndefined())
+			return IntegerValue.valueOf(0);
+
+		CollectionValue coll = (CollectionValue) args[0];
+		int res = coll.uCountC(args[1], confident);
+		return IntegerValue.valueOf(res);
+	}
+
+	@Override
+	public String checkWarningUnrelatedTypes(Expression args[]) {
+		CollectionType  col = (CollectionType) args[0].type();
+		Type commonElementType = col.elemType().getLeastCommonSupertype(args[1].type());
+
+		if (!(col.elemType().isTypeOfOclAny() || args[1].type().isTypeOfOclAny()) && commonElementType.isTypeOfOclAny()) {
+			return "Expression " + StringUtil.inQuotes(this.stringRep(args, "")) +
+					" will always evaluate to true, " + StringUtil.NEWLINE +
+					"because the element type " + StringUtil.inQuotes(col.elemType()) +
+					" and the parameter type " + StringUtil.inQuotes(args[1].type()) + " are unrelated.";
+		}
+
 		return null;
 	}
 }
