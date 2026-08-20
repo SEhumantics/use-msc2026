@@ -387,10 +387,24 @@ public class ExpressionPrintVisitor implements ExpressionVisitor {
 		writer.write(operator("|", exp));
 		writer.write(ws());
 		exp.getQueryExpression().processWithVisitor(this);
+		/*
+		 * E12 / K-15 — the fork's ExpressionPrintVisitor never overrode visitQuery to print a
+		 * uSelectC's confidence threshold, so `col->uSelectC(e | e >= 1, 0.9)` and
+		 * `col->uSelectC(e | e >= 1, 0.1)` printed identically despite evaluating differently. This
+		 * reaches the `show` command, the HTML exporter (GenerateHTMLExpressionVisitor extends this
+		 * class) and the GUI evaluation-tree display. uSelect has no confidence argument
+		 * (getUncertaintyExpression() is null for it), so this is a no-op there.
+		 * See docs/port2/specification.md E12, docs/port2/adaptation-policy.md K-15.
+		 */
+		if (exp.getUncertaintyExpression() != null) {
+			writer.write(operator(",", exp));
+			writer.write(ws());
+			exp.getUncertaintyExpression().processWithVisitor(this);
+		}
 		writer.write(ws());
 		writer.write(operator(")", exp));
 	}
-	
+
 	@Override
 	public void visitQuery(ExpQuery exp) {
 		visitQuery(exp, null);

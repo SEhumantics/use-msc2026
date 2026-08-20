@@ -1,7 +1,9 @@
 package org.tzi.use.uncertainty;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -10,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.tzi.use.uml.mm.ModelFactory;
+import org.tzi.use.uml.ocl.expr.EvalNode;
 import org.tzi.use.uml.ocl.expr.Evaluator;
 import org.tzi.use.uml.ocl.expr.Expression;
 import org.tzi.use.uml.ocl.value.Value;
@@ -107,6 +110,62 @@ class UncertainQueryAndMembershipTest {
         @DisplayName("the confidence argument must be Real, or the expression does not compile")
         void confidenceMustBeReal() {
             assertNull(compile("Set{1,2,3}->uSelectC(e | e > 1, 'not a number')"));
+        }
+
+        @Test
+        @DisplayName("E12/K-15: the confidence threshold is not dropped when the expression is printed")
+        void printedFormIncludesConfidenceThreshold() {
+            // Before this fix, ExpressionPrintVisitor.visitQuery never called
+            // getUncertaintyExpression(), so a uSelectC with 0.9 and one with 0.1 printed
+            // identically (this is the `show` command / HTML exporter / GUI eval-tree code path,
+            // not the unrelated ExpQuery.toString(StringBuilder), which drops it by fork design).
+            String printed = printed(compile("Set{1,2,3}->uSelectC(e | e > 1, 0.9)"));
+            assertEquals("Set{1, 2, 3}->uSelectC( e:Integer | (e > 1), 0.9 )", printed);
+        }
+
+        @Test
+        @DisplayName("uSelect (no threshold) is unaffected: nothing is appended after the body")
+        void uSelectPrintedFormHasNoTrailingComma() {
+            String printed = printed(compile("Set{1,2,3}->uSelect(e | e > 1)"));
+            assertEquals("Set{1, 2, 3}->uSelect( e:Integer | (e > 1) )", printed);
+        }
+
+        private static String printed(Expression e) {
+            java.io.StringWriter sw = new java.io.StringWriter();
+            java.io.PrintWriter pw = new java.io.PrintWriter(sw);
+            e.processWithVisitor(
+                    new org.tzi.use.uml.ocl.expr.ExpressionPrintVisitor(pw));
+            pw.flush();
+            return sw.toString();
+        }
+
+        /**
+         * K-14 (Tier B) — the GUI evaluation-tree browser (EvalNode.substituteChildExpressions,
+         * used by ExprEvalBrowser/EvalOCLDialog/ClassInvariantView) replaces an already-evaluated
+         * CHILD subexpression with its computed value rather than re-expanding its source text, so
+         * each tree level shows one step. That substitution is driven by
+         * SubstituteVariablesExpressionVisitor's per-expression-type visit overrides, each of which
+         * checks "is this exact subexpression one I should substitute?" before falling through to
+         * the ordinary recursive printer. Every other query type (select, exists, forAll, one,
+         * reject, ...) had that override; uSelect/uSelectC did not, so when either appears as the
+         * RANGE of an ENCLOSING query node, the enclosing node's substituted print silently falls
+         * back to re-expanding the uSelect/uSelectC subexpression's raw source instead of showing
+         * its computed value. Nesting a second query around the uSelect call is required to
+         * reproduce this: substituteChildExpressions() only ever substitutes a node's OWN range
+         * child, so the uSelect/uSelectC node has to BE that range child, not the root.
+         */
+        @Test
+        @DisplayName("K-14: an enclosing query substitutes a uSelect range child with its value")
+        void enclosingQuerySubstitutesUSelectRangeChild() {
+            Expression e = compile("(Set{1,2,3}->uSelect(f | f > 1))->select(x | x > 0)");
+            Evaluator evaluator = new Evaluator(true);
+            evaluator.eval(e, null, null, new VarBindings(), null, "");
+            EvalNode root = evaluator.getEvalNodeRoot();
+            String substituted = root.substituteChildExpressions();
+            assertTrue(substituted.contains("Set{2,3}"),
+                    "the uSelect child must be shown as its computed value Set{2,3}: " + substituted);
+            assertFalse(substituted.contains("uSelect"),
+                    "the uSelect child's raw source must not be re-expanded: " + substituted);
         }
     }
 

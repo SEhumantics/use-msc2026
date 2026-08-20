@@ -613,6 +613,27 @@ public class EvalNode {
 			if (replace(exp)) return;
 			super.visitExpSelectByType(exp);
 		}
+
+		/*
+		 * K-14 (Tier B) — every other query/collection expression type that can appear as an
+		 * evaluation-tree node overrides its visit method here to substitute the evaluated
+		 * sub-value (visitSelect, visitExists, visitForAll, visitOne, visitReject,
+		 * visitSelectByKind, visitExpSelectByType, ...). uSelect/uSelectC were added later and
+		 * never got the same treatment, so the GUI evaluation browser silently fell back to
+		 * printing the unsubstituted source text for these two node types only. See
+		 * docs/port2/adaptation-policy.md K-14.
+		 */
+		@Override
+		public void visitUSelect(ExpUSelect exp) {
+			if (replace(exp)) return;
+			super.visitUSelect(exp);
+		}
+
+		@Override
+		public void visitUSelectC(ExpUSelectC exp) {
+			if (replace(exp)) return;
+			super.visitUSelectC(exp);
+		}
     }
     
     private class RelevantOperationHighlightVisitor extends GenerateHTMLExpressionVisitor {
