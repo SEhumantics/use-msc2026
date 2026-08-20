@@ -274,14 +274,58 @@ So F-3's correction is now exactly co-extensive with the contract violation it w
 that was discovered by the pre-registration lapsing rather than by anyone reading the code. This is
 rule 1 doing the job it exists for.
 
+### 4.3b The type and dispatch rows, and a porting omission found beside them
+
+`harness-contract.md` §C3 says outright that the differential harness cannot see the type layer, so
+these four rows were always going to need purpose-built evidence. `B7TypeAndDispatchTest`, 12 tests.
+
+| Row | The defect | Evidence |
+|---|---|---|
+| **M-21** | `UBooleanType`, `UStringType` and `SBooleanType` put `TypeFactory.mkX()` in `allSupertypes()` where `URealType` and `UIntegerType` put `this`. For a factory singleton those are the same object — but `TypeTest` constructs types **directly**, and for such an instance `this != mkX()`, so **a directly-constructed type was not among its own supertypes** and did not conform to itself. | all five constructed directly, each asserted to contain itself and to `conformsTo` itself |
+| **M-22** | three constructor visibilities across five sibling types: `UIntegerType` public, `URealType` protected, the rest package-private | see below |
+| **M-37** | `Op_uInteger_value.matches` declared `mkUInteger()` while `eval` returns an `IntegerValue`. `ExpStdOp.create` stores `matches`'s answer as the **static** type, so every enclosing expression was type-checked against the wrong one | driven through `ExpStdOp.create`, the production path, not by reflecting into the registry |
+| **M-38** | `Op_uBoolean_or` dereferenced the `null` that `UBooleanValue.valueOf` returns for an `UndefinedValue`. The sibling `Op_uBoolean_and` guards it; only `or` did not | see below |
+
+#### M-22's evidence is a compile error
+
+The first draft of the test sat in `org.tzi.use.uncertainty` and **did not compile** — five errors,
+one per uncertain type, all reading *"`URealType()` is not public … cannot be accessed from outside
+package"*. The file was moved into `org.tzi.use.uml.ocl.type`, and that refusal is recorded in its
+class comment: a reflective modifier check is asserted too, but the compiler's refusal is the
+stronger statement and a reader of the reflective assertion would otherwise never know it had been
+tested against a real call site.
+
+#### M-38 needed a witness that does not exist in the corpus
+
+`b7-fix-plan.md` §0.2 established that `Undefined or Undefined` never reaches `Op_uBoolean_or`:
+`Op_boolean_or` is registered first (`OpGeneric.java:90` against `:94`), matches `(OclVoid, OclVoid)`
+under `INCLUDE_VOID`, and `ExpStdOp.create` stops at the first match. So the four corpus entries that
+write it pass today and would pass with the NPE still in place.
+
+The witness is a pair of `ExpUndefined(TypeFactory.mkUBoolean())` — expressions carrying a declared
+`UBoolean` type that evaluate to `Undefined`. The test asserts **first** that `or.type()` is
+`UBoolean`, because if `Op_boolean_or` had matched instead, the witness would have missed the code
+under test entirely and the assertion about the result would have been meaningless.
+
+#### The porting omission
+
+`VoidType` was missing all five `isKindOfU*` overrides, which the fork has
+(`FORK/…/VoidType.java:38, 58, 123, 128, 133`). `OclVoid` therefore answered `true` for
+`isKindOfInteger(INCLUDE_VOID)` and `false` for `isKindOfUInteger(INCLUDE_VOID)`, so `Undefined`
+could be passed where an `Integer` was expected and was refused where a `UInteger` was — and every
+`matches()` in `StandardOperationsU*.java` guards on exactly those predicates.
+
+This is **not** a B7 correction. It moves the port *towards* the fork, so no `IntendedDepartures`
+entry adjudicates it, and the sweep is unchanged by it.
+
 ### 4.4 The gate
 
 `bash scripts/upstream-oracle-gate.sh both` → **PASS**.
 
 | mode | classes | methods | executions | failures |
 |---|---|---|---|---|
-| default, `use-core` surefire | 31 (floor 15 → **re-pinned 31**) | 170 (floor 107 → **re-pinned 170**) | 170 | 0 |
-| oracle, `use-core` surefire | 64 (floor 48 → **re-pinned 64**) | 441 (floor 378 → **re-pinned 441**) | 1029 | 0 |
+| default, `use-core` surefire | 36 (floor 15 → **re-pinned 36**) | 182 (floor 107 → **re-pinned 182**) | 182 | 0 |
+| oracle, `use-core` surefire | 69 (floor 48 → **re-pinned 69**) | 453 (floor 378 → **re-pinned 453**) | 1041 | 0 |
 
 The jump is 13 classes, not 2: surefire counts each `@Nested` class as its own report, and the two
 new files carry 6 and 7 nested classes. Floors may grow and may never shrink.
@@ -302,14 +346,13 @@ read before the goldens were updated.
 | Rows | Status |
 |---|---|
 | M-11, M-8, M-9, M-10, M-12, M-18, F-2, F-3, F-4, F-10, bundle A | **done**, evidenced above |
-| **M-21, M-22** (type layer) | not started |
-| **M-37, M-38** (`OpGeneric` registries) | not started |
+| M-21, M-22, M-37, M-38 | **done**, evidenced in §4.3b |
 | **M-29, M-30, M-32, M-33** (expression/parser layer) | not started |
 | **M-26, M-27** (`ExpDefSBoolean`) | the class was ported although B10 decided "drop"; unreachable from any grammar rule. Needs a decision, not a fix |
 | **M-6, M-28, M-31, M-43, M-48b, M-51** | "fix = do not change the code". Each still needs its written justification **at the site** |
 | **CF-5, CF-7, CF-8, CF-9, M-44, M-45, M-49b** | the test-harness rows. None started |
 
-**11 of 33 rows are discharged.** That is the honest count; the previous record said 1.
+**15 of 33 rows are discharged.** That is the honest count; the previous record said 1.
 
 ---
 
@@ -326,6 +369,9 @@ mvn -o -pl use-core test -Dtest=B7CorrectionsTest
 
 # section 4.3a
 mvn -o -pl use-core test -Dtest=MathUtilRoundSaturationTest
+
+# section 4.3b
+mvn -o -pl use-core test -Dtest=B7TypeAndDispatchTest
 
 # section 1.1 / 1.3
 mvn -o -pl use-core test -Dtest=IntendedDeparturesTest

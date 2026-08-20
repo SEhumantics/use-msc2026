@@ -59,10 +59,31 @@ final class Op_uInteger_value extends OpGeneric {
         return false;
     }
 
+    /**
+     * B7 / ledger M-37 — <strong>behaviour deliberately changed from the fork.</strong>
+     *
+     * <p>The fork returned {@code TypeFactory.mkUInteger()} here (fork
+     * {@code src/main/org/tzi/use/uml/ocl/expr/operations/StandardOperationsUInteger.java:54-64})
+     * while {@link #eval} two methods below returns an {@code IntegerValue}. The comment above this
+     * class has always said {@code value : UInteger -> Integer}; the sibling
+     * {@code Op_ureal_value} correctly declares {@code mkReal()}.
+     *
+     * <p>This is not cosmetic. {@code ExpStdOp.create} stores what {@code matches} returns as the
+     * expression's <strong>static</strong> type, so type-checking of any <em>enclosing</em>
+     * expression was performed against {@code UInteger} while the value that actually arrived at
+     * runtime was an {@code Integer}.
+     *
+     * <p><strong>Declared consequence.</strong> {@code TYPE} only. The printed type suffix does not
+     * move: {@code Value.toStringWithType} uses {@code getRuntimeType()}, so the nine corpus entries
+     * that exercise this operation already read {@code -> 3 : Integer}. That was checked before the
+     * change rather than after.
+     *
+     * <p>Decided by the user on 2026-08-17 (B7); {@code docs/port2/b7-fix-plan.md} section 2 M-37.
+     */
     @Override
     public Type matches(Type[] params) {
         return params.length == 1 && params[0].isTypeOfUInteger() ?
-                TypeFactory.mkUInteger() : null;
+                TypeFactory.mkInteger() : null;
     }
 
     @Override
