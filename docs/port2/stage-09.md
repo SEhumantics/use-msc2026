@@ -15,9 +15,12 @@ mechanism B7 requires, applied it row by row across sixteen commits, ported the 
 test corpus and its four largest test files, found and fixed two real regressions and one genuine
 pre-existing fork defect along the way (a multi-variable `forAll`/`exists` accumulation bug, §4.3h),
 implemented the two features the port was missing entirely (`uSelect`/`uSelectC` and uncertainty-aware
-collection membership), and ends with **all 33 ledger rows discharged** — evidenced, in every case, by
-an independently fork-authored test passing against this port's own computation, not merely by the
-port agreeing with itself.
+collection membership), reached **all 33 ledger rows discharged** — evidenced, in every case, by an
+independently fork-authored test passing against this port's own computation, not merely by the port
+agreeing with itself — and then closed the two items left open outside the ledger's own scope:
+`uCount`/`uCountC` (a real fork feature the port never had) and M-1..M-6 (six metamorphic relations,
+designed from a written spec, closing the coverage blindspot on the two types — `SBoolean`, `UString` —
+with the weakest independent evidence).
 
 ---
 
@@ -676,17 +679,86 @@ other 434 `assertEquals` calls). CF-7 moves from "partially discharged" to fully
 outstanding at the start of this stage's final push; both close in this commit. See §5 for the full,
 final accounting by row name.
 
+### 4.3l `uCount`/`uCountC` — a real fork feature, absent from the port until now
+
+Neither operation was ever a B7 ledger row: B7 tracks behaviour that *changed* during porting, and
+`uCount`/`uCountC` simply did not exist in the port at all, so there was nothing to fix. They surfaced
+from an earlier session's adversarial audit and were carried in §5 as an open item once the ledger
+itself closed.
+
+Ported from `StandardOperationsCollection.java`'s `Op_collection_uCount`/`Op_collection_uCountC` and
+`CollectionValue.java`'s `uCountC` method. Semantics unchanged. Unlike `uSelect`/`uSelectC` (§4.3h),
+neither needed a grammar change or a new `Expression` subclass: both are ordinary `OpGeneric` standard
+operations, registered exactly like `count` itself, of which they are the uncertain-equality analogue
+— an element counts if `uEquals` between it and the target meets a confidence threshold (fixed at
+`0.5` for `uCount`, explicit for `uCountC`), not crisp `equals`.
+
+The fork's own coverage (`UCollectionExpOpTest.testUCount`) evaluates one expression and asserts
+nothing — it would pass even if `uCount` always returned `0`. `UCountCoverageTest`, 6 methods, replaces
+it with assertions on the actual returned count:
+
+```
+$ mvn -o -pl use-core test -Dtest=UCountCoverageTest
+Tests run: 6, Failures: 0, Errors: 0, Skipped: 0
+```
+
+### 4.3m M-1..M-6 — the metamorphic relations, closing the SBoolean/UString blindspot
+
+`docs/port2/stage-03-scope.md` §8.5 proposed six relations specifically because `SBoolean` and
+`UString` carry the weakest independent evidence of the five uncertain types (§2 of the same document)
+— each relation is "a property of the ported code checked against itself," so it yields evidence where
+there is no fork test and no ported counterpart to compare against. Confirmed before writing any of
+it: the fork's own test suite has zero property-based or metamorphic-test infrastructure anywhere, so
+this is new test design from a written spec, not a port of anything.
+
+`MetamorphicRelationsTest`, 14 methods across 6 `@Nested` classes, one per relation — every relation
+holds:
+
+| # | Relation | Result |
+|---|---|---|
+| M-1 | Crisp embedding (all four types: `UReal`, `UInteger`, `UBoolean`, `UString`) | holds |
+| M-2 | Degree monotonicity (`UReal`, `UInteger` addition) | holds |
+| M-3 | `UBoolean` canonicalisation (`and`, `or`) | holds |
+| M-4 | `UInteger`/`UReal` widening agreement (`+`, `-`) | holds |
+| M-5 | `SBoolean` interning independence | holds |
+| M-6 | `SBoolean` simplex closure (21 of 23 SBoolean-returning operations) | holds |
+
+M-5 needed the package-private `SBooleanValue(double,double,double,double)` constructor — the OCL
+literal `SBoolean(1,0,0,1)` itself interns to `SBooleanValue.TRUE` (confirmed:
+`run("SBoolean(1,0,0,1)") == SBooleanValue.TRUE` is `true`), so a genuinely distinct-but-equal instance
+can only be built by calling the constructor directly, which forced this file into
+`org.tzi.use.uml.ocl.value` (alongside `UBooleanValueTest`) rather than the `org.tzi.use.uncertainty`
+package this stage's other new tests use.
+
+**M-6 found a real, pre-existing fork defect, incidentally, not fixed here.** Every `matches()` method
+in `StandardOperationsSBoolean.java` was read to enumerate all SBoolean-returning operations, not
+guessed — 23 declare a `SBoolean` return type. Two of them, `conjunctiveCertainty` and
+`degreeOfConflict`, throw a `NullPointerException` when their result is treated as `SBoolean` (as their
+declared type promises): both delegate to `SBooleanValue.conjunctiveCertainty`/`degreeOfConflict`,
+which actually return `RealValue`. Confirmed byte-identical in the fork's own source, both files — this
+is a genuine static-declared-type-vs-runtime-value mismatch in the fork itself, not a portation
+artifact. It is documented in `MetamorphicRelationsTest`'s own javadoc and excluded from the M-6 table
+(closure does not apply to an operation that doesn't return `SBoolean`), but **not fixed**: changing a
+declared operation return type is its own independently-scoped decision — it could affect OCL-level
+type-checking of any expression chaining off these two operations — and this test file's job was to
+measure the port against a written spec, not to fix whatever it happened to find along the way.
+
+```
+$ mvn -o -pl use-core test -Dtest=MetamorphicRelationsTest
+Tests run: 14, Failures: 0, Errors: 0, Skipped: 0
+```
+
 ### 4.4 The gate
 
 `bash scripts/upstream-oracle-gate.sh both` → **PASS**. Numbers below are the state at the end of this
-stage, after nine re-pins in total: the B7 corrections phase (§3–4.3f), the `uSelect`/
+stage, after eleven re-pins in total: the B7 corrections phase (§3–4.3f), the `uSelect`/
 collection-membership commit (§4.3h), the CF-8 corpus-port commit (§4.3i), the M-43 commit (§4.3j),
-and the four M-44 commits, one per file (§4.3k).
+the four M-44 commits (§4.3k), `uCount`/`uCountC` (§4.3l), and the metamorphic relations (§4.3m).
 
 | mode | classes | methods | executions | failures |
 |---|---|---|---|---|
-| default, `use-core` surefire | 52 (floor 15 → **re-pinned 52**) | 332 (floor 107 → **re-pinned 332**) | 332 | 0 |
-| oracle, `use-core` surefire | 85 (floor 48 → **re-pinned 85**) | 603 (floor 378 → **re-pinned 603**) | 1191 | 0 |
+| default, `use-core` surefire | 59 (floor 15 → **re-pinned 59**) | 352 (floor 107 → **re-pinned 352**) | 352 | 0 |
+| oracle, `use-core` surefire | 92 (floor 48 → **re-pinned 92**) | 623 (floor 378 → **re-pinned 623**) | 1211 | 0 |
 | default/oracle, `use-gui` | unchanged: 1/1 surefire, 1/129 failsafe | — | — | 0 |
 
 The re-pins, in order: **+13 classes / +54 methods** for the B7 pre-registration mechanism and its two
@@ -695,9 +767,10 @@ class as its own report, and the two files carry 6 and 7 nested classes between 
 `UncertainQueryAndMembershipTest`'s 5 `@Nested` classes; **+1/+1** for `USECompilerUncertaintyTest`;
 **+1/+5** for `UBooleanValueTest`; then, one file per commit, **+1/+12** for `ExpQueryUncertaintyTest`,
 **+1/+27** for `UBooleanExpOpsTest`, **+1/+32** for `URealExpOpsTest`, **+1/+39** for
-`UIntegerExpOpsTest`. `use-gui` is untouched by every one of the nine — no `use-gui` source file
-changed this stage, and the `ExpQuery` accumulation fix (§4.3h) corrected two existing `ShellIT`
-fixtures rather than adding new ones. Floors may grow and may never shrink.
+`UIntegerExpOpsTest`; then **+1/+6** for `UCountCoverageTest`; then **+6/+14** for
+`MetamorphicRelationsTest`'s 6 `@Nested` classes. `use-gui` is untouched by every one of the eleven —
+no `use-gui` source file changed this stage, and the `ExpQuery` accumulation fix (§4.3h) corrected two
+existing `ShellIT` fixtures rather than adding new ones. Floors may grow and may never shrink.
 
 **Waivers: four** (W-01–W-04). No `.java` test file was edited to make ported code pass — every waiver
 this stage (W-02, W-03, W-04) alters only the ported `.in` fixture *data* the tests read, never the
@@ -739,15 +812,19 @@ this commit sequence, 31 (one more partial) after the M-43 commit, and now 33, c
 **What "closed" does and doesn't mean.** Every row in the 33-row ledger this port's own audit produced
 has a commit, a test, and a piece of written evidence behind it. It does not mean every conceivable
 defect in the uncertainty extension has been found — §1 of `b7-fix-plan.md` was itself scoped to what
-that audit could find by the methods it used. Two categories of work remain genuinely open, outside
-this ledger's scope (see the row below): `uCount`/`uCountC` (never implemented in this port at all —
-no corpus entry or fork test needed it, so its absence was never forced into view) and the six
-metamorphic relations M-1..M-6 (property-based tests the fork's own test suite does not contain; they
-would need to be designed, not just ported).
+that audit could find by the methods it used. Two categories of work were carried as genuinely open,
+outside this ledger's scope, when the 33/33 milestone landed: `uCount`/`uCountC` (never implemented in
+this port at all — no corpus entry or fork test needed it, so its absence was never forced into view)
+and the six metamorphic relations M-1..M-6 (property-based tests the fork's own test suite does not
+contain; they needed to be designed, not ported). **Both closed in this same stage, immediately after**
+— `uCount`/`uCountC` in §4.3l, M-1..M-6 in §4.3m. `uSelect`/`uSelectC` and uncertainty-aware collection
+membership, previously in this same "missing feature" category, closed earlier still, in §4.3h.
 
-| Rows | Status |
-|---|---|
-| **`uCount`/`uCountC`, metamorphic tests M-1..M-6** | outside the 33-row ledger; separate open items from the adversarial audit. `uSelect`/`uSelectC` and uncertainty-aware collection membership, previously in this category, are done — §4.3h |
+As of this stage's last commit, **nothing from the adversarial audit's original findings remains open.**
+That is not a claim that the port is defect-free — see §4.3m's own finding (`conjunctiveCertainty`/
+`degreeOfConflict`'s return-type mismatch) for a counter-example found in the course of this very work,
+left open on its own terms. It is a claim about the specific, named backlog this stage inherited: it is
+now empty.
 
 ---
 
@@ -804,6 +881,12 @@ mvn -o -pl use-core test -Dtest=UBooleanValueTest
 
 # section 4.3k -- M-44 and CF-7 close: all four files, 110 methods, 0 corrections
 mvn -o -pl use-core test -Dtest=ExpQueryUncertaintyTest,UBooleanExpOpsTest,URealExpOpsTest,UIntegerExpOpsTest
+
+# section 4.3l -- uCount/uCountC, a real feature the fork's own test never actually checked
+mvn -o -pl use-core test -Dtest=UCountCoverageTest
+
+# section 4.3m -- M-1..M-6, the metamorphic relations
+mvn -o -pl use-core test -Dtest=MetamorphicRelationsTest
 
 # section 1.1 / 1.3
 mvn -o -pl use-core test -Dtest=IntendedDeparturesTest
