@@ -167,17 +167,17 @@ The intransitivity is deterministic, so that is what is asserted.
 operations enumerated  355
 supported by the port  355  (100%)
 rows                   1294072 total, 79520 measured
-verdicts               {AGREE=78218, INTENDED_DEPARTURE=1302, BOTH_THREW=50598,
+verdicts               {AGREE=78130, INTENDED_DEPARTURE=1390, BOTH_THREW=50598,
                         UNMEASURABLE=808, HARNESS_ERROR=1163146}
-pre-registered (B7)    5 declaration(s), 1302 row(s) adjudicated
+pre-registered (B7)    11 declaration(s), 1390 row(s) adjudicated
 diverging operations   0 (unintended)
 ====================================================
 ```
 
-**0 unintended divergence, 0 unused declarations, 1302 rows adjudicated.** Before the declarations
-were written the same sweep reported `DIFFER=1302` across those same five operations, so the
-adjudication is exactly co-extensive with the corrections and adds nothing to the green count:
-`AGREE` is `78218` in both runs.
+**0 unintended divergence, 0 unused declarations, 1390 rows adjudicated** across **11 declarations
+over 12 operations**. The adjudication is co-extensive with the corrections and adds nothing to the
+green count: with the corrections in and the declarations removed, the same sweep reports the same
+`AGREE` figure and the same rows as `DIFFER`.
 
 ### 4.2 One result per operation, not one per corpus — a defect found and fixed mid-stage
 
@@ -222,14 +222,66 @@ And it asserts the **bundle** obligations directly: bundle B (`M-10` + `F-3`) by
 cross-type equal pair hashes alike, and bundle A by checking that `URealValue.compareTo` — the side
 that gained the arm — is non-zero, since if it still fell through, M-9's negation would be a no-op.
 
+### 4.3a F-2 — the row the plan said had no observable effect
+
+`b7-fix-plan.md` §2 F-2 says the fix "has no observable effect on any existing evidence" because
+"no test and no corpus entry reaches that magnitude". **Both halves are wrong**, and the sweep is
+what showed it.
+
+`InputGenerator` ships `NaN`, both infinities and ±`Double.MAX_VALUE` — all far above the 9.2e8
+ceiling. Six printing operations moved, on 144 rows. The pairs are the argument for the fix:
+
+| the fork printed | the port prints |
+|---|---|
+| `UReal(9.223372036854776E8, 0.0)` | `UReal(1.7976931348623157E308, 0.0)` |
+| `UReal(9.223372036854776E8, 0.0)` | `UReal(Infinity, 0.0)` |
+| `UReal(0.0, 0.0)` | `UReal(NaN, 0.0)` |
+| `UBoolean(true, 0.0)` | `UBoolean(true, NaN)` |
+
+Read the first two rows together: **the fork printed the same text for `Double.MAX_VALUE` and for
+`Infinity`.** And it printed a `NaN` probability as `0.0`, which reads as *certainly false* — the
+strongest claim the type can make — for a value carrying no probability at all.
+
+#### The rounding mode was nearly a second, undeclared change
+
+`Math.round` rounds a half toward **positive infinity**: `Math.round(-0.5) == 0`. `BigDecimal`'s
+`HALF_UP` rounds a half **away from zero**: it would send `-0.5` to `-1.0`. A plain `HALF_UP` would
+therefore have moved every negative half — a population the corpora do reach — inside a commit whose
+stated subject is saturation.
+
+It was caught by an assertion, not by review: `MathUtilRoundSaturationTest.Preserved.agreesBelowTheCeiling`
+sweeps both bodies over 36 values at four scales and demands they agree everywhere below the ceiling.
+The mode is now `HALF_UP` above zero and `HALF_DOWN` below it, which together are exactly
+half-toward-positive-infinity.
+
+#### The declared limit
+
+`NaN` and the infinities have no `BigDecimal` representation and are returned unchanged. The fork's
+body mapped `NaN` to `0.0` and `±Infinity` to `±9.223372036854776E8` — neither of which is a rounding
+of anything. They are reachable from OCL: `UReal(1,0) / UReal(0,0)` produces an infinity that then
+flows into `toString` and `equals`.
+
+#### The mechanism caught its own declaration going stale
+
+F-3's declaration was written as **72 rows over 9 distinct pairs**. When F-2 landed it stopped
+matching, clause 4 fired, and the gate refused. The cause was not a regression: 56 of those 72 rows
+had been departing only because the *old* `round` mangled large values, and with the ceiling gone
+they **agree with the fork again**. What survives is 16 rows over 2 pairs — `Double.hashCode(-0.0)`
+becoming `Double.hashCode(0.0)`, and a subnormal rounding to zero — both cases the fork's own
+`equals` already called equal.
+
+So F-3's correction is now exactly co-extensive with the contract violation it was written for, and
+that was discovered by the pre-registration lapsing rather than by anyone reading the code. This is
+rule 1 doing the job it exists for.
+
 ### 4.4 The gate
 
 `bash scripts/upstream-oracle-gate.sh both` → **PASS**.
 
 | mode | classes | methods | executions | failures |
 |---|---|---|---|---|
-| default, `use-core` surefire | 28 (floor 15 → **re-pinned 28**) | 161 (floor 107 → **re-pinned 161**) | 161 | 0 |
-| oracle, `use-core` surefire | 61 (floor 48 → **re-pinned 61**) | 432 (floor 378 → **re-pinned 432**) | 1020 | 0 |
+| default, `use-core` surefire | 31 (floor 15 → **re-pinned 31**) | 170 (floor 107 → **re-pinned 170**) | 170 | 0 |
+| oracle, `use-core` surefire | 64 (floor 48 → **re-pinned 64**) | 441 (floor 378 → **re-pinned 441**) | 1029 | 0 |
 
 The jump is 13 classes, not 2: surefire counts each `@Nested` class as its own report, and the two
 new files carry 6 and 7 nested classes. Floors may grow and may never shrink.
@@ -249,8 +301,7 @@ read before the goldens were updated.
 
 | Rows | Status |
 |---|---|
-| M-11, M-8, M-9, M-10, M-12, M-18, F-3, F-4, F-10, bundle A | **done**, evidenced above |
-| **F-2** (`MathUtil.round` saturates above 9.2e8) | not started. Must be a **separate commit** after the byte-identical `round` is shown green — `b7-fix-plan.md` §7.1 bundle D |
+| M-11, M-8, M-9, M-10, M-12, M-18, F-2, F-3, F-4, F-10, bundle A | **done**, evidenced above |
 | **M-21, M-22** (type layer) | not started |
 | **M-37, M-38** (`OpGeneric` registries) | not started |
 | **M-29, M-30, M-32, M-33** (expression/parser layer) | not started |
@@ -258,7 +309,7 @@ read before the goldens were updated.
 | **M-6, M-28, M-31, M-43, M-48b, M-51** | "fix = do not change the code". Each still needs its written justification **at the site** |
 | **CF-5, CF-7, CF-8, CF-9, M-44, M-45, M-49b** | the test-harness rows. None started |
 
-**10 of 33 rows are discharged.** That is the honest count; the previous record said 1.
+**11 of 33 rows are discharged.** That is the honest count; the previous record said 1.
 
 ---
 
@@ -272,6 +323,9 @@ mvn -o -pl use-core test -Dtest=PortedFidelitySweepTest
 
 # section 4.3
 mvn -o -pl use-core test -Dtest=B7CorrectionsTest
+
+# section 4.3a
+mvn -o -pl use-core test -Dtest=MathUtilRoundSaturationTest
 
 # section 1.1 / 1.3
 mvn -o -pl use-core test -Dtest=IntendedDeparturesTest

@@ -139,29 +139,33 @@ public class PortedFidelitySweepTest {
 
                 // ---- F-3: hashCode hashed unrounded values that equals() compares rounded ----
                 //
-                // INTEGER(-2147483648) -> INTEGER(0) is Double.hashCode(-0.0) becoming
-                // Double.hashCode(0.0), and INTEGER(1) -> INTEGER(0) is a subnormal rounding to zero.
-                // Both are cases where equals() ALREADY said "equal" and the hash said "different
-                // bucket", which is the contract violation in the direction that loses data.
-                .declarePopulation("URealValue.hashCode()", "F-3", 72,
-                        List.of("INTEGER(-1048576)@Integer\tINTEGER(404537700)@Integer",
-                                "INTEGER(-2146435072)@Integer\tINTEGER(-1742945948)@Integer",
-                                "INTEGER(-2147483648)@Integer\tINTEGER(0)@Integer",
-                                "INTEGER(1)@Integer\tINTEGER(0)@Integer",
-                                "INTEGER(1048576)@Integer\tINTEGER(404537700)@Integer",
-                                "INTEGER(1065353216)@Integer\tINTEGER(1470939492)@Integer",
-                                "INTEGER(1065877504)@Integer\tINTEGER(1072693248)@Integer",
-                                "INTEGER(2146435072)@Integer\tINTEGER(-1742945948)@Integer",
-                                "INTEGER(2146959360)@Integer\tINTEGER(0)@Integer"),
+                // THIS DECLARATION SHRANK WHEN F-2 LANDED, and the mechanism is what noticed.
+                //
+                // It first read 72 rows over 9 distinct pairs. Then MathUtil.round stopped
+                // saturating (F-2), and 56 of those 72 rows started AGREEING: they had been
+                // departing only because the OLD round() mangled large values, not because rounding
+                // is the right thing to do to them. What is left is the two cases where rounding
+                // genuinely changes the hash and equals() had already called the values equal --
+                // Double.hashCode(-0.0) becoming Double.hashCode(0.0), and a subnormal rounding to
+                // zero. So F-3's correction is now exactly co-extensive with the contract violation
+                // it was written for, and 56 rows of previously-adjudicated divergence turned back
+                // into plain agreement.
+                //
+                // The lapse was not spotted by reading the code. The declaration stopped matching,
+                // clause 4 fired, and the gate refused -- which is the property rule 1 exists for.
+                .declarePopulation("URealValue.hashCode()", "F-3", 16,
+                        List.of("INTEGER(-2147483648)@Integer\tINTEGER(0)@Integer",
+                                "INTEGER(1)@Integer\tINTEGER(0)@Integer"),
                         IntendedDepartures.Direction.REFERENCE_WAS_WRONG,
                         "B7 (user decision 2026-08-17). The fork hashed the UNROUNDED value and "
                         + "uncertainty while equals(), three lines below, compares them ROUNDED to "
                         + "ten decimals -- so two values equals() calls equal could land in different "
                         + "buckets, and a HashSet never consults equals across buckets. The port "
-                        + "rounds inside hashCode with the same MathUtil.round(x, 10). Note "
-                        + "INTEGER(-2147483648) -> INTEGER(0): that is Double.hashCode(-0.0) becoming "
-                        + "Double.hashCode(0.0), a pair the fork's own equals already called equal. "
-                        + "b7-fix-plan.md section 2 F-3.")
+                        + "rounds inside hashCode with the same MathUtil.round(x, 10). Both surviving "
+                        + "pairs are cases the fork's own equals ALREADY called equal: "
+                        + "INTEGER(-2147483648) -> INTEGER(0) is Double.hashCode(-0.0) becoming "
+                        + "Double.hashCode(0.0), and INTEGER(1) -> INTEGER(0) is a subnormal "
+                        + "rounding to zero. b7-fix-plan.md section 2 F-3.")
 
                 // ---- M-12: the one correction with a wide codomain ----
                 .declareWideCodomain("UStringValue.compareTo(value)", "M-12", 432, 210,
@@ -185,6 +189,78 @@ public class PortedFidelitySweepTest {
                         + "sample: INTEGER(-16) -> INTEGER(0) is the empty UString against the empty "
                         + "String, where 16 is exactly the length of the \"UString('', \" prefix the "
                         + "fork was comparing against. b7-fix-plan.md section 2 M-12.")
+
+
+                // ---- F-2: MathUtil.round saturated, and printing showed it ----
+                //
+                // b7-fix-plan.md section 2 F-2 says this fix "has no observable effect on any
+                // existing evidence" because "no test and no corpus entry reaches that magnitude".
+                // THAT IS WRONG, and the sweep is what showed it: InputGenerator ships NaN, both
+                // infinities and +/-Double.MAX_VALUE, all of which are far above the 9.2e8 ceiling.
+                // Six printing operations move, on 144 rows.
+                //
+                // Read the pairs. The fork printed the SAME number, 9.223372036854776E8, for
+                // Double.MAX_VALUE and for Infinity -- two values that are not remotely alike -- and
+                // printed 0.0 for NaN. Every one of these is the fork inventing a finite quantity
+                // that the value did not have.
+                //
+                // The NaN and infinity rows are the declared limit of the new body rather than the
+                // saturation itself: BigDecimal cannot represent them, so round() returns them
+                // unchanged where Math.round mapped them onto 0 and onto the ceiling. Passing them
+                // through is the choice B7 implies -- printing a made-up finite number for infinity
+                // is a defect, not a rounding -- and it is declared here rather than left to be
+                // discovered. See MathUtil.round's javadoc.
+                .declarePopulation("URealValue.toString()", "F-2", 56,
+                        List.of("STRING(\"UReal(-9.223372036854776E8, 0.0)\")@String\tSTRING(\"UReal(-1.7976931348623157E308, 0.0)\")@String",
+                                "STRING(\"UReal(-9.223372036854776E8, 0.0)\")@String\tSTRING(\"UReal(-Infinity, 0.0)\")@String",
+                                "STRING(\"UReal(0.0, 0.0)\")@String\tSTRING(\"UReal(NaN, 0.0)\")@String",
+                                "STRING(\"UReal(1.0, 0.0)\")@String\tSTRING(\"UReal(1.0, NaN)\")@String",
+                                "STRING(\"UReal(1.0, 9.223372036854776E8)\")@String\tSTRING(\"UReal(1.0, Infinity)\")@String",
+                                "STRING(\"UReal(9.223372036854776E8, 0.0)\")@String\tSTRING(\"UReal(1.7976931348623157E308, 0.0)\")@String",
+                                "STRING(\"UReal(9.223372036854776E8, 0.0)\")@String\tSTRING(\"UReal(Infinity, 0.0)\")@String"),
+                        IntendedDepartures.Direction.REFERENCE_WAS_WRONG,
+                        "B7 (user decision 2026-08-17). Math.round(double) returns a long and "
+                        + "saturates at Long.MAX_VALUE; every uncertainty call site passes digits=10, "
+                        + "so the ceiling is 9.223372036854776E8. Above it the fork printed one "
+                        + "number for every input -- note it gave the SAME text for Double.MAX_VALUE "
+                        + "and for Infinity -- and it printed 0.0 for NaN. The port uses BigDecimal, "
+                        + "which has no ceiling, and passes NaN and the infinities through. "
+                        + "b7-fix-plan.md section 2 F-2 and MathUtilRoundSaturationTest.")
+
+                .declarePopulation("URealValue.toStringWithType()", "F-2", 56,
+                        List.of("STRING(\"UReal(-9.223372036854776E8, 0.0) : UReal\")@String\tSTRING(\"UReal(-1.7976931348623157E308, 0.0) : UReal\")@String",
+                                "STRING(\"UReal(-9.223372036854776E8, 0.0) : UReal\")@String\tSTRING(\"UReal(-Infinity, 0.0) : UReal\")@String",
+                                "STRING(\"UReal(0.0, 0.0) : UReal\")@String\tSTRING(\"UReal(NaN, 0.0) : UReal\")@String",
+                                "STRING(\"UReal(1.0, 0.0) : UReal\")@String\tSTRING(\"UReal(1.0, NaN) : UReal\")@String",
+                                "STRING(\"UReal(1.0, 9.223372036854776E8) : UReal\")@String\tSTRING(\"UReal(1.0, Infinity) : UReal\")@String",
+                                "STRING(\"UReal(9.223372036854776E8, 0.0) : UReal\")@String\tSTRING(\"UReal(1.7976931348623157E308, 0.0) : UReal\")@String",
+                                "STRING(\"UReal(9.223372036854776E8, 0.0) : UReal\")@String\tSTRING(\"UReal(Infinity, 0.0) : UReal\")@String"),
+                        IntendedDepartures.Direction.REFERENCE_WAS_WRONG,
+                        "As URealValue.toString() above; toStringWithType appends the static type to "
+                        + "the same rendering, so it moves on the same rows. F-2.")
+
+                .declarePopulation("UIntegerValue.toString()", "F-2", 8,
+                        List.of("STRING(\"UInteger(1, 0.0)\")@String\tSTRING(\"UInteger(1, NaN)\")@String"),
+                        IntendedDepartures.Direction.REFERENCE_WAS_WRONG,
+                        "F-2, on the uncertainty component: the fork's Math.round(NaN * 1e10) is 0, "
+                        + "so a NaN uncertainty printed as 0.0 -- a certainty the value did not have.")
+
+                .declarePopulation("UIntegerValue.toStringWithType()", "F-2", 8,
+                        List.of("STRING(\"UInteger(1, 0.0) : UInteger\")@String\tSTRING(\"UInteger(1, NaN) : UInteger\")@String"),
+                        IntendedDepartures.Direction.REFERENCE_WAS_WRONG,
+                        "As UIntegerValue.toString() above. F-2.")
+
+                .declarePopulation("UBooleanValue.toString()", "F-2", 8,
+                        List.of("STRING(\"UBoolean(true, 0.0)\")@String\tSTRING(\"UBoolean(true, NaN)\")@String"),
+                        IntendedDepartures.Direction.REFERENCE_WAS_WRONG,
+                        "F-2, on the probability component: a NaN probability printed as 0.0, which "
+                        + "reads as 'certainly false' -- the strongest claim available -- for a value "
+                        + "that carries no probability at all.")
+
+                .declarePopulation("UBooleanValue.toStringWithType()", "F-2", 8,
+                        List.of("STRING(\"UBoolean(true, 0.0) : UBoolean\")@String\tSTRING(\"UBoolean(true, NaN) : UBoolean\")@String"),
+                        IntendedDepartures.Direction.REFERENCE_WAS_WRONG,
+                        "As UBooleanValue.toString() above. F-2.")
 
                 .build();
     }
