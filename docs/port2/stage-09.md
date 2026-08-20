@@ -414,14 +414,42 @@ repository (`find use-core/src/test -iname 'UBooleanValueTest.java' -o -iname
 'USECompilerUncertaintyTest.java'` finds neither). Porting them *is* the remaining test-harness work
 (CF-8 and neighbours); these three rows apply to that porting once it happens, not before.
 
+### 4.3f `uEquals` — a question closed, not a fix
+
+An earlier session left a standing worry: commit {@code d99ab9ef} routed {@code =}/{@code <>} on
+uncertain operands to {@code uEquals}, and noted that {@code uEquals} was **not** in the differential
+sweep at the time, so {@code UReal(2,0.5) = 2} giving probability {@code 0.0} "looks wrong to me and
+may be a genuine fork defect; it cannot be judged until uEquals is swept." `UEqualsCoverageTest`, 6
+tests, closes it.
+
+**Half one: is `uEquals` actually swept?** Yes, and there was no separate step to add it. It is a
+public, single-`Value`-argument instance method on all five uncertain value classes, in both the
+historical jar and the port, so `UnwrittenPortInvariantTest.reachableOperations` finds it by
+reflection — it has been one of the 355 operations `PortedFidelitySweepTest` drives since that test
+was written (section 4.1). That sweep reports `AGREE` on every measured `uEquals` row.
+
+**Half two: is the `0.0` correct?** Yes, and it is not a coincidence. `uDataTypes.UReal.calculate`
+(the vendored library, `UReal.java:501-508`) branches on which side of a comparison is degenerate
+(uncertainty exactly `0`), and whenever exactly one side is, it sets `eq = 0.0`
+**unconditionally** — before ever looking at how close the two means are. That is the correct answer
+for a continuous distribution compared to an exact point: a continuous random variable takes any
+single value with probability zero, however close that value sits to the mean.
+`UReal(2,0.5) = 2` is asking "what is the probability this Gaussian equals exactly 2", and the honest
+answer is zero for any mean. It is not the constant `0.0` in general — two genuinely uncertain
+operands (`UReal(2,0.5) = UReal(2,0.5)`) give `UBoolean(true, 1.0)`, and the Gaussian-overlap branch
+of the same library method is what computes that.
+
+Every test in the file drives the historical jar as well as the port, so it would fail if either half
+of this answer stopped being true.
+
 ### 4.4 The gate
 
 `bash scripts/upstream-oracle-gate.sh both` → **PASS**.
 
 | mode | classes | methods | executions | failures |
 |---|---|---|---|---|
-| default, `use-core` surefire | 40 (floor 15 → **re-pinned 40**) | 194 (floor 107 → **re-pinned 194**) | 194 | 0 |
-| oracle, `use-core` surefire | 73 (floor 48 → **re-pinned 73**) | 465 (floor 378 → **re-pinned 465**) | 1053 | 0 |
+| default, `use-core` surefire | 41 (floor 15 → **re-pinned 41**) | 200 (floor 107 → **re-pinned 200**) | 200 | 0 |
+| oracle, `use-core` surefire | 74 (floor 48 → **re-pinned 74**) | 471 (floor 378 → **re-pinned 471**) | 1059 | 0 |
 
 The jump is 13 classes, not 2: surefire counts each `@Nested` class as its own report, and the two
 new files carry 6 and 7 nested classes. Floors may grow and may never shrink.
@@ -489,6 +517,9 @@ grep -c 'ledger M-6\|ledger M-28\|ledger M-31' \
   use-core/src/main/java/org/tzi/use/uml/ocl/value/SBooleanValue.java \
   use-core/src/main/java/org/tzi/use/uml/ocl/expr/ExpConstUBoolean.java \
   use-core/src/main/java/org/tzi/use/uml/ocl/expr/ExpConstUReal.java
+
+# section 4.3f
+mvn -o -pl use-core test -Dtest=UEqualsCoverageTest
 
 # section 1.1 / 1.3
 mvn -o -pl use-core test -Dtest=IntendedDeparturesTest
