@@ -323,6 +323,15 @@ public class UpstreamOracleFloor {
     // blocks converted to assertThrows with real (observed, not guessed) messages (M-44).
     // use-core/surefire 49/234 -> 50/261 (default) and 82/505 -> 83/532 (oracle). use-gui
     // unchanged.
+    //
+    // RE-PINNED 2026-08-20 (B7 M-44, file 3 of 4: URealExpOpsTest). Adds ONE Jupiter test file
+    // with 32 methods, no @Nested classes. All 32 pass with zero semantic corrections; 326
+    // assertEquals calls reordered mechanically (CF-7, same script). 4 try/fail/catch blocks (all
+    // in testMinMax, min/max on a non-numeric argument in both operand orders) converted to
+    // assertThrows, each wrapping BOTH the ExpStdOp.create call and the eval that follows it
+    // (M-44's own note that a two-statement try body needs the lambda to wrap both).
+    // use-core/surefire 50/261 -> 51/293 (default) and 83/532 -> 84/564 (oracle). use-gui
+    // unchanged.
     // Floors are >= : the suite may GROW, it may never shrink. No floor is 0 and no floor
     // may be lowered to make a run pass — see harness-contract.md sec. 8 step 7 clause 1,
     // "Do not lower the floor."
@@ -330,13 +339,13 @@ public class UpstreamOracleFloor {
     record Floor(int classes, int methods) { }
 
     static final Map<String, Floor> ORACLE = Map.of(
-            "use-core/surefire", new Floor(83, 532),
+            "use-core/surefire", new Floor(84, 564),
             "use-gui/surefire", new Floor(8, 17),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
 
     static final Map<String, Floor> DEFAULT = Map.of(
-            "use-core/surefire", new Floor(50, 261),
+            "use-core/surefire", new Floor(51, 293),
             "use-gui/surefire", new Floor(1, 1),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
