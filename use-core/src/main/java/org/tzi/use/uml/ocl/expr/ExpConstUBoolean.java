@@ -70,6 +70,23 @@ public class ExpConstUBoolean extends Expression {
         if (value.isUndefined() || probability.isUndefined())
             res = UndefinedValue.instance;
         else try {
+            // B7 / ledger M-28 -- DECIDED NOT TO CHANGE, and that decision is the fix.
+            //
+            // The recommendation this row considered was replacing the round-trip through String
+            // (Boolean.valueOf(value.toString()), Double.valueOf(probability.toString())) with
+            // direct accessors: ((BooleanValue) value).value() and
+            // ((RealValue) probability).value(). It was not taken.
+            //
+            // Why not: the round-trip is not an oversight, it is TWO behaviours in one expression.
+            // First, Double.valueOf(anIntegerValue.toString()) yields 1.0 where a direct accessor
+            // ((IntegerValue) probability).value() yields the int 1 -- a real value shift a rewrite
+            // would introduce silently. Second, and load-bearing: the NumberFormatException a
+            // malformed string raises here is exactly what the catch two lines below converts to
+            // Undefined. A direct-accessor rewrite has no string to fail to parse, so it deletes
+            // that error path along with the string conversion, changing which malformed inputs
+            // become Undefined and which throw.
+            //
+            // Decided by the user on 2026-08-17 (B7); docs/port2/b7-fix-plan.md section 2 M-28.
             res = UBooleanValue.valueOf(Boolean.valueOf(value.toString()), Double.valueOf(probability.toString()));
         }
         catch (RuntimeException ex) {

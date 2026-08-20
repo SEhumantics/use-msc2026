@@ -391,6 +391,29 @@ classpath — `target/classes` first — reproduced the fix immediately. Recorde
 the failure shape this whole project keeps finding: a signal that looks like a result but is actually
 measuring the wrong artifact.
 
+### 4.3e M-6, M-28, M-31 — three rows whose fix is a written reason, at the site
+
+B7 says "fix the historical defects, documenting each", and for these three the documented finding
+is that the ledger's proposed change is *worse* than what stands. That is not evasion of the
+decision — it is the decision, applied. Each now carries a full javadoc at its own site rather than
+only a line in this document, so a reader who arrives at the code (not this file) sees the reasoning.
+
+| Row | Site(s) | What was considered and rejected |
+|---|---|---|
+| **M-6** | `URealValue.assertKindOfUReal`, `UIntegerValue.assertKindOfUInteger`, `UStringValue.assertKindOfUString`, `SBooleanValue.assertKindOfSBoolean` | Narrowing the bare `RuntimeException` to `IllegalArgumentException`. Rejected: two catch sites downstream (`ExpConstSBoolean.java:57`, `ASTSBooleanLiteral.java:35`) swallow `Exception` broadly, and the full downstream `catch` set could not be enumerated — narrowing is risk with no offsetting benefit |
+| **M-28** | `ExpConstUBoolean.eval` | Replacing the `String`-round-trip (`Boolean.valueOf(value.toString())`, `Double.valueOf(probability.toString())`) with direct accessors. Rejected: the round-trip is two behaviours in one expression — it also produces the `NumberFormatException` that the surrounding `catch` converts to `Undefined`, and a direct accessor has no string to fail to parse |
+| **M-31** | `ExpConstUReal`'s constructor | Moving `ASTURealLiteral`'s type check into the constructor, for consistency with its four siblings. Rejected: this constructor is called directly, with unvalidated arguments, at 300+ sites in the ported test suite; making the check a constructor-time failure breaks every one of them and is a compile-shape change none of the siblings' call sites make |
+
+No test count moves — these are documentation-only changes at sites the existing suite already
+exercises. Confirmed: the gate reports the same 40/194 (default) and 73/465 (oracle) as the previous
+commit.
+
+**M-43, M-48b and M-51 are not actionable yet.** All three apply to fork test files —
+`UBooleanValueTest.java` and `USECompilerUncertaintyTest.java` — that have not been ported into this
+repository (`find use-core/src/test -iname 'UBooleanValueTest.java' -o -iname
+'USECompilerUncertaintyTest.java'` finds neither). Porting them *is* the remaining test-harness work
+(CF-8 and neighbours); these three rows apply to that porting once it happens, not before.
+
 ### 4.4 The gate
 
 `bash scripts/upstream-oracle-gate.sh both` → **PASS**.
@@ -422,13 +445,15 @@ read before the goldens were updated.
 | M-21, M-22, M-37, M-38 | **done**, evidenced in §4.3b |
 | M-26, M-27 | **moot**: `ExpDefSBoolean` deleted as dead code, §4.3c |
 | M-29, M-30, M-32, M-33 | **done**, evidenced in §4.3d |
-| **M-6, M-28, M-31, M-43, M-48b, M-51** | "fix = do not change the code". Each still needs its written justification **at the site** |
+| M-6, M-28, M-31 | **done**, evidenced in §4.3e |
+| **M-43, M-48b, M-51** | apply to fork test files not yet ported; blocked on the CF-8-family porting work, not actionable yet |
 | **CF-5, CF-7, CF-8, CF-9, M-44, M-45, M-49b** | the test-harness rows. None started |
 | **`uSelect`/`uSelectC`, uncertainty-aware collection membership, `uCount`/`uCountC`, metamorphic tests M-1..M-6** | outside the 33-row ledger; separate open items from the adversarial audit |
 
-**21 of 33 rows are discharged**: 15 fixed at the value, type and dispatch layers (sections 3–4.3b),
-2 moot by the deletion of `ExpDefSBoolean` (M-26, M-27; section 4.3c), and 4 more fixed at the parser
-and literal-constant layer (M-29, M-30, M-32, M-33; section 4.3d). The previous record said 1.
+**24 of 33 rows are discharged**: 15 fixed at the value, type and dispatch layers (sections 3–4.3b),
+2 moot by the deletion of `ExpDefSBoolean` (M-26, M-27; section 4.3c), 4 fixed at the parser and
+literal-constant layer (M-29, M-30, M-32, M-33; section 4.3d), and 3 more discharged by written
+justification at the site (M-6, M-28, M-31; section 4.3e). The previous record said 1.
 
 ---
 
@@ -455,6 +480,15 @@ grep -rn 'ExpDefSBoolean\|ASTSBooleanDefExpression' use-core/src/main use-gui/sr
 
 # section 4.3d
 mvn -o -pl use-core test -Dtest=B7ParserAndConstantsTest
+
+# section 4.3e -- the javadoc is at the site; grep confirms it is there
+grep -c 'ledger M-6\|ledger M-28\|ledger M-31' \
+  use-core/src/main/java/org/tzi/use/uml/ocl/value/URealValue.java \
+  use-core/src/main/java/org/tzi/use/uml/ocl/value/UIntegerValue.java \
+  use-core/src/main/java/org/tzi/use/uml/ocl/value/UStringValue.java \
+  use-core/src/main/java/org/tzi/use/uml/ocl/value/SBooleanValue.java \
+  use-core/src/main/java/org/tzi/use/uml/ocl/expr/ExpConstUBoolean.java \
+  use-core/src/main/java/org/tzi/use/uml/ocl/expr/ExpConstUReal.java
 
 # section 1.1 / 1.3
 mvn -o -pl use-core test -Dtest=IntendedDeparturesTest

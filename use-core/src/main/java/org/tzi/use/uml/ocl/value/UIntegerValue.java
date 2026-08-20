@@ -219,6 +219,30 @@ public class UIntegerValue extends UncertainValue {
         return result;
     }
 
+    /**
+     * B7 / ledger M-6 — <strong>DECIDED NOT TO CHANGE, and that decision is the fix.</strong>
+     *
+     * <p>The recommendation this row considered was narrowing {@code RuntimeException} to
+     * {@code IllegalArgumentException}, on the ordinary grounds that a bare {@code RuntimeException}
+     * is the least informative exception type available. It was not taken.
+     *
+     * <p><strong>Why not.</strong> {@code ExpQueryUncertaintyTest.java:179,200} catches
+     * {@code RuntimeException} — a subclass would still satisfy that {@code catch}, so those two
+     * sites are safe either way. But {@code ExpConstSBoolean.java:57} and
+     * {@code ASTSBooleanLiteral.java:35} both {@code catch (Exception ex)} and swallow it, silently
+     * converting whatever escapes into {@code Undefined} or a discarded error — and the full
+     * downstream {@code catch} set reachable from this method <strong>could not be enumerated</strong>.
+     * A narrower type is {@code ERR}-shaped risk with no offsetting benefit: nothing in this codebase
+     * discriminates {@code RuntimeException} from {@code IllegalArgumentException}, so narrowing
+     * could only ever change behaviour by accident, never on purpose.
+     *
+     * <p>Decided by the user on 2026-08-17 (B7); {@code docs/port2/b7-fix-plan.md} section 2 M-6.
+     *
+     * @param value the value to coerce
+     * @return {@code value} narrowed to {@code UInteger}
+     * @throws RuntimeException if {@code value} is not a kind of {@code UInteger}. Deliberately the
+     *         broad type: see the note above.
+     */
     private UIntegerValue assertKindOfUInteger(Value value) {
         UIntegerValue uInteger = valueOf(value);
 
