@@ -433,4 +433,54 @@ class SBooleanFusionValueTest {
                     0.0, 0.0, 1.0, 0.4);
         }
     }
+
+    @Nested
+    @DisplayName("consensusAndCompromiseFusion: O(4^n) hazard and degenerate cases")
+    class ConsensusAndCompromiseFusion {
+
+        @Test
+        @DisplayName("fusing N identical opinions returns that same opinion")
+        void identicalOpinionsAreAFixedPoint() {
+            String expr = A + ".consensusAndCompromiseFusion(Set{" + A + "," + A + "," + A + "})";
+            assertOpinion(expr, 0.5, 0.3, 0.2, 0.5);
+        }
+
+        @Test
+        @DisplayName("two dogmatic, totally conflicting opinions still fuse to a valid opinion, not a pass-through")
+        void conflictingDogmaticOpinionsProduceGenuineFusion() {
+            String dogTrue = "SBoolean(1, 0, 0, 0.5)";
+            String dogFalse = "SBoolean(0, 1, 0, 0.5)";
+            SBooleanValue result = (SBooleanValue) run(dogTrue + ".consensusAndCompromiseFusion(Set{" + dogFalse + "})");
+            double b = result.belief().value(), d = result.disbelief().value(), u = result.uncertainty().value();
+            assertEquals(1.0, b + d + u, 0.001, "result must be a valid opinion");
+            boolean isDogTruePassThrough = Math.abs(b - 1.0) < 0.001 && Math.abs(d) < 0.001;
+            boolean isDogFalsePassThrough = Math.abs(d - 1.0) < 0.001 && Math.abs(b) < 0.001;
+            assertTrue(!isDogTruePassThrough && !isDogFalsePassThrough,
+                    "fusing two conflicting dogmatic opinions must not just echo one of the inputs back");
+        }
+
+        @Test
+        @DisplayName("6 distinct opinions (4^6 = 4096 candidate combinations) completes and returns a valid opinion")
+        void scalesToSixOpinionsWithoutHanging() {
+            // ccFusion requires every fused opinion to share the same baseRate (it throws
+            // IllegalArgumentException otherwise -- see SBoolean.java's baseRate-equality check at
+            // the top of ccFusion). All six opinions below use baseRate 0.5; belief/disbelief/
+            // uncertainty still differ across all six so the permutation search is genuinely
+            // exercised at n=6 (4^6 = 4096 combinations).
+            String[] opinions = {
+                    "SBoolean(0.5,0.3,0.2,0.5)", "SBoolean(0.2,0.5,0.3,0.5)", "SBoolean(0.1,0.6,0.3,0.5)",
+                    "SBoolean(0.6,0.1,0.3,0.5)", "SBoolean(0.4,0.4,0.2,0.5)", "SBoolean(0.05,0.85,0.1,0.5)"
+            };
+            String set = "Set{" + String.join(",", opinions[1], opinions[2], opinions[3], opinions[4], opinions[5]) + "}";
+            long start = System.nanoTime();
+            SBooleanValue result = (SBooleanValue) run(opinions[0] + ".consensusAndCompromiseFusion(" + set + ")");
+            long elapsedMs = (System.nanoTime() - start) / 1_000_000;
+            double sum = result.belief().value() + result.disbelief().value() + result.uncertainty().value();
+            assertEquals(1.0, sum, 0.001, "result must be a valid opinion at n=6");
+            assertTrue(elapsedMs < 30_000,
+                    "consensusAndCompromiseFusion at n=6 (4^6=4096 combinations) took " + elapsedMs
+                            + "ms -- if this regresses badly, the O(4^n) hazard documented in "
+                            + "b7-fix-plan.md section 6 has become a real performance problem");
+        }
+    }
 }
