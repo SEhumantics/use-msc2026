@@ -192,18 +192,21 @@ class MetamorphicRelationsTest {
         private static final String C = "SBoolean(0.1,0.1,0.8,1)";
 
         /**
-         * All 23 {@code final SBoolean} enum constants in {@code StandardOperationsSBoolean}
-         * declare (via {@code matches()}) a {@code SBoolean} return type. Two of them —
-         * {@code conjunctiveCertainty} and {@code degreeOfConflict} — are excluded here because
-         * that declaration does not match their actual runtime behaviour: both delegate to
-         * {@link SBooleanValue#conjunctiveCertainty} / {@link SBooleanValue#degreeOfConflict},
-         * which return {@code RealValue}, not {@code SBooleanValue}. Confirmed byte-identical in
-         * the fork's own source (both files), so this is a genuine pre-existing fork defect — a
-         * static-type/runtime-value mismatch, not a simplex-closure violation — found incidentally
-         * while building this test, not part of the B7 ledger (which is closed), and not fixed
-         * here: fixing a declared operation return type is a distinct, independently-scoped change
-         * this test's job is not to make. Simplex closure does not apply to either operation
-         * because neither actually returns an {@code SBoolean} to check.
+         * {@code conjunctiveCertainty} and {@code degreeOfConflict} are correctly absent from this
+         * set: both actually return a {@code Real} ({@link SBooleanValue#conjunctiveCertainty} /
+         * {@link SBooleanValue#degreeOfConflict} wrap a {@code double} in {@code RealValue}), so
+         * simplex closure does not apply to them. This was not always so — both operations'
+         * {@code matches()} originally declared a {@code SBoolean} return type that never matched
+         * their actual runtime value, found incidentally while first building this test. It was
+         * initially left unfixed as "a distinct, independently-scoped change." That characterization
+         * was revised one stage later, at S9's SBoolean test-coverage pass, on new evidence: the
+         * mismatch is not merely cosmetic but crashes with a real {@code NullPointerException} the
+         * moment a genuine SBoolean-only operation is chained onto the result (reproduced with
+         * {@code conjunctiveCertainty(...).belief()} — see the fix and its full account at
+         * {@code StandardOperationsSBoolean.java}'s {@code CONJUNCTIVE_CERTAINTY}/
+         * {@code DEGREE_OF_CONFLICT} constants). Both operations' declared type is now {@code Real},
+         * matching their real runtime behaviour, and are exercised directly in
+         * {@code SBooleanExpOpsTest} rather than through this simplex-closure set.
          */
         private static final String[][] SBOOLEAN_RETURNING_OPERATIONS = {
                 {"uncertaintyMaximized", A + ".uncertaintyMaximized()"},

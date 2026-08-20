@@ -246,7 +246,7 @@ public enum StandardOperationsSBoolean {
         }
     }),
 
-    // conjuntiveCertainty: SBoolean x SBoolean -> SBoolean
+    // conjuntiveCertainty: SBoolean x SBoolean -> Real
     CONJUNCTIVE_CERTAINTY(new OpGeneric() {
 
         @Override
@@ -264,11 +264,29 @@ public enum StandardOperationsSBoolean {
             return false;
         }
 
+        /*
+         * Found at S9 while adding M-1..M-6 (docs/port2/stage-09.md sec 4.3m) and initially left
+         * unfixed as "its own independently-scoped decision": matches() declared mkSBoolean() while
+         * eval() below always returns a RealValue (SBooleanValue.conjunctiveCertainty(),
+         * uml/ocl/value/SBooleanValue.java:298, wraps a plain double in RealValue, not SBooleanValue).
+         * Revisited while adding SBoolean test coverage this stage, with new evidence that upgrades
+         * this from a cosmetic type-declaration mismatch to a live crash: any expression chaining a
+         * genuine SBoolean-only operation onto the (declared-SBoolean, actually-Real) result
+         * type-checks fine statically but throws a real NullPointerException at runtime --
+         * SBooleanValue.valueOf(Value) (SBooleanValue.java:110-127) silently returns Java null for a
+         * RealValue argument (it has no fallback arm for one), and the caller unconditionally
+         * dereferences it. Reproduced live before this fix with
+         * `SBoolean(0.5,0.3,0.2,0.5).conjunctiveCertainty(SBoolean(0.2,0.5,0.3,0.4)).belief()`.
+         * Same defect class as the already-fixed ledger row M-37 and this stage's UString
+         * indexOf/toString fixes; fixed the same way, by correcting the declared type to match the
+         * real runtime type. TYPE only: no corpus entry uses conjunctiveCertainty (no UString/SBoolean
+         * token appears in any .in fixture, specification.md sec 6.5).
+         */
         @Override
         public Type matches(Type[] params) {
             return params.length == 2 && params[0].isKindOfSBoolean(Type.VoidHandling.EXCLUDE_VOID)
                     && params[1].isKindOfSBoolean(Type.VoidHandling.EXCLUDE_VOID) ?
-                    TypeFactory.mkSBoolean() : null;
+                    TypeFactory.mkReal() : null;
         }
 
         @Override
@@ -279,7 +297,7 @@ public enum StandardOperationsSBoolean {
         }
     }),
 
-    // degreeOfConflict: SBoolean x SBoolean -> SBoolean
+    // degreeOfConflict: SBoolean x SBoolean -> Real
     DEGREE_OF_CONFLICT(new OpGeneric() {
 
         @Override
@@ -297,11 +315,16 @@ public enum StandardOperationsSBoolean {
             return false;
         }
 
+        /*
+         * Found at S9 while adding SBoolean test coverage: same defect class and fix as
+         * CONJUNCTIVE_CERTAINTY above -- see its comment for the full account.
+         * SBooleanValue.degreeOfConflict() (SBooleanValue.java:303) also returns a plain RealValue.
+         */
         @Override
         public Type matches(Type[] params) {
             return params.length == 2 && params[0].isKindOfSBoolean(Type.VoidHandling.EXCLUDE_VOID)
                     && params[1].isKindOfSBoolean(Type.VoidHandling.EXCLUDE_VOID) ?
-                    TypeFactory.mkSBoolean() : null;
+                    TypeFactory.mkReal() : null;
         }
 
         @Override
