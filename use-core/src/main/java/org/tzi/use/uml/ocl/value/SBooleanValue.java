@@ -418,53 +418,17 @@ public final class SBooleanValue extends UncertainBooleanValue {
 		return new SBooleanValue(SBoolean.createVacuousOpinion(p.value()));
 	}
 
-	public SBooleanValue minimumFusion(Value value) {
-		SBooleanValue sBooleanValue = assertKindOfSBoolean(value);
-		LinkedList<SBoolean> collection = new LinkedList<SBoolean>();
-		collection.add(this.sBoolean);
-		collection.add(sBooleanValue.sBoolean);
-		return new SBooleanValue(SBoolean.minimumBeliefFusion(collection));
-	}
-
-	public SBooleanValue majorityFusion(Value value) {
-		SBooleanValue sBooleanValue = assertKindOfSBoolean(value);
-		LinkedList<SBoolean> collection = new LinkedList<SBoolean>();
-		collection.add(this.sBoolean);
-		collection.add(sBooleanValue.sBoolean);
-		return new SBooleanValue(SBoolean.majorityBeliefFusion(collection));
-	}
-
-	public SBooleanValue averageFusion(Value value) {
-		SBooleanValue sBooleanValue = assertKindOfSBoolean(value);
-		LinkedList<SBoolean> collection = new LinkedList<SBoolean>();
-		collection.add(this.sBoolean);
-		collection.add(sBooleanValue.sBoolean);
-		return new SBooleanValue(SBoolean.averageBeliefFusion(collection));
-	}
-
-	public SBooleanValue cumulativeFusion(Value value) {
-		SBooleanValue sBooleanValue = assertKindOfSBoolean(value);
-		LinkedList<SBoolean> collection = new LinkedList<SBoolean>();
-		collection.add(this.sBoolean);
-		collection.add(sBooleanValue.sBoolean);
-		return new SBooleanValue(SBoolean.cumulativeBeliefFusion(collection));
-	}
-
-	public SBooleanValue epistemicCumulativeFusion(Value value) {
-		SBooleanValue sBooleanValue = assertKindOfSBoolean(value);
-		LinkedList<SBoolean> collection = new LinkedList<SBoolean>();
-		collection.add(this.sBoolean);
-		collection.add(sBooleanValue.sBoolean);
-		return new SBooleanValue(SBoolean.epistemicCumulativeBeliefFusion(collection));
-	}
-
-	public SBooleanValue weightedFusion(Value value) {
-		SBooleanValue sBooleanValue = assertKindOfSBoolean(value);
-		LinkedList<SBoolean> collection = new LinkedList<SBoolean>();
-		collection.add(this.sBoolean);
-		collection.add(sBooleanValue.sBoolean);
-		return new SBooleanValue(SBoolean.weightedBeliefFusion(collection));
-	}
+	/*
+	 * Found and removed at S9 (dead-code sweep, not a B7 ledger row): minimumFusion, majorityFusion,
+	 * averageFusion, cumulativeFusion, epistemicCumulativeFusion, weightedFusion used to live here,
+	 * each called only from a matching enum constant in StandardOperationsSBoolean.java that was
+	 * commented out byte-identically in the fork's own source. With no live registration, these six
+	 * had no grammar path at all -- ungrammared semantics code. See
+	 * StandardOperationsSBoolean.java's removal note (same commit) for the full account; the
+	 * equivalent live, registered operations are minimumBeliefFusion/majorityBeliefFusion/
+	 * averageBeliefFusion/cumulativeBeliefFusion/epistemicCumulativeBeliefFusion/weightedBeliefFusion
+	 * just below.
+	 */
 
 	public SBooleanValue minimumBeliefFusion(Value value) {
 		CollectionValue cValue = (CollectionValue) value;
