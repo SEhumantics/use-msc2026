@@ -307,6 +307,14 @@ public class UpstreamOracleFloor {
     // valueOf(true, -2) and valueOf(true, 2) — see the test file's own javadoc for the full
     // evidence. use-core/surefire 47/217 -> 48/222 (default) and 80/488 -> 81/493 (oracle).
     // use-gui unchanged.
+    //
+    // RE-PINNED 2026-08-20 (B7 M-44, first file: ExpQueryUncertaintyTest). Adds ONE Jupiter test
+    // file with 12 methods, no @Nested classes — the fork's own independently-written coverage of
+    // uSelect/uSelectC/forAll/exists (ported this stage in the uSelect/membership commit) plus
+    // sum(). All 12 pass with zero semantic corrections; three exception-message assertions were
+    // corrected to match the port's actual wording (observed, not guessed) after the first run.
+    // use-core/surefire 48/222 -> 49/234 (default) and 81/493 -> 82/505 (oracle). use-gui
+    // unchanged.
     // Floors are >= : the suite may GROW, it may never shrink. No floor is 0 and no floor
     // may be lowered to make a run pass — see harness-contract.md sec. 8 step 7 clause 1,
     // "Do not lower the floor."
@@ -314,13 +322,13 @@ public class UpstreamOracleFloor {
     record Floor(int classes, int methods) { }
 
     static final Map<String, Floor> ORACLE = Map.of(
-            "use-core/surefire", new Floor(81, 493),
+            "use-core/surefire", new Floor(82, 505),
             "use-gui/surefire", new Floor(8, 17),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
 
     static final Map<String, Floor> DEFAULT = Map.of(
-            "use-core/surefire", new Floor(48, 222),
+            "use-core/surefire", new Floor(49, 234),
             "use-gui/surefire", new Floor(1, 1),
             "use-core/failsafe", new Floor(1, 1),
             "use-gui/failsafe", new Floor(1, 129));
