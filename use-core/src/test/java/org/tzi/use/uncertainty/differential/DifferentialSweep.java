@@ -70,7 +70,19 @@ public final class DifferentialSweep {
                 "intendedDepartures (use IntendedDepartures.none())");
     }
 
-    /** The reviewed throw-pairs this sweep will adjudicate; empty unless a caller supplied some. */
+    /**
+     * The reviewed throw-pairs this sweep will adjudicate; empty unless a caller supplied some.
+     *
+     * @implNote Do not sign these off in bulk to clear the stage gate. A perfect port still needs on
+     *     the order of 150 distinct entries before clause 2 of {@code stageGateFailures} can be met on
+     *     the operations that only ever throw (D-29) — a defensible-looking domino, since every entry
+     *     requires the operation, both throwable classes and both messages to match exactly. That
+     *     pressure is exactly the shape of the deleted blanket "two throws agree" rule reappearing one
+     *     hand-authored entry at a time. Each entry needs its own reviewed, written rationale; a
+     *     script or a loop that generates them from the sweep's own output has re-created the rule
+     *     this class exists to refuse.
+     * @see "docs/port2/harness-contract.md &sect;7 second trap -- deviation ledger (decided 2026-08-17)"
+     */
     public AcceptedThrowPairs acceptedThrowPairs() {
         return acceptedThrowPairs;
     }

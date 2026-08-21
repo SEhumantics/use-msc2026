@@ -60,8 +60,22 @@ public class UnlimitedNaturalType extends BasicType {
         return !t.isTypeOfVoidType() && (t.isKindOfNumber(VoidHandling.EXCLUDE_VOID) || t.isTypeOfOclAny());
     }
 
-    /** 
+    /**
      * Returns the set of all supertypes (including this type).
+     *
+     * @implNote Deliberately does <b>not</b> add {@code UInteger} or {@code UReal}, even though
+     *     {@link #conformsTo} answers {@code true} for both (inherited from the "kind of number"
+     *     predicate rule this type shares with {@link IntegerType}). This reproduces a historical
+     *     lattice inconsistency (B11) bit-for-bit rather than fixing it: {@code
+     *     UnlimitedNatural.conformsTo(UInteger)} is {@code true} but {@code
+     *     UnlimitedNatural.getLeastCommonSupertype(UInteger)} returns {@code OclAny}, not {@code
+     *     UInteger}, and the two answers disagree with what {@link
+     *     UniqueLeastCommonSupertypeDeterminator#calculateFor} reports for the same pair. Do not
+     *     "complete" this set to match {@code conformsTo} without re-opening B11 -- it is the same
+     *     shape as a pre-existing upstream defect ({@code Integer.conformsTo(UnlimitedNatural)} is
+     *     true while {@code UnlimitedNatural} is absent from {@code Integer.allSupertypes()}), so
+     *     widening this one alone would not even make the lattice self-consistent.
+     * @see "docs/port2/spec-parts/11-types.md &sect;3 B11 -- deviation ledger (adaptation-policy.md row T-15, specification.md &sect;9 row 11)"
      */
     @Override
 	public Set<Type> allSupertypes() {

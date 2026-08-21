@@ -9,6 +9,12 @@ silent, the area document is the detail record.
 pre-registration of every deliberate deviation from the fork. §5 re-scores the open decisions.
 §6 collects everything that is not yet established.
 
+**Provenance note (2026-08-21).** Three of the six area readers this document cites for detail —
+`adaptation/04-grammar.md`, `adaptation/06-collections.md`, and `spec-parts/13-grammar.md` — were
+consolidated during a documentation cleanup and no longer exist as separate files. Every decision
+those area readers argued for is already recorded in this document's own tables (§2, §4); the
+deleted files' full original content remains in git history.
+
 **Evidence tags used throughout:** `MEASURED` (code was executed and its output pasted in the area
 document), `READ_FROM_SOURCE` (read at a named file:line), `INFERRED` (reasoned, not executed).
 Every `INFERRED` row must be probed before its owning stage starts — §2.3 lists them.
@@ -160,7 +166,7 @@ starts (INFERRED shape, or the two readers disagreed).
 | **K-12** | `ExpSelect:45,60`, `ExpReject:45,56` | **deliberately unchanged:** select/reject/any/one still call `assertBooleanQuery()` and REJECT a `UBoolean` predicate at compile time (`Argument expression of 'select' must have Boolean type, found 'UBoolean'.`). Only exists/forAll had the guard swapped; `uSelect`/`uSelectC` exist precisely to fill the gap | identical — the whole `ExpSelect` diff is +2/−0 and both lines are `$Id$`/`@version` comments | **PRESERVE THE ASYMMETRY.** It is uncertainty design, not an accident. Do not "helpfully" relax select/reject/any/one to accept `UBoolean` | S7 | MEASURED |
 | **K-13** | `ExpQuery` `sortedBy`, hunk `@@ -456,12 +655,7 @@` | only `return new SequenceValue(rangeElemType, result);` — the fork predates the feature | has an extra `if (this.type().isTypeOfOrderedSet()) return new OrderedSetValue(…)` branch | **REJECT the hunk.** Upstream drift, not uncertainty meaning, so clause 2 gives it to 7.5.0. Applying the fork here would silently **REGRESS** 7.5.0. The clearest case in the whole adaptation of the policy's second clause, and why whole-file replacement is unacceptable | S7 | READ_FROM_SOURCE |
 | **K-17** | `CollectionValue.uIncludesAll` / `uExcludesAll` — defects **D-C5**, **D-C6** | `uIncludesAll` short-circuits `if (coll2.size() > size()) result = FALSE;` **without examining any element**, while `uExcludesAll` has no matching shortcut; both `and`-fold per-element probabilities, silently treating element memberships as **independent** events | plain boolean set operations, no size shortcut | **D-C5 FIX:** drop the shortcut or guard it to non-Bag receivers — size is not a membership criterion for a Bag, and the asymmetry with `uExcludesAll` is unjustified. **D-C6 DOCUMENT:** the independence assumption is a modelling choice, not a bug, but it silently determines every `includesAll` probability and is written down nowhere in the fork | S7 | READ_FROM_SOURCE |
-| **P-03** | `UBooleanExpression.in` :8,11,14 and `URealExpression.in` :62,65; thrown at `ASTURealLiteral` :28,31 and `ASTUBooleanLiteral` :31 | four bare messages with **no** `src:line:col` prefix, because they use `new SemanticException(String)` with a null `SrcPos`. Raw buffer: `>>>Value must be Boolean\n<<<`. Ordinary fork errors DO carry the prefix | **NOT a collision.** `SemanticException` is byte-identical in both trees and 7.5.0 has **16** position-less sites of its own, one in the OCL expression parser: `Sequence{1..'a'}`→bare `Ranges must be of type Integer.` | **no normalisation rule.** Three binding constraints: **C1a** keep the four strings byte-exact including the ungrammatical `Probability must be a Integer or Real`; **C1b** throw with **NO** `SrcPos`/`Token` (attaching one prefixes `probe:1:0: ` and breaks all 5); **C1c** keep them the only thing written to the error stream (the harness captures a buffer, not a line — M-49b) | S8 | MEASURED |
+| **P-03** | `UBooleanExpression.in` :8,11,14 and `URealExpression.in` :62,65; thrown at `ASTURealLiteral` :28,31 and `ASTUBooleanLiteral` :31 | bare messages with **no** `src:line:col` prefix, because they use `new SemanticException(String)` with a null `SrcPos`. Raw buffer: `>>>Value must be Boolean\n<<<`. Ordinary fork errors DO carry the prefix. **Corrected count** (`adaptation-policy-refutation.md` §4.1): not four in one place — **eleven position-less strings across five classes in two packages** (`ASTURealLiteral`, `ExpConstUInteger`, `ExpConstUBoolean`, `ExpConstUString`, `ExpConstSBoolean`); the `UBoolean` message actually lives in `ExpConstUBoolean` (`uml/ocl/expr`), not `ASTUBooleanLiteral` (`parser/ocl`) | **NOT a collision.** `SemanticException` is byte-identical in both trees and 7.5.0 has **16** position-less sites of its own, one in the OCL expression parser: `Sequence{1..'a'}`→bare `Ranges must be of type Integer.` | **no normalisation rule.** Three binding constraints: **C1a** keep all eleven strings byte-exact, including the ungrammatical `Probability must be a Integer or Real` and the `SBoolean` messages' double spaces (`Belief  must`); **C1b** throw with **NO** `SrcPos`/`Token` (attaching one prefixes `probe:1:0: ` and breaks all 5 corpus error-path entries); **C1c** keep them the only thing written to the error stream (the harness captures a buffer, not a line — M-49b). Only 4 of the 11 have a corpus witness; the other 7 are unwitnessed and the guard must still cover them | S8 | MEASURED |
 | **P-05** | `Value.java`, `SetValue`, `CollectionValue.getSortedElements`, `TupleValue`, `VoidType.toString`, all scalar `toString`s | **identical code** to 7.5.0 — diffs are only `$Id`/`@version`/javadoc lines plus the fork's added `RealValue.valueOf` (E26) | same | **NO collision, so no rule.** Confirmed by a 21-expression crisp control: 16 lines identical, 5 differing only by the `Undefined` token. Rules that would normalise separators, whitespace, sort order or the `" : Type"` suffix are **explicitly refused as divergence-masking** | S8 | MEASURED |
 | **P-06** | collection printing sorts via `Collections.sort`; several `compareTo` bodies fall back to `toString().compareTo(…)` | over the 324 distinct element strings the fork actually printed, exactly **one** flips sign under the rename: `'false'` (`'f'`=102 lies between `'U'`=85 and `'n'`=110) | same machinery, same fallback | **PROVEN UNREACHABLE**, not merely unwitnessed: every `compareTo` in the port's universe short-circuits before the fallback. The one sign-flipping string is produced by `BooleanValue`, which is in the short-circuiting group. 12 probes agree; corpus exposure 0. **This is why N1 is a whole-string map and not `expected.replace("Undefined","null")`.** After DEP-07 lands the argument holds *a fortiori* — the three classes that today fall out of the if-chain returning 0 will return +1 explicitly | S8 | MEASURED |
 | **P-07** | `UIntegerExpression.in` :44,45,46 and `URealExpression.in` :179-185 | `UInteger(5, 0.3).toString()`→`'UInteger(5, 0.3)' : String` — the U-value printed grammar quoted **inside** a `StringValue` | no counterpart | **no normalisation.** Constraint **C2**: the UReal/UInteger printed grammar is pinned **twice** — directly by 696 entries (486 UReal + 210 UInteger) and indirectly by these 10. Any change to those `toString` bodies must be justified against both populations; a "printing-only" change is not local | S8 | MEASURED |
@@ -194,50 +200,22 @@ starts (INFERRED shape, or the two readers disagreed).
 
 ## 3. Waiver ledger
 
-**One waiver.** That is the most important number in this document, and it was **measured**, not assumed.
+**One waiver, W-01** (`TypeTest#testSupertype`, 10 of 12 assertions falsified by adopting the fork's
+`allSupertypes()` widening — B5 option 1), now written up canonically, with its full evidence and the
+corrected "why the alteration is correct" text, in `upstream-test-waivers.md` (§§2-3 there). That file
+is normative for W-01; this section is not duplicated here.
 
-### 3.1 The waiver
-
-| field | content |
-|---|---|
-| **id** | **W-01** |
-| **upstream test** | `use-core/src/test/java/org/tzi/use/uml/ocl/type/TypeTest.java#testSupertype` |
-| **assertions falsified** | **10 of 12** (MEASURED, `/tmp/upstest/UpsTest.java` re-stating each assertion verbatim against the fork lattice) |
-| **the one design decision** | adopting the fork's `allSupertypes()` widening on `BooleanType` (+2), `IntegerType` (+2), `RealType` (+1), `StringType` (+1) — i.e. B5 option 1 |
-| **which break** | `Boolean`, `Integer`, `Real`, `String`, `Collection(Boolean)`, `Collection(Integer)`, `Collection(Collection(Real))`, `Set(Integer)`, `Sequence(Integer)`, `Bag(Integer)` — the six collection ones because `CollectionType`/`SetType.allSupertypes()` *derive* from the element type and are unedited by the fork |
-| **which survive, and why** | `OclAny` (no supertype but itself) and `Enum` (`EnumType extends MClassifierImpl`, whose `allSupertypes` at `MClassifierImpl:133-138` the fork does not edit — see T-14) |
-| **why the alteration is correct** | B5 option 2 (conformance one-way only, uncertain types kept out of the crisp closure) breaks `getLeastCommonSupertype`, which is what drives overload resolution and the worked example. The assertions test **exact set equality** on `allSupertypes()`; the lattice legitimately adds members. This is a lattice *design* change, not a test-hygiene problem, and it cannot be dissolved by relocating assertions |
-| **evidence to cite** | `adaptation/01-types.md` §6.1–§6.5, and the independent re-derivation at `audit-02-specification.md` §2 (commit `3cb92468`) |
-
-### 3.2 Everything the search covered, so the count is bounded not guessed
-
-| what was searched | result |
-|---|---|
-| `grep -rn "allSupertypes" use-core/src/test use-gui/src/test` | 24 hits, **all** in `TypeTest.java:137-227` = the 12 `testSupertype` assertions |
-| `grep -rn "getLeastCommonSupertype\|LeastCommonSupertypeDeterminator" use-core/src/test use-gui/src/test` | **zero hits** |
-| `TypeTest#testSubtype` (13 `conformsTo` assertions) executed against the fork lattice | **0 of 13 break** |
-| the other 9 `conformsTo` assertion sites (`StatementEffectTest` ×6, `VariableSetTest` ×2, `SymbolTableTest` ×1) | none falsified — all over classifier/`OclVoid` types or still-true `Integer < Real` |
-| 6 architecture tests | **all 6 assert nothing** (`grep -c assert` = 0 each; they `writeResultsToFile`). Adding 7 classes cannot fail them |
-| `Type` implementors in any test source tree | **zero** — all 14 `implements Type`/`extends TypeImpl`/`extends MClassifierImpl` hits are under `use-core/src/main`. The ten new interface methods create **zero** compile breaks in any test tree |
-| grammar side: upstream fixtures colliding with the five U-type names | **zero** (`grep` over `*.use/*.soil/*.cmd/*.in/*.assl/*.testsuite` returns nothing) |
-| grammar side: fixtures colliding with `equals` | 3 real (`t098.use:11`, `t133_import_date.use:29`, `t133_import_datetime.use:12`) + 6 false alarms cleared by measurement (a `#` comment, and 5× `equalsIgnoreCase` which is safe under ANTLR 3 maximal munch) — **and all 3 are dissolved by G-01, measured byte-identical to baseline** |
-
-### 3.3 Two things that are NOT waivers and must not be smuggled into one
+Two standing notes that belong to this document rather than to the waiver record itself:
 
 1. **Coverage, not breakage.** `TypeTest`'s ~39 `testIsTypeOf*`/`testIsKindOf*` methods each want ten
-   more `assertFalse` lines once `Type` gains ten predicates (the fork did exactly this at
-   `TypeTest.java:462-466`). Omitting them **fails nothing**. Budget for it; do not waive it.
-2. **T-08 / B11b is a nondeterminism, present in plain 7.5.0.** It breaks no upstream test today only
-   because no upstream `.use`/`.soil` fixture puts `*` inside a collection literal. **That is luck,
-   not safety**, and it is not covered by W-01 or by B11.
+   more `assertFalse` lines once `Type` gains ten predicates. Omitting them **fails nothing**, so it is
+   not covered by W-01 — budget for it, do not waive it.
+2. **T-08 / B11b is a nondeterminism, present in plain 7.5.0**, not a waiver. It breaks no upstream
+   test today only because no upstream fixture puts `*` inside a collection literal — that is luck,
+   not safety, and it is not covered by W-01 or by B11.
 
-### 3.4 Standing rule-3 obligation
-
-`docs/port2/upstream-test-waivers.md` currently reads "**None. Zero waivers through S0, S1 and S2**"
-and flags B5 as "known, not a waiver yet, and must not become one silently". **S3 must write W-01
-into that file, citing §3.1–§3.2 rather than re-arguing the ten assertions**, and must record the
-`git diff --name-status` evidence that no other upstream test file was touched. Target after S3:
-**exactly one waiver**.
+**Rule-3 obligation (discharged):** S3 wrote W-01 into `upstream-test-waivers.md`. Target was, and
+remains, **exactly one waiver**.
 
 ---
 
@@ -294,118 +272,71 @@ observable change, and the collision row it comes from.
 
 ---
 
-## 5. Re-scoring the open decisions
+## 5. Re-scoring the open decisions — outcome
 
-`foundation-verdict.md` §3 lists **B1–B12** and **H13–H22** (23 rows). Eight were already answered
-before this round: **B2, B3, B7, H14** (user-decided 2026-08-17) and **H17, H19, H20, H21**
-(answered by the eight review rounds). **15 remained.**
+`foundation-verdict.md` §3 listed **B1–B12** and **H13–H22** (23 rows); 8 were already answered before
+this round. Of the 15 that remained, this document **answered 5** (B4, B5, B6, B8, B9 — each decided
+by measurement, not preference; the answers are folded into §§1-4 above and need no separate record
+now that the port has shipped), **constrained 6** without deciding them (B1, B10, B11, B12, H15, H16),
+**left 4 fully open** (B1a, H13, H18, H22 — none of them adaptation questions), and **raised 3 new
+ones** (B11b, B13, B14).
 
-**This policy ANSWERS 5, CONSTRAINS 6, and leaves 4 untouched. It raises 3 new decisions.**
+**Where the constrained and new decisions landed**, now that S3–S9 are done: B1 → V04's
+unreachability constraint holds, `uDataTypes` stayed vendor-relocated. B10 → dropped, as recommended
+(dead code, unreachable from any grammar). B11 → reproduced, with **B11b split off and FIXED**
+(deterministic tie-break, DEP-30) because the original nondeterminism existed in plain 7.5.0 too and
+made the oracle unmeasurable. B12 → the corpus criterion **1427/1419/8-departures/0-`.in`-edits**
+shipped as stated (see the correction to "four" below). H15 → `UString`/`SBoolean` corpus gaps closed
+by purpose-built tests, not by widening the historical `.in` fixtures. H16 → `equals(Object)`
+fidelity is evidenced by the differential harness's purpose-built tests, per `b7-fix-plan.md` §7.3.
+**B13** (= V15/K-10) and **B14** (= V18/P-04) were both genuine scope questions this document
+deliberately left to the user; see `upstream-test-waivers.md` and `b7-fix-plan.md` for where each was
+ultimately decided — this document does not re-litigate them.
 
-### 5.1 ANSWERED — 5 rows the human no longer has to decide
+### 5.1 Corrections this policy made to the standing record
 
-| # | the answer | evidence | what changes |
-|---|---|---|---|
-| **B4** | **Option 1 — drop `identicalExpression`, register `Op_identical` in the opmap.** Not option 2 (semantic predicate), not option 3 (amend fixtures). | MEASURED with **zero grammar edit** on 7.5.0: `(1).equals(1)`→`Boolean true`; `Set{1}->equals(Set{1})`→`true`; `(1).equals(1) and true`→`true`; `let equals : Integer = 1 in equals` works; `t098.use` and `t133_import_date.use` **byte-identical to baseline**; user-defined `equals` wins dispatch (`ASTOperationExpression.java:660-661`). The meaning being preserved is real and unobtainable from `=`: `UReal(2,0.5).equals(UReal(2.4,0.5))`→`false : Boolean` while `=` gives `UBoolean(true, 0.689)` | reserved words 6→**0** (36 lexer sites→0); upstream fixtures broken 2 of 129→**0**; fork parse defects D1/D2 **fixed** rather than reproduced. Supersedes 03's C-04 claim that the registry entry is dead without the grammar production |
-| **B5** | **Option 1 — adopt the fork's lattice and handle the breakage with exactly ONE waiver.** | 10 of 12 `testSupertype` assertions falsified (MEASURED by re-stating each verbatim against the fork lattice); 0 of 13 in `testSubtype`; 0 of the other 9 `conformsTo` sites; 0 of 6 architecture tests (all assertion-free); 0 `Type` implementors in any test tree; 0 test references to `getLeastCommonSupertype` | **the waiver count is 1, and it is bounded by search not by assumption.** §3 is the waiver text |
-| **B6** | **Option 1 — normalise in the harness.** Already the user's decision; this round confirms the mechanism and bounds it. | `UndefinedValue.java` differs in exactly **one** behavioural line, and is the **sole** non-lexer producer of the token in the whole fork tree. All 79 expectations are the **whole** string (0 nested). A 21-expression crisp control yields 5 diffs, all that token. 6 of the 11 corpus entries that compile under plain 7.5.0 differ, all by that token | rule **N1** is a whole-string map with a `contains` guard and `assertEquals(79, n1Fired)`, plus three mutation controls that must turn the suite red. `expected.replace(…)` is **refused** |
-| **B8** | **Option 1 — tighten `matches`, on BOTH `Op_number_sqrt` and `Op_number_pow`.** Not option 2. | option 2 (register uncertainty first) changes **22 of 74 970** cells of ordinary non-uncertain OCL — String relationals and Boolean logic become `UBoolean`, because `StringType.isKindOfUString` and `BooleanType.isKindOfUBoolean` are true under the fork's lattice. Uncertainty-**last** changes 0 cells, so the fork's slot is not load-bearing among these cells — keep it anyway to minimise the merge | the record named only `sqrt`; **`pow` needs the same guard on both parameters**. Two further corrections: `mkInteger()`→`mkReal()` is an **upstream** type-soundness defect and must be left alone (O-01/O-08); and the record's `Integer + Integer` warning is a **branch-order** constraint inside `ArithOperation.matches`, not a registry-slot one (O-07) |
-| **B9** | **Option 1 — take both.** | the "additive middle" is fatal: 7.5.0 casts `(BooleanValue) queryVal` at `ExpQuery` :136, :206, :208, reached from :161, so swapping the guard alone yields a `ClassCastException` (CONFIRMED from source). The fork demonstrably takes both and does not throw. Three independent reasons: uncertain `exists`/`forAll` **is** uncertainty meaning; `ExpQueryUncertaintyTest` :79-88 / :93-102 are unportable otherwise, leaving Study A a hole exactly at the worked example; `uSelect`/`uSelectC` already depend on `assertKindOfUBoolean()` and the 5-arg ctor | accepted cost stated honestly: **loses short-circuiting**, and for `exists` a predicate that is undefined or divergent on a later element is now evaluated. Mitigated by **DEP-27** (INFERRED, must be validated). Plus DEP-21, DEP-25 |
-
-### 5.2 CONSTRAINED — 6 rows still the human's, but with the space narrowed
-
-| # | still open because | what this policy constrains |
-|---|---|---|
-| **B1** | how `uDataTypes` reaches the product classpath is untouched by this round (recommendation **A2**, vendor relocated, stands) | **V04 binds any choice:** the delegates format with `%5.3f` and **must remain unreachable from `Value.toString()`**. The `%5.3f` form must never appear in the port's output. Also **02 §5.5**: `UBooleanValue(UBoolean)`, `valueOf(UBoolean)` and `getuBoolean()` are package-private and used from `SBooleanValue`, so both classes **must** land in `org.tzi.use.uml.ocl.value`, and `SBooleanValue`'s two package-private constructors must not be widened (the `Builder` is the cross-package entry point) |
-| **B10** | `ExpDefSBoolean` + `ASTSBooleanDefExpression` were not re-derived this round | **B2's full-SBoolean decision does not reach it** — it is unreachable dead code, not one of the 39 operations. The recommendation (**drop**) survives, and K-14's arithmetic assumes it: the fork's `ExpressionVisitor` diff is +10/−1 and this area contributes 2 of the 8 additions; dropping B10 makes the port's addition **7, not 8** |
-| **B11** | deliberately not overturned by 01; the standing recommendation is **reproduce + pin `LCS(UnlimitedNatural, UInteger) == OclAny`** | **two facts the decision did not have.** (1) The divergence is observable at **expression** level: `Set{*, UInteger(1,1)}` : `Set(UInteger)` but `if true then * else UInteger(1,1) endif` : `OclAny` and `Sequence{*}->append(UInteger(1,1))` : `Sequence(OclAny)` + warning. (2) The two LCS routines **disagree**, so "reproduce" means reproducing a self-inconsistent *pair* of answers, and the pin must name **which** routine. Also: **B7 does not decide this row, and B11's "reproduce" is not licence to reproduce a B7 row** |
-| **B12** | corpus-harness placement and the process-global `Options.explicitVariableDeclarations` write are untouched | **the acceptance criterion is now fixed** (P-04 §7.3): 1427 entries; **1419** passes; 79 via N1 with `n1Fired == 79`; 5 via the error path with the four message constants unmodified; **8** pre-registered departures pinned to measured fork-jar strings; **0** edits to the four `.in` files, whose md5s must be preserved. Plus **C1c**: the harness captures a *buffer*, not a line, so a stray `Warning:` line would be concatenated in — the five error-path buffers must each stay one line |
-| **H15** | whether the corpora are widened before S4 | **forced for two of the five types, and newly constrained for tuples.** `grep -c 'UString'` and `grep -c 'SBoolean'` are **0** in all four `.in` files, so B2's 39 SBoolean operations, `SBooleanValue.toString`'s 3-dp rounding, `UStringValue`'s hard-coded prefix, and the entire DEP-02/09/10/11 fix set are **unobserved by the historical oracle** and can only be defended by purpose-built tests. `SBoolean`'s 4-arg concrete syntax has **zero** corpus witnesses anywhere in the reference repositories; `UString` has exactly **one** (`Traffic.use:53`) and must not be generalised from it. Separately, **T-09**: any tuple-heavy fixture needs an **arity cap** — `5ⁿ+1` supertypes costs 1.6 s at n=7 and did not finish at n=9 |
-| **H16** | how fidelity is established for the 33 non-nameable operations, `equals(Object)` first | **`equals` now has measured before/after answers on both sides of every bridge** (02 §3.1's 17-row table), so the instrument question is narrowed to "how do we run these", not "what should they say". The four `Value` predicates are the only signature change in the whole value layer (V02), so no adapter needs to reckon with a moved contract |
-
-### 5.3 OPEN and untouched — 4 rows
-
-| # | why this policy says nothing |
-|---|---|
-| **B1a** | whether to keep A2 on defence-in-depth grounds or re-open A1. No adaptation reader touched the classloader question |
-| **H13** | how S4 gates given D-29 (a perfect port passes 74 of 285). A harness question, not an adaptation question |
-| **H18** | post-state — the 8 `void` mutators cannot be shown faithful by this harness at all |
-| **H22** | whether D-55/D-56 are closed now or carried as corpus-dependent latents |
-
-### 5.4 NEW decisions this round raises — 3
-
-| id | decision | recommendation | why it cannot wait |
-|---|---|---|---|
-| **B11b** | `UniqueLeastCommonSupertypeDeterminator.calculateFor` returns an order-dependent answer for the mutually-conformant `{Integer, UnlimitedNatural}` pair — **in plain 7.5.0 as well as the fork** (MEASURED, same binary, hash order forced, 3/3 each way). "Reproduce the fork" therefore has no single well-defined answer for `Set{*, 1}` | **FIX** — deterministic tie-break, deviation recorded (DEP-30) | Study A defines agreement **against this port**; a nondeterministic oracle cell makes the agreement metric unmeasurable. Not covered by B11's waiver; bites even with B11 reproduced verbatim. **Decide before S3** |
-| **B13** (= V15 / K-10 / D-C4) | `Set{1, UReal(1,0)}` silently drops the UReal (size 1) while `Set{UReal(1,0), 1}` keeps both (size 2). **The two readers disagree**: 02 says it is not on the 33-row B7 list so B7 does not authorise a fix, and the only symmetric fix edits upstream `IntegerValue.equals`/`RealValue.equals` — exceeding the recorded minimal upstream edits; 06 calls it squarely a B7 latent defect to be FIXED | none offered — this is a genuine scope question about whether B7's list is exhaustive or exemplary. **This document deliberately does not assert whether the fixed answer is 1 or 2** | **must be decided before or with DEP-03**, because F-10 makes the same asymmetry appear for `UInteger` (today masked by the collapsed hash). Deciding it after would silently change the meaning of a landed commit |
-| **B14** (= V18 / P-04 / R1) | 8 corpus rows expect 10-decimal `UBoolean` confidences that **neither the fork source nor the fork jar can produce** (both round to 3). Measured MATCH=2 MISMATCH=8, with two controls passing | **(a) follow the fork code**, emit 3 dp, pre-register the 8 rows — the reading in which every claim is backed by executable fork behaviour, and consistent with B6's precedent of normalising the corpus rather than the port. (b) follow the corpus is defensible but leaves 72 `UBoolean` expectations satisfied by a printer present in neither the fork's source nor its jar | it sets **Study A's denominator**. Until it is taken the S8 number is either 1419 or 1427 and the two are not interchangeable. **Nothing under `docs/port2/` acknowledged this before this round** |
-
-### 5.5 Corrections this policy makes to the standing record
-
-Five, each measured. S3–S9 must use the corrected form.
-
-| # | record | correction |
-|---|---|---|
-| 1 | `b7-fix-plan.md` §2 row **F-10**, Δoutput `NONE` ("HashSet still consults equals, so set contents are unchanged") | **wrong.** Today the hashes differ (0 vs 1072693248) so `equals` is **never** consulted; after the fix they collide and the element is dropped — `HashSet{1, UInteger(1,0)}.size()` goes **2→1**. Correct Δ is **`SET`**. The zero-corpus-exposure conclusion survives on a different argument |
-| 2 | `b7-fix-plan.md` :566-568 — S8 criterion "1427 entries, 1427 passes, zero expectation edits" | **unachievable by any correct port.** The fork fails **8 of its own 1427** entries on its own shipped jar. Restate as **1427 entries / 1419 passes / 8 pre-registered departures / 0 `.in` edits** |
-| 3 | `spec-parts/13-grammar.md` §13.0 — "the fork's `.gpart` files are CRLF, 7.5.0's are LF" | **inverted.** The fork is **LF**; 7.5.0 is **CRLF**. The conclusion (normalise before diffing) stands; only the attribution is backwards. Quantified trap: raw diff calls `OCLLexerRules` 254/254 changed when the real delta is 0 |
-| 4 | `spec-parts/15-upstream-delta.md` :550-553 — "registering the U* operations in the wrong slot changes which overload wins for `Integer + Integer`" | **measured: it does not.** `+(Integer,Integer)` is identical in all three arrangements, because the fork registers **no** `+` for numbers at all. The real constraint is **branch order inside `ArithOperation.matches`**. Both constraints are real; they are not the same constraint |
-| 5 | `adaptation/03-operations.md` C-04 — "registering `Op_identical` without the `identicalExpression` production makes it dead code" | **refuted by measurement in `adaptation/04-grammar.md` §3.5.** On 7.5.0 with **no grammar edit**, `(1).equals(1)` works, because 7.5.0's `operationExpression` routes `.equals(…)` to the named-operation path. This is what makes B4 answerable |
+Five, each measured; S3–S9 used the corrected form. Kept because two are still live pointers into
+`b7-fix-plan.md`: (1) `b7-fix-plan.md` §2 row F-10's Δoutput `NONE` was **wrong** — the fix changes
+`HashSet` membership (`SET`, not `NONE`) because the unfixed hashes never collide with the fixed ones;
+zero corpus exposure survives on a different argument. (2) `b7-fix-plan.md`'s S8 criterion "1427
+entries, 1427 passes, zero expectation edits" was **unachievable** — the fork fails 8 of its own 1427
+entries on its own shipped jar; restated as **1427 entries / 1419 passes / 8 pre-registered departures
+/ 0 `.in` edits**. (3) `spec-parts/13-grammar.md` §13.0 had the fork/7.5.0 `.gpart` line-ending
+attribution **inverted** (fork is LF, 7.5.0 is CRLF; the normalise-before-diffing conclusion still
+stands). (4) `spec-parts/15-upstream-delta.md` claimed registry slot order changes `Integer + Integer`
+overload resolution — **measured false**; the real constraint is branch order inside
+`ArithOperation.matches` (O-07), a different constraint from the same area. (5) `adaptation/03-operations.md`
+C-04's claim that `Op_identical` is dead code without the `identicalExpression` grammar production was
+**refuted by measurement** — registering it needs zero grammar edit (this is what makes B4 answerable).
 
 ---
 
-## 6. Residual risk
+## 6. Residual risk — what remained open, where it landed
 
-Everything not established. **Grouped by what would settle it.**
+This section tracked, pre-implementation, everything not yet established: 2 INFERRED shapes needing a
+build-time probe (G-03's predicate-gated grammar rule; DEP-27's exists/forAll short-circuit), 5 claims
+unverifiable until the port existed (an unguarded `sqrt` `ClassCastException`; whether the V09/V13
+`compareTo` fixes move any corpus print order; M-10's `UIntegerExpression.in:1304` watch item;
+`ShellIT`'s `t133` import chain; cell-for-cell lattice agreement against the fork jars), 7 measured-but-
+bounded gaps in the sweeps (chiefly: **`UString`/`SBoolean` have zero corpus coverage** — the 4-arg
+`SBoolean` literal and B2's 39 operations are evidenced only by purpose-built tests, never by the
+historical `.in` corpus; the operation sweep covered only arities 1-3 over 17 types; the corpus itself
+was never replayed through the operation registries, only through the 179-expression and 74970-cell
+sweeps), and 5 environment/process risks (no Maven run during this round; `ShellIT` not executed;
+the fork probed only on OpenJDK 21, not its contemporary JDK 7/8; jar-vs-source provenance asserted
+not proven).
 
-### 6.1 INFERRED — must be probed before the owning stage starts (2)
-
-| id | claim | settles by | stage |
-|---|---|---|---|
-| **G-03 / DEP-19** | the predicate-gated `literal` rule's **shape**. The *need* is MEASURED (`UReal(2, 0.5)`→`Undefined operation` even after the type name is registered); the shape is inferred from the `isQueryIdent` precedent at `OCLBase.gpart` :309/:322. The parser was **not** regenerated | build it; validate the ANTLR 3 lookahead interaction with the `enumName=IDENT '::' enumLit=IDENT` alternative, 7.5.0's `modelQualifier=IDENT HASH …` alternative, and `propertyCall` | S6 |
-| **DEP-27** | the exists/forAll short-circuit refinement. No implementation exists in either tree | validate against `ExpQueryTest` and the five no-regression rows of 06 §1.5 | S7 |
-
-### 6.2 UNVERIFIABLE until the port exists (5)
-
-| claim | settles by |
-|---|---|
-| that `UReal(4,2).sqrt()` actually throws `ClassCastException` (rather than failing some other way) in an **unguarded** port. Both premises are established separately — `matches` accepts the type (MEASURED), `URealValue` is not a `RealValue` (READ_FROM_SOURCE) — but the composite was not executed | build the port without the O-01 guard and compile it |
-| whether the V09/V13 `compareTo` fixes move any corpus print order. Four expectations pin `Collections.sort` output; none contains a `UInteger` and the edits touch only the `UIntegerValue` and `StringValue` arms, so expected exposure is 0. But `Set{UReal(1,0.5),UReal(1,0.75),1.2}` prints **not numerically sorted**, proving the `URealValue` comparator is already non-transitive under fuzzy comparison | run all 1427 entries before and after **each** compareTo commit |
-| whether M-10's fix perturbs `UIntegerExpression.in:1304` (`( UInteger(2, 3) / 1 ).equals( UInteger(2, 3).toUReal() )`), which passes on the fork today. **Registered as a watch item, not a departure** | the experiment already written at `b7-fix-plan.md:539` |
-| the real `t133` import chain was **not** compiled — `USECompiler.compileSpecification(String, …)` leaves `Context.getfFileUri()` null, so import resolution NPEs identically with and without the adaptation. A self-contained transcription was substituted | run `ShellIT` when the port builds |
-| whether the ported lattice matches the fork jars **cell for cell**. The 10-of-12 and 0-of-13 figures come from re-stating each upstream assertion verbatim against the 2021 fork jars — that measures the lattice, not the 7.5.0 test harness | the port's own build must re-verify all 288 cells |
-
-### 6.3 Measured but bounded — the corpora and sweeps do not cover everything (7)
-
-| gap | size of the hole |
-|---|---|
-| **`UString` and `SBoolean` have zero corpus coverage.** `grep -c` = 0 in all four `.in` files; the 4-arg `SBoolean` literal has **0** occurrences anywhere in the reference repositories, `UString` exactly **1** | the entire DEP-02/09/10/11 fix set, `SBooleanValue.toString`'s 3-dp rounding, `UStringValue`'s hard-coded prefix, and B2's 39 operations are unobserved by the historical oracle. Purpose-built tests only. Independently confirms `audit-03-acceptance.md:522` |
-| the 74 970-cell operation sweep covers **arities 1–3 over 17 types**; arity ≥ 4 and tuple/enum/user-class receivers were not swept | judged low risk (`grep -c 'params.length == 4'` is 0 in both trees; no uncertainty predicate mentions `MessageType`/`EnumType`/user classes) but **not proved** |
-| `P5`'s `PortedURealType` is a faithful stand-in reproducing exactly the fork's `URealType` :12-38 overrides, **not the real ported type** | if the port gives `URealType` any *additional* widening override (`isKindOfString`, `isKindOfBoolean`, `isKindOfCollection`, `isKindOfOclAny`), the 21-class hazard list **grows**. The sweep must be re-run against the real ported type as S5's regression gate |
-| the `TypeFactory.buildInTypesMap` proof mapped `"UReal"` to the existing `RealType` instance (`RealType` is `final`) | establishes the **name-resolution path only**. The `type=Real` in that output is the stand-in showing through, not a claim about U-type semantics |
-| the `.in` corpus was **not replayed** through the operation registries; the 179-expression and 74 970-cell sweeps substitute for, but do not replace, a corpus replay | S5's proposed gate — re-run the winner sweep against the ported tree, assert 0 differing cells except the `pow`/`sqrt` buckets — must also run against the corpus once the harness exists |
-| `TypeImpl.getLeastCommonSupertype` can never become order-dependent under the fork lattice is **INFERRED for the general case** (argument: `cs` can contain `UnlimitedNatural` only when one operand already is, in which case the `equals` short-circuit fires). Only two cells were MEASURED | an exhaustive order-sensitivity sweep over all 144 pairwise LCS cells was **not run** |
-| `->closure` and `->iterate` over uncertain elements were **not probed at all**; `->collect`, `->sortedBy`, `->isUnique` were spot-checked only. `->sortedBy` rides on the same asymmetric comparator as B13, so with larger inputs Java's TimSort may throw `Comparison method violates its general contract!` | outright gap; test after B13 is decided and DEP-06/07 land |
-
-### 6.4 Environment and process risk (5)
-
-| risk | note |
-|---|---|
-| **No Maven was run** anywhere in this round (ground rule 3). All 7.5.0 figures come from `use-core/target/classes` at HEAD `54e2745b` as it stood at probe time | if that build tree is stale relative to HEAD, the **entire 7.5.0 column** needs re-measuring |
-| **`ShellIT` was not executed.** The 129 figure is `ls …/testfiles/shell/*.in \| wc -l` plus `ShellIT.java:58-65` | whether all 129 currently pass on `port-uncertainty-2` is unmeasured. The B4 verdict rests on a byte-identical comparison of the two affected drivers' compiler output, not on a JUnit run |
-| **`USECompilerTest`'s `.use` corpus was searched but not compiled under a lattice-patched core** (the port does not exist yet). Searched for the five reserved names and for `*` inside collection literals — both negative | if the port changes any printed type name in that corpus it surfaces there, not in any adaptation document |
-| **the fork was executed on OpenJDK 21.0.11**, not its contemporary JDK 7/8 (bytecode major 51). Every reported difference is a `Double.toString`/`StringBuilder.append` string, whose contract has not changed | the 1419/8 split has **not** been reproduced on an older JVM |
-| **jar-vs-source provenance is asserted, not proven** — the fork's `use.jar` was not decompile-and-diffed against its `src/main`. Every behavioural claim in the values and printing areas came from the **jars**, and one spot check confirmed agreement (`UBooleanValue.toString` rounds to 3 in both) | formula attributions in `10-values.md` and the `20-ops-*` parts remain source-derived and unconfirmed against the jar |
-
-### 6.5 Constraints on code nobody has written yet (3)
-
-These are the failure modes where a later implementer, acting reasonably, breaks a measured result.
+The port shipped and both acceptance commands are green (`harness-contract.md` §0.1), so these are
+now closed as evidence gaps rather than open risks — S3–S9 either produced the purpose-built tests
+this section called for or the differential sweep exercises the cells directly. The three standing
+**implementer traps** remain live as guidance for anyone touching this code later, since a correct
+build does not by itself prevent someone from silently reintroducing the failure mode:
 
 | id | the trap | the guard |
 |---|---|---|
-| **R-A** | an implementer "improves" the four position-less `SemanticException(String)` throws into positioned ones. All 5 error-path entries then fail with a *plausible-looking* `probe:1:0: ` prefix that reads like a real divergence | pin the four strings as constants in one place, plus one test asserting the captured buffer carries **no** `probe:` prefix (C1a/C1b/C1c) |
+| **R-A** | an implementer "improves" the eleven position-less `SemanticException(String)` throws (P-03) into positioned ones — all 5 corpus error-path entries then fail with a *plausible-looking* `probe:1:0: ` prefix that reads like a real divergence | pin all eleven strings as constants (not four — P-03's corrected count), plus one test asserting the captured buffer carries **no** `probe:` prefix (C1a/C1b/C1c) |
 | **R-B** | a reviewer diffs `IntegerType.conformsTo`, sees a body byte-identical to 7.5.0's, and "restores symmetry" — silently widening the lattice, because `Integer ≤ UInteger`/`UReal` is installed from the **supertype** side | javadoc note on `IntegerType.conformsTo` saying it is deliberately unchanged (T-04) |
-| **R-C** | the P-06 unreachability proof enumerates exactly **ten** `compareTo` implementations. It must be re-run if a sixth uncertain value class is added, or any class that lacks an explicit `UndefinedValue` branch **and** has a `toString` fallback | N1-G is the standing guard: any expectation containing `Undefined` outside the whole-string form makes the run **fail** rather than guess |
+| **R-C** | the P-06 unreachability proof enumerates exactly **ten** `compareTo` implementations; it must be re-run if a sixth uncertain value class is added, or any class lacking an explicit `UndefinedValue` branch **and** having a `toString` fallback is added | N1-G is the standing guard: any expectation containing `Undefined` outside the whole-string form makes the run **fail** rather than guess |
 
 ---
 

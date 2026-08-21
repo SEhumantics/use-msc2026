@@ -9,6 +9,10 @@ and no test. It is written under the governing policy:
 Everything below is either **MEASURED** (a command was run and its output is pasted), **READ FROM
 SOURCE** (file:line quoted), or explicitly marked **INFERRED** / **UNVERIFIABLE**. No Maven was run.
 
+**Provenance note (2026-08-21).** `spec-parts/20-ops-UBoolean.md`, cited below, was consolidated
+during a documentation cleanup and no longer exists as a separate file; its rounding-behavior
+conclusions are already reflected in `specification.md` §2.1. Full original content in git history.
+
 ---
 
 ## 0. Headline

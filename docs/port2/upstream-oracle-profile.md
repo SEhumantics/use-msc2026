@@ -4,6 +4,10 @@
 Built on branch `port-uncertainty-2`, commit `e3668a04` (build config) with the H21 behaviour change
 in `1ec7d59f`. Java `openjdk 21.0.11`, Maven `3.9.16`, surefire `3.5.4`, failsafe `2.22.2`.
 
+**Provenance note (2026-08-21).** `upstream-oracle-verification.md`, cited below, was consolidated
+during a documentation cleanup and no longer exists as a separate file; its findings (RB-1 and the
+R-1..R-6 minors) are already closed/tabulated below in §5.2.6. Full original content in git history.
+
 > **ROUND 9, `6702f06e`: the gate now asserts its own floor, and §4.6's caveats are corrected.** A
 > static refuter returned **DEFECTIVE** on this document and on the profile
 > ([`upstream-oracle-static-review.md`](upstream-oracle-static-review.md), D-01…D-07); the stricter
@@ -122,31 +126,10 @@ print(f"{'TOTAL':19s} classes={grand[0]:3d} methods={grand[1]:4d} executions={gr
 
 ### 3.1 With the profile added and nothing else touched (commit `e3668a04`)
 
-This is the measurement that answers "does the profile leak?". `mvn -B clean` first, then:
-
-```
-$ mvn -B verify -Djava.awt.headless=true
-EXIT=0
-[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.623 s -- in org.tzi.use.architecture.MavenCyclicDependenciesCoreTest
-[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.832 s -- in Detection power: subtle infidelities in a ported U-type
-[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.116 s -- in Uncertainty differential smoke
-[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 42.32 s -- in Unwritten-port invariant
-[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.021 s -- in HistoricalOracle class-loader isolation
-[INFO] Tests run: 34, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.158 s -- in Differential harness regressions
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.134 s -- in org.tzi.use.uml.mm.ModelAPITest
-[INFO] Tests run: 78, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.172 s - in org.tzi.use.OCLExpressionIT
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.094 s -- in org.tzi.use.architecture.MavenLayeredArchitectureTest
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Tests run: 129, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 7.144 s - in org.tzi.use.main.shell.ShellIT
-[INFO] Tests run: 129, Failures: 0, Errors: 0, Skipped: 0
-[INFO] BUILD SUCCESS
-[INFO] Total time:  01:40 min
-```
-
-surefire `78 + 1 = 79`, failsafe `1 + 129 = 130`, **total 209 methods, 0 failures, 0 errors** —
-exactly the figure the round-8 record carries. **The profile does not leak into the default build.**
+This is the measurement that answers "does the profile leak?". From a clean tree,
+`mvn -B verify -Djava.awt.headless=true`: `BUILD SUCCESS`, exit 0. Surefire `78 + 1 = 79`, failsafe
+`1 + 129 = 130` — **209 methods total, 0 failures, 0 errors, 0 skipped**, exactly the figure the
+round-8 record carries. **The profile does not leak into the default build.**
 
 ### 3.2 Independent evidence for "does not leak", from the resolved classpath
 
@@ -163,24 +146,9 @@ Two lines under the profile, one per module; zero without it.
 
 ### 3.3 After the H21 change (commit `1ec7d59f`) — 209 becomes 210, and why
 
-```
-$ mvn -B clean && mvn -B verify -Djava.awt.headless=true
-EXIT=0
-[INFO] Tests run: 35, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.224 s -- in Differential harness regressions
-[INFO] Tests run: 79, Failures: 0, Errors: 0, Skipped: 0        <- use-core surefire
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0         <- use-core failsafe
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0         <- use-gui surefire
-[INFO] Tests run: 129, Failures: 0, Errors: 0, Skipped: 0       <- use-gui failsafe
-[INFO] BUILD SUCCESS
-[INFO] Total time:  01:42 min
-
-$ python3 count.py
-surefire  use-core  classes=  7 methods=  79 executions=  79 failures=0 errors=0 skipped=0
-surefire  use-gui   classes=  1 methods=   1 executions=   1 failures=0 errors=0 skipped=0
-failsafe  use-core  classes=  1 methods=   1 executions=   1 failures=0 errors=0 skipped=0
-failsafe  use-gui   classes=  1 methods= 129 executions= 129 failures=0 errors=0 skipped=0
-TOTAL               classes= 10 methods= 210 executions= 210 failures=0 errors=0 skipped=0
-```
+From clean, `mvn -B verify -Djava.awt.headless=true`: `BUILD SUCCESS`, exit 0. Deduplicated (§2's
+script): `surefire use-core 7/79`, `surefire use-gui 1/1`, `failsafe use-core 1/1`, `failsafe
+use-gui 1/129` — **TOTAL 10 classes / 210 methods, 0 failures / 0 errors / 0 skipped**.
 
 **209 → 210, delta +1, fully accounted for:** `Differential harness regressions` goes 34 → 35, the
 single H21 regression test
@@ -193,56 +161,18 @@ else moves. `executions == methods` in the default build: there are no JUnit-3 a
 
 ### 4.1 Read the deduplicated figure, not the headline
 
-```
-$ mvn -B clean && mvn -B verify -Pupstream-oracle -Djava.awt.headless=true
-EXIT=0
-[INFO] --- surefire:3.5.4:test (default-test) @ use-core ---
-[INFO] Tests run: 938, Failures: 0, Errors: 0, Skipped: 0
-[INFO] --- failsafe:2.22.2:integration-test (default) @ use-core ---
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
-[INFO] --- surefire:3.5.4:test (default-test) @ use-gui ---
-[INFO] Tests run: 17, Failures: 0, Errors: 0, Skipped: 0
-[INFO] --- failsafe:2.22.2:integration-test (default) @ use-gui ---
-[INFO] Tests run: 129, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Reactor Summary for use 7.5.0:
-[INFO] BUILD SUCCESS
-[INFO] Total time:  02:00 min
-```
-
-**`938` is a count of method *executions*, and it overcounts.** The tree contains 14
-`AllTests.java` JUnit-3 aggregators (`org.tzi.use.AllTests`, `org.tzi.use.uml.AllTests`,
-`org.tzi.use.uml.mm.AllTests`, …), nested, so a member class is run once directly and once per
-enclosing suite. Surefire writes every execution into the one file named after the *member* class, so
-`TEST-org.tzi.use.uml.ocl.type.TypeTest.xml` holds **152 `<testcase>` elements over 38 distinct
-method names** — factor 4, one direct run plus three suite levels — while its own root attribute
-reads `tests="38"`. The aggregator files themselves hold zero test cases:
-
-```
-$ python3 - <<EOS
-import glob, xml.etree.ElementTree as ET
-for p in sorted(glob.glob('use-core/target/surefire-reports/TEST-*.xml')):
-    r = ET.parse(p).getroot()
-    print(int(r.get("tests","0")), "tests", len(list(r.iter("testcase"))), "testcases ", r.get("name"))
-EOS
-(excerpt, aligned)
-    0 tests     0 testcases  org.tzi.use.AllTests
-   38 tests   152 testcases  org.tzi.use.uml.ocl.type.TypeTest
-   55 tests    55 testcases  org.tzi.use.uml.mm.MImportedModelTest
-   11 tests    55 testcases  org.tzi.use.uml.sys.soil.StatementEffectTest
-    2 tests     6 testcases  org.tzi.use.parser.USECompilerTest
-```
-
-28 of `use-core`'s 40 test classes are inflated this way; the other 12, and all 8 in `use-gui`, run
-once. **Deduplicated:**
-
-```
-$ python3 count.py
-surefire  use-core  classes= 40 methods= 350 executions= 938 failures=0 errors=0 skipped=0
-surefire  use-gui   classes=  8 methods=  17 executions=  17 failures=0 errors=0 skipped=0
-failsafe  use-core  classes=  1 methods=   1 executions=   1 failures=0 errors=0 skipped=0
-failsafe  use-gui   classes=  1 methods= 129 executions= 129 failures=0 errors=0 skipped=0
-TOTAL               classes= 50 methods= 497 executions=1085 failures=0 errors=0 skipped=0
-```
+From clean, `mvn -B verify -Pupstream-oracle -Djava.awt.headless=true`: `BUILD SUCCESS`, exit 0,
+console headline `938 + 1 + 17 + 129 = 1085` test executions — but **that headline counts method
+*executions*, and it overcounts.** The tree contains 14 `AllTests.java` JUnit-3 aggregators
+(`org.tzi.use.AllTests`, `org.tzi.use.uml.AllTests`, `org.tzi.use.uml.mm.AllTests`, …), nested, so a
+member class is run once directly and once per enclosing suite. Surefire writes every execution into
+the one file named after the *member* class, so `TEST-org.tzi.use.uml.ocl.type.TypeTest.xml` holds
+**152 `<testcase>` elements over 38 distinct method names** — factor 4, one direct run plus three
+suite levels — while its own root attribute reads `tests="38"`. The aggregator files themselves hold
+zero test cases (e.g. `org.tzi.use.AllTests`: `0 tests, 0 testcases`; contrast
+`org.tzi.use.uml.mm.MImportedModelTest`: `55 tests, 55 testcases`, not inflated). 28 of `use-core`'s
+40 test classes are inflated this way; the other 12, and all 8 in `use-gui`, run once. Deduplicated
+counts are in §4.2.
 
 ### 4.2 The headline numbers
 
@@ -361,23 +291,15 @@ upstream's own words, and that failure is a decision (**B5**) rather than a sile
 1. **21 of the 287 contain no assertion.** Four ArchUnit classes are revived —
    `AntCyclicDependenciesCoreTest` 10, `AntCyclicDependenciesGUITest` 6,
    `MavenCyclicDependenciesGUITest` 4, `AntLayeredArchitectureTest` 1 — and each calls
-   `.evaluate(…)`, never `.check(…)`:
-
-   ```
-   AntCyclicDependenciesCoreTest.java:   evaluate=1 check=0 assert=0
-   AntCyclicDependenciesGUITest.java:    evaluate=1 check=0 assert=0
-   MavenCyclicDependenciesGUITest.java:  evaluate=1 check=0 assert=0
-   AntLayeredArchitectureTest.java:      evaluate=1 check=0 assert=0
-   ```
-
-   They pass unconditionally and write a report. This is exactly constraint **C2** of
-   `specification.md`, in its new population: the count of *assertion-bearing* revived methods is
-   **at most 266**, not 287. **At most**, and stated that way deliberately — 21 were measured to
-   assert nothing, and the remaining 266 were *not* individually audited for assertions in this
-   round, so 266 is an upper bound and not a measurement. It does not change the decision — even a
-   loose 266 upstream-authored assertion-bearing methods is two orders of magnitude more signal than
-   the baseline's **one** (`ModelAPITest`, per C2) — but a stage document must not quote 287 as if it
-   were 287 assertions.
+   `.evaluate(…)`, never `.check(…)`, measured directly in the four source files
+   (`evaluate=1 check=0 assert=0` in each). They pass unconditionally and write a report. This is
+   exactly constraint **C2** of `specification.md`, in its new population: the count of
+   *assertion-bearing* revived methods is **at most 266**, not 287. **At most**, and stated that way
+   deliberately — 21 were measured to assert nothing, and the remaining 266 were *not* individually
+   audited for assertions in this round, so 266 is an upper bound and not a measurement. It does not
+   change the decision — even a loose 266 upstream-authored assertion-bearing methods is two orders
+   of magnitude more signal than the baseline's **one** (`ModelAPITest`, per C2) — but a stage
+   document must not quote 287 as if it were 287 assertions.
 
 2. **~~`USECompilerTest`'s 2 methods may be vacuous, per B12.~~ — REFUTED, and this caveat was
    wrong about the class it named.**
@@ -390,26 +312,15 @@ upstream's own words, and that failure is a decision (**B5**) rather than a sile
 
    **Refuted by the static refuter, `docs/port2/upstream-oracle-static-review.md` D-02 (:188-214),
    2026-08-17, and re-verified independently while fixing it.** `USECompilerTest` **cannot** pass
-   vacuously, and it contains no `user.dir` at all:
-
-   ```
-   $ grep -n "user.dir" use-core/src/test/java/org/tzi/use/parser/USECompilerTest.java
-   $ echo $?
-   1
-   ```
-
-   What the file actually does — **classpath** resolution, and four assertions that fire on an
-   empty or absent fixture directory:
-
-   * `USECompilerTest.java:77-79` — `new File(ClassLoader.getSystemResource("org/tzi/use/parser").toURI())`
-     and the same for `examples` and `test_expr.in`; no `user.dir`, so the Maven working directory
-     is irrelevant to fixture resolution;
-   * `:84` — `fail("Folders including tests are missing!")` in the static initialiser if that
-     classpath resource is absent;
-   * `:293` and `:116` — `assertNotNull(files)` on the test directory and on the examples directory;
-   * `:297-301` — `assertEquals("make sure that all test files can be found …", expected,
-     fileList.size())` with `EXPECTED = 49` (`:69`). A directory listing that came back empty
-     would fail on `49 != 0`, not pass.
+   vacuously and contains no `user.dir` at all (`grep -n "user.dir"
+   use-core/src/test/java/org/tzi/use/parser/USECompilerTest.java` → no match). What it actually
+   does is **classpath** resolution instead: `ClassLoader.getSystemResource("org/tzi/use/parser")`
+   at `:77-79` (and the same for `examples` and `test_expr.in`, so the Maven working directory is
+   irrelevant to fixture resolution); `fail("Folders including tests are missing!")` in the static
+   initialiser at `:84` if that classpath resource is absent; `assertNotNull(files)` on the test and
+   examples directories at `:293` and `:116`; and `assertEquals("make sure that all test files can
+   be found …", 49, fileList.size())` at `:297-301` (`EXPECTED = 49`, `:69`). A directory listing
+   that came back empty would fail on `49 != 0`, not pass.
 
    **Why the correction matters more than the wording.** Acting on the caveat as written meant
    looking for a defect in an upstream test that has none, and "fixing" it would be an edit to
@@ -428,26 +339,15 @@ upstream's own words, and that failure is a decision (**B5**) rather than a sile
 
    **Corrected after `docs/port2/upstream-oracle-static-review.md` D-03 (:216-237), 2026-08-17.**
    `USECompilerUncertaintyTest` is **not in the reactor** and is not run by this profile — it
-   survives only inside the vendored historical jar:
-
-   ```
-   $ git grep -ln USECompilerUncertaintyTest -- use-core use-gui
-   use-core/src/test/resources/historical/use.jar
-   ```
-
-   The hazard is nevertheless **live**, in two classes the profile *does* revive, and these are the
-   `file:line`s the caveat should always have carried:
-
-   ```
-   $ grep -rn "Options.explicitVariableDeclarations" use-core/src/test use-gui/src/test
-   use-core/src/test/java/org/tzi/use/parser/USECompilerTest.java:111:        Options.explicitVariableDeclarations = false;
-   use-core/src/test/java/org/tzi/use/parser/soil/StatementGenerationTest.java:64:  	    Options.explicitVariableDeclarations = false;
-   ```
-
-   The field defaults to `true` (`use-core/src/main/java/org/tzi/use/config/Options.java:138`),
-   both writers set it to `false` — `StatementGenerationTest` in `setUp()` (`:61-64`), so once per
-   its 12 methods — and **neither class has a `tearDown` that restores it**
-   (`grep -n "tearDown" …` matches in neither). Both classes are in §4.4's revived list
+   survives only inside the vendored historical jar
+   (`use-core/src/test/resources/historical/use.jar`; `git grep -ln USECompilerUncertaintyTest --
+   use-core use-gui` matches only that path). The hazard is nevertheless **live**, in two classes the
+   profile *does* revive, and these are the `file:line`s the caveat should always have carried:
+   `USECompilerTest.java:111` and `parser/soil/StatementGenerationTest.java:64` both set
+   `Options.explicitVariableDeclarations = false`. The field defaults to `true`
+   (`use-core/src/main/java/org/tzi/use/config/Options.java:138`), `StatementGenerationTest` does so
+   in `setUp()` — so once per its 12 methods (`:61-64`) — and **neither class has a `tearDown` that
+   restores it** (`grep -n "tearDown" …` matches in neither). Both classes are in §4.4's revived list
    (`USECompilerTest` 2 methods; `parser/soil/StatementGenerationTest` 12 methods / 48 executions),
    and the 14 `AllTests` aggregators change the order in which they run relative to everything
    else. Nothing observed the leak in this round (0 failures), and that is a fact about today's
@@ -570,8 +470,8 @@ which needs a file under `use-gui/src`:
 
 `harness-contract.md` §8 step 2: *"A floor chosen after the run is not a floor"*, and `0` is *"rejected
 outright"*. The literals below were written into the script from the round-8/round-9 measurements and
-**then** the accepting run was made; §7 pastes it. Floors are `>=`, so the suite may grow and may never
-shrink.
+**then** the accepting run was made; §7.1/§7.2 confirm it. Floors are `>=`, so the suite may grow and
+may never shrink.
 
 | | `use-core` surefire | `use-gui` surefire | `use-core` failsafe | `use-gui` failsafe | total |
 |---|---|---|---|---|---|
@@ -580,7 +480,10 @@ shrink.
 
 *(**RE-PINNED 2026-08-17, round 11.** Was `7/79` → `10/210` and `40/350` → `50/497`. The `+1/+1` in the
 `use-core` surefire cell is `UpstreamOracleGateWiringTest`, the F-01 fix — raised in the same commit that
-grew the suite, which is what §8 step 7 clause 1 requires. No floor was lowered.)*
+grew the suite, which is what §8 step 7 clause 1 requires. No floor was lowered. Both poms have since
+been re-pinned further as the port grew; `scripts/UpstreamOracleFloor.java`'s own header carries the
+current, up-to-date literals and the running log of every re-pinning — that file, not this table, is
+the floor's live source of truth.)*
 
 **Per module and per tier, because a reactor-wide total is not a floor:** `use-core`'s 350 dwarf
 `use-gui`'s 17, so one number would stay green through exactly the accident D-01 describes. Losing any
@@ -678,7 +581,7 @@ are reported as `stale-ignored=N`. **A floor computed over stale evidence is not
 ### 5.1.4 A floor nobody has seen fail is not known to work — five deliberate breakages
 
 Each was applied to the committed tree, run, and the tree restored with `git status --porcelain` empty
-afterwards. Full output is in §7.3.
+afterwards. Pass/fail summary of each run is in §7.3.
 
 | # | Breakage | Command | Result |
 |---|---|---|---|
@@ -715,44 +618,21 @@ Both are now red. What follows is the mechanism, then the measurement.
 
 > **CORRECTED 2026-08-18, round 11 defect G-03, and the refuter's own count corrected in turn.**
 > This section said `exec:exec` declares "**eight**" parameters with user properties. Round 11's
-> refuter said **21**, having pasted a list of 22. The measured number is **22**. Counted from the
-> descriptor, not recalled:
+> refuter said **21**, having pasted a list of 22. The measured number is **22**, counted from the
+> plugin descriptor (`unzip -p ~/.m2/repository/org/codehaus/mojo/exec-maven-plugin/3.5.0/
+> exec-maven-plugin-3.5.0.jar META-INF/maven/plugin.xml`, counting `exec`-goal parameters whose
+> `<configuration>` body holds a `${...}` expression): 20 are `exec.*` — `addOutputToClasspath`,
+> `addResourcesToClasspath`, `commandlineArgs` (`exec.args`), `async`, `asyncDestroyOnShutdown`,
+> `classpathScope`, `executable`, `forceJava`, `includePluginDependencies`, `inheritIo`,
+> `longClasspath`, `longModulepath`, `outputFile`, `quietLogs`, `skip`, `timeout`, `toolchain`,
+> `toolchainJavaHomeEnvName`, `useMavenLogger`, `workingDirectory` (`exec.workingdir`) — and 2 are
+> unprefixed (`sourceRoot`, `testSourceRoot`); none are read-only.
 >
-> ```
-> $ unzip -p ~/.m2/repository/org/codehaus/mojo/exec-maven-plugin/3.5.0/exec-maven-plugin-3.5.0.jar \
->       META-INF/maven/plugin.xml    # mojo goal=exec; parameters whose <configuration> body holds a ${...}
-> total exprs: 22
-> editable (settable from -D): 22
->    1. addOutputToClasspath           ${addOutputToClasspath}
->    2. addResourcesToClasspath        ${addResourcesToClasspath}
->    3. commandlineArgs                ${exec.args}
->    4. async                          ${exec.async}
->    5. asyncDestroyOnShutdown         ${exec.asyncDestroyOnShutdown}
->    6. classpathScope                 ${exec.classpathScope}
->    7. executable                     ${exec.executable}
->    8. forceJava                      ${exec.forceJava}
->    9. includePluginDependencies      ${exec.includePluginsDependencies}
->   10. inheritIo                      ${exec.inheritIo}
->   11. longClasspath                  ${exec.longClasspath}
->   12. longModulepath                 ${exec.longModulepath}
->   13. outputFile                     ${exec.outputFile}
->   14. quietLogs                      ${exec.quietLogs}
->   15. skip                           ${exec.skip}
->   16. timeout                        ${exec.timeout}
->   17. toolchain                      ${exec.toolchain}
->   18. toolchainJavaHomeEnvName       ${exec.toolchainJavaHomeEnvName}
->   19. useMavenLogger                 ${exec.useMavenLogger}
->   20. workingDirectory               ${exec.workingdir}
->   21. sourceRoot                     ${sourceRoot}
->   22. testSourceRoot                 ${testSourceRoot}
-> read-only: 0 []
-> ```
->
-> Twenty are `exec.*`; two are unprefixed. **Seven** are pinned, **eight** are handed to check A2,
-> **fourteen** are neither — and that residual is **deliberate and listed**, not overlooked. See
-> [`gate-threat-model.md`](gate-threat-model.md) §2 and §3: closing the other fourteen would defend
-> the in-build binding against an operator who hand-types a `-D` to disable their own acceptance
-> check, and that is not the adversary this gate exists for. The wrapper still fails such a run.
+> Seven are pinned, eight are handed to check A2, fourteen are neither — and that residual is
+> **deliberate and listed**, not overlooked. See [`gate-threat-model.md`](gate-threat-model.md) §2
+> and §3: closing the other fourteen would defend the in-build binding against an operator who
+> hand-types a `-D` to disable their own acceptance check, and that is not the adversary this gate
+> exists for. The wrapper still fails such a run.
 >
 > The claim below that "**any** set property fails the build" was also refuted for a different
 > reason (G-01/G-02) and is **now true**, since 2026-08-18 — see §5.2.6.
@@ -833,7 +713,7 @@ deliberate developer flag — but the receipt records `verdict=PARTIAL` and the 
 ### 5.2.4 The measurement — round 10's two bypasses, its controls, and the residual hole
 
 Every row run on the committed tree, `mvn -q clean` first, tree restored and `git status --porcelain`
-checked after each. Full output in §7.4.
+checked after each. Pass/fail summary of each run is in §7.4.
 
 | # | what was done | round 10 | round 11 | what the message names |
 |---|---|---|---|---|
@@ -874,112 +754,28 @@ $ git diff --name-status 30d480db..HEAD -- '*/src/main/*'
 (empty)
 ```
 
-```
-$ git diff --name-status 30d480db..HEAD
-A	.gitattributes
-M	.gitignore
-A	docs/port2/audit-00-verdict.md
-A	docs/port2/audit-01-harness.md
-A	docs/port2/audit-02-specification.md
-A	docs/port2/audit-03-acceptance.md
-A	docs/port2/audit-04-wildcard.md
-A	docs/port2/differential/s1-smoke-ureal-add.tsv
-A	docs/port2/differential/s1-smoke-ureal-minus-faulty.tsv
-A	docs/port2/foundation-verdict.md
-A	docs/port2/harness-contract.md
-A	docs/port2/spec-parts/10-values.md
-A	docs/port2/spec-parts/11-types-oracle.sh
-A	docs/port2/spec-parts/11-types.md
-A	docs/port2/spec-parts/12-expressions.md
-A	docs/port2/spec-parts/13-grammar.md
-A	docs/port2/spec-parts/14-historical-tests.md
-A	docs/port2/spec-parts/15-upstream-delta.md
-A	docs/port2/spec-parts/16-modernization-ledger.md
-A	docs/port2/spec-parts/17-refutation-classification.md
-A	docs/port2/spec-parts/18-refutation-delta.md
-A	docs/port2/spec-parts/19-open-questions.md
-A	docs/port2/spec-parts/20-ops-SBoolean.md
-A	docs/port2/spec-parts/20-ops-UBoolean.md
-A	docs/port2/spec-parts/20-ops-UInteger.md
-A	docs/port2/spec-parts/20-ops-UReal.md
-A	docs/port2/spec-parts/20-ops-UString.md
-A	docs/port2/specification.md
-A	docs/port2/stage-00-baseline.md
-A	docs/port2/stage-01-refutation-empirical.md
-A	docs/port2/stage-01-refutation-fidelity.md
-A	docs/port2/stage-01-refutation-isolation.md
-A	docs/port2/stage-01-round6-fixes.md
-A	docs/port2/stage-01-static-review-post-fix.md
-A	docs/port2/stage-01-static-review-round3.md
-A	docs/port2/stage-01-static-review-round4.md
-A	docs/port2/stage-01-static-review-round5.md
-A	docs/port2/stage-01-verification-post-fix.md
-A	docs/port2/stage-01-verification-round3.md
-A	docs/port2/stage-01-verification-round4.md
-A	docs/port2/stage-01-verification-round5.md
-A	docs/port2/stage-01-verification-round6.md
-A	docs/port2/stage-01-verification-round7.md
-A	docs/port2/stage-01-verification-round8.md
-A	docs/port2/stage-01.md
-A	docs/port2/stage-02.md
-A	docs/port2/upstream-oracle-profile.md
-A	docs/port2/upstream-test-waivers.md
-M	use-core/pom.xml
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/AcceptedDegenerateOperations.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/AcceptedThrowPairs.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/Candidate.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/DiffReportWriter.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/DiffRow.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/DiffVerdict.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/DifferentialHarnessRegressionTest.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/DifferentialSweep.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/HarnessMarshallingException.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/HistoricalOracle.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/HistoricalOracleIsolationTest.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/InputGenerator.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/IsolatedJarClassLoader.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/PortedInfidelityDetectionPowerTest.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/StubCandidate.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/UOp.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/UValue.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/UncertaintyDifferentialSmokeTest.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/UnwrittenPortInvariantTest.java
-A	use-core/src/test/resources/historical/atenearesearchgroup.uncertainty.jar
-A	use-core/src/test/resources/historical/use.jar
-M	use-gui/pom.xml
-```
-
-Filtered to the non-`docs/` paths, which is where the ground rule bites:
+`git diff --name-status 30d480db..HEAD` lists 84 paths in total: 44 new `docs/port2/**` files (this
+round's own audit trail, including this document), `.gitattributes` (new) / `.gitignore` (modified,
+S0 housekeeping, `stage-00-baseline.md` §1), the S1 differential harness — 17 new files under
+`use-core/src/test/java/org/tzi/use/uncertainty/differential/` plus two vendored reference jars
+under `use-core/src/test/resources/historical/` — and the two pom edits. Filtered to the non-`docs/`
+paths, which is where the ground rule bites:
 
 ```
 $ git diff --name-status 30d480db..HEAD | grep -v '\tdocs/'
 A	.gitattributes
 M	.gitignore
 M	use-core/pom.xml
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/AcceptedDegenerateOperations.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/AcceptedThrowPairs.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/Candidate.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/DiffReportWriter.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/DiffRow.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/DiffVerdict.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/DifferentialHarnessRegressionTest.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/DifferentialSweep.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/HarnessMarshallingException.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/HistoricalOracle.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/HistoricalOracleIsolationTest.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/InputGenerator.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/IsolatedJarClassLoader.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/PortedInfidelityDetectionPowerTest.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/StubCandidate.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/UOp.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/UValue.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/UncertaintyDifferentialSmokeTest.java
-A	use-core/src/test/java/org/tzi/use/uncertainty/differential/UnwrittenPortInvariantTest.java
+A	use-core/src/test/java/org/tzi/use/uncertainty/differential/   (17 .java files: AcceptedDegenerateOperations,
+	AcceptedThrowPairs, Candidate, DiffReportWriter, DiffRow, DiffVerdict,
+	DifferentialHarnessRegressionTest, DifferentialSweep, HarnessMarshallingException,
+	HistoricalOracle, HistoricalOracleIsolationTest, InputGenerator, IsolatedJarClassLoader,
+	PortedInfidelityDetectionPowerTest, StubCandidate, UOp, UValue,
+	UncertaintyDifferentialSmokeTest, UnwrittenPortInvariantTest)
 A	use-core/src/test/resources/historical/atenearesearchgroup.uncertainty.jar
 A	use-core/src/test/resources/historical/use.jar
 M	use-gui/pom.xml
 ```
-
 
 Reading of the non-docs paths, against the ground rules:
 
@@ -1017,459 +813,100 @@ Reading of the non-docs paths, against the ground rules:
 
 ## 7.1 Round-9 acceptance run — the default build, from clean
 
-A `grep` of the build log for the `BUILD` line, every surefire/failsafe headline and every
-`[floor]` line — not a contiguous paste, so the `BUILD SUCCESS` line stands first rather than last.
-The full log is the run itself; `EXIT=0`.
-
-```
-$ mvn -q clean && mvn -B verify -Djava.awt.headless=true
-[INFO] BUILD SUCCESS
-[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.883 s -- in org.tzi.use.architecture.MavenCyclicDependenciesCoreTest
-[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.186 s -- in Detection power: subtle infidelities in a ported U-type
-[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.101 s -- in Uncertainty differential smoke
-[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 39.32 s -- in Unwritten-port invariant
-[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.019 s -- in HistoricalOracle class-loader isolation
-[INFO] Tests run: 35, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.159 s -- in Differential harness regressions
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.106 s -- in org.tzi.use.uml.mm.ModelAPITest
-[INFO] Tests run: 79, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.13 s - in org.tzi.use.OCLExpressionIT
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.673 s -- in org.tzi.use.architecture.MavenLayeredArchitectureTest
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Tests run: 129, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 6.337 s - in org.tzi.use.main.shell.ShellIT
-[INFO] Tests run: 129, Failures: 0, Errors: 0, Skipped: 0
-[floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.stamp
-[floor] ===== upstream-oracle floor check: use-core =====
-[floor] requested profiles (reactor-wide, from the command line): (none)
-[floor] this module's upstream-oracle profile effective: false
-[floor] mode: DEFAULT
-[floor] freshness stamp: 2026-08-17T14:44:04.218Z — reports older than this are stale and are NOT counted
-[floor] surefire  use-core  classes=7   (floor 7  )  methods=79   (floor 79  )  executions=79   failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: absent
-[floor] PASS — use-core met every pinned floor in DEFAULT mode.
-[floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.stamp
-[floor] ===== upstream-oracle floor check: use-gui =====
-[floor] requested profiles (reactor-wide, from the command line): (none)
-[floor] this module's upstream-oracle profile effective: false
-[floor] mode: DEFAULT
-[floor] freshness stamp: 2026-08-17T14:45:05.814Z — reports older than this are stale and are NOT counted
-[floor] surefire  use-gui   classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] failsafe  use-gui   classes=1   (floor 1  )  methods=129  (floor 129 )  executions=129  failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] vintage-only sentinel org.tzi.use.gui.views.diagrams.util.DirectedLineTest: absent
-[floor] PASS — use-gui met every pinned floor in DEFAULT mode.
-
---- deduplicated counts, from the independent script of §2 ---
-surefire  use-core  classes=  7 methods=  79 executions=  79 failures=0 errors=0 skipped=0
-surefire  use-gui   classes=  1 methods=   1 executions=   1 failures=0 errors=0 skipped=0
-failsafe  use-core  classes=  1 methods=   1 executions=   1 failures=0 errors=0 skipped=0
-failsafe  use-gui   classes=  1 methods= 129 executions= 129 failures=0 errors=0 skipped=0
-TOTAL               classes= 10 methods= 210 executions= 210 failures=0 errors=0 skipped=0
-
-$ mvn -B dependency:list | grep -c vintage
-0
-```
+`mvn -q clean && mvn -B verify -Djava.awt.headless=true`: `BUILD SUCCESS`, exit 0. Deduplicated
+(§2's script): `surefire use-core 7/79`, `surefire use-gui 1/1`, `failsafe use-core 1/1`, `failsafe
+use-gui 1/129` — **TOTAL 10 classes / 210 methods, 0 failures / 0 errors / 0 skipped**. The floor
+check (`scripts/UpstreamOracleFloor.java`, phase `verify`) printed `[floor] PASS — use-core met
+every pinned floor in DEFAULT mode.` and the same for `use-gui`, both against `stale-ignored=0`;
+both vintage-only sentinels (`org.tzi.use.parser.USECompilerTest`,
+`org.tzi.use.gui.views.diagrams.util.DirectedLineTest`) reported `absent`, as expected in DEFAULT
+mode. `mvn -B dependency:list | grep -c vintage` → `0`.
 
 **210 methods, 10 classes, 0 failures / 0 errors / 0 skipped, no vintage engine — unchanged by this
 round**, and now every one of the four populations is asserted.
 
 ## 7.2 Round-9 acceptance run — under the profile, from clean
 
-A `grep` of the build log for the `BUILD` line, every surefire/failsafe headline and every
-`[floor]` line — not a contiguous paste, so the `BUILD SUCCESS` line stands first rather than last.
-The full log is the run itself; `EXIT=0`.
+`mvn -q clean && mvn -B verify -Pupstream-oracle -Djava.awt.headless=true`: `BUILD SUCCESS`, exit
+0. Deduplicated: `surefire use-core 40/350`, `surefire use-gui 8/17`, `failsafe use-core 1/1`,
+`failsafe use-gui 1/129` — **TOTAL 50 classes / 497 methods, 0 failures / 0 errors / 0 skipped**
+(1085 raw executions, the aggregator inflation of §4.1). The floor check printed `[floor] PASS` for
+both modules in ORACLE mode, both sentinels `collected`, both floors met exactly. `mvn -B
+dependency:list -Pupstream-oracle | grep vintage` confirms the engine is present.
 
-```
-$ mvn -q clean && mvn -B verify -Pupstream-oracle -Djava.awt.headless=true
-[INFO] BUILD SUCCESS
-[floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.stamp
-[floor] ===== upstream-oracle floor check: use-core =====
-[floor] requested profiles (reactor-wide, from the command line): [upstream-oracle]
-[floor] this module's upstream-oracle profile effective: true
-[floor] mode: ORACLE
-[floor] freshness stamp: 2026-08-17T14:45:41.311Z — reports older than this are stale and are NOT counted
-[floor] surefire  use-core  classes=40  (floor 40 )  methods=350  (floor 350 )  executions=938  failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: collected
-[floor] PASS — use-core met every pinned floor in ORACLE mode.
-[floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.stamp
-[floor] ===== upstream-oracle floor check: use-gui =====
-[floor] requested profiles (reactor-wide, from the command line): [upstream-oracle]
-[floor] this module's upstream-oracle profile effective: true
-[floor] mode: ORACLE
-[floor] freshness stamp: 2026-08-17T14:46:49.046Z — reports older than this are stale and are NOT counted
-[floor] surefire  use-gui   classes=8   (floor 8  )  methods=17   (floor 17  )  executions=17   failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] failsafe  use-gui   classes=1   (floor 1  )  methods=129  (floor 129 )  executions=129  failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] vintage-only sentinel org.tzi.use.gui.views.diagrams.util.DirectedLineTest: collected
-[floor] PASS — use-gui met every pinned floor in ORACLE mode.
+**50 distinct classes / 497 distinct methods, 0 failures / 0 errors / 0 skipped, `BUILD SUCCESS`,
+and all four floors met exactly** — the checker's figures and the independent script's figures
+agree, and the 1085 executions against 497 methods are the aggregator inflation of §4.1.
 
---- deduplicated counts, from the independent script of §2 ---
-surefire  use-core  classes= 40 methods= 350 executions= 938 failures=0 errors=0 skipped=0
-surefire  use-gui   classes=  8 methods=  17 executions=  17 failures=0 errors=0 skipped=0
-failsafe  use-core  classes=  1 methods=   1 executions=   1 failures=0 errors=0 skipped=0
-failsafe  use-gui   classes=  1 methods= 129 executions= 129 failures=0 errors=0 skipped=0
-TOTAL               classes= 50 methods= 497 executions=1085 failures=0 errors=0 skipped=0
+## 7.3 The five deliberate breakages — pass/fail summary
 
-$ mvn -B dependency:list -Pupstream-oracle | grep vintage | sort -u
-[INFO]    org.junit.vintage:junit-vintage-engine:jar:5.7.0:test -- module org.junit.vintage.engine
-```
-
-**50 distinct classes / 497 distinct methods, 0 failures / 0 errors / 0 skipped, `BUILD SUCCESS`, and
-all four floors met exactly** — the checker's figures and the independent script's figures agree, and
-the 1085 executions against 497 methods are the aggregator inflation of §4.1.
-
-## 7.3 The five deliberate breakages, verbatim
-
-Each breakage was applied to the committed tree at `6702f06e`, run, and restored;
-`git status --porcelain` is empty after every restore, which is the `(empty above == tree clean)` line.
-
-```
-################ PRECONDITION ################
-[driver] HEAD: 6702f06e
-[driver] (empty == clean)
-
-################ BREAK (a) — delete the use-gui profile block ################
-[driver] removed <profiles> from use-gui/pom.xml; git diff stat:
- use-gui/pom.xml | 16 ----------------
- 1 file changed, 16 deletions(-)
------ a1-gui-deleted-default : mvn EXIT=1 -----
-[INFO] BUILD FAILURE
-[floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.stamp
-[floor] ===== upstream-oracle floor check: use-core =====
-[floor] requested profiles (reactor-wide, from the command line): (none)
-[floor] this module's upstream-oracle profile effective: false
-[floor] mode: DEFAULT
-[floor] freshness stamp: 2026-08-17T14:50:09.405Z — reports older than this are stale and are NOT counted
-[floor] surefire  use-core  classes=7   (floor 7  )  methods=79   (floor 79  )  executions=79   failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: absent
-[floor] ###############################################################
-[floor] FAIL — 1 floor violation(s) in use-core (DEFAULT mode):
-[floor]   1. WIRING: use-gui/pom.xml HAS NO <profiles> ELEMENT — the upstream-oracle profile has been deleted. The upstream JUnit 3/4 oracle cannot be activated in this module and -Pupstream-oracle would silently collect the default build's tests instead (D-01).
-[floor] Do NOT lower a floor to make this pass. See D-01 in docs/port2/upstream-oracle-static-review.md and harness-contract.md sec. 8.
-[floor] ###############################################################
-[ERROR] Failed to execute goal org.codehaus.mojo:exec-maven-plugin:3.5.0:exec (upstream-oracle-floor) on project use-core: Command execution failed. Process exited with an error: 1 (Exit value: 1) -> [Help 1]
------ a2-gui-deleted-oracle : mvn EXIT=1 -----
-[INFO] BUILD FAILURE
-[floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.stamp
-[floor] ===== upstream-oracle floor check: use-core =====
-[floor] requested profiles (reactor-wide, from the command line): [upstream-oracle]
-[floor] this module's upstream-oracle profile effective: true
-[floor] mode: ORACLE
-[floor] freshness stamp: 2026-08-17T14:51:14.409Z — reports older than this are stale and are NOT counted
-[floor] surefire  use-core  classes=40  (floor 40 )  methods=350  (floor 350 )  executions=938  failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: collected
-[floor] ###############################################################
-[floor] FAIL — 1 floor violation(s) in use-core (ORACLE mode):
-[floor]   1. WIRING: use-gui/pom.xml HAS NO <profiles> ELEMENT — the upstream-oracle profile has been deleted. The upstream JUnit 3/4 oracle cannot be activated in this module and -Pupstream-oracle would silently collect the default build's tests instead (D-01).
-[floor] Do NOT lower a floor to make this pass. See D-01 in docs/port2/upstream-oracle-static-review.md and harness-contract.md sec. 8.
-[floor] ###############################################################
-[ERROR] Failed to execute goal org.codehaus.mojo:exec-maven-plugin:3.5.0:exec (upstream-oracle-floor) on project use-core: Command execution failed. Process exited with an error: 1 (Exit value: 1) -> [Help 1]
-[driver] git status --porcelain after restore:
-[driver] (empty above == tree clean)
-
-################ BREAK (b) — delete the use-core profile block ################
- use-core/pom.xml | 16 ----------------
- 1 file changed, 16 deletions(-)
------ b-core-deleted-oracle : mvn EXIT=1 -----
-[INFO] BUILD FAILURE
-[floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.stamp
-[floor] ===== upstream-oracle floor check: use-core =====
-[floor] requested profiles (reactor-wide, from the command line): [upstream-oracle]
-[floor] this module's upstream-oracle profile effective: false
-[floor] mode: ORACLE
-[floor] freshness stamp: 2026-08-17T14:52:27.750Z — reports older than this are stale and are NOT counted
-[floor] surefire  use-core  classes=7   (floor 40 )  methods=79   (floor 350 )  executions=79   failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: absent
-[floor] ###############################################################
-[floor] FAIL — 5 floor violation(s) in use-core (ORACLE mode):
-[floor]   1. WIRING: use-core/pom.xml HAS NO <profiles> ELEMENT — the upstream-oracle profile has been deleted. The upstream JUnit 3/4 oracle cannot be activated in this module and -Pupstream-oracle would silently collect the default build's tests instead (D-01).
-[floor]   2. EFFECTIVENESS: -Pupstream-oracle WAS REQUESTED ON THE COMMAND LINE BUT IS NOT EFFECTIVE IN use-core. Its profile block is missing, renamed or inactive, so this module collected DEFAULT-build tests while the gate was asked for the upstream oracle. That is D-01's merge accident, and it is an error, not a pass.
-[floor]   3. FLOOR use-core/surefire: 7 distinct test classes < floor 40. The upstream JUnit 3/4 tree was not collected: check that junit-vintage-engine is present at <scope>test</scope> inside use-core's upstream-oracle profile and that junit:junit is still on the test classpath.
-[floor]   4. FLOOR use-core/surefire: 79 distinct test methods < floor 350. The upstream JUnit 3/4 tree was not collected: check that junit-vintage-engine is present at <scope>test</scope> inside use-core's upstream-oracle profile and that junit:junit is still on the test classpath.
-[floor]   5. SENTINEL use-core: org.tzi.use.parser.USECompilerTest produced no report under -Pupstream-oracle. It extends junit.framework.TestCase, so its absence means the vintage engine was not on the test classpath — the profile was requested and did nothing.
-[floor] Do NOT lower a floor to make this pass. See D-01 in docs/port2/upstream-oracle-static-review.md and harness-contract.md sec. 8.
-[floor] ###############################################################
-[ERROR] Failed to execute goal org.codehaus.mojo:exec-maven-plugin:3.5.0:exec (upstream-oracle-floor) on project use-core: Command execution failed. Process exited with an error: 1 (Exit value: 1) -> [Help 1]
-[driver] git status --porcelain after restore:
-[driver] (empty above == tree clean)
-
-################ BREAK (c) — profile requested and EFFECTIVE, engine made ineffective ################
-[driver] vintage engine declared <type>pom</type> in use-core: resolves, wiring intact,
-[driver] but the engine JAR never reaches the test classpath, so the JUnit 3/4 tree is
-[driver] silently not collected. Only a count floor can see this.
- use-core/pom.xml | 1 +
- 1 file changed, 1 insertion(+)
------ c-engine-ineffective-oracle : mvn EXIT=1 -----
-[INFO] BUILD FAILURE
-[floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.stamp
-[floor] ===== upstream-oracle floor check: use-core =====
-[floor] requested profiles (reactor-wide, from the command line): [upstream-oracle]
-[floor] this module's upstream-oracle profile effective: true
-[floor] mode: ORACLE
-[floor] freshness stamp: 2026-08-17T14:53:33.178Z — reports older than this are stale and are NOT counted
-[floor] surefire  use-core  classes=7   (floor 40 )  methods=79   (floor 350 )  executions=79   failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: absent
-[floor] ###############################################################
-[floor] FAIL — 3 floor violation(s) in use-core (ORACLE mode):
-[floor]   1. FLOOR use-core/surefire: 7 distinct test classes < floor 40. The upstream JUnit 3/4 tree was not collected: check that junit-vintage-engine is present at <scope>test</scope> inside use-core's upstream-oracle profile and that junit:junit is still on the test classpath.
-[floor]   2. FLOOR use-core/surefire: 79 distinct test methods < floor 350. The upstream JUnit 3/4 tree was not collected: check that junit-vintage-engine is present at <scope>test</scope> inside use-core's upstream-oracle profile and that junit:junit is still on the test classpath.
-[floor]   3. SENTINEL use-core: org.tzi.use.parser.USECompilerTest produced no report under -Pupstream-oracle. It extends junit.framework.TestCase, so its absence means the vintage engine was not on the test classpath — the profile was requested and did nothing.
-[floor] Do NOT lower a floor to make this pass. See D-01 in docs/port2/upstream-oracle-static-review.md and harness-contract.md sec. 8.
-[floor] ###############################################################
-[ERROR] Failed to execute goal org.codehaus.mojo:exec-maven-plugin:3.5.0:exec (upstream-oracle-floor) on project use-core: Command execution failed. Process exited with an error: 1 (Exit value: 1) -> [Help 1]
-[driver] git status --porcelain after restore:
-[driver] (empty above == tree clean)
-
-################ BREAK (d) — profile requested, vintage version mangled ################
- use-core/pom.xml | 2 +-
- use-gui/pom.xml  | 2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
------ d-version-mangled-oracle : mvn EXIT=1 -----
-[INFO] BUILD FAILURE
-[ERROR] Failed to execute goal on project use-core: Could not resolve dependencies for project org.tzi.use:use-core:jar:7.5.0
-[driver] git status --porcelain after restore:
-[driver] (empty above == tree clean)
-
-################ BREAK (e) — tree intact, gate narrowed from the command line ################
------ e-narrowed-oracle : mvn EXIT=1 -----
-[INFO] BUILD FAILURE
-[floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.stamp
-[floor] ===== upstream-oracle floor check: use-core =====
-[floor] requested profiles (reactor-wide, from the command line): [upstream-oracle]
-[floor] this module's upstream-oracle profile effective: true
-[floor] mode: ORACLE
-[floor] freshness stamp: 2026-08-17T14:54:46.551Z — reports older than this are stale and are NOT counted
-[floor] surefire  use-core  classes=1   (floor 40 )  methods=6    (floor 350 )  executions=6    failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
-[floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: absent
-[floor] ###############################################################
-[floor] FAIL — 3 floor violation(s) in use-core (ORACLE mode):
-[floor]   1. FLOOR use-core/surefire: 1 distinct test classes < floor 40. The upstream JUnit 3/4 tree was not collected: check that junit-vintage-engine is present at <scope>test</scope> inside use-core's upstream-oracle profile and that junit:junit is still on the test classpath.
-[floor]   2. FLOOR use-core/surefire: 6 distinct test methods < floor 350. The upstream JUnit 3/4 tree was not collected: check that junit-vintage-engine is present at <scope>test</scope> inside use-core's upstream-oracle profile and that junit:junit is still on the test classpath.
-[floor]   3. SENTINEL use-core: org.tzi.use.parser.USECompilerTest produced no report under -Pupstream-oracle. It extends junit.framework.TestCase, so its absence means the vintage engine was not on the test classpath — the profile was requested and did nothing.
-[floor] Do NOT lower a floor to make this pass. See D-01 in docs/port2/upstream-oracle-static-review.md and harness-contract.md sec. 8.
-[floor] ###############################################################
-[ERROR] Failed to execute goal org.codehaus.mojo:exec-maven-plugin:3.5.0:exec (upstream-oracle-floor) on project use-core: Command execution failed. Process exited with an error: 1 (Exit value: 1) -> [Help 1]
-[driver] nothing to restore (no tree edit)
-[driver] (empty == clean)
-[driver] BREAKS DONE
-```
-
-**Every one fails.** Note what each one proves:
+Each breakage in §5.1.4's table was applied to the committed tree at `6702f06e`, run, and restored;
+`git status --porcelain` was empty after every restore. **Every one fails, as the table states.**
+What each one proves:
 
 * **(a1)** is the D-01 scenario exactly — one module's profile block deleted — and it fails the
   **default** command, with no profile requested. The merge accident cannot reach a green build at all.
-* **(b)** fires all four mechanisms at once, including `EFFECTIVENESS: -Pupstream-oracle WAS REQUESTED
-  ON THE COMMAND LINE BUT IS NOT EFFECTIVE IN use-core`, which is the requirement that a requested
-  profile collecting default counts is an error.
+* **(b)** fires all four mechanisms at once, including `EFFECTIVENESS: -Pupstream-oracle WAS
+  REQUESTED ON THE COMMAND LINE BUT IS NOT EFFECTIVE IN use-core`, which is the requirement that a
+  requested profile collecting default counts is an error.
 * **(c)** is the case only a count floor can see: the wiring is intact, the profile *is* effective,
   the dependency resolves — and the engine never reaches the test classpath. `7 < 40`, `79 < 350`,
   sentinel absent.
-* **(d)** cannot even resolve, so the gate fails before any test runs. A gate that cannot run is not a
-  gate that passed.
-* **(e)** is the same defect attempted from the command line rather than the tree: `-Dtest=` narrowing
-  under the profile collects 6 methods of 350 and fails.
+* **(d)** cannot even resolve, so the gate fails before any test runs. A gate that cannot run is not
+  a gate that passed.
+* **(e)** is the same defect attempted from the command line rather than the tree: `-Dtest=`
+  narrowing under the profile collects 6 methods of 350 and fails.
 
----
+## 7.4 Round-11 acceptance and break output — pass/fail summary
 
-## 7.4 Round-11 acceptance and break output, verbatim
+Every command below was run on `port-uncertainty-2` with the round-11 changes in the working tree,
+`pgrep -f '[c]lassworlds.launcher.Launcher'` empty before each, `mvn -q clean` before each build, and
+`git status --porcelain` clean before and after every run, with no foreign modification observed at
+any point.
 
-Every command below was run by me on `port-uncertainty-2` with the round-11 changes in the working
-tree, `pgrep -f '[c]lassworlds.launcher.Launcher'` empty before each, `mvn -q clean` before each build,
-and `git status --porcelain` captured before and after. No foreign modification was observed at any
-point. Logs are in the driver output; what follows is pasted from it.
+### 7.4.1 THE GATE — both modes, one invocation
 
-### 7.4.1 THE GATE — `scripts/upstream-oracle-gate.sh`, both modes, one invocation
-
-Run at HEAD (`cdcbea54`, the behaviour commit) with a clean tree, 3 m 14 s wall. Verbatim and
-unfiltered, including the wrapper's own before/after `git status --porcelain`:
-
-```
-[gate] =================================================================
-[gate] upstream-oracle acceptance gate — mode: both
-[gate] reactor root: /home/xoruser/msc-4/use-msc2026
-[gate] profile id (hard-coded here, not typed): upstream-oracle
-[gate] git status --porcelain BEFORE:
-[gate]   (nothing above == clean)
-[gate] =================================================================
-
-[gate] ----- default : expecting mode DEFAULT in every module -----
-[gate] mvn -q clean
-[gate] mvn -B verify -Djava.awt.headless=true
-[gate] mvn EXIT=0, log: /tmp/use-upstream-oracle-gate/default.log (1491 lines)
-[gate] the floor's own words for default:
-[gate]   [floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.stamp
-[gate]   [floor] ===== upstream-oracle floor check: use-core =====
-[gate]   [floor] requested profiles (reactor-wide, from the command line): (none)
-[gate]   [floor] this module's upstream-oracle profile effective: false
-[gate]   [floor] mode: DEFAULT
-[gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
-[gate]   [floor] freshness stamp: 2026-08-17T16:47:52.598Z — reports older than this are stale and are NOT counted
-[gate]   [floor] surefire  use-core  classes=8   (floor 8  )  methods=80   (floor 80  )  executions=80   failures=0 errors=0 skipped=0 stale-ignored=0
-[gate]   [floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
-[gate]   [floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: absent
-[gate]   [floor] wrote receipt /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.receipt (verdict=PASS)
-[gate]   [floor] PASS — use-core met every pinned floor in DEFAULT mode.
-[gate]   [floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.stamp
-[gate]   [floor] ===== upstream-oracle floor check: use-gui =====
-[gate]   [floor] requested profiles (reactor-wide, from the command line): (none)
-[gate]   [floor] this module's upstream-oracle profile effective: false
-[gate]   [floor] mode: DEFAULT
-[gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
-[gate]   [floor] freshness stamp: 2026-08-17T16:48:49.466Z — reports older than this are stale and are NOT counted
-[gate]   [floor] surefire  use-gui   classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
-[gate]   [floor] failsafe  use-gui   classes=1   (floor 1  )  methods=129  (floor 129 )  executions=129  failures=0 errors=0 skipped=0 stale-ignored=0
-[gate]   [floor] vintage-only sentinel org.tzi.use.gui.views.diagrams.util.DirectedLineTest: absent
-[gate]   [floor] wrote receipt /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.receipt (verdict=PASS)
-[gate]   [floor] PASS — use-gui met every pinned floor in DEFAULT mode.
-
-[gate] ----- oracle : expecting mode ORACLE in every module -----
-[gate] mvn -q clean
-[gate] mvn -B verify -Djava.awt.headless=true -Pupstream-oracle
-[gate] mvn EXIT=0, log: /tmp/use-upstream-oracle-gate/oracle.log (1819 lines)
-[gate] the floor's own words for oracle:
-[gate]   [floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.stamp
-[gate]   [floor] ===== upstream-oracle floor check: use-core =====
-[gate]   [floor] requested profiles (reactor-wide, from the command line): [upstream-oracle]
-[gate]   [floor] this module's upstream-oracle profile effective: true
-[gate]   [floor] mode: ORACLE
-[gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
-[gate]   [floor] freshness stamp: 2026-08-17T16:49:21.514Z — reports older than this are stale and are NOT counted
-[gate]   [floor] surefire  use-core  classes=41  (floor 41 )  methods=351  (floor 351 )  executions=939  failures=0 errors=0 skipped=0 stale-ignored=0
-[gate]   [floor] failsafe  use-core  classes=1   (floor 1  )  methods=1    (floor 1   )  executions=1    failures=0 errors=0 skipped=0 stale-ignored=0
-[gate]   [floor] vintage-only sentinel org.tzi.use.parser.USECompilerTest: collected
-[gate]   [floor] wrote receipt /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.receipt (verdict=PASS)
-[gate]   [floor] PASS — use-core met every pinned floor in ORACLE mode.
-[gate]   [floor] wrote freshness stamp /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.stamp
-[gate]   [floor] ===== upstream-oracle floor check: use-gui =====
-[gate]   [floor] requested profiles (reactor-wide, from the command line): [upstream-oracle]
-[gate]   [floor] this module's upstream-oracle profile effective: true
-[gate]   [floor] mode: ORACLE
-[gate]   [floor] reactor: FULL (no -pl/--projects, no -rf/--resume-from)
-[gate]   [floor] freshness stamp: 2026-08-17T16:50:25.279Z — reports older than this are stale and are NOT counted
-[gate]   [floor] surefire  use-gui   classes=8   (floor 8  )  methods=17   (floor 17  )  executions=17   failures=0 errors=0 skipped=0 stale-ignored=0
-[gate]   [floor] failsafe  use-gui   classes=1   (floor 1  )  methods=129  (floor 129 )  executions=129  failures=0 errors=0 skipped=0 stale-ignored=0
-[gate]   [floor] vintage-only sentinel org.tzi.use.gui.views.diagrams.util.DirectedLineTest: collected
-[gate]   [floor] wrote receipt /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.receipt (verdict=PASS)
-[gate]   [floor] PASS — use-gui met every pinned floor in ORACLE mode.
-
-[gate] =================================================================
-[gate] git status --porcelain AFTER:
-[gate]   (nothing above == clean; report anything you did not write, never commit it)
-[gate] PASS — mode 'both': every check above held.
-[gate] =================================================================
-```
-
-Both floors met **exactly**, in both modes, for both modules and both tiers; both receipts written and
-verified on disk after Maven exited; `stale-ignored=0` everywhere; both vintage-only sentinels absent by
-default and collected under the profile. Headline executions, for the record: `939 + 17` surefire and
-`1 + 129` failsafe = **1086 executions for 498 distinct methods** under the profile. The default build is
-vintage-free from the resolved classpath, not merely from counts:
-
-```
-$ mvn -B -q dependency:list -Djava.awt.headless=true | grep -c vintage
-0
-```
+`bash scripts/upstream-oracle-gate.sh` at HEAD (`cdcbea54`), clean tree, 3 m 14 s wall:
+`[gate] PASS — mode 'both': every check above held.` Both floors met **exactly**, in both modes, for
+both modules and both tiers (default 11/211, oracle 51/498 — the `+1/+1` of the wiring test);
+`stale-ignored=0` everywhere; both vintage-only sentinels absent by default and collected under the
+profile; both receipts written and verified on disk after Maven exited. Headline executions:
+`939 + 17` surefire and `1 + 129` failsafe = **1086 executions for 498 distinct methods** under the
+profile. `mvn -B -q dependency:list -Djava.awt.headless=true | grep -c vintage` → `0`.
 
 ### 7.4.2 F-01 — `-Dexec.args=-version`, the command that used to silence everything
 
-Round 10, §3.7: `[driver] number of [floor] lines in the log: 0` / `[INFO] BUILD SUCCESS`. Now:
-
-```
------ b1-execargs-default : mvn -B verify -Djava.awt.headless=true -Dexec.args=-version : EXIT=1 -----
-[driver] number of [floor] lines in the log: 16
-[floor] FAIL — 1 floor violation(s) in use-core (DEFAULT mode):
-[floor]   1. TAMPERING: -Dexec.args=-version was set on the command line. That property belongs to the floor's own exec-maven-plugin execution, which is the ONLY exec-maven-plugin binding in this reactor, so there is no legitimate use for it here. It is inert — the pom pins the corresponding element — but an attempt to switch the gate off is a BUILD FAILURE, not a silent no-op. This is defect F-01 (docs/port2/upstream-oracle-floor-verification.md sec. 3.7), where -Dexec.args=-version produced BUILD SUCCESS with zero [floor] lines.
-[INFO] BUILD FAILURE
-[ERROR] Failed to execute goal org.codehaus.mojo:exec-maven-plugin:3.5.0:exec (upstream-oracle-floor) on project use-core: Command execution failed. Process exited with an error: 1 (Exit value: 1) -> [Help 1]
-```
-
-And under the profile, `b2`, identically — `FAIL — 1 floor violation(s) in use-core (ORACLE mode)`.
-The three siblings, all of which were untried or inert in round 10:
-
-```
------ b4-execasync : -Dexec.async=true : EXIT=1 -----
-[floor]   1. TAMPERING: -Dexec.async=true was set on the command line. That property belongs to the floor's own exec-maven-plugin execution, which is 
------ b5-execskip : -Dexec.skip=true (tree intact; round 10 needed a pom break to make this fail) : EXIT=1 -----
-[floor]   1. TAMPERING: -Dexec.skip=true was set on the command line. That property belongs to the floor's own exec-maven-plugin execution, which is t
------ b3-execoutputfile : -Dexec.outputFile=/dev/null (the one parameter that CANNOT be pinned) : EXIT=1 -----
-[driver] number of [floor] lines in the log: 0   <- the words are in /dev/null, the failure is not
-[ERROR] Failed to execute goal org.codehaus.mojo:exec-maven-plugin:3.5.0:exec (upstream-oracle-floor) on project use-core: Command execution failed. Process exited with an error: 1 (Exit value: 1) -> [Help 1]
-```
+Round 10: `BUILD SUCCESS`, 0 `[floor]` lines. Now: `mvn -B verify -Djava.awt.headless=true
+-Dexec.args=-version` → **`BUILD FAILURE`, exit 1, 16 `[floor]` lines**, one `TAMPERING` violation
+naming the property and citing this defect (F-01). Identical result under the profile (`b2`). The
+three siblings — `-Dexec.async=true` (`b4`), `-Dexec.skip=true` (`b5`, inert in round 10, needed a
+pom break to fail), `-Dexec.outputFile=/dev/null` (`b3`, the one unpinnable parameter) — all
+`FAIL`, exit 1, each naming its own `TAMPERING` violation (`b3` has 0 `[floor]` lines in the log —
+the words went to `/dev/null` — but Maven itself still fails).
 
 ### 7.4.3 F-01, belt and braces — mechanism 1 removed, mechanism 2 holds
 
-`<commandlineArgs>` reverted to round 10's `<arguments>` shape in `use-core/pom.xml`, so `exec.args`
-wins again, plus the bypass. The exec binding really is silenced — **0** `[floor]` lines, exactly as in
-round 10 — and the build is red anyway:
-
-```
------ b11-unpinned-plus-execargs : EXIT=1 -----
-[driver] number of [floor] lines in the log: 0
-The -Pupstream-oracle acceptance gate is not wired as the record claims — 2 violation(s). This test IS the gate's guard against being silenced; do not weaken it to make a build pass. See docs/port2/upstream-oracle-floor-verification.md F-01/F-02 and docs/port2/harness-contract.md sec. 0.
-  1. use-core/pom.xml carries <commandlineArgs> 0 time(s), needs 2 — one per floor execution. Unpinned, the user property -Dexec.args is honoured on the command line and the floor check can be silenced or diverted with no edit to any tracked file (F-01).
-  2. RUNTIME: target/upstream-oracle-floor.stamp does not exist in /home/xoruser/msc-4/use-msc2026/use-core. The `upstream-oracle-floor-stamp` execution did not run in THIS build, so the verify-phase check would have no way to tell this build's reports from an earlier -Pupstream-oracle run's. That is exactly what -Dexec.args=-version did (F-01).
-[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.4:test (default-test) on project use-core: There are test failures.
-```
+With `<commandlineArgs>` reverted to round 10's unpinned `<arguments>` shape in
+`use-core/pom.xml`, `exec.args` wins again and the exec binding really is silenced — **0**
+`[floor]` lines, exactly as in round 10 — and the build is red anyway, from mechanism 2: the Jupiter
+wiring test names both the removed pin (`carries <commandlineArgs> 0 time(s), needs 2`) and the
+runtime consequence (`RUNTIME: … stamp does not exist`), 2 violations, exit 1.
 
 ### 7.4.4 F-01 — §5.1.3 item 3's residual hole, closed
 
-`exec-maven-plugin` deleted from **both** poms. Round 10 break `(l)`: `BUILD SUCCESS`, exit 0. Now:
-
-```
------ b12b-both-exec-deleted : mvn -B verify -Djava.awt.headless=true : EXIT=1 -----
-[driver] grep -c 'exec-maven-plugin' use-core/pom.xml use-gui/pom.xml -> 1, 1   (the checker's own comment reference only)
-[driver] number of [floor] lines in the log: 0
-The -Pupstream-oracle acceptance gate is not wired as the record claims — 41 violation(s). This test IS the gate's guard against being silenced; do not weaken it to make a build pass. See docs/port2/upstream-oracle-floor-verification.md F-01/F-02 and docs/port2/harness-contract.md sec. 0.
-  1. use-core/pom.xml no longer runs scripts/UpstreamOracleFloor.java; that module's counts would go unasserted — the D-01 defect itself.
-  2. use-core/pom.xml has no `upstream-oracle-floor` execution bound to the `verify` phase.
-  3. use-core/pom.xml has no `upstream-oracle-floor-stamp` execution bound to the `initialize` phase, so stale reports from an earlier -Pupstream-oracle run could be counted as this build's.
-  4. use-core/pom.xml's floor execution does not pass --module=use-core.
-  5. use-core/pom.xml carries <skip>false</skip> 0 time(s), needs 2 — one per floor execution. Unpinned, the user property -Dexec.skip is honoured on the command line and the floor check can be silenced or diverted with no edit to any tracked file (F-01).
-  6. use-core/pom.xml carries <commandlineArgs> 0 time(s), needs 2 — one per floor execution. Unpinned, the user property -Dexec.args is honoured on the command line and the floor check can be silenced or diverted with no edit to any tracked file (F-01).
-  7. use-core/pom.xml carries <async>false</async> 0 time(s), needs 2 — one per floor execution. Unpinned, the user property -Dexec.async is honoured on the command line and the floor check can be silenced or diverted with no edit to any tracked file (F-01).
-  8. use-core/pom.xml carries <timeout>0</timeout> 0 time(s), needs 2 — one per floor execution. Unpinned, the user property -Dexec.timeout is honoured on the command line and the floor check can be silenced or diverted with no edit to any tracked file (F-01).
-  9. use-core/pom.xml carries <quietLogs>false</quietLogs> 0 time(s), needs 2 — one per floor execution. Unpinned, the user property -Dexec.quietLogs is honoured on the command line and the floor check can be silenced or diverted with no edit to any tracked file (F-01).
-  10. use-core/pom.xml carries <executable>${java.home}/bin/java</executable> 0 time(s), needs 2 — one per floor execution. Unpinned, the user property -Dexec.executable is honoured on the command line and the floor check can be silenced or diverted with no edit to any tracked file (F-01).
-  ... (41 violations in total, every stripped pin in both poms named)
-```
+With `exec-maven-plugin` deleted from **both** poms, round 10 (break `(l)`) was `BUILD SUCCESS`,
+exit 0. Now: **`BUILD FAILURE`, exit 1, 41 violations** — the wiring test names every stripped pin
+in both poms individually (missing floor executions, missing `--module=`, all seven pins at
+`0` time(s) where 2 are required, and so on).
 
 ### 7.4.5 F-02 — the mistyped profile id, both ways
 
-The **bare, hand-typed** command. Round 10 break `(d)`: `BUILD SUCCESS`, exit 0, floor `PASS` in
-DEFAULT mode. Now:
-
-```
------ b6-typo-bare : mvn -B verify -Pupstream-oracle-typo -Djava.awt.headless=true : EXIT=1 -----
-[driver] number of [floor] lines in the log: 16
-[floor] mode: DEFAULT
-[floor] FAIL — 1 floor violation(s) in use-core (DEFAULT mode):
-[floor]   1. PROFILE: -Pupstream-oracle-typo was requested on the command line but NO pom in this reactor declares a profile with that id. Maven only WARNS about that and then builds on, so the gate would have run the vacuous default-build counts and printed PASS while the operator believed they had asked for the upstream oracle — defect F-02 (docs/port2/upstream-oracle-floor-verification.md sec. 3.5). Declared profile ids in this reactor: [upstream-oracle]. The acceptance gate is scripts/upstream-oracle-gate.sh, which hard-codes the id; do not hand-type -P. If this id IS legitimate, declare it in a pom or pass -Duse.floor.allowProfiles=upstream-oracle-typo.
-[WARNING] The requested profile "upstream-oracle-typo" could not be activated because it does not exist.
-[INFO] BUILD FAILURE
-```
-
-And through the wrapper, which is what the record now calls the gate. Nine independent checks fail,
-and the first one that names the profile is the `could not be activated` grep F-02 asked for:
-
-```
-[gate] FAIL — default: Maven exited 1. Tail of the log:
-[gate] FAIL — default: no 'BUILD SUCCESS' in the log.
-[gate] FAIL — default: Maven could not activate a requested profile. THIS IS DEFECT F-02: without this check the build is green, the floor prints PASS in DEFAULT mode, and the revived upstream class
-[gate]   2:[WARNING] The requested profile "upstream-oracle-typo" could not be activated because it does not exist.
-[gate]   1412:[WARNING] The requested profile "upstream-oracle-typo" could not be activated because it does not exist.
-[gate] FAIL — default: expected exactly one line '[floor] PASS — use-core met every pinned floor in DEFAULT mode.' in the log, found 0. Every [floor] verdict line the log does have:
-[gate] FAIL — default: expected exactly one line '[floor] PASS — use-gui met every pinned floor in DEFAULT mode.' in the log, found 0. Every [floor] verdict line the log does have:
-[gate] FAIL — default: the floor check announced itself 1 time(s), expected 2.
-[gate] FAIL — default: the floor reported FAIL, FATAL or PARTIAL:
-[gate] FAIL — default: receipt /home/xoruser/msc-4/use-msc2026/use-core/target/upstream-oracle-floor.receipt does not carry the line 'verdict=PASS'. It says:
-[gate] FAIL — default: no receipt at /home/xoruser/msc-4/use-msc2026/use-gui/target/upstream-oracle-floor.receipt. The verify-phase floor check did not run to completion in use-gui. A silenced exec 
-[gate] GATE FAILED — 9 check(s) failed in mode 'default'.
-```
+The **bare, hand-typed** `mvn -B verify -Pupstream-oracle-typo -Djava.awt.headless=true` — round
+10 (break `(d)`) was `BUILD SUCCESS`, exit 0, floor `PASS` in DEFAULT mode. Now: **`BUILD
+FAILURE`**, one `PROFILE` violation naming the typo, the declared ids, and the fact that the gate is
+the wrapper script, not a hand-typed `-P`. Through the wrapper, nine independent checks fail together
+(no `BUILD SUCCESS`, the `could not be activated` line, both modules' missing `PASS` lines, missing
+announce count, missing receipts) — `GATE FAILED — 9 check(s) failed in mode 'default'.`
 
 **What the bare command can and cannot be made to do — stated plainly.** `mvn -P<typo>` is now a
 build failure because check B2 reads the reactor's declared profile ids. What *cannot* be fixed from
@@ -1483,39 +920,19 @@ record can do is refuse to call that the gate, and make the common typo red anyw
 
 ### 7.4.6 F-03 — `-pl` no longer says `PASS`
 
-```
------ b7-pl-usecore : mvn -B verify -pl use-core -Pupstream-oracle -Djava.awt.headless=true : EXIT=0 -----
-[floor] mode: ORACLE
-[floor] reactor: PARTIAL — selected projects [use-core], resume-from (none)
-[floor] PARTIAL — use-core met its own pinned floors in ORACLE mode, but THIS WAS A PARTIAL REACTOR (-pl/--projects [use-core]), so the other module's floors were NOT checked. A partial reactor is NOT the acceptance gate: run scripts/upstream-oracle-gate.sh. Do not quote this line as a green gate (F-03).
-[INFO] BUILD SUCCESS
-```
-
-Exit 0 on purpose: `-pl` is a deliberate developer flag, not a merge accident. The receipt records
-`verdict=PARTIAL`, and the wrapper requires `verdict=PASS` and `partial-reactor=false`, so a partial
-reactor can be used for iteration and can never be quoted as acceptance.
+`mvn -B verify -pl use-core -Pupstream-oracle -Djava.awt.headless=true` → `BUILD SUCCESS`, exit 0
+(on purpose — `-pl` is a deliberate developer flag, not a merge accident), but `[floor] PARTIAL —
+use-core met its own pinned floors in ORACLE mode, but THIS WAS A PARTIAL REACTOR …`, never `PASS`.
+The receipt records `verdict=PARTIAL`, and the wrapper requires `verdict=PASS` and
+`partial-reactor=false`, so a partial reactor can be used for iteration and can never be quoted as
+acceptance.
 
 ### 7.4.7 The controls — round 10's tree-borne breakages must still fail, and do
 
-```
------ b8-gui-profile-deleted : <profiles> removed from use-gui/pom.xml, DEFAULT command : EXIT=1 -----
-The -Pupstream-oracle acceptance gate is not wired as the record claims — 2 violation(s). This test IS the gate's guard against being silenced; do not weaken it to make a build pass. See docs/port2/upstream-oracle-floor-verification.md F-01/F-02 and docs/port2/harness-contract.md sec. 0.
-  1. use-gui/pom.xml HAS NO <profiles> ELEMENT — the upstream-oracle profile has been deleted, so -Pupstream-oracle would silently collect the default build's tests in this module (D-01's merge accident).
-  2. use-gui/pom.xml's upstream-oracle profile does not set use.upstreamOracle.effective=true, so the gate loses its requested-but-not-effective detector.
-[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.5.4:test (default-test) on project use-core: There are test failures.
-
------ b9-skiptests-oracle : -DskipTests under the profile : EXIT=1 -----
-[floor] FAIL — 7 floor violation(s) in use-core (ORACLE mode):
-[floor]   1. FLOOR use-core/surefire: the report directory does not exist (/home/xoruser/msc-4/use-msc2026/use-core/target/surefire-reports). Nothing was collected. 0 is rejected outright (h
-[floor]   2. FLOOR use-core/surefire: 0 distinct test classes < floor 41. The upstream JUnit 3/4 tree was not collected: check that junit-vintage-engine is present at <scope>test</scope> ins
-
------ b10-wiring-test-deleted : the Jupiter test removed : EXIT=1 -----
-[floor] FAIL — 3 floor violation(s) in use-core (DEFAULT mode):
-[floor]   1. WIRING: use-core/src/test/java/org/tzi/use/uncertainty/gate/UpstreamOracleGateWiringTest.java is missing. That Jupiter test is the half of the F-01 fix that cannot be silenced b
-[floor]   2. FLOOR use-core/surefire: 7 distinct test classes < floor 8. The default build lost tests it used to run.
-[floor]   3. FLOOR use-core/surefire: 79 distinct test methods < floor 80. The default build lost tests it used to run.
-```
-
-B8 now fails from the `test` phase rather than from `verify` — earlier, and the floor check would have
-caught it too. B10 shows the two halves guarding each other: the checker names the missing test file,
-and the count floor independently notices the method it stopped contributing.
+Three controls, all still `FAIL`, exit 1: **(b8)** `<profiles>` deleted from `use-gui/pom.xml`
+under the default command — 2 violations, now caught at the `test` phase rather than `verify`, i.e.
+earlier; the floor check would have caught it too. **(b9)** `-DskipTests` under the profile — 7
+violations (report directory absent, both count floors, sentinel). **(b10)** the Jupiter wiring test
+itself deleted — 3 violations: the missing file, and the count floor independently noticing the
+`+1/+1` method it stopped contributing (`7 < 8` classes, `79 < 80` methods) — the two halves of the
+fix guarding each other.

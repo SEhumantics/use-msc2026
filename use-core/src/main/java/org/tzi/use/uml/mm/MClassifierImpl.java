@@ -27,7 +27,18 @@ import org.tzi.use.uml.sys.MOperationCall;
 import java.util.*;
 
 /**
- * 
+ * @implNote This class is one of exactly two implementation roots for {@code
+ *     org.tzi.use.uml.ocl.type.Type} -- the other is {@code
+ *     org.tzi.use.uml.ocl.type.TypeImpl}. Every {@code is*}/{@code isKindOf*} predicate declared on
+ *     {@code Type} therefore needs a {@code return false;} default here as well as on {@code
+ *     TypeImpl}; six {@code MClassifierImpl} subclasses ({@code MClassImpl}, {@code
+ *     MAssociationImpl}, {@code MAssociationClassImpl}, {@code MSignalImpl}, {@code
+ *     MDataTypeImpl}, and {@code EnumType}) inherit whatever is decided here, so a new predicate
+ *     defaulted only on {@code TypeImpl} silently gives all six classifier kinds no answer instead
+ *     of {@code false}. {@code EnumType} is the easy one to forget: despite representing a "type" in
+ *     the OCL sense, it {@code extends MClassifierImpl}, not {@code TypeImpl} -- it is not a {@link
+ *     org.tzi.use.uml.ocl.type.BasicType} and picks up none of {@code TypeImpl}'s overrides.
+ * @see "docs/port2/spec-parts/11-types.md &sect;3 -- deviation ledger (adaptation-policy.md rows T-02, T-14)"
  * @author Lars Hamann
  *
  */

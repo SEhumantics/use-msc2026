@@ -4,6 +4,14 @@ Assembled from `docs/port2/spec-parts/10..20-*`. This is a **checklist that S3�
 against**, not a narrative. Every row cites a historical file+symbol or the shell command that
 reproduces it. `UNVERIFIABLE` means exactly that — it is never smoothed into a claim.
 
+**Provenance note (2026-08-21).** Several evidence sub-documents this file's rows cite by name were
+consolidated during a documentation cleanup and no longer exist as separate files:
+`audit-02-specification.md`, `spec-parts/12-expressions.md`, `spec-parts/13-grammar.md`,
+`spec-parts/17-refutation-classification.md`, `spec-parts/18-refutation-delta.md`, and
+`spec-parts/20-ops-UReal.md`. Every conclusion those citations support is already stated in this
+table's own row text — the citation is a provenance pointer, not a dependency — and the deleted
+files' full original content remains in git history.
+
 Path aliases used throughout:
 
 | Alias | Absolute path |
@@ -193,59 +201,20 @@ a reader must be able to see what was weighed.
 | **B5** | **`TypeTest#testSupertype` conflict.** The moment `Real ≤ UReal`, `Boolean ≤ UBoolean`, `String ≤ UString`, `Integer ≤ UInteger` enter `allSupertypes()`, **10 of the 12 assertions in upstream's own untouched `testSupertype`** become false. This cannot be fixed by moving tests to a new class — it is a lattice design question. | **1** adopt the fork's lattice and handle the upstream breakage explicitly; **2** keep uncertain types out of the crisp types' supertype closure (conformance one-way only) | **1** — option 2 breaks `getLeastCommonSupertype`, which is what drives overload resolution | **Independently re-derived by audit-02 §2 (commit `3cb92468`): CONFIRMED exactly — `TT/uml/ocl/type/TypeTest.java:135-228` holds exactly 12 `assertEquals`; under the fork lattice OclAny and Enum survive, 4 crisp-type and 6 collection assertions break. 10 break, 2 survive.** §3.1, §6.3; `14-historical-tests.md` §3.3, G7 | S3 type-lattice landing, and interacts with **B3** (under (b), this failure becomes visible) |
 | **B6** | **`UndefinedValue` printed form.** 7.5.0 prints `null`; the fork prints `Undefined` (upstream commit `72ab8fd7`, 2019-06-27 "changed Undefined to null"). The historical corpus contains **79 entries** expecting `-> Undefined : OclVoid`. This is a whole-suite systematic offset, not a one-off. | **1** normalise in the harness; **2** rewrite the 79 corpus lines; **3** revert `UndefinedValue` | **1** — "the port prints `null` where the oracle prints `Undefined`" is a *correct* port, not a regression | **audit-02: CONFIRMED — exactly 79 (`UBooleanExpression.in` 16 + `UIntegerExpression.in` 38 + `URealExpression.in` 25 + `UCollectionOperations.in` 0), stable with or without the `-> ` prefix.** §4.1; `15-upstream-delta.md` §1(d); `14-historical-tests.md` §5 | every corpus-driven S4–S7 comparison |
 | **B7** ✅ **DECIDED 2026-08-17: FIX and document each row (bug-for-bug recommendation not taken). THE PER-ROW PLAN IS [`b7-fix-plan.md`](b7-fix-plan.md), WHICH SUPERSEDES EVERY `DEFER` IN `16-modernization-ledger.md`** | **Bug-for-bug vs. fix: 33 BEHAVIOUR-CHANGING ledger rows.** The fork carries defects that are *unobserved* by its own tests (`UStringValue.equals` is constant `false`, breaking reflexivity; `SBooleanValue.compareTo` returns `0`; `UIntegerValue.hashCode` collapses to `0` whenever `u == 0`). Fixing any of them changes `Set`/`Bag` membership and therefore the **printed output** the `.in` fixtures assert on. | per-row: reproduce, or fix and record | decide **as one policy** first, then per-row; §7.2 lists all 33 | §7; `16-modernization-ledger.md` Tables A+B | S4–S7 fidelity verdicts |
-| **B8** | **`Op_number_sqrt` / `Op_number_pow` shadowing.** 7.5.0 **added** these (`T/uml/ocl/expr/operations/StandardOperationsNumber.java:848`, `:802`, registered `:32`, `:31`); the fork has neither. Their `matches` is `isKindOfNumber(EXCLUDE_VOID)`, which `URealType`/`UIntegerType` answer `true`. Registered **before** the uncertainty registries ⇒ `UReal(4,2).sqrt()` resolves to `Op_number_sqrt`, types as `Integer`, then `ClassCastException`. | **1** tighten `Op_number_sqrt.matches` to exclude `UncertainType`; **2** register uncertainty ops first (**changes `Integer+Integer` typing — see §2.6**); **3** teach `Op_number_sqrt` about `UReal` | **1** | **audit-02: CONFIRMED, every link in the chain — the two ops exist in 7.5.0 and not in the fork; `matches` is `isKindOfNumber(EXCLUDE_VOID)`; `URealType`/`UIntegerType` return `true`; `F/uml/ocl/expr/operations/OpGeneric.java:88` registers Number before the five uncertainty registries at `:93-97`; `F/uml/ocl/expr/ExpStdOp.java:129-134` takes the first match over an insertion-ordered `ArrayListMultimap`; `eval` casts to `RealValue` and `URealValue extends UncertainValue`, so ClassCastException.** §2.6; `20-ops-UReal.md` §4.4 | any `sqrt`/`pow` result being trusted |
+| **B8** | **`Op_number_sqrt` / `Op_number_pow` shadowing.** 7.5.0 **added** these (`T/uml/ocl/expr/operations/StandardOperationsNumber.java:848`, `:802`, registered `:32`, `:31`); the fork has neither. Their `matches` is `isKindOfNumber(EXCLUDE_VOID)`, which `URealType`/`UIntegerType` answer `true`. Registered **before** the uncertainty registries ⇒ `UReal(4,2).sqrt()` resolves to `Op_number_sqrt`, types as `Integer`, then `ClassCastException`. | **1** tighten `Op_number_sqrt.matches` to exclude `UncertainType`; **2** register uncertainty ops first (**changes `Integer+Integer` typing — see §2.6**); **3** teach `Op_number_sqrt` about `UReal` | **1** | **audit-02: CONFIRMED, every link in the chain — the two ops exist in 7.5.0 and not in the fork; `matches` is `isKindOfNumber(EXCLUDE_VOID)`; `URealType`/`UIntegerType` return `true`; `F/uml/ocl/expr/operations/OpGeneric.java:88` registers Number before the five uncertainty registries at `:93-97`; `F/uml/ocl/expr/ExpStdOp.java:129-134` takes the first match over an insertion-ordered `ArrayListMultimap`; `eval` casts to `RealValue` and `URealValue extends UncertainValue`, so ClassCastException.** §2.6 (full derivation above in this row) | any `sqrt`/`pow` result being trusted |
 | **B9** | **`ExpQuery` items 7+8 — `exists`/`forAll` over uncertain predicates.** §12 declares its `ExpQuery` edit "purely additive" while keeping 7.5.0's `evalExistsOrForAll`. The refuter shows that then `assertKindOfUBoolean()` is **added and never called** and `exists`/`forAll` over a `UBoolean` predicate is **silently unported** — yet `ExpQueryUncertaintyTest#testForAllColA` pins `UBoolean(true, 0.999968314)`. Items 7+8 and the `ExpExists`/`ExpForAll` assertion swap are **one atomic unit: take both or neither**. | **1** take both (loses short-circuiting and the `isEnableEvalTree` fast path); **2** take neither and record `exists`/`forAll` as out of scope | decide explicitly; do **not** ship the "additive" middle | §2.4; `17-refutation-classification.md` R6; `12-expressions.md` §3.3.2 | `ExpQueryUncertaintyTest` parity |
 | **B10** | **`ExpDefSBoolean` + `ASTSBooleanDefExpression`.** Unreachable dead code (sole `new ExpDefSBoolean` is at `F/parser/ocl/ASTSBooleanDefExpression.java:25`; that AST class is **never instantiated** anywhere, and no grammar produces it), with an **inverted** type guard, a missing `ctx.exit`, and an `eval` that can return Java `null`. | drop, or port with the three defects documented | **drop** — it also saves `visitDefSBoolean` in `ExpressionVisitor` and both visitors | §8.1; `12-expressions.md` §2; `19-open-questions.md` Q1 | `ExpressionVisitor` method count (7 vs 8) |
 | **B11** | **`UnlimitedNatural` lattice inconsistency.** `UnlimitedNatural.conformsTo(UInteger)` and `…(UReal)` are `true` (predicate-driven, `F/uml/ocl/type/UnlimitedNaturalType.java:61-63`, identical in 7.5.0), yet `UnlimitedNatural.allSupertypes()` was **not** extended ⇒ `UnlimitedNatural.getLeastCommonSupertype(UInteger)` returns `OclAny`. The same shape of defect **pre-exists upstream** for `Integer`/`UnlimitedNatural`. | reproduce bit-for-bit, or fix | **reproduce**, plus a regression test pinning `LCS(UnlimitedNatural, UInteger) == OclAny` so the deviation is visible | **audit-02: CONFIRMED including the pre-exists-upstream clause — the fork's `UnlimitedNaturalType.java` differs from 7.5.0's by a two-line `$Id$` comment only, and upstream `IntegerType` already has the identical shape.** §3.4; `11-types.md` §1.8-1 | S3 lattice |
 | **B12** | **Corpus harness placement and global state.** `USECompilerUncertaintyTest` resolves its four `.in` files from `System.getProperty("user.dir") + "/src/test/org/tzi/use/parser/uncertainty"` — under Maven the module root is `use-core/`, so `listFiles` returns `null`; **or**, if an empty directory exists, the loop runs zero times and the test **passes vacuously**. It also sets the process-global `Options.explicitVariableDeclarations = false` and never restores it, which is why the JUnit-3 `AllTests` **suite ordering is load-bearing**. | move fixtures to `use-core/src/test/resources/…` + classpath lookup + `assertTrue(files.length > 0)`; and either pin ordering or make the global write self-restoring | do both; note the non-empty assertion converts a previously-vacuous pass into a failure — that is itself a behaviour change and must be recorded as one | §7.2 (CF-5, CF-8, M-45); `16-modernization-ledger.md` | corpus-driven S4–S7 |
 
-### Audit of this document — what an independent refuter did to §0
+### Audit of this document — summary
 
-`docs/port2/audit-02-specification.md` (commit `3cb92468`) adjudicated **185 distinct citations**
-against source, covering **100 % of §0, §1 and §7** plus §3.1/§3.2, §3.5, §5.5/§5.6, §8.1 and a
-sweep of §2/§4/§6/§10. Verdict **SOUND_WITH_CAVEATS**, hit rate **175/185 = 94.6 %** (88.6 % under
-the strict reading that counts §3.1's cite-the-method convention as 11 misses — now documented in
-place at §3.1).
-
-**No blocking decision was refuted.** Four of the twelve were re-derived **from source, by a second
-party, without reusing this document's method**, and all four came back CONFIRMED. That is not a
-review comment on this document; it is an independent measurement, and it is why these four rows may
-be executed without re-deriving them:
-
-| Decision | The claim that was checked | Outcome |
-|---|---|---|
-| **B5** | "10 of the 12 assertions in upstream's untouched `testSupertype` become false" | **CONFIRMED, exactly 10 of 12.** `TT/uml/ocl/type/TypeTest.java:135-228` holds exactly 12 `assertEquals`; under the fork lattice `OclAny` and `Enum` survive, 4 crisp-type and 6 collection assertions break — the collection ones because `CollectionType`/`SetType.allSupertypes()` *derive* from the element type |
-| **B6** | "the historical corpus contains **79** entries expecting `-> Undefined : OclVoid`" | **CONFIRMED, exactly 79** — `UBooleanExpression.in` 16 + `UIntegerExpression.in` 38 + `URealExpression.in` 25 + `UCollectionOperations.in` 0, stable with or without the `-> ` prefix |
-| **B8** | the `Op_number_sqrt`/`Op_number_pow` shadowing chain | **CONFIRMED, every link** — the two ops exist in 7.5.0 and not in the fork; `matches` is `isKindOfNumber(EXCLUDE_VOID)`; `URealType`/`UIntegerType` answer `true`; Number is registered before the five uncertainty registries; `ExpStdOp` takes the **first** match over an insertion-ordered `ArrayListMultimap`; `eval` casts to `RealValue` while `URealValue extends UncertainValue` ⇒ `ClassCastException` |
-| **B11** | the `UnlimitedNatural` lattice inconsistency, **including** "the same shape pre-exists upstream" | **CONFIRMED including the upstream clause** — the fork's `UnlimitedNaturalType.java` differs from 7.5.0's by a two-line `$Id$` comment only, and upstream `IntegerType` already carries the identical defect. So reproducing it is not importing a fork bug; it is leaving an upstream one alone |
-
-Each row above also carries this annotation inline in the §0 table, so a reader who arrives at a
-decision does not have to find this paragraph first.
-
-The inventory was reconstructed twice by methods
-that do not reuse this document's keyword filter — a reference graph over the 33 new fork classes,
-and an API-gap test over every static call those classes make into upstream — and came back
-**complete**, not merely correct.
-
-All ten misses are corrected in place above and are marked "**corrected**" where they occur. Four
-were one wrong path stated twice (**B4**'s missing `shell/` segment), five were one-line offsets
-(**B1a**, `11-types.md:747`, `URealType:9`, `ExpDefSBoolean:16-17`), one was an over-tight adjective
-(§4.3's `GenerateHTMLExpressionVisitor` list). §7 — the 72-token ledger a human executes row by row
-— scored **72/72 on file:line**; its only two defects were subsection row counts, also corrected.
-
-**The one MAJOR finding was editorial and is now closed**: 75 % of citations were bare basenames
-with no tree alias, 40+ of them resolving in *both* trees with different content at the cited line.
-A second pass aliased every ambiguous one and re-measured the whole file mechanically — see the
-citation convention note at the head of this document for the classification, and **R0b** in §10.1
-for the closure record. Ten ambiguous citations are deliberately left bare because the adjacent
-sentence names the tree outright; nothing in this document now requires guessing.
-
-**Decisions deliberately NOT escalated** (recorded, port may take them): `mkUReal()` return type
-(`Type` vs `URealType` — narrowing is source-compatible with all 27 fork call sites);
-`UIntegerType()` constructor visibility (fork `public`, siblings not — note `URealType()` is
-`protected`, not package-private, correcting `11-types.md:711` — **corrected** from `:747`, which is
-a blank line; the fuller and already-correct treatment is `11-types.md:70-76`, audit-02 M5); the `allSupertypes` `this` vs
-`TypeFactory.mkX()` idiom; the fork's `testIsTypeOfUBooloean`/`testIsTypeOfSBooloean` typos.
+An independent refuter (`audit-02-specification.md`, commit `3cb92468`) adjudicated 185 citations
+across §0/§1/§7 plus spot checks elsewhere. Verdict SOUND_WITH_CAVEATS, 175/185 hit rate. **No
+blocking decision was refuted**; B5, B6, B8 and B11 were independently re-derived from source (not
+by reusing this document's method) and all four came back CONFIRMED exactly as stated in the table
+above. The ~10 citation misses found were one-line offsets, since corrected in place above. Git
+history preserves the full adjudication if it is ever needed again.
 
 ---
 
@@ -374,7 +343,7 @@ Ordered by uncertainty-attributable added lines (the reproduction command at the
 | E11 | `T/uml/mm/MClassifierImpl.java` | 10 | **edit** | `MClass`/`MDataType`/`MAssociation` must answer "no" to every uncertainty query. Ten `return false;` no-ops. **`conformsTo` (`:121-130`), `allSupertypes` (`:132-137`), `getLeastCommonSupertype` (`:139-…`) untouched** | **Load-bearing:** `Type` has exactly **two** implementation roots in 7.5.0 — `TypeImpl` and `MClassifierImpl` — proved by `grep -rn "public boolean isTypeOfOclAny()" --include=*.java use-core use-gui` → 3 hits (`TypeImpl:313`, `MClassifierImpl:355`, `OclAnyType:33`). Adding to `Type` without adding here **breaks the build**. **File-level copying is forbidden** — 7.5.0's `MClassifierImpl` is 588 L vs the fork's 511 L, pulling up the whole attribute/operation table (`:54-61`, `:491-573`) |
 | E12 | `T/uml/ocl/expr/ExpressionPrintVisitor.java` | 8 | **edit** | Must render the seven (eight under B10=port) new expression forms, **and must print the confidence argument of a `uSelectC`** | **Refuter R2 adopted — `12-expressions.md` says "add 8 methods" and misses an existing-body change.** `visitQuery(ExpQuery, VarInitializer)` gains, after `exp.getQueryExpression().processWithVisitor(this)`: `if (exp.getUncertaintyExpression() != null) { writer.write(","); writer.write(ws()); exp.getUncertaintyExpression().processWithVisitor(this); }` (`F:421-425`). **Refuter R3 adopted:** §12 §3.3.4's "the confidence argument is lost on print / will break any print-then-reparse test" is **false for the print visitor** — `visitUSelectC` delegates to `visitQuery`, which does print it. Only `ExpQuery.toString(StringBuilder)` (`F:680-694`, unchanged from `T:486-500`) drops it |
 | E13 | `T/analysis/coverage/AbstractCoverageVisitor.java` | 7 | **edit** | Must traverse the new expression forms (empty bodies for the literals, `visitQuery(exp)` for the two uSelects) **and traverse a query's confidence sub-expression** | **Refuter R2 adopted.** `visitQuery(ExpQuery)` gains `if (exp.getUncertaintyExpression() != null) exp.getQueryExpression().processWithVisitor(this);` (`F:257-259`) — note the fork's **own bug**: it re-visits `getQueryExpression()`, not `getUncertaintyExpression()`. Neither the edit nor the bug is recorded in §12. Technically abstract, but it implements all 49 concretely (`grep -c "public void visit"` → 49) and its two concrete subclasses would break |
-| E14 | `T/uml/ocl/expr/operations/OpGeneric.java` | 6 | **edit** | Five uncertainty registries must be registered, **after** `StandardOperationsBoolean` and **before** the collections | Missing from `12-expressions.md`. **Refuter R1 adopted.** The complete fork↔7.5.0 diff of this file is **one hunk** (`@@ -88,6 +88,13 @@`, 7 added lines incl. a blank and a comment — `15-upstream-delta.md`'s "six lines" and `20-ops-UInteger.md` §7's "88..97" are both loose; refuter F7/R.7 adopted). **No `OpGeneric` member signature differs** — all five ops sections independently confirm this |
+| E14 | `T/uml/ocl/expr/operations/OpGeneric.java` | 6 | **edit** | Five uncertainty registries must be registered, **after** `StandardOperationsBoolean` and **before** the collections | Missing from `12-expressions.md`. **Refuter R1 adopted.** The complete fork↔7.5.0 diff of this file is **one hunk** (`@@ -88,6 +88,13 @@`, 7 added lines incl. a blank and a comment — `15-upstream-delta.md`'s "six lines" and the pre-consolidation UInteger ops draft's "88..97" (draft removed 2026-08-21, folded into this row) are both loose; refuter F7/R.7 adopted). **No `OpGeneric` member signature differs** — all five ops sections independently confirm this |
 | E15 | `T/uml/ocl/expr/ExpressionVisitor.java` | 6 | **edit** | Seven new `void visit…` declarations (eight if B10 = port). Insert to keep the fork's ordering: `visitConstUBoolean`/`visitConstSBoolean`(`/visitDefSBoolean`) after `visitConstBoolean` (`T:35`), `visitConstUInteger` after `:37`, `visitConstUReal` after `:38`, `visitConstUString` after `:39`, `visitUSelect`/`visitUSelectC` after `:76` | **Do NOT copy the fork's file** — it is 7.0-era and declares `visitObjOp(ExpObjOp)`; 7.5.0 uses `visitInstanceOp(ExpInstanceOp)` (upstream `46c277e7`, 2024-11-24). Counts: 7.5.0 declares **49**, fork **57**; the set difference is exactly the 8 new methods **plus** the `visitObjOp ↔ visitInstanceOp` rename |
 | E16 | `T/uml/ocl/type/VoidType.java` | 5 | **edit** | `OclVoid` answers `true` to the five new `isKindOf*` **only under `INCLUDE_VOID`**. Five overrides, each `return h == VoidHandling.INCLUDE_VOID;`. `conformsTo` stays `return true`; `allSupertypes()` keeps throwing; 7.5.0's `isKindOfDataType` (`:92-95`) stays | none |
 | E17 | `T/uml/ocl/type/BooleanType.java` | 5 | **edit** | `Boolean ≤ UBoolean` and `Boolean ≤ SBoolean`. Add `isKindOfUBoolean`/`isKindOfSBoolean` → `true`; `conformsTo` gains 2 disjuncts; `allSupertypes` gains 2 entries | The fork leaves the `new HashSet<Type>(2)` capacity hint at 2 while inserting four elements — harmless; do not copy it as if it were meaningful |
@@ -431,8 +400,8 @@ one affected (§1.6 E12/E13/E15).
   `isBooleanOperation()` ⇒ `evalWithArgs(ctx, Expression[])` is called with **unevaluated** operands.
   The `eval` call is wrapped in `catch (ArithmeticException) → Undefined` and **nothing else** — an
   NPE or CCE escapes the evaluator. Verified identical in both trees (fork `F/uml/ocl/expr/ExpStdOp.java:293-318`;
-  7.5.0 `:286-311`; note `20-ops-UInteger.md` §2's "299-308 / 308-315" matches neither tree exactly —
-  refuter R.5 adopted).
+  7.5.0 `:286-311`; note the pre-consolidation UInteger ops draft's §2 "299-308 / 308-315" (draft
+  removed 2026-08-21) matches neither tree exactly — refuter R.5 adopted).
 * **Overload resolution is first-match-wins in registration order.** `ExpStdOp.opmap` is an
   `ArrayListMultimap`; `create` returns the first `op` whose `matches(params)` is non-null.
 * **`OpGeneric`'s contract is byte-identical between fork and 7.5.0.** All five ops sections
@@ -1367,8 +1336,9 @@ it were installed under. Class-file major version **52** (Java 8), readable by J
 **oracle-side need is already solved, on the test side, with no Maven coordinates involved**. What
 remains unsolved is the **product** side: `use-core` main code must compile against `uDataTypes.*`.
 
-> `20-ops-UReal.md` §2 states this jar is **not** present in the target repo. **That is refuted**
-> (refuter R.3, corroborated by `stage-01.md` §2). The port needs no "obtain the jar" step.
+> The pre-consolidation UReal operation reference (`spec-parts/20-ops-UReal.md` §2, since folded
+> into this section and removed) stated this jar is **not** present in the target repo. **That is
+> refuted** (refuter R.3, corroborated by `stage-01.md` §2). The port needs no "obtain the jar" step.
 
 ### Is the 2023 source a safe stand-in for the 2021 jar? Yes, for this port's call paths
 
@@ -2729,27 +2699,14 @@ Rows marked **RE-OPENED** were stated as fact by one pass and refuted by another
 | R47 | **The S1 stub is not the port.** Every "AGREE" at S1 is agreement between the historical jars and a 40-line re-derivation of two formulas, over **two** operations. The remaining ~70 methods of the historical surface are reachable through `UOp`/`HistoricalOracle` but have **never been exercised** | **scheduled** — S2/S3 must widen this |
 | R48 | **No port-plan document exists in this repository.** `docs/port2/` contains only the stage files and `spec-parts/`, and `grep -i "VoidType\|BooleanType\|IntegerType"` over `stage-00-baseline.md` returns nothing. Several "touchpoints named in the port plan" in the source sections were therefore derived from the fork↔7.5.0 diff, **not from a plan** | open — this document now *is* the plan for §1–§9 |
 
-## 10.6 Claims that one pass asserted and another refuted — do not act on the original
+## 10.6 Claims that one pass asserted and another refuted
 
-| # | Original claim | Status |
-|---|---|---|
-| R49 | "`TypeImpl.conformsTo` supplies a `false`-returning default" (§15 §2.1/§2.2) | **REFUTED.** It is `return this.conformsTo(other);` — unbounded recursion in **both** trees. A new `*Type` that omits `conformsTo` compiles clean and `StackOverflowError`s at first use. **§1.2's mandatory box supersedes it** |
-| R50 | "The differential harness loads the historical jar through a plain parent-first `URLClassLoader` (`UValue.java:13-16`)" (§15 §7.4) | **REFUTED.** That citation is Javadoc prose; the real loader already isolates `uDataTypes.` **parent-last**, and the repository has **measured** that the suggested platform-parented remedy does **not** work under JPMS. **A2 must be re-argued on defence-in-depth grounds (B1a)** |
-| R51 | "`OCLLexerRules.gpart` — empty diff" (§15 §6.3) | **REFUTED as written** — `diff` reports `1,127c1,127`; the files are identical only after CRLF normalisation. **Conclusion (no new lexer token) stands** |
-| R52 | "the oracle jar is not present in `use-core/src/test/resources/historical/`" (`20-ops-UReal.md` §2) | **REFUTED** — it is there, byte-identical, md5 `a3055f54205babaa27484fa94efdda1c`. **The port needs no "obtain the jar" step** |
-| R53 | "`equivalent` has no competitor / registration order does not matter for it" (`20-ops-UBoolean.md` §3.14/§4.3) | **REFUTED** — `StandardOperationsSBoolean` registers a second `equivalent` whose `matches` accepts `Boolean × Boolean` and `UBoolean × UBoolean`. **The precedence chain is Boolean → UBoolean → SBoolean** |
-| R54 | "the `power`/`sqrt` FIXME is caused by the `(float)` narrowing, `1.016465997955662` vs `1.4142135623730951`" (`20-ops-UReal.md` §3 #11) | **REFUTED on all three counts** — the exponent `0.5` is exact in `float`; the cause is the discarded second-order term; against the binding jar the two agree after `MathUtil.round(·,10)`. **It is a second obsolete skip, not a trap** |
-| R55 | "`UInteger sqrt` line 382 is dead; line 385 is the only guard that fires" (`20-ops-UInteger.md` §4.11/§6.3) | **REFUTED** — only 382's *first* disjunct is dead; its second tests the uncertainty and fires **first** for `(0, u>0)`. **The suggested "repair" would delete the only live infinite-uncertainty trap.** Transcribe 382–386 verbatim |
-| R56 | "the confidence argument is lost on print and will break any print-then-reparse test" (`12-expressions.md` §3.3.4) | **REFUTED for the print visitor** — `visitUSelectC` delegates to `visitQuery`, which the fork edits to print it. **Only `ExpQuery.toString(StringBuilder)` drops it** |
-| R57 | 18 `[in:N]` corpus citations in `20-ops-UInteger.md`'s `div`/`mod` sections | **REFUTED — all 18 point at the wrong lines.** Every claimed expression+result pair exists with exactly the stated result, so **the semantics are sound**, but **re-derive every `[in:N]` with `grep -nF` before regenerating expectations** |
-| R58 | "`Op_enum_toString` and `Op_sBoolean_toString`" (`20-ops-UString.md` §2.13/§3.4) | **REFUTED — both identifiers are fabricated.** The Enum one is `final class Op_toString`; the SBoolean one is an anonymous `OpGeneric` in the enum constant `TO_STRING`. The six-way `toString` collision itself is real |
-| R59 | "`xor` of two vacuous SBoolean opinions gives `(0,0,1,0)`" | **REFUTED** — `a = \|a₁ − a₂\|`, so it is `(0, 0, 1, \|a₁ − a₂\|)` |
-| R60 | "`deduceY`'s eight `K` cases are a case analysis selected by …" and its six-divisor list | **REFUTED** — they are **sequential `if`s that do not partition** (source order decides), the listed `(yGivenX.b − yGivenNotX.b)` is a **false positive**, and `(yGivenNotX.b − yGivenX.b)` at L381 is a **missed** zero-divisor. Two type-inconsistent numerators (L368, L374) were also unflagged |
-| R61 | "§12's `ExpQuery`/visitor/`ASTQueryExpression` edits are 'purely additive' / 'add N new methods' / 'a ctor overload plus a guard'" | **REFUTED on all three** — §1.6 E5/E8/E12/E13 and **B9** carry the corrected scope |
-| R62 | "`ls T/uml/ocl/value/` lists no `U*Value.java`" | **REFUTED as literally written** (`UndefinedValue`, `UnlimitedNaturalValue` match); substantive claim correct |
-| R63 | "all `U*Type` sibling constructors are package-private except `UIntegerType`" | **REFUTED** — `URealType()` is `protected` |
-| R64 | "`OCLBase.gpart` 678 → 708 lines" | **REFUTED** — 677 → 707. The +30 delta and the 8-hunk/+35/−8 measurement are exactly right |
-| R65 | uDataTypes source-tree file counts "24 / 15", `SBoolean` javap delta "14 lines", the `divideBy` grep transcript, `OpGeneric`'s "six lines", "11 checked-in jars", and six line-number citations in §15 | **REFUTED** — 23 / 18, 11 lines, nine lines of grep output, seven lines, 13 jars, and the corrected line numbers. **Every affected conclusion stands** |
+17 rows (R49-R65) recorded specific claims made by an earlier draft of this document and refuted
+by a later pass, e.g. a mis-cited line number, a fabricated identifier, or a miscounted diff. None
+changed a conclusion or a blocking decision — every row's note ends "conclusion stands" or names the
+corrected fact, which is already folded into the relevant section above (§2.2, §2.3, §4.6, §5.1,
+etc.). This was commentary on the document's own drafting history, not on the port or the code; git
+log preserves it. Removed 2026-08-21 as part of doc compression; see git history for the full table.
 
 ## 10.7 Deliberately not attempted
 

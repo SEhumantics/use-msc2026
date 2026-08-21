@@ -26,8 +26,21 @@ import java.util.Set;
 /**
  * Abstract base class of all types. Types should be created only by
  * the TypeFactory class.
- *  
- * @author      Mark Richters 
+ *
+ * @implNote This class is one of exactly two implementation roots for {@link Type} in this
+ *     codebase -- the other is {@code org.tzi.use.uml.mm.MClassifierImpl}, which every {@code
+ *     MClassifier} (classes, associations, enums, datatypes, ...) implements instead of extending
+ *     this class. Every {@code is*}/{@code isKindOf*} predicate on {@code Type} is therefore given
+ *     a {@code return false;} default in <b>both</b> places, not just here. Adding a new such
+ *     predicate to {@link Type} and defaulting it only in one root leaves the other root's leaves
+ *     (six {@code MClassifierImpl} subclasses at last count, including {@code EnumType}, which
+ *     extends {@code MClassifierImpl} and not this class) either failing to compile or silently
+ *     answering wrong depending on how the interface method is declared. Verify with {@code grep -rn
+ *     "public boolean isTypeOfOclAny()" --include=*.java} across the source tree: it should return
+ *     exactly three hits (this class, {@code MClassifierImpl}, and {@code OclAnyType}'s own
+ *     override), which pins the two-roots claim.
+ * @see "docs/port2/spec-parts/11-types.md &sect;3 -- deviation ledger (adaptation-policy.md row T-02)"
+ * @author      Mark Richters
  */
 public abstract class TypeImpl implements Type {
 
@@ -75,11 +88,36 @@ public abstract class TypeImpl implements Type {
     @Override
 	public abstract int hashCode();
 
+    /**
+     * @implNote This is a self-recursive stub, not a default answer: {@code return
+     *     this.conformsTo(other);} calls the same virtual method again, so it never terminates on
+     *     its own. It works today only because every concrete {@code Type} in this tree overrides
+     *     {@code conformsTo}. A new leaf class that extends {@code TypeImpl} (directly or via {@link
+     *     BasicType}) and forgets to override this method will compile cleanly and then
+     *     {@code StackOverflowError} the first time anything calls {@code conformsTo} on it --
+     *     silently, with no wrong-answer symptom to catch in review first. This is a pre-existing
+     *     upstream shape, unchanged by the uncertainty port; when adding a new concrete type, add a
+     *     unit test that calls {@code conformsTo} on an instance of it.
+     * @see "docs/port2/spec-parts/11-types.md &sect;3 -- deviation ledger (adaptation-policy.md row T-12)"
+     */
     @Override
 	public boolean conformsTo(Type other) {
 		return this.conformsTo(other);
 	}
 
+	/**
+	 * @implNote This pairwise routine is <b>not</b> the only least-common-supertype computation in
+	 *     the codebase, and the two do not always agree. Collection literals and runtime collection
+	 *     values go through {@link UniqueLeastCommonSupertypeDeterminator#calculateFor} instead
+	 *     (its callers are {@code ExpCollectionLiteral} and {@code CollectionValue}); this method is
+	 *     used by {@code ExpIf} and roughly fifty sites across the {@code StandardOperations*}
+	 *     classes. Both intersect {@link #allSupertypes()} and both call {@link #conformsTo}, so they
+	 *     usually agree -- but for a mutually-conformant pair of types they can diverge (see {@link
+	 *     UniqueLeastCommonSupertypeDeterminator} for the worked case). Fixing a perceived bug in one
+	 *     routine's answer does not fix the other; check both before declaring the disagreement
+	 *     resolved.
+	 * @see "docs/port2/spec-parts/11-types.md &sect;3 -- deviation ledger (adaptation-policy.md row T-07)"
+	 */
 	@Override
 	public Type getLeastCommonSupertype(Type type) {
 		if (type == null )

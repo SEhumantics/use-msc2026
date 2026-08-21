@@ -193,7 +193,17 @@ public final class PortedCandidate implements Candidate {
 
     // ------------------------------------------------------------------ marshalling out
 
-    /** Maps a value the PORTED code returned back to a {@link UValue}, observing its class. */
+    /**
+     * Maps a value the PORTED code returned back to a {@link UValue}, observing its class.
+     *
+     * @implNote This is the invocation-seam shape {@code harness-contract.md} &sect;7 and &sect;8 step 1
+     *     mandate for defect D-52: {@code raw} is the exact object {@link #invoke(UOp, List)} received
+     *     from {@code method.invoke(...)}, threaded through unchanged to build {@code out} and then
+     *     passed to {@code out.observedFrom(raw)} at the very end — the same reference, used for
+     *     nothing else, never reconstructed, re-boxed or replaced by a stand-in. That is what makes
+     *     the resulting {@link UValue.TypeProvenance#OBSERVED} token a statement about this class and
+     *     not a choice this adapter made.
+     */
     static UValue fromPorted(Object raw) {
         if (raw == null) {
             return UValue.nullValue();

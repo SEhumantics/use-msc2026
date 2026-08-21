@@ -232,8 +232,22 @@ public final class TupleType extends TypeImpl {
     }
     
 
-    /** 
+    /**
      * Returns the set of all supertypes (including this type).
+     *
+     * @implNote {@link #genAllSuperTypes} builds the cartesian product of each part's own
+     *     {@code allSupertypes()}, so the result size is exponential in the number of tuple parts
+     *     and in the size of each part's supertype set. For {@code n} parts of type {@code Integer}
+     *     the size is exactly {@code k^n + 1}, where {@code k} is however many supertypes
+     *     {@code Integer} itself has -- adding uncertainty predicates to {@code Integer} (see {@link
+     *     IntegerType#allSupertypes}) raised {@code k} from 3 to 5, which alone grew a 7-part tuple's
+     *     supertype set from 2188 entries to 78126 and made a 9-part one not finish inside a 2-minute
+     *     cap in measurement. This method and {@link #genAllSuperTypes} are deliberately left
+     *     unedited by the uncertainty port -- do not add uncertainty-specific handling here, and
+     *     be wary of widening any basic type's {@code allSupertypes()} further, since every such
+     *     widening multiplies through every tuple-typed expression in the corpus. The result is
+     *     memoised in {@link #fAllSupertypes} precisely because it is expensive to recompute.
+     * @see "docs/port2/adaptation/01-types.md &sect;C-09 -- deviation ledger (adaptation-policy.md row T-09)"
      */
     public Set<Type> allSupertypes() {
         Set<Type> cached = fAllSupertypes;

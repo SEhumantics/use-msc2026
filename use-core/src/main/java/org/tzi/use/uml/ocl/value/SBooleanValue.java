@@ -309,6 +309,37 @@ public final class SBooleanValue extends UncertainBooleanValue {
 		return new SBooleanValue(sBoolean.uncertaintyMaximized());
 	}
 
+	/**
+	 * Deduces the opinion about {@code y} from a conditional opinion pair, per the vendored
+	 * {@code uncertainty.datatypes.SBoolean#deduceY}'s eight-case subjective-logic deduction.
+	 *
+	 * @implNote {@code SBoolean.deduceY} (vendored, not editable — see its file header) has three
+	 *     hazards worth knowing before touching anything nearby, since the source itself is
+	 *     off-limits to comment:
+	 *     <ol>
+	 *     <li><b>Six unguarded divisors, not the four you'd guess from a skim.</b> The four
+	 *     non-difference divisors ({@code b+a*u}, {@code d+(1-a)*u}, {@code y.a}, {@code 1-y.a}) are
+	 *     genuinely unguarded. Of the four <em>difference</em> divisors, two are safe (each sits
+	 *     behind a strict {@code >} branch guard that keeps it nonzero), but the other two sit
+	 *     behind {@code <=} guards that <em>permit equality</em> and so can still be zero: case
+	 *     III.A.1's divisor is correctly guarded (strict), but case III.B.2's
+	 *     {@code (yGivenNotX.b - yGivenX.b)} can be zero under its own {@code <=} branch condition.
+	 *     <li><b>The eight {@code K}-selecting blocks are sequential {@code if}s, not
+	 *     {@code else if}.</b> A later block's assignment silently overwrites an earlier one where
+	 *     both fire. The case-II family partitions cleanly (all four compare against the same
+	 *     threshold expression), but the case-III family does not — III.A.1 compares against a
+	 *     different threshold than III.A.2/III.B.1/III.B.2, so for some inputs two case-III blocks
+	 *     both fire and the textually-later one wins; for the complementary inputs none fire and
+	 *     {@code K} stays {@code 0}. A bug-compatible port must preserve the source order of the
+	 *     eight blocks exactly — converting them to {@code else if} to "clean up" the dead-looking
+	 *     duplication would be a real behavior change, not a refactor.
+	 *     <li><b>Two numerators mix belief and disbelief accumulators</b> (case III.A.2 subtracts a
+	 *     disbelief term from a belief accumulator; case III.B.1 subtracts a belief term from a
+	 *     disbelief accumulator), unlike their type-consistent case-II siblings. These read as
+	 *     transcription errors in the upstream oracle itself — but a verbatim port must reproduce
+	 *     them exactly, since {@code SBoolean.java} is byte-for-byte vendored.
+	 *     </ol>
+	 */
 	public SBooleanValue deduceY(Value yGivenX, Value yGivenNotX) {
 		SBooleanValue sboolA = assertKindOfSBoolean(yGivenX);
 		SBooleanValue sboolB = assertKindOfSBoolean(yGivenNotX);

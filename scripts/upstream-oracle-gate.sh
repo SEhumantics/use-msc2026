@@ -189,7 +189,7 @@ run_one() {
   n=$(grep -cE '^\[floor\] initialize: requested profiles ' "$log")
   if [ "$n" -ne ${#MODULES[@]} ]; then
     bad "$label: the initialize-phase profile guard announced itself $n time(s), expected" \
-        "${#MODULES[@]}. Without it, `mvn test -Pupstream-oracle-typo` is a green build with" \
+        "${#MODULES[@]}. Without it, \`mvn test -Pupstream-oracle-typo\` is a green build with" \
         "no gate in it (defect G-04)."
   fi
   if grep -qE '^\[floor\] (FAIL|FATAL|PARTIAL)' "$log"; then

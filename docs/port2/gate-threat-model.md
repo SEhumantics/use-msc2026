@@ -9,6 +9,11 @@ round found more. This file exists to stop that regress by **drawing the line ex
 the adversary the gate is for, naming the adversary it is not for, and **listing every known bypass**
 so that "out of scope" can never be mistaken for "unknown".
 
+**Provenance note (2026-08-21).** `upstream-oracle-verification.md`, cited below, was consolidated
+during a documentation cleanup and no longer exists as a separate file; its findings (RB-1 and the
+R-1..R-6 minors) are closed/tabulated in `upstream-oracle-profile.md` §5.2.6. Full original content
+in git history.
+
 The one-sentence version:
 
 > **The gate defends a green build against being a lie by accident. It does not defend against an

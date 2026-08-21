@@ -156,8 +156,20 @@ public final class TypeFactory {
     /**
      * Returns the type instance of the build in simple type with the name <code>typeName</code>
      * or <code>null</code> if the name does not map to a build in type.
+     *
+     * @implNote {@code buildInTypesMap} is consulted by {@code ASTSimpleType.gen} before enums,
+     *     before {@code model().getClassifier(name)}, and before the variable-type table. Every key
+     *     in the map -- including {@code "UInteger"}, {@code "UReal"}, {@code "UBoolean"}, {@code
+     *     "UString"}, {@code "SBoolean"} -- is therefore a reserved word that shadows a
+     *     user-declared classifier of the same name, e.g. a model declaring {@code class UReal}
+     *     silently gets the built-in type instead of its own class wherever {@code UReal} is used as
+     *     a type name. This is a deliberate, narrower-than-the-fork choice: only the type name is
+     *     reserved (via this map), not the grammar token, so {@code class UReal} still parses -- it
+     *     just cannot be used as a type name afterwards. Do not add a name to this map without
+     *     checking it is not already a plausible model class name.
      * @param typeName
      * @return
+     * @see "docs/port2/adaptation/01-types.md &sect;C-10 -- deviation ledger (adaptation-policy.md row T-10/G-04)"
      */
     public static Type mkSimpleType(String typeName) {
     	if (buildInTypesMap.containsKey(typeName)) {

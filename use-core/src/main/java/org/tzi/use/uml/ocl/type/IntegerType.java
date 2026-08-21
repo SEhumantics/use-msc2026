@@ -62,8 +62,18 @@ public final class IntegerType extends BasicType {
       	return true;
     }
     
-    /** 
-     * Returns true if this type is a subtype of <code>t</code>. 
+    /**
+     * Returns true if this type is a subtype of <code>t</code>.
+     *
+     * @implNote This body is byte-identical to plain OCL {@code Integer.conformsTo} and must stay
+     *     that way. {@code Integer <= UInteger} and {@code Integer <= UReal} are installed from the
+     *     supertype side -- {@link UIntegerType#isKindOfNumber} and {@link URealType#isKindOfNumber}
+     *     both answer {@code true} -- not by anything in this method. A reviewer diffing this method
+     *     against upstream will see no change and may be tempted to "restore symmetry" by adding
+     *     {@code t.isTypeOfUInteger()} / {@code t.isTypeOfUReal()} disjuncts here; that would not fix
+     *     anything (the edges already exist) and would silently widen the lattice in a spot that is
+     *     deliberately asymmetric.
+     * @see "docs/port2/spec-parts/11-types.md &sect;2 -- deviation ledger (adaptation-policy.md row T-04)"
      */
     @Override
 	public boolean conformsTo(Type t) {

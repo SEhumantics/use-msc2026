@@ -63,7 +63,19 @@ package org.tzi.use.uncertainty.differential;
  */
 public enum DiffVerdict {
 
-    /** Both sides returned a value and the canonical forms are identical. */
+    /**
+     * Both sides returned a value and the canonical forms are identical.
+     *
+     * @implNote {@link UValue#canonical()} is type-bearing, so this includes the Java class each side
+     *     was <em>observed</em> or <em>assumed</em> as ({@link UValue.TypeProvenance}) — see
+     *     {@link UValue}'s class comment. A subject whose adapter merely assumed its class can still
+     *     land here by luck rather than by fidelity, and the class token alone does not tell the two
+     *     cases apart; only {@link DifferentialSweep.Result#javaTypeMismatchCount()} and its provenance
+     *     split do. That is why the invocation-seam shape mandated for
+     *     {@link UValue#observedFrom(Object)} exists: an {@code AGREE} row is not, by itself, evidence
+     *     that the port produced the right class, only that it produced the right content.
+     * @see "docs/port2/harness-contract.md &sect;2 verdict vocabulary, &sect;7 third trap -- deviation ledger (decided 2026-08-17)"
+     */
     AGREE,
 
     /**

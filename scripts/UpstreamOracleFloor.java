@@ -600,9 +600,9 @@ public class UpstreamOracleFloor {
         //
         // RESIDUAL, stated because a limit nobody writes down is a false claim: a profile
         // declared in a settings.xml or in an ancestor pom outside this reactor would not be
-        // found. This machine has neither (upstream-oracle-verification.md sec. 11: no .mvn, no
-        // ~/.m2/settings.xml, empty MAVEN_OPTS/MAVEN_ARGS), so the pom set is the complete
-        // authority here. If a future machine has one, declare the id or pass
+        // found. This machine has neither (verified: no .mvn, no ~/.m2/settings.xml, empty
+        // MAVEN_OPTS/MAVEN_ARGS), so the pom set is the complete authority here. If a future
+        // machine has one, declare the id or pass
         // -Duse.floor.allowProfiles=<id>[,<id>] — which widens THIS check and nothing else.
         Set<String> declaredProfiles = declaredProfileIds(reactorRoot);
         Set<String> allowedProfiles = parseMavenList(allowRaw);

@@ -147,6 +147,18 @@ final class Op_uString_setValue extends OpGeneric {
 
 
 // setConfidence : UString x Real -> UString
+/**
+ * {@code setConfidence : UString x (Integer | Real) -> UString} — replaces the confidence
+ * component, keeping the value component unchanged.
+ *
+ * @implNote {@code new UStringValue(...)} in {@code eval} re-runs {@code UString}'s constructor
+ *     guard, which throws {@code IllegalArgumentException} for a confidence outside {@code [0,1]}.
+ *     That exception is not caught here or by {@code ExpStdOp.eval}, so it escapes the evaluator as
+ *     a crash rather than becoming {@code Undefined}. The same guard does <em>not</em> reject
+ *     {@code NaN} ({@code NaN < 0.0} and {@code NaN > 1.0} are both {@code false}), so
+ *     {@code setConfidence} silently accepts a {@code NaN} confidence and produces a
+ *     {@code UString} that carries it into every later projection and comparison.
+ */
 final class Op_uString_setConfidence extends OpGeneric {
 
     @Override
@@ -185,6 +197,18 @@ final class Op_uString_setConfidence extends OpGeneric {
 }
 
 // at : UString x Integer -> String
+/**
+ * {@code at : UString x Integer -> UString} — the 1-based single character at the given index,
+ * with the receiver's confidence carried through unchanged.
+ *
+ * @implNote Diverges from upstream {@code Op_string_at}, which returns
+ *     {@code UndefinedValue.instance} for an out-of-range index. Here {@code eval} delegates to
+ *     {@link UStringValue#uAt}, which reaches {@code UString.uSubstring} and throws
+ *     {@code IllegalArgumentException} for {@code idx < 1} or {@code StringIndexOutOfBoundsException}
+ *     for {@code idx > size}. Neither is caught here, and {@code ExpStdOp.eval} catches only
+ *     {@code ArithmeticException}, so an out-of-range index escapes the evaluator as an uncaught
+ *     crash rather than degrading to {@code Undefined}.
+ */
 final class Op_uString_at extends OpGeneric {
 
     @Override
@@ -340,6 +364,20 @@ final class Op_uString_indexOf extends OpGeneric {
 
 
 // substring : UString x Integer x Integer -> UString
+/**
+ * {@code substring : UString x Integer x Integer -> UString} — 1-based, inclusive-inclusive range,
+ * copying the receiver's confidence into the result unchanged regardless of how much of the string
+ * survives.
+ *
+ * @implNote The inline comment below claims the catch-all behavior matches
+ *     {@code java.lang.String.substring}; that claim is false. {@code String.substring} throws on
+ *     an invalid range. This instead swallows every {@code Exception} out of the underlying
+ *     {@code UString.uSubstring} call — both the lower-bound guard
+ *     ({@code IllegalArgumentException} for {@code lower < 1}) and the upper-bound overrun
+ *     ({@code StringIndexOutOfBoundsException}) — and substitutes {@code UString("", 1.0)}: an
+ *     empty string at full confidence, not {@code Undefined} and not the receiver's actual
+ *     confidence.
+ */
 final class Op_uString_substring extends OpGeneric {
 
     @Override
@@ -702,6 +740,23 @@ final class Op_uString_toUBoolean extends OpGeneric {
 
 
 // < : UString x Value -> UBoolean
+/**
+ * {@code < : UString x Value -> UBoolean}
+ *
+ * @implNote {@code matches()} guards both operands with only
+ *     {@code isKindOfUString(EXCLUDE_VOID)}, which {@code StringType} also answers {@code true}
+ *     for — unlike {@link Op_uString_uConcat} above, there is no {@code someOfThemIsUString} check
+ *     requiring at least one operand to be a genuine {@code UString}. So a plain
+ *     {@code String < String} comparison matches this class too, and is kept off plain strings only
+ *     by registration order: {@code StandardOperationsString} is registered before
+ *     {@code StandardOperationsUString} ({@code OpGeneric.registerOperations}), and
+ *     {@code ExpStdOp.create} takes the first matching candidate, so {@code Op_string_less} wins for
+ *     {@code String < String} today. That ordering is load-bearing and unenforced by any guard in
+ *     this class: reordering the two registrations would silently retype every existing
+ *     {@code String < String} comparison in a model from {@code Boolean} to {@code UBoolean}. The
+ *     three sibling comparison classes below ({@code <=}, {@code >}, {@code >=}) share the same
+ *     constraint.
+ */
 final class Op_uString_less extends OpGeneric {
 
     @Override
@@ -735,6 +790,13 @@ final class Op_uString_less extends OpGeneric {
 
 
 // <= : UString x Value -> UBoolean
+/**
+ * {@code <= : UString x Value -> UBoolean}
+ *
+ * @implNote Same registration-order constraint as {@link Op_uString_less} above: {@code matches()}
+ *     has no {@code someOfThemIsUString} guard, so plain {@code String <= String} is kept off this
+ *     class only because {@code StandardOperationsString} is registered first.
+ */
 final class Op_uString_less_or_equal extends OpGeneric {
 
     @Override
@@ -768,6 +830,13 @@ final class Op_uString_less_or_equal extends OpGeneric {
 
 
 // > : UString x Value -> UBoolean
+/**
+ * {@code > : UString x Value -> UBoolean}
+ *
+ * @implNote Same registration-order constraint as {@link Op_uString_less} above: {@code matches()}
+ *     has no {@code someOfThemIsUString} guard, so plain {@code String > String} is kept off this
+ *     class only because {@code StandardOperationsString} is registered first.
+ */
 final class Op_uString_greater extends OpGeneric {
 
     @Override
@@ -801,6 +870,13 @@ final class Op_uString_greater extends OpGeneric {
 
 
 // > : UString x Value -> UBoolean
+/**
+ * {@code >= : UString x Value -> UBoolean}
+ *
+ * @implNote Same registration-order constraint as {@link Op_uString_less} above: {@code matches()}
+ *     has no {@code someOfThemIsUString} guard, so plain {@code String >= String} is kept off this
+ *     class only because {@code StandardOperationsString} is registered first.
+ */
 final class Op_uString_greater_or_equal extends OpGeneric {
 
     @Override

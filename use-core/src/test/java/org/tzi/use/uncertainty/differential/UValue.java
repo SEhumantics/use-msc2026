@@ -390,6 +390,17 @@ public final class UValue {
      * wrong object reports the wrong class, which is the D-18 divergence and is meant to be one.
      * What it removes is the ability to be wrong <em>by omission</em>.
      *
+     * @implNote This method cannot itself enforce which object a caller hands it, and that gap is
+     *     defect D-52: {@code observedFrom} reads {@code getClass().getName()} off whatever it is
+     *     given, so an adapter that hands it an empty stand-in class of the reference's name — rather
+     *     than the object the port actually returned — erases a real wrong-class defect to zero in
+     *     every published figure, with a verdict tally byte-identical to a defect-free port. The
+     *     safety property is therefore on the <em>caller's shape</em>, not on this method's contract:
+     *     the object passed here must be the invocation's own return value, captured at one seam and
+     *     used for nothing else before this call — see {@link PortedCandidate#fromPorted(Object)} for
+     *     the worked example, where the parameter that was invoked and the argument passed here are
+     *     the same reference throughout. Do not construct a marker, placeholder or type-shaped
+     *     stand-in anywhere in an adapter.
      * @param returned the object the side under comparison returned; may be a boxed primitive, and
      *                 must not be {@code null} — a {@code null} result is {@link #nullValue()} and a
      *                 {@code void} operation is {@link #voidValue()}, neither of which has a class
@@ -397,6 +408,7 @@ public final class UValue {
      * @throws IllegalStateException    if this value carries no observation — {@link Kind#NULL} and
      *                                  {@link Kind#VOID} mean "no result", and a non-result cannot
      *                                  have been observed as anything
+     * @see "docs/port2/harness-contract.md &sect;7 REQUIREMENT on S4, &sect;8 step 1 -- deviation ledger (decided 2026-08-17)"
      */
     public UValue observedFrom(Object returned) {
         if (returned == null) {

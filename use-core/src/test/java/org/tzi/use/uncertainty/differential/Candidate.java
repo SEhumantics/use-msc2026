@@ -86,6 +86,19 @@ import java.util.List;
  * token copy the snippet above.
  *
  * <p>Test-scoped. Not part of the product.
+ *
+ * @implNote Do not reach for {@link HarnessMarshallingException} as a fallback for "I am not sure
+ *     this row is right" (defect D-17, measured D-32). {@code HARNESS_ERROR} and
+ *     {@link DiffVerdict#UNSUPPORTED} rows are excluded from the per-operation denominator that
+ *     {@code UnwrittenPortInvariantTest}'s no-logic-port check reads, so an adapter that declines to
+ *     marshal wherever it might otherwise be wrong is scored fully agreed by that invariant, not
+ *     merely neutral. It buys no stage pass either — clause 2 of the stage gate refuses any
+ *     {@code HARNESS_ERROR} row, and a subject that always throws it was measured to reach zero stage
+ *     passes on every operation it touches. What it destroys is attribution: a reader is told the
+ *     harness could not drive those rows, not that the port answered them wrongly. Reserve it for a
+ *     genuine adapter failure — wrong argument count, an unmarshallable receiver type, a result the
+ *     adapter's contract forbids — never for "the implementation might be wrong here".
+ * @see "docs/port2/harness-contract.md &sect;7 first trap -- deviation ledger (decided 2026-08-17)"
  */
 public interface Candidate extends Closeable {
 
