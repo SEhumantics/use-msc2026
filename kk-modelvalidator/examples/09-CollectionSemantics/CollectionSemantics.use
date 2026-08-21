@@ -1,0 +1,42 @@
+-------------------------------------------------------- CollectionSemantics
+model CollectionSemantics
+
+-- Demonstrates a confirmed limitation of this plugin's OCL->Kodkod
+-- translator (org.tzi.use.kodkod.transform.ocl.QueryExpressionVisitor):
+-- Kodkod has no relational representation for Bag or Sequence, so any
+-- ->collect() whose source is (per the OCL standard) a Set or a Bag --
+-- meaning the result should itself be a Bag, since collect() never
+-- filters, only maps -- is silently *reinterpreted as a Set* instead.
+-- Duplicate result values collapse. See NOTES.md in this directory for
+-- the full write-up, the exact log line, and confirmed query output.
+--
+-- The scenario: a Playlist has exactly 3 Songs (fixed by the [1]/[3]
+-- association-end multiplicities below, together with the class object
+-- bounds in CollectionSemantics.properties), and each Song's `album`
+-- attribute is restricted to only 2 possible values (also via the
+-- .properties file). By the pigeonhole principle, any solution the
+-- solver finds MUST have at least two of the three Songs sharing an
+-- `album` value. True Bag semantics for ->collect() would therefore
+-- report a Bag of size 3 (one entry per Song, duplicates kept) -- but
+-- this plugin reports a Set of size <= 2 instead.
+
+class Song
+attributes
+  album : Integer  -- restricted to Set{1,2} in the .properties file
+end
+
+class Playlist
+end
+
+association Contains between
+  Playlist [1] role playlist
+  Song     [3] role songs
+end
+
+constraints
+
+-- Purely structural sanity check (redundant with the multiplicities
+-- above plus the .properties bounds, but gives `check -v` something
+-- concrete to confirm): every Playlist really is linked to exactly 3
+-- Songs in any solution the model finder produces.
+context Playlist inv hasThreeSongs: self.songs->size() = 3

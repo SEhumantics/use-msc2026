@@ -1,0 +1,20 @@
+-- Hand-built (NOT Kodkod-searched) instance of the Vehicle hierarchy: exactly
+-- one Car and one Truck, both fully within every attribute range the class
+-- invariants require. Loaded via the plain USE `open' command (see
+-- valid-instance.cmd), which auto-detects a non-".use"/non-model file and
+-- executes it line by line exactly like a .cmd script.
+--
+-- car1: wheels=4 (> 0, satisfies Vehicle::PositiveWheels),
+--       numDoors=4 (within [2,5], satisfies Car::ReasonableDoors)
+-- truck1: wheels=6 (> 0, satisfies Vehicle::PositiveWheels),
+--         payloadCapacity=5 (> 0, satisfies Truck::PositivePayload)
+
+!create car1 : Car
+!set car1.licensePlate := 'CAR-001'
+!set car1.wheels := 4
+!set car1.numDoors := 4
+
+!create truck1 : Truck
+!set truck1.licensePlate := 'TRK-100'
+!set truck1.wheels := 6
+!set truck1.payloadCapacity := 5

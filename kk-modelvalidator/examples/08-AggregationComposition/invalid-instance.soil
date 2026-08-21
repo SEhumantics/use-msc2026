@@ -1,0 +1,28 @@
+-- Hand-built instance that mirrors valid-instance.soil EXACTLY except for
+-- one deliberate change: m1.size is set to 0 instead of a positive value.
+-- This violates exactly one invariant:
+--
+--   context fi:File inv sizePositive: fi.size > 0
+--
+-- Structurally everything else is identical to the valid instance (4
+-- objects, same links), so nameNotEmpty (f1, f2), Archive's nameNotEmpty
+-- (a1), and notOwnPrimaryParent (f1, f2) should still all report OK -- only
+-- sizePositive on m1 should FAIL.
+
+!create f1 : Folder
+!set f1.name := 'root'
+
+!create f2 : Folder
+!set f2.name := 'docs'
+
+!insert (f1, f2) into PrimaryContains
+
+!create a1 : Archive
+!set a1.name := 'archive1'
+
+!create m1 : MediaFile
+!set m1.name := 'song.mp3'
+!set m1.size := 0
+!set m1.codec := 'mp3'
+
+!insert (a1, m1) into ArchiveHasMedia

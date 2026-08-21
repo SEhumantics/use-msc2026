@@ -1,0 +1,16 @@
+-- Hand-built instance that deliberately VIOLATES exactly the PositiveSalary
+-- invariant (salary > 0) for one object, while leaving NotBelowMinusOne
+-- (salary > -1) satisfied for all three: Dave's salary is set to 0, which
+-- fails "> 0" but still passes "> -1". Structurally valid otherwise -- all
+-- three objects are ordinary Employee instances with their salary attribute
+-- set. Read via the plain USE shell `open' command (see
+-- invalid-instance.cmd).
+
+!create Dave : Employee
+!set Dave.salary := 0
+
+!create Erin : Employee
+!set Erin.salary := 2500
+
+!create Frank : Employee
+!set Frank.salary := 7

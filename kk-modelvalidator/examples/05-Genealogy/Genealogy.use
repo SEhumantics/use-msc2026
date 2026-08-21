@@ -1,0 +1,114 @@
+model Parenthood
+
+-- ===================================================================
+-- Reconstructed for USE 7.5.0 / KK-ModelValidator from the Person /
+-- Parenthood ("Corleone family") running example in:
+--   M. Gogolla, F. Hilken, K.-H. Doan: "Achieving Model Quality through
+--   Model Validation, Verification and Exploration", Computer Languages,
+--   Systems & Structures (COMLAN), Database Systems Group, University
+--   of Bremen.
+-- No working parenthood.use file exists in the source archive; this
+-- file is assembled from verbatim OCL invariants quoted in the paper's
+-- LaTeX prose (sections/preliminaries.tex, sections/use-cases.tex). See
+-- the accompanying attribution note for exactly what is verbatim versus
+-- reconstructed/normalized. Zero-argument OCL operation calls
+-- (allInstances, size) have been given explicit "()" throughout, since
+-- USE 7.5.0 requires them even though some of the paper's typeset
+-- snippets omit them.
+-- ===================================================================
+
+class Person
+attributes
+  fName : String
+  lName : String
+  yearB : Integer
+operations
+  -- "Classifying terms" use case: partitions Persons by descendant-count
+  -- level, using the paper's own p.child->size() / p.child.child->size() /
+  -- p.child.child.child->size() building blocks (mutually exclusive by
+  -- construction -- see the accompanying classifyingTerms.cmd/.ct file).
+  -- descLevel0: no children at all (a "leaf" of the family tree).
+  descLevel0() : Boolean =
+    self.child->size() = 0
+  -- descLevel1: has children, but none of them have children of their own.
+  descLevel1() : Boolean =
+    self.child->size() > 0 and self.child.child->size() = 0
+  -- descLevel2: has grandchildren, but no great-grandchildren yet.
+  descLevel2() : Boolean =
+    self.child.child->size() > 0 and self.child.child.child->size() = 0
+end
+
+association Parenthood between
+  Person[0..2] role parent
+  Person[*] role child
+end
+
+constraints
+
+-- -------------------------------------------------------------------
+-- Base invariants: always meant to be active. They keep family trees
+-- "rational" -- unique names, no cycles, and each generation strictly
+-- older than the next by at least 15 years.
+-- -------------------------------------------------------------------
+
+context p1, p2 : Person inv nameUnique:
+  p1<>p2 implies (p1.fName<>p2.fName or p1.lName<>p2.lName)
+
+context p : Person inv acyclicParenthood:
+  p.parent->closure(parent)->excludes(p)
+
+context p : Person inv parentOlderChild:
+  p.child->forAll(c | p.yearB+15<=c.yearB)
+
+-- -------------------------------------------------------------------
+-- Supplementary invariants for individual paper use cases. Inactive by
+-- default -- see the accompanying .properties file for how each named
+-- section activates/negates the ones it needs.
+-- -------------------------------------------------------------------
+
+-- "Constraint implication" use case: suspected consequence of
+-- parentOlderChild (a grandparent is at least 30 years older).
+context gp : Person inv grandparentOlderGrandchild:
+  gp.child.child->forAll( gc | gp.yearB+30 <= gc.yearB )
+
+-- "Property satisfiability" use case: shows the model allows perfectly
+-- balanced, binary family trees.
+context p : Person inv balancedBinaryTree:
+  -- balance, binary
+  (p.child->size()=0 or p.child->size()=2) and
+  -- root
+  Person.allInstances()->one(r | r.parent->size()=0 and
+    Person.allInstances()->excluding(r)->forAll(p2 |
+      p2.parent->size()=1)) and
+  -- balance
+  p.child->forAll(c1,c2 | c1.child->closure(child)->size() =
+    c2.child->closure(child)->size())
+
+-- "Equivalence implication" use case: two ways of saying "0..2 parents".
+context p : Person inv parent_0_2_size:
+  0<=p.parent->size() and p.parent->size()<=2
+
+context p : Person inv parent_0_2_Set:
+  let P = Person.allInstances() in
+  p.parent=Set{} or
+  P->exists(c | p.parent=Set{c}) or
+  P->exists(c | P->exists(d | c<>d and p.parent=Set{c,d}))
+
+context p : Person inv parent_0_2_size_EQUIV_parent_0_2_Set:
+  let A = 0<=p.parent->size() and p.parent->size()<=2 in
+  let B = let P = Person.allInstances() in
+          p.parent=Set{} or
+          P->exists(c | p.parent=Set{c}) or
+          P->exists(c | P->exists(d | c<>d and p.parent=Set{c,d})) in
+  (A implies B) and (B implies A)
+
+-- Deliberately-broken variant (inner "exists" replaced by "one"): the
+-- source paper uses this to demonstrate a counterexample rather than a
+-- true equivalence -- see warnings.
+context p : Person inv parent_0_2_size_EQUIV_parent_0_2_Set_ONE:
+  let A = 0<=p.parent->size() and p.parent->size()<=2 in
+  let B = let P = Person.allInstances() in
+          p.parent=Set{} or
+          P->one(c | p.parent=Set{c}) or
+          P->one(c | P->one(d | c<>d and p.parent=Set{c,d})) in
+  (A implies B) and (B implies A)

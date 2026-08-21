@@ -1,0 +1,15 @@
+model EmployeeInvariants
+
+class Employee
+attributes
+  salary : Integer
+end
+
+constraints
+
+-- PositiveSalary logically implies NotBelowMinusOne, so NotBelowMinusOne is
+-- NOT independent: no state can violate it while PositiveSalary still holds.
+-- This pair exists to give `modelvalidator -invIndep` something meaningful
+-- to say (see invIndep.cmd).
+context Employee inv PositiveSalary: self.salary > 0
+context Employee inv NotBelowMinusOne: self.salary > -1

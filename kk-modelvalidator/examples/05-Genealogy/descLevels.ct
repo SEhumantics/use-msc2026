@@ -1,0 +1,5 @@
+[level0Count] Person.allInstances()->select(p | p.descLevel0())->size()
+~~~
+[level1Count] Person.allInstances()->select(p | p.descLevel1())->size()
+~~~
+[level2Count] Person.allInstances()->select(p | p.descLevel2())->size()

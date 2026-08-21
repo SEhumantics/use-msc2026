@@ -1,0 +1,36 @@
+-- Hand-built, deliberately VALID instance of Library.use (SOIL statements,
+-- no Kodkod search): 2 Users, 2 Books, 2 Copies, one Borrows link and one
+-- BelongsTo link per Copy. Every invariant in Library.properties' active
+-- set should report OK against this state -- see valid-instance.cmd.
+
+!create Ada : User
+!set Ada.name := 'Ada'
+!set Ada.address := 'NY'
+
+!create Bob : User
+!set Bob.name := 'Bob'
+!set Bob.address := 'CA'
+
+!create DBforDummies : Book
+!set DBforDummies.title := 'DBforDummies'
+!set DBforDummies.auth := 'Ada'
+!set DBforDummies.year := 2000
+
+!create IntroToAI : Book
+!set IntroToAI.title := 'IntroToAI'
+!set IntroToAI.auth := 'Bob'
+!set IntroToAI.year := 2005
+
+!create DBS42 : Copy
+!set DBS42.signature := 'DBS42'
+!set DBS42.numReturns := 0
+
+!create NW21 : Copy
+!set NW21.signature := 'NW21'
+!set NW21.numReturns := 2
+
+!insert (DBS42, DBforDummies) into BelongsTo
+!insert (NW21, IntroToAI) into BelongsTo
+
+!insert (Ada, DBS42) into Borrows
+!insert (Bob, NW21) into Borrows

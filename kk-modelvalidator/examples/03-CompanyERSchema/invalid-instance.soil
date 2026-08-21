@@ -1,0 +1,79 @@
+-- Same 13-object instance as valid-instance.soil (structurally identical:
+-- same objects, same FK-matching string attributes, so every PK/FK
+-- invariant, acyclic, budget check, etc. still hold), except for ONE
+-- deliberate change: Alice's salary is set to -100 instead of 40000.
+--
+-- This targets exactly one invariant:
+--   context e:Employee inv salary_positive:
+--     e.salary>0
+-- Alice.salary=-100 makes `Employee::salary_positive' FAIL for Alice
+-- (Bob's salary is untouched and still positive, so that invariant is
+-- only violated by the one object, not vacuously/globally broken).
+--
+-- Confirmed NOT to cascade into any other invariant: Alice's salary only
+-- otherwise appears in DepartmentBudget_greater_allEmployeeSalary
+-- (`e.salary <= d.budget div (...)`), and -100 <= any positive
+-- Department budget/employee-count ratio holds regardless of sign, so
+-- that invariant still reports OK for Alice too (verified below).
+
+!create Engineering : Department
+!set Engineering.dname := 'Engineering'
+!set Engineering.budget := 100000
+
+!create Sales : Department
+!set Sales.dname := 'Sales'
+!set Sales.budget := 50000
+
+!create Alice : Employee
+!set Alice.fname := 'Alice'
+!set Alice.lname := 'Smith'
+!set Alice.salary := -100
+!set Alice.dname := 'Engineering'
+
+!create Bob : Employee
+!set Bob.fname := 'Bob'
+!set Bob.lname := 'Jones'
+!set Bob.salary := 30000
+!set Bob.dname := 'Sales'
+
+!create Charlie : Dependent
+!set Charlie.dfname := 'Charlie'
+!set Charlie.age := 10
+!set Charlie.fname := 'Alice'
+!set Charlie.lname := 'Smith'
+
+!create Apollo : Project
+!set Apollo.pname := 'Apollo'
+!set Apollo.budget := 20000
+!set Apollo.mngfname := 'Alice'
+!set Apollo.mnglname := 'Smith'
+
+!create BobOnApollo : ProjectWork
+!set BobOnApollo.fname := 'Bob'
+!set BobOnApollo.lname := 'Jones'
+!set BobOnApollo.pname := 'Apollo'
+
+!create Acme : Supplier
+!set Acme.sname := 'Acme'
+!set Acme.location := 'NY'
+
+!create Widget : Part
+!set Widget.pname := 'Widget'
+!set Widget.cost := 100
+
+!create Gadget : Part
+!set Gadget.pname := 'Gadget'
+!set Gadget.cost := 50
+
+!create ApolloWidget : ProjectPart
+!set ApolloWidget.projectname := 'Apollo'
+!set ApolloWidget.partname := 'Widget'
+
+!create AcmeApolloWidget : SupplierProjectPart
+!set AcmeApolloWidget.suppliername := 'Acme'
+!set AcmeApolloWidget.projectname := 'Apollo'
+!set AcmeApolloWidget.partname := 'Widget'
+
+!create WidgetContainsGadget : Component
+!set WidgetContainsGadget.containername := 'Widget'
+!set WidgetContainsGadget.containedname := 'Gadget'

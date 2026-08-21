@@ -18,6 +18,14 @@
             <artifactId>use-gui</artifactId>
             <version>7.5.0</version>
         </dependency>
+        <!-- Declared so Maven's reactor builds kk-modelvalidator before this assembly step, exactly
+             like the use-gui dependency above: assembly.xml pulls the built jar from
+             kk-modelvalidator/target, same pattern as use-gui.jar from use-gui/target. -->
+        <dependency>
+            <groupId>org.tzi.use</groupId>
+            <artifactId>kk-modelvalidator</artifactId>
+            <version>7.5.0</version>
+        </dependency>
     </dependencies>
 
     <build>

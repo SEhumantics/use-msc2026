@@ -1,0 +1,322 @@
+model CompanyER
+
+class Employee
+attributes
+  fname:String
+  lname:String
+  salary:Integer
+  dname:String
+end
+
+class Department
+attributes
+  dname:String
+  budget:Integer
+end
+
+class Dependent
+attributes
+  dfname:String
+  age:Integer
+  fname:String
+  lname:String
+end
+
+class Project
+attributes
+  pname:String
+  budget:Integer
+  mngfname:String
+  mnglname:String
+end
+
+class ProjectWork
+attributes
+  fname:String
+  lname:String
+  pname:String
+end
+
+class Supplier
+attributes
+  sname:String
+  location:String -- original thirteen US states
+end
+
+/* location string enum - original thirteen US states - Delaware,
+Pennsylvania, New Jersey, Georgia, Connecticut, Massachusetts Bay,
+Maryland, South Carolina, New Hampshire, Virginia, New York, North
+Carolina, and Rhode Island and Providence Plantations - DE, PA, NJ,
+GA, CT, MA, MD, SC, NH, VA, NY, NC, RI */
+
+class Part
+attributes
+  pname:String
+  cost:Integer
+operations
+  contained():Set(Part)=
+    Part.allInstances()->select(p|Component.allInstances()->
+      exists(c|c.containername=self.pname and c.containedname=p.pname))
+  containedPlus():Set(Part)=self.contained()->closure(p|p.contained())
+end
+
+class ProjectPart
+attributes
+  projectname:String
+  partname:String
+end
+
+class SupplierProjectPart
+attributes
+  suppliername:String
+  projectname:String
+  partname:String
+end
+
+class Component
+attributes
+  containername:String
+  containedname:String
+end
+
+------------------------------------------------------------------------
+
+association FK_Employee_Department between
+  Employee   [*]
+  Department [1] derived =
+    Department.allInstances()->any(d|d.dname=self.dname)
+end
+
+association FK_Dependent_Employee between
+  Dependent [*]
+  Employee  [1] derived =
+    Employee.allInstances()->
+      any(e|e.fname=self.fname and e.lname=self.lname)
+end
+
+association FK_ProjectWork_Employee between
+  ProjectWork [*]
+  Employee    [1] derived =
+    Employee.allInstances()->
+      any(e|e.fname=self.fname and e.lname=self.lname)
+end
+
+association FK_Project_Manager between
+  Project  [*]
+  Employee [1] role manager derived =
+    Employee.allInstances()->
+      any(e|e.fname=self.mngfname and e.lname=self.mnglname)
+end
+
+association FK_ProjectWork_Project between
+  ProjectWork [*]
+  Project     [1] derived =
+    Project.allInstances()->any(p|p.pname=self.pname)
+end
+
+association FK_ProjectPart_Project between
+  ProjectPart [*]
+  Project     [1] derived = 
+    Project.allInstances()->any(p|p.pname=self.projectname)
+end
+
+association FK_SupplierProjectPart_Project between
+  SupplierProjectPart [*]
+  Project             [1] derived =
+    Project.allInstances()->any(p|p.pname=self.projectname)
+end
+
+association FK_SupplierProjectPart_Part between
+  SupplierProjectPart [*]
+  Part                [1] derived =
+    Part.allInstances()->any(p|p.pname=self.partname)
+end
+
+association FK_SupplierProjectPart_Supplier between
+  SupplierProjectPart [*]
+  Supplier            [1] derived =
+    Supplier.allInstances()->any(s|s.sname=self.suppliername)
+end
+
+association FK_ProjectPart_Part between
+  ProjectPart [*]
+  Part        [1] derived =
+    Part.allInstances()->any(p|p.pname=self.partname)
+end
+
+association FK_Component_Container between
+  Component [*] role containerComponent
+  Part      [1] role containerPart derived =
+    Part.allInstances()->any(p|p.pname=self.containername)
+end
+
+association FK_Component_Contained between
+  Component [*] role containedComponent
+  Part      [1] role containedPart derived =
+    Part.allInstances()->any(p|p.pname=self.containedname)
+end
+
+------------------------------------------------------------------------
+
+constraints
+
+context e1,e2:Employee inv fname_lname_primary_key:
+  e1.fname<>null and e1.lname<>null and
+  e2.fname<>null and e2.lname<>null and
+  ((e1<>e2) implies (e1.fname<>e2.fname or e1.lname<>e2.lname))
+  -- pk01: C->forAll(c1,c2 | c1<>c2 implies c1.a<>c2.a)
+
+  -- pk01: C->forAll(c1,c2 | c1<>c2 implies c1.a<>c2.a)
+  -- pk02: C->isUnique(c | c.a)
+  -- pk03: C->forAll(c1,c2 | c1.a=c2.a implies c1=c2)
+  -- pk04: C->forAll(c1| C->select(c2| c1<>c2 and c1.a=c2.a)->isEmpty())
+  -- pk05: C->forAll(c1| C->excl(c1)->select(c2| c1.a=c2.a)->isEmpty())
+  -- pk06: C->forAll(c1| C->select(c2| c1<>c2 and c1.a=c2.a)->size()=0)
+  -- pk07: C->forAll(c1| C->excl(c1)->select(c2| c1.a=c2.a)->size()=0)
+  -- pk08: C->forAll(c1| not C->exists(c2| c1<>c2 and c1.a=c2.a))
+  -- pk09: C->forAll(c1| C->forAll(c2| c1<>c2 implies c1.a<>c2.a))
+  -- pk10: C->forAll(c1| C->forAll(c2| c1.a=c2.a implies c1=c2))
+
+context e:Employee inv dname_foreign_key_Department:
+  Department.allInstances()->one(d|d.dname=e.dname)
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+context Department inv dname_primary_key:
+  dname<>null and Department.allInstances()->isUnique(dname)
+  -- pk02: C->isUnique(c | c.a)
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+context d1,d2:Dependent inv dfname_fname_lname_primary_key:
+  d1.dfname<>null and d1.fname<>null and d1.lname<>null and
+  d2.dfname<>null and d2.fname<>null and d2.lname<>null and
+  ((d1.dfname=d2.dfname and d1.fname=d2.fname and d1.lname=d2.lname)
+    implies (d1=d2))
+  -- pk03: C->forAll(c1,c2 | c1.a=c2.a implies c1=c2)
+
+context d:Dependent inv fname_lname_foreign_key_Employee:
+  Employee.allInstances()->one(e|e.fname = d.fname and e.lname=d.lname)
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+context p1:Project inv pname_primary_key:
+  pname<>null and Project.allInstances()->
+    select(p2|p2<>p1 and p2.pname=p1.pname)->isEmpty()
+  -- pk04: C->forAll(c1| C->select(c2| c1<>c2 and c1.a=c2.a)->isEmpty())
+
+context p:Project inv fname_lname_foreign_key_Employee:
+  Employee.allInstances()->
+    one(e|e.fname=p.mngfname and e.lname=p.mnglname)
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+context pw1:ProjectWork inv fname_lname_pname_primary_key:
+  pw1.fname<>null and pw1.lname<>null and pw1.pname<>null and
+  ProjectWork.allInstances()->excluding(pw1)->
+    select(pw2|pw2.fname=pw1.fname and pw2.lname=pw1.lname and
+               pw2.pname=pw1.pname)->isEmpty()
+  -- pk05: C->forAll(c1| C->excl(c1)->select(c2| c1.a=c2.a)->isEmpty())
+
+context pw:ProjectWork inv fname_lname_foreign_key_Employee:
+  Employee.allInstances()->one(e|e.fname=pw.fname and e.lname=pw.lname)
+
+context pw:ProjectWork inv pname_foreign_key_Project:
+  Project.allInstances()->one(p|p.pname=pw.pname)
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+context s1:Supplier inv sname_primary_key:
+  s1.sname<>null and Supplier.allInstances()->
+    select(s2|s2<>s1 and s2.sname=s1.sname)->size()=0
+  -- pk06: C->forAll(c1| C->select(c2| c1<>c2 and c1.a=c2.a)->size()=0)
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+context p1:Part inv pname_primary_key:
+  p1.pname<>null and
+  Part.allInstances()->excluding(p1)->
+    select(p2|p2.pname=p1.pname)->size()=0
+  -- pk07: C->forAll(c1| C->excl(c1)->select(c2| c1.a=c2.a)->size()=0)
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+context pp1:ProjectPart inv project_name_part_name_primary_key:
+  pp1.projectname<>null and pp1.partname<>null and
+  (not ProjectPart.allInstances()->exists(pp2|
+    pp2<>pp1 and pp2.projectname=pp1.projectname and
+                 pp2.partname=pp1.partname))
+  -- pk08: C->forAll(c1| not C->exists(c2| c1<>c2 and c1.a=c2.a))
+
+context pp:ProjectPart inv project_name_foreign_key_Project:
+  Project.allInstances()->one(p|p.pname=pp.projectname)
+
+context pp:ProjectPart inv part_name_foreign_key_Part:
+  Part.allInstances()->one(p|p.pname=pp.partname)
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+context sp1:SupplierProjectPart
+  inv supplier_project_part_name_primary_key:
+  sp1.suppliername<>null and sp1.projectname<>null and
+  sp1.partname<>null and
+  SupplierProjectPart.allInstances()->forAll(sp2| sp2<>sp1 implies
+    (sp2.suppliername<>sp1.suppliername or
+     sp2.projectname<>sp1.projectname or sp2.partname<>sp1.partname))
+  -- pk09: C->forAll(c1| C->forAll(c2| c1<>c2 implies c1.a<>c2.a))
+
+context sp:SupplierProjectPart inv supplier_name_foreign_key_Supplier:
+  Supplier.allInstances()->one(s|s.sname=sp.suppliername)
+
+context sp:SupplierProjectPart inv project_name_foreign_key_Project:
+  Project.allInstances()->one(p|p.pname=sp.projectname)
+
+context sp:SupplierProjectPart inv part_name_foreign_key_Part:
+  Part.allInstances()->one(p|p.pname=sp.partname)
+
+-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+context c1:Component
+  inv container_name_contained_name_primary_key:
+  c1.containername<>null and c1.containedname<>null and
+  Component.allInstances()->forAll(c2|
+    (c2.containername=c1.containername and
+     c2.containedname=c1.containedname) implies c2=c1)
+  -- pk10: C->forAll(c1| C->forAll(c2| c1.a=c2.a implies c1=c2))
+
+context c:Component inv container_name_foreign_key_Part:
+  Part.allInstances()->one(p|p.pname=c.containername)
+
+context c:Component inv contained_name_foreign_key_Part:
+  Part.allInstances()->one(p|p.pname=c.containedname)
+
+------------------------------------------------------------------------
+
+context e:Employee inv salary_positive:
+  e.salary>0
+
+context Department inv budget_positive:
+  budget>0
+
+context d:Dependent inv age_reasonable:
+  0<d.age and d.age<100
+
+context p:Part inv cost_positive:
+  p.cost>0
+
+context c:Component inv acyclic:
+  let p=Part.allInstances()->any(pname=c.containername) in
+  p.contained().containedPlus()->excludes(p)
+
+context e:Employee inv DepartmentBudget_greater_allEmployeeSalary:
+  let d=Department.allInstances()->any(dname=e.dname) in
+  e.salary
+  <=
+  d.budget div (Employee.allInstances()->select(dname=d.dname)->size())
+
+context p:Project inv ProjectBudget_greater_PartCost:
+  ProjectPart.allInstances()->select(projectname=p.pname)->
+    forAll(pp|Part.allInstances()->one(p1|
+      p1.pname=pp.partname and p1.cost<p.budget))
+
+------------------------------------------------------------------------

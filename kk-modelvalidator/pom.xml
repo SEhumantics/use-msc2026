@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <groupId>org.tzi.use</groupId>
+        <artifactId>use</artifactId>
+        <version>7.5.0</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>kk-modelvalidator</artifactId>
+    <packaging>jar</packaging>
+    <name>KK-ModelValidator</name>
+    <description>
+        Modernized rebuild of the Kodkod-backed USE Model Validator plugin (originally
+        ModelValidatorPlugin, useocl/use_plugins, ModelValidator/trunk, version 5.1.0-r1) against the
+        current USE 7.5.0 / Java 21 codebase. Kept as a live crisp-model-finding baseline: the thesis's
+        Z3-ModelValidator is evaluated in part by comparison against this tool on the fragment both can
+        express. Source ported verbatim from the pinned reference clone
+        (.git/reference-repositories/use-plugins/ModelValidator/trunk); see docs/kk-modelvalidator-port.md
+        for every API drift found and fixed.
+    </description>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+    </properties>
+
+    <!-- kodkod.jar (Emina Torlak's Kodkod relational model finder) is not published under any
+         Maven Central coordinates (confirmed: zero hits searching Central for "kodkod", 2026-08-21).
+         Vendored as a local-repo jar, same pattern as this reactor's other checked-in binary
+         dependencies with no upstream repository (docs/port2/adaptation-policy.md B1/B1a). It is
+         467 KB — small enough to check into git, unlike the 52 MB pinned Z3 binary the Z3-ModelValidator
+         work fetches at build time instead. -->
+    <repositories>
+        <repository>
+            <id>kk-modelvalidator-vendored</id>
+            <url>file://${project.basedir}/local-repo</url>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <!-- provided: the plugin runs inside an already-running USE process that already has these
+             classes loaded (lib/use-gui.jar). Shading them into the plugin jar too would be dead
+             weight and risks classloader duplicate-class surprises. -->
+        <dependency>
+            <groupId>org.tzi.use</groupId>
+            <artifactId>use-core</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.tzi.use</groupId>
+            <artifactId>use-gui</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Kodkod 2.1 (2015-09-20), the last version emina/kodkod ever released
+             (https://github.com/emina/kodkod/releases/tag/v2.1) - no breaking changes over the 2.0
+             build this plugin originally vendored; manifest diff confirmed identical besides the
+             version bump. -->
+        <dependency>
+            <groupId>edu.washington.cs.kodkod</groupId>
+            <artifactId>kodkod</artifactId>
+            <version>2.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.sat4j</groupId>
+            <artifactId>org.sat4j.core</artifactId>
+            <version>2.3.1</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-collections</groupId>
+            <artifactId>commons-collections</artifactId>
+            <!-- 3.2.2 fixes CVE-2015-4852 (InvokerTransformer deserialization RCE); pure version
+                 bump, zero API changes from 3.2.1. -->
+            <version>3.2.2</version>
+        </dependency>
+        <!-- commons-lang3 (successor to EOL commons-lang 2.x): different Maven coordinates and
+             package (org.apache.commons.lang3 vs org.apache.commons.lang). Only one main-source
+             file used commons-lang (TextInputParser.java, StringUtils.countMatches(String,String)),
+             which has an identical-behavior overload in lang3, so no logic changes were needed. -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>3.17.0</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+            <!-- current 1.x release; pure version bump, zero API changes expected. -->
+            <version>1.3.5</version>
+        </dependency>
+        <!-- commons-configuration2 (successor to EOL commons-configuration 1.x): different Maven
+             coordinates and package (org.apache.commons.configuration2 vs org.apache.commons.configuration).
+             HierarchicalINIConfiguration was renamed/reworked as INIConfiguration; getSection(String)/
+             getSections() null-section ("global section") semantics were verified identical between
+             the two libraries by diffing their actual sources (both special-case null to mean "the
+             properties before any [section] header", both include null in getSections() when such
+             properties exist). load(Reader)/save(File) convenience methods were replaced with
+             read(Reader)/write(Writer) plus explicit FileReader/FileWriter, preserving the same
+             platform-default-charset behavior the ported code already relied on. -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-configuration2</artifactId>
+            <version>2.11.0</version>
+        </dependency>
+        <!-- reload4j: maintained, drop-in fork of log4j 1.2.17 created specifically to eliminate
+             the log4j 1.x CVEs (incl. CVE-2019-17571 socket-server deserialization RCE), keeping the
+             same org.apache.log4j.* package names so no source changes are needed. Real Maven
+             Central coordinates are ch.qos.reload4j:reload4j, not org.slf4j:reload4j (verified via
+             `mvn dependency:get`, 2026-08-21). -->
+        <dependency>
+            <groupId>ch.qos.reload4j</groupId>
+            <artifactId>reload4j</artifactId>
+            <version>1.2.25</version>
+        </dependency>
+
+        <!-- The plugin's own test suite (test/org/tzi/use/kodkod/...) is JUnit 4, org.junit.Test /
+             @BeforeClass style. Run it as-is via the vintage engine rather than migrating to JUnit 5 —
+             same reasoning as use-core's own -Pupstream-oracle profile (docs/port2/upstream-oracle-profile.md):
+             a migrated test file is a rewritten oracle, not evidence about the ported code. -->
+        <dependency>
+            <groupId>org.junit.vintage</groupId>
+            <artifactId>junit-vintage-engine</artifactId>
+            <version>5.7.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>KK-ModelValidator-1.0</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- OCLTest.setUpBeforeClass() loads "test/org/tzi/use/kodkod/transform/ocl/testModel.use"
+                         by a path relative to the process working directory, exactly as it did under Ant.
+                         ${project.basedir} is already surefire's default working directory; stated
+                         explicitly here because it is load-bearing, not incidental. The referenced
+                         "test/" tree lives at kk-modelvalidator/test/, a sibling of src/, not inside it -
+                         it is a resource fixture, not compiled source. -->
+                    <workingDirectory>${project.basedir}</workingDirectory>
+                    <!-- Do not let surefire fail the reactor build here: this test corpus has a known,
+                         pinned, characterized set of non-conformances (docs/kk-modelvalidator-port.md)
+                         that predate this port. scripts/floor-check.sh, bound below at the verify
+                         phase, is the actual gate: it fails the build if failures/errors exceed the
+                         pinned floor, so testFailureIgnore does not mean "ignored", it means "gated by
+                         a floor instead of by zero tolerance". -->
+                    <testFailureIgnore>true</testFailureIgnore>
+                </configuration>
+            </plugin>
+            <!-- THE GATE IS A SCRIPT, same discipline as scripts/upstream-oracle-gate.sh elsewhere in
+                 this reactor: scripts/floor-check.sh, not a hand-read "tests passed" impression. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>kk-modelvalidator-floor-check</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>bash</executable>
+                            <workingDirectory>${project.basedir}</workingDirectory>
+                            <commandlineArgs>scripts/floor-check.sh</commandlineArgs>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- USE's plugin loader (org.tzi.use.runtime, scanning lib/plugins/*.jar) expects one
+                 self-contained jar per plugin, exactly as the original Ant build's <jar> task bundled
+                 kodkod/sat4j/commons-*/log4j via <zipfileset src="..."/>. shade reproduces that. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <!-- This module is a terminal plugin artifact, never a compile-time
+                                 dependency of anything else in the reactor, so the reduced POM shade
+                                 normally writes to the project root serves no purpose here. -->
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <manifestEntries>
+                                        <Plugin-Name>KodkodPlugin</Plugin-Name>
+                                        <Plugin-Version>0.1</Plugin-Version>
+                                        <Plugin-Publisher>Hendrik Reitmann</Plugin-Publisher>
+                                        <Main-Class>org.tzi.use.kodkod.plugin.KodkodPlugin</Main-Class>
+                                    </manifestEntries>
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

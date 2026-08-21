@@ -1,0 +1,16 @@
+-- Hand-built, deliberately VALID instance of EmployeeInvariants (regular
+-- USE SOIL statements, not a Kodkod search). Three Employee objects, all
+-- with strictly positive salaries, so both PositiveSalary (salary > 0)
+-- and NotBelowMinusOne (salary > -1) hold for every one of them.
+-- Read via the plain USE shell `open' command (see valid-instance.cmd),
+-- which auto-detects a non-".use" file and executes it line by line
+-- exactly like a .cmd script.
+
+!create Alice : Employee
+!set Alice.salary := 5000
+
+!create Bob : Employee
+!set Bob.salary := 1
+
+!create Carol : Employee
+!set Carol.salary := 42

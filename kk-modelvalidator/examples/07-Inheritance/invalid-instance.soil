@@ -1,0 +1,18 @@
+-- Hand-built instance that is structurally valid (parses, both concrete
+-- subclasses present, no missing attributes) but deliberately VIOLATES
+-- exactly one invariant: Car::ReasonableDoors (self.numDoors >= 2 and
+-- self.numDoors <= 5). car1.numDoors is set to 1, which is out of range.
+--
+-- Every other invariant still holds in this state:
+--   Vehicle::PositiveWheels -- car1.wheels=4 > 0, truck1.wheels=6 > 0 (OK)
+--   Truck::PositivePayload  -- truck1.payloadCapacity=5 > 0 (OK)
+
+!create car1 : Car
+!set car1.licensePlate := 'CAR-002'
+!set car1.wheels := 4
+!set car1.numDoors := 1
+
+!create truck1 : Truck
+!set truck1.licensePlate := 'TRK-200'
+!set truck1.wheels := 6
+!set truck1.payloadCapacity := 5

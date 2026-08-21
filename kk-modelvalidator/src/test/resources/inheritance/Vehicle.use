@@ -1,0 +1,37 @@
+model Vehicle
+
+-- A minimal generalization/inheritance hierarchy (not from upstream), built
+-- specifically to exercise the model validator against a class hierarchy:
+-- a superclass invariant, a subclass-specific invariant, and a query that
+-- demonstrates polymorphic navigation (Vehicle.allInstances() naturally
+-- contains both Car and Truck instances) together with oclIsTypeOf/
+-- oclAsType to distinguish/downcast them.
+
+abstract class Vehicle
+attributes
+  licensePlate : String
+  wheels : Integer
+end
+
+class Car < Vehicle
+attributes
+  numDoors : Integer
+end
+
+class Truck < Vehicle
+attributes
+  payloadCapacity : Integer -- tons
+end
+
+constraints
+
+-- Superclass-level invariant: holds for every Vehicle regardless of its
+-- concrete subclass.
+context v:Vehicle inv PositiveWheels: v.wheels > 0
+
+-- Subclass-specific invariant: only meaningful for Car (a passenger car has
+-- between 2 and 5 doors; a Truck has no numDoors attribute at all).
+context c:Car inv ReasonableDoors: c.numDoors >= 2 and c.numDoors <= 5
+
+-- Subclass-specific invariant: only meaningful for Truck.
+context t:Truck inv PositivePayload: t.payloadCapacity > 0

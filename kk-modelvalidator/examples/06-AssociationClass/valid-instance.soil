@@ -1,0 +1,37 @@
+-- Hand-built (NOT Kodkod-searched) instance of CompanyEmployment, meant to
+-- satisfy every declared invariant. Two Person objects, two Company objects,
+-- and one Employment association-class link object per Person -- created
+-- with the same `!create <name> : <AssocClass> between (<end1>,<end2>)` SOIL
+-- syntax as use-core's own examples/Documentation/AssociationClass example
+-- (end order follows the `associationclass Employment between Person[...]
+-- Company[...]` declaration: Person first, then Company).
+--
+-- Chosen so every invariant holds:
+--   PositiveSalary            : both salaries > 0
+--   StartDateNotNegative      : both startDates >= 0
+--   SalaryBelowEmployerBudget : both salaries < their employer's budget
+--   EmployeeAndEmployerAlwaysLinked : trivially true (an Employment link
+--     object always has both ends bound -- see valid-instance.cmd)
+--   AtMostOneEmployer         : each Person here has exactly one Employment
+
+!create ada : Person
+!set ada.name := 'Ada'
+
+!create bob : Person
+!set bob.name := 'Bob'
+
+!create acme : Company
+!set acme.name := 'Acme'
+!set acme.budget := 100000
+
+!create globex : Company
+!set globex.name := 'Globex'
+!set globex.budget := 50000
+
+!create adaEmployment : Employment between (ada, acme)
+!set adaEmployment.salary := 60000
+!set adaEmployment.startDate := 5
+
+!create bobEmployment : Employment between (bob, globex)
+!set bobEmployment.salary := 20000
+!set bobEmployment.startDate := 10

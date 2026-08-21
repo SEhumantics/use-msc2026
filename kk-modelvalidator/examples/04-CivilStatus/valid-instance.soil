@@ -1,0 +1,37 @@
+-- Hand-built, deliberately VALID instance of CivilStatusWorld.
+--
+-- Built with plain SOIL statements (create/set/insert) -- NOT via the
+-- birth/marry/divorce/death class operations, and NOT via the Kodkod
+-- ModelValidator search (-validate). This is model VALIDATION of an
+-- already-constructed instance, a distinct concern from model FINDING
+-- via search (see validate.cmd in this same directory for the latter).
+--
+-- Ann (female) and Bob (male) are married to each other (a single
+-- Marriage link with Ann in the "wife" position, Bob in the "husband"
+-- position); Cid (male) is single and unlinked. This satisfies every
+-- invariant that CivilStatus.properties actually enforces during search
+-- (attributesDefined, nameIsUnique, femaleHasNoWife, maleHasNoHusband).
+-- The fifth declared invariant, nameCapitalThenSmallLetters, is not the
+-- point of this file (its OCL uses String.substring/.size, which the
+-- Kodkod plugin's translator doesn't support -- see CivilStatus.use's own
+-- header), but it happens to hold too, since every name below is exactly
+-- one capital letter followed by lowercase letters.
+
+!create Ann, Bob, Cid : Person
+
+!set @Ann.name := 'Ann'
+!set @Ann.civstat := #married
+!set @Ann.gender := #female
+!set @Ann.alive := true
+
+!set @Bob.name := 'Bob'
+!set @Bob.civstat := #married
+!set @Bob.gender := #male
+!set @Bob.alive := true
+
+!set @Cid.name := 'Cid'
+!set @Cid.civstat := #single
+!set @Cid.gender := #male
+!set @Cid.alive := true
+
+!insert (Ann, Bob) into Marriage

@@ -1,0 +1,32 @@
+-- Hand-built, deliberately VALID instance of the Genealogy model (SOIL
+-- validation test -- distinct from model FINDING via -validate/Kodkod
+-- search). Two generations, four Person objects, three Parenthood links:
+-- Vito is the root ancestor of two children (Michael, Fredo), and Michael
+-- is in turn the parent of Anthony. Every yearB gap across a Parenthood
+-- link is >=15 (20/18/25 respectively), so all three BASE invariants --
+-- nameUnique, acyclicParenthood, parentOlderChild -- hold by construction.
+-- See valid-instance.cmd for the actual `check -v' run confirming this.
+
+!create Vito : Person
+!set Vito.fName := 'Vito'
+!set Vito.lName := 'Corleone'
+!set Vito.yearB := 1900
+
+!create Michael : Person
+!set Michael.fName := 'Michael'
+!set Michael.lName := 'Corleone'
+!set Michael.yearB := 1920
+
+!create Fredo : Person
+!set Fredo.fName := 'Fredo'
+!set Fredo.lName := 'Corleone'
+!set Fredo.yearB := 1918
+
+!create Anthony : Person
+!set Anthony.fName := 'Anthony'
+!set Anthony.lName := 'Corleone'
+!set Anthony.yearB := 1945
+
+!insert (Vito,Michael) into Parenthood
+!insert (Vito,Fredo) into Parenthood
+!insert (Michael,Anthony) into Parenthood

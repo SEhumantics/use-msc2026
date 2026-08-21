@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata>
+  <groupId>edu.washington.cs.kodkod</groupId>
+  <artifactId>kodkod</artifactId>
+  <versioning>
+    <release>2.1</release>
+    <versions>
+      <version>2.1</version>
+    </versions>
+    <lastUpdated>20260821092958</lastUpdated>
+  </versioning>
+</metadata>

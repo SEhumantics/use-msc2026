@@ -1,0 +1,89 @@
+-- Hand-built, deliberately-VALID instance of CompanyER.use (13 objects
+-- across all 10 classes; 2-3 objects per class where a foreign key or
+-- primary-key invariant needs more than one to be meaningful, 1 object
+-- per class otherwise). Not a Kodkod search -- every attribute value is
+-- chosen by hand so all 29 class invariants hold.
+--
+-- Every association in this model is `derived` (computed from matching
+-- string attributes, e.g. Employee.dname = Department.dname) rather than
+-- a first-class navigable end, so there is deliberately no `!insert ...
+-- into <Assoc>` anywhere below: setting the FK-style attributes to
+-- matching values is sufficient for the derived association ends (and
+-- the OCL foreign-key invariants that re-check them) to line up.
+--
+-- Two Departments, each with exactly one Employee, so the per-employee
+-- DepartmentBudget_greater_allEmployeeSalary check (salary <= budget div
+-- employees-in-that-dept) only ever divides by 1.
+
+!create Engineering : Department
+!set Engineering.dname := 'Engineering'
+!set Engineering.budget := 100000
+
+!create Sales : Department
+!set Sales.dname := 'Sales'
+!set Sales.budget := 50000
+
+!create Alice : Employee
+!set Alice.fname := 'Alice'
+!set Alice.lname := 'Smith'
+!set Alice.salary := 40000
+!set Alice.dname := 'Engineering'
+
+!create Bob : Employee
+!set Bob.fname := 'Bob'
+!set Bob.lname := 'Jones'
+!set Bob.salary := 30000
+!set Bob.dname := 'Sales'
+
+-- Charlie is Alice's dependent (fname/lname FK back to Alice).
+!create Charlie : Dependent
+!set Charlie.dfname := 'Charlie'
+!set Charlie.age := 10
+!set Charlie.fname := 'Alice'
+!set Charlie.lname := 'Smith'
+
+-- Apollo is managed by Alice (mngfname/mnglname FK).
+!create Apollo : Project
+!set Apollo.pname := 'Apollo'
+!set Apollo.budget := 20000
+!set Apollo.mngfname := 'Alice'
+!set Apollo.mnglname := 'Smith'
+
+-- Bob works on Apollo.
+!create BobOnApollo : ProjectWork
+!set BobOnApollo.fname := 'Bob'
+!set BobOnApollo.lname := 'Jones'
+!set BobOnApollo.pname := 'Apollo'
+
+!create Acme : Supplier
+!set Acme.sname := 'Acme'
+!set Acme.location := 'NY'
+
+-- Two Parts: Widget (used by the project, cost well under Apollo's
+-- budget) and Gadget (contained inside Widget, forming a one-level,
+-- acyclic bill-of-materials edge).
+!create Widget : Part
+!set Widget.pname := 'Widget'
+!set Widget.cost := 100
+
+!create Gadget : Part
+!set Gadget.pname := 'Gadget'
+!set Gadget.cost := 50
+
+-- Apollo uses Widget; Widget's cost (100) is well under Apollo's budget
+-- (20000), satisfying ProjectBudget_greater_PartCost.
+!create ApolloWidget : ProjectPart
+!set ApolloWidget.projectname := 'Apollo'
+!set ApolloWidget.partname := 'Widget'
+
+-- Acme supplies Widget to Apollo.
+!create AcmeApolloWidget : SupplierProjectPart
+!set AcmeApolloWidget.suppliername := 'Acme'
+!set AcmeApolloWidget.projectname := 'Apollo'
+!set AcmeApolloWidget.partname := 'Widget'
+
+-- Widget contains Gadget (one edge only -- no cycle, so
+-- Component::acyclic holds).
+!create WidgetContainsGadget : Component
+!set WidgetContainsGadget.containername := 'Widget'
+!set WidgetContainsGadget.containedname := 'Gadget'

@@ -75,6 +75,30 @@
             </includes>
         </fileSet>
         <fileSet>
+            <!-- Modernized Kodkod Model Validator, built from source in this reactor rather than
+                 vendored as a static binary (see docs/kk-modelvalidator-port.md). Supersedes the
+                 vendored ModelValidatorPlugin-5.2.0-r1.jar removed from
+                 src/main/resources/plugins/, which crashes against this fork's USE API
+                 (NoSuchMethodError, confirmed and documented). -->
+            <directory>${project.basedir}/../kk-modelvalidator/target</directory>
+            <outputDirectory>lib/plugins</outputDirectory>
+            <includes>
+                <include>KK-ModelValidator-1.0.jar</include>
+            </includes>
+        </fileSet>
+        <fileSet>
+            <!-- Runnable, verified KK-ModelValidator examples (see
+                 kk-modelvalidator/examples/README.md), covering plugin commands the
+                 main USE examples above never exercise: mv -validate, -invIndep,
+                 -scrollingAll, and the OCL query mechanism against a relational
+                 solution. -->
+            <directory>${project.basedir}/../kk-modelvalidator/examples</directory>
+            <outputDirectory>examples/KK-ModelValidator</outputDirectory>
+            <includes>
+                <include>**/*</include>
+            </includes>
+        </fileSet>
+        <fileSet>
             <!-- javafx sdk that should be shipped with the USE archive is located here -->
             <directory>${project.basedir}/../use-gui/lib/javafx-sdk-21.0.5</directory>
             <outputDirectory>lib/javafx-sdk-21.0.5</outputDirectory>

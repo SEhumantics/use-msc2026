@@ -1,0 +1,127 @@
+model FileSystem
+
+-- Whole-part filesystem model, built specifically to exercise the
+-- KK-ModelValidator plugin's two "Miscellaneous" config-file toggles
+-- documented in Usage.pdf's "Configuration using a property file" section:
+--
+--   aggregationcyclefreeness = on|off  (default on)
+--     "no cycles are allowed inside of aggregations and compositions"
+--   forbiddensharing = on|off          (default on)
+--     "objects participating in a composition can[not] be member of more
+--      than one composition"
+--
+-- Both toggles are model-level solver settings, not OCL; they live entirely
+-- in the .properties files (FileSystem_default.properties /
+-- FileSystem_off.properties), not in this .use file.
+--
+-- IMPORTANT MODELING NOTE, discovered by reading the installed plugin's own
+-- source (org.tzi.kodkod.model.impl.Association.cycleFreenessDefinitions,
+-- org.tzi.kodkod.model.impl.Class.forbiddingSharingDefinition) and then
+-- confirming empirically:
+--   - A cycle formed by a SINGLE aggregation/composition association
+--     applied to itself (e.g. a lone self-referential Folder-contains-
+--     Folder association) is compiled into an UNCONDITIONAL Kodkod
+--     constraint that ignores the aggregationcyclefreeness toggle
+--     entirely -- such a cycle is TRIVIALLY_UNSATISFIABLE whether the
+--     toggle is on or off. This was our first design attempt; it produced
+--     identical UNSATISFIABLE results in both configs (a real, confirmed
+--     limitation of this plugin build -- see this example's README-style
+--     notes / the task report's "warnings" section).
+--   - Sharing of the same object between two DIFFERENT composition
+--     associations that both declare the EXACT SAME class at their part
+--     end is likewise an unconditional Kodkod constraint, ignoring the
+--     forbiddensharing toggle.
+--   - The toggles DO have an observable, confirmed effect for the two
+--     structural shapes modeled below instead: a cycle that only closes
+--     across TWO DIFFERENT associations (PrimaryContains/AltContains,
+--     matching the baseline USE distribution's own
+--     examples/Documentation/AggregationsAndCompositions/nocycle06.use
+--     fixture), and sharing that only becomes visible once inheritance is
+--     involved (FolderHasFile's part end is File; ArchiveHasMedia's part
+--     end is the subclass MediaFile -- the plugin's per-class Kodkod check
+--     matches part-end classes by exact equality, not by subtype, so
+--     neither association alone triggers its unconditional constraint,
+--     while USE core's own general checkStructure() graph walk -- which IS
+--     gated by the config toggle -- still recognizes a single MediaFile
+--     object doubly owned once the object diagram is reconstructed).
+
+class Folder
+attributes
+  name : String
+end
+
+class File
+attributes
+  name : String
+  size : Integer
+end
+
+class MediaFile < File
+attributes
+  codec : String
+end
+
+class Archive
+attributes
+  name : String
+end
+
+------------------------------------------------------------------------
+-- Two INDEPENDENT self-referential composition hierarchies on Folder.
+-- Neither one is cyclic by itself; forcing a link in each that together
+-- close a 2-hop cycle ACROSS both associations is exactly the shape
+-- aggregationcyclefreeness is meant to forbid, and (per the note above) is
+-- the shape whose Kodkod-level enforcement is actually gated by the
+-- toggle in this plugin build.
+composition PrimaryContains between
+  Folder [0..1] role primaryParent
+  Folder [0..*] role primarySubfolders
+end
+
+composition AltContains between
+  Folder [0..1] role altParent
+  Folder [0..*] role altSubfolders
+end
+
+------------------------------------------------------------------------
+-- Two DIFFERENT composition associations whose part-end classes are File
+-- and its subclass MediaFile respectively. A concrete MediaFile object can
+-- be forced into both (it IS a File), which is exactly the whole-object
+-- "member of more than one composition" case forbiddensharing is meant to
+-- forbid.
+composition FolderHasFile between
+  Folder [0..1] role ownerFolder
+  File   [0..*] role files
+end
+
+composition ArchiveHasMedia between
+  Archive   [0..1] role ownerArchive
+  MediaFile [0..*] role archivedMedia
+end
+
+------------------------------------------------------------------------
+
+constraints
+
+-- Ordinary domain invariants, deliberately UNRELATED to the aggregation/
+-- composition toggles above, so they stay satisfied identically across
+-- both the default and the "off" run: the only thing that should ever
+-- differ between the two config files is whether the forced cyclic /
+-- forced doubly-owned structures are admitted at all.
+
+context f:Folder inv nameNotEmpty:
+  f.name <> ''
+
+context fi:File inv sizePositive:
+  fi.size > 0
+
+context a:Archive inv nameNotEmpty:
+  a.name <> ''
+
+-- Explicit, directly OCL-checkable statement of the length-1 case of
+-- aggregation-cycle-freeness ("a folder is not its own primary parent").
+-- Kept as a real invariant (independent of both the plugin's structural
+-- search constraint and the 2-hop cross-association cycle test above) so a
+-- later SOIL script can satisfy/violate it on its own.
+context f:Folder inv notOwnPrimaryParent:
+  f.primaryParent <> f

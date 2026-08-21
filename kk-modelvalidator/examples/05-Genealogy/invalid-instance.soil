@@ -1,0 +1,33 @@
+-- Hand-built instance of the Genealogy model that deliberately VIOLATES
+-- exactly the `parentOlderChild' base invariant (and no other base
+-- invariant) -- SOIL validation test, distinct from model FINDING via
+-- -validate/Kodkod search. Same Vito/Michael/Fredo/Anthony family shape as
+-- valid-instance.soil, except Fredo's yearB is dropped from 1918 to 1910,
+-- so that Vito.yearB+15 (=1915) > Fredo.yearB (=1910): only a 10-year gap
+-- on the Vito->Fredo link, instead of the required >=15. Structurally this
+-- is still a perfectly acyclic, uniquely-named family -- only the age gap
+-- on that one link is wrong.
+
+!create Vito : Person
+!set Vito.fName := 'Vito'
+!set Vito.lName := 'Corleone'
+!set Vito.yearB := 1900
+
+!create Michael : Person
+!set Michael.fName := 'Michael'
+!set Michael.lName := 'Corleone'
+!set Michael.yearB := 1920
+
+!create Fredo : Person
+!set Fredo.fName := 'Fredo'
+!set Fredo.lName := 'Corleone'
+!set Fredo.yearB := 1910
+
+!create Anthony : Person
+!set Anthony.fName := 'Anthony'
+!set Anthony.lName := 'Corleone'
+!set Anthony.yearB := 1945
+
+!insert (Vito,Michael) into Parenthood
+!insert (Vito,Fredo) into Parenthood
+!insert (Michael,Anthony) into Parenthood

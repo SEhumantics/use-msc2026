@@ -1,0 +1,25 @@
+-- "Partial solution completion" use case (paper section "Validation and
+-- Verification Use Cases"): hand-build a small, deliberately INCOMPLETE
+-- family by regular USE SOIL statements (not through the model validator),
+-- then let `mv -validate' (with automaticDiagramExtraction turned on --
+-- see partialCompletion.cmd) COMPLETE this exact state rather than search
+-- from scratch. Read via the plain USE shell `open' command, which
+-- auto-detects a non-".use"/non-model file and executes it line by line
+-- exactly like a .cmd script (confirmed by actually running this: `info
+-- state' afterwards reports 2 Person objects / 1 Parenthood link).
+--
+-- Vito is a root ancestor (no parent) and Michael his son -- one
+-- Parenthood link already in place. yearB values already respect
+-- parentOlderChild (0+15 <= 30).
+
+!create Vito : Person
+!set Vito.fName := 'Vito'
+!set Vito.lName := 'Corleone'
+!set Vito.yearB := 0
+
+!create Michael : Person
+!set Michael.fName := 'Michael'
+!set Michael.lName := 'Corleone'
+!set Michael.yearB := 30
+
+!insert (Vito,Michael) into Parenthood

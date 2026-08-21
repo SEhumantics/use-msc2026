@@ -1,0 +1,32 @@
+-- Hand-built instance of CivilStatusWorld that deliberately VIOLATES
+-- exactly one invariant: Person::nameIsUnique.
+--
+-- Three Person objects are created with distinct system object names (P1,
+-- P2, P3), but P1 and P2 are both given the SAME "name" attribute value
+-- ('Ann') -- nameIsUnique compares the "name" attribute, not the object's
+-- system identity, so this is a genuine, isolated violation of exactly
+-- that one invariant. Structurally the instance is otherwise identical in
+-- shape to valid-instance.soil: P1 (female) and P2 (male) are married to
+-- each other, P3 (male) is single and unlinked, and every attribute is
+-- defined on every object -- so attributesDefined, femaleHasNoWife and
+-- maleHasNoHusband all still hold, and nameCapitalThenSmallLetters holds
+-- too (both names used, 'Ann' and 'Cid', are Capital-then-lowercase).
+
+!create P1, P2, P3 : Person
+
+!set @P1.name := 'Ann'
+!set @P1.civstat := #married
+!set @P1.gender := #female
+!set @P1.alive := true
+
+!set @P2.name := 'Ann'
+!set @P2.civstat := #married
+!set @P2.gender := #male
+!set @P2.alive := true
+
+!set @P3.name := 'Cid'
+!set @P3.civstat := #single
+!set @P3.gender := #male
+!set @P3.alive := true
+
+!insert (P1, P2) into Marriage
