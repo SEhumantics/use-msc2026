@@ -96,10 +96,6 @@ class UBooleanExpOpsTest {
 
     }
 
-    /**
-     * Test uncertainty : UBoolaen -> Real
-     */
-
     @Test
     void testConfidence() throws ExpInvalidException {
         Expression[] args;
@@ -136,10 +132,6 @@ class UBooleanExpOpsTest {
         assertEquals(new RealValue(1), e.eval(op, state), op.toString());
 
     }
-
-    /**
-     * Test setUncertainty
-     */
 
     @Test
     void testSetConfidence() throws ExpInvalidException {
@@ -470,12 +462,6 @@ class UBooleanExpOpsTest {
 
     }
 
-
-    // TESTING AND
-
-    /**
-     * Testing and with UBoolean values.
-     */
     @Test
     void testAndWithUBoolean() throws ExpInvalidException {
         Expression [] args;
@@ -523,10 +509,6 @@ class UBooleanExpOpsTest {
         op = ExpStdOp.create("and", args);
         assertEquals(UBooleanValue.valueOf(true, 0.2695), e.eval(op, state), op.toString());
     }
-
-    /**
-     * Testing and with Boolean
-     */
 
     @Test
     void testAndWithBoolean() throws ExpInvalidException {
@@ -590,10 +572,6 @@ class UBooleanExpOpsTest {
 
 
     }
-
-    /**
-     * Testing and with Undefined
-     */
 
     @Test
     void testAndWithUndefined() throws ExpInvalidException {
@@ -669,10 +647,6 @@ class UBooleanExpOpsTest {
         assertEquals(UBooleanValue.FALSE, e.eval(op, state), op.toString());
 
     }
-
-    /**
-     * Test OR operation
-     */
 
     @Test
     void testOrWithBoolean() throws ExpInvalidException {
@@ -848,10 +822,6 @@ class UBooleanExpOpsTest {
 
     }
 
-    /**
-     * Test XOR
-     */
-
     @Test
     void testXORWithUBoolean() throws ExpInvalidException {
         Expression [] args;
@@ -1021,10 +991,6 @@ class UBooleanExpOpsTest {
 
     }
 
-    /**
-     * Test NOT
-     */
-
     @Test
     void testNot() throws ExpInvalidException {
         Expression [] args;
@@ -1137,10 +1103,6 @@ class UBooleanExpOpsTest {
         op = ExpStdOp.create("not", args);
         assertEquals(UBooleanValue.valueOf(true, 0.8), e.eval(op, state), op.toString());
     }
-
-    /**
-     * Test implies
-     */
 
     @Test
     void testImpliesWithUBoolean() throws ExpInvalidException {
@@ -1317,10 +1279,6 @@ class UBooleanExpOpsTest {
 
     }
 
-    /**
-     * Test Equivalent
-     */
-
     @Test
     void testEquivalentWithUBoolean() throws ExpInvalidException {
         Expression [] args;
@@ -1496,10 +1454,6 @@ class UBooleanExpOpsTest {
         assertEquals(UndefinedValue.instance, e.eval(op, state), op.toString());
     }
 
-    /**
-     * Test for toBooleanC
-     */
-
     @Test
     void testToBooleanC() throws ExpInvalidException {
         Expression [] args;
@@ -1660,10 +1614,6 @@ class UBooleanExpOpsTest {
         assertEquals("Undefined operation `UBoolean.toBooleanC(String)'.", ex2.getMessage());
     }
 
-    /**
-     * Test for setValue
-     */
-
     @Test
     void testSetValue() throws ExpInvalidException {
         Expression [] args;
@@ -1706,10 +1656,6 @@ class UBooleanExpOpsTest {
         });
         assertEquals("Undefined operation `UBoolean.setValue(String)'.", ex3.getMessage());
     }
-
-    /**
-     * Test toString : UBoolean -> String
-     */
 
     @Test
     void testToString() throws ExpInvalidException {

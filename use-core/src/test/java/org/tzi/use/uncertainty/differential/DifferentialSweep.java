@@ -1117,22 +1117,6 @@ public final class DifferentialSweep {
         }
 
         /**
-         * Rows on which both sides threw but with <em>different</em> throwable classes.
-         *
-         * <p>Surfaces a defect class that is otherwise invisible above row level. A port that fails
-         * on the right inputs with the wrong exception type produces a tally, a row count, an
-         * agreement count and a disagreement list that are bit-identical to a correct port's: every
-         * such row is {@link DiffVerdict#BOTH_THREW} either way. Measured on a planted defect that
-         * changed {@code IndexOutOfBoundsException} to {@code IllegalStateException} on 89 rows of
-         * {@code UStringValue.at(int)}, every aggregate the harness offered was unchanged and only
-         * the row text differed. The evidence was always in the columns and the note; it now has a
-         * number, so a sweep with no golden to diff against can still assert on it.
-         *
-         * <p>Counted over {@link DiffVerdict#BOTH_THREW} and {@link DiffVerdict#ACCEPTED_THROW}
-         * alike: an adjudicated pair with mismatched classes is exactly the sign-off a reviewer
-         * should be asked to justify twice.
-         */
-        /**
          * <strong>Rows on which the two sides' content was identical and only the Java class
          * differed</strong> — the D-18 population, in its own dimension because it is no longer a
          * verdict (defect <strong>D-43</strong>, round 8).
@@ -1168,6 +1152,22 @@ public final class DifferentialSweep {
             return n;
         }
 
+        /**
+         * Rows on which both sides threw but with <em>different</em> throwable classes.
+         *
+         * <p>Surfaces a defect class that is otherwise invisible above row level. A port that fails
+         * on the right inputs with the wrong exception type produces a tally, a row count, an
+         * agreement count and a disagreement list that are bit-identical to a correct port's: every
+         * such row is {@link DiffVerdict#BOTH_THREW} either way. Measured on a planted defect that
+         * changed {@code IndexOutOfBoundsException} to {@code IllegalStateException} on 89 rows of
+         * {@code UStringValue.at(int)}, every aggregate the harness offered was unchanged and only
+         * the row text differed. The evidence was always in the columns and the note; it now has a
+         * number, so a sweep with no golden to diff against can still assert on it.
+         *
+         * <p>Counted over {@link DiffVerdict#BOTH_THREW} and {@link DiffVerdict#ACCEPTED_THROW}
+         * alike: an adjudicated pair with mismatched classes is exactly the sign-off a reviewer
+         * should be asked to justify twice.
+         */
         public int throwClassMismatchCount() {
             int n = 0;
             for (DiffRow row : rows) {

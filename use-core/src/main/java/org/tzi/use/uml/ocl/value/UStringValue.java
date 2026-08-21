@@ -76,12 +76,6 @@ public class UStringValue extends UncertainValue {
     }
 
     /**
-     * This method ensure that the value is kind of UString and return this value (casted)
-     * @param value
-     * @return An UString value.
-     */
-
-    /**
      * B7 / ledger M-6 — <strong>DECIDED NOT TO CHANGE, and that decision is the fix.</strong>
      *
      * <p>The recommendation this row considered was narrowing {@code RuntimeException} to

@@ -99,18 +99,18 @@ final class Op_equal extends OpGeneric {
 
 	private UncertainBooleanValue evalUncertainBooleanResult(Value [] args) {
 		UncertainValue value;
-		int index_other;
+		int otherIndex;
 
 		if (args[0] instanceof UncertainValue) {
 			value = (UncertainValue) args[0];
-			index_other = 1;
+			otherIndex = 1;
 		}
 		else {
 			value = (UncertainValue) args[1];
-			index_other = 0;
+			otherIndex = 0;
 		}
 
-		return value.uEquals(args[index_other]);
+		return value.uEquals(args[otherIndex]);
 	}
 
 	private BooleanValue evalBooleanResult(Value[] args) {
@@ -183,18 +183,18 @@ final class Op_notequal extends OpGeneric {
 
 	private UncertainBooleanValue evalUncertainBooleanResult(Value [] args) {
 		UncertainValue value;
-		int index_other;
+		int otherIndex;
 
 		if (args[0] instanceof UncertainValue) {
 			value = (UncertainValue) args[0];
-			index_other = 1;
+			otherIndex = 1;
 		}
 		else {
 			value = (UncertainValue) args[1];
-			index_other = 0;
+			otherIndex = 0;
 		}
 
-		return value.uDistinct(args[index_other]);
+		return value.uDistinct(args[otherIndex]);
 	}
 
 	private BooleanValue evalBooleanResult(Value[] args) {

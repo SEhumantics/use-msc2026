@@ -846,9 +846,8 @@ public final class HistoricalOracle implements Candidate {
      * than falling back to {@code toString()}. Refusing is the point: a representation that is only
      * approximately right is worse than no representation, because it still populates a report
      * column that a reader will treat as measured.
-     */
-    /**
-     * Made {@code static} at S4 so the ported side can render through the <em>same</em> code.
+     *
+     * <h2>Made {@code static} at S4 so the ported side can render through the <em>same</em> code</h2>
      *
      * <p>That is deliberate and it is a design choice with a cost. The rendering is the
      * <em>instrument</em>, not the port's behaviour: if the two sides formatted independently, a

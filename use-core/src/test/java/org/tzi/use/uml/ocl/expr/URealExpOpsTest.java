@@ -45,10 +45,6 @@ class URealExpOpsTest {
     }
 
 
-    /**
-     * Test toInteger : UReal -> Integer
-     */
-
     @Test
     void testURealToInteger() throws ExpInvalidException {
         Expression[] args;
@@ -89,10 +85,6 @@ class URealExpOpsTest {
         op = ExpStdOp.create("toInteger", args);
         assertEquals(IntegerValue.valueOf(0), e.eval(op, state), op.toString());
     }
-
-    /**
-     * Test toReal : UReal -> Real
-     */
 
     @Test
     void testURealToReal() throws ExpInvalidException {
@@ -136,10 +128,6 @@ class URealExpOpsTest {
 
     }
 
-    /**
-     * Test toString : UReal -> String
-     */
-
     @Test
     void testURealToString() throws ExpInvalidException {
         Expression [] args;
@@ -181,10 +169,6 @@ class URealExpOpsTest {
         assertEquals(new StringValue("UReal(0.5, 3.2)"), e.eval(op, state), op.toString());
     }
 
-    /**
-     * Test abs: UReal -> UReal
-     */
-
     @Test
     void testURealAbs() throws ExpInvalidException {
         Expression [] args;
@@ -206,10 +190,6 @@ class URealExpOpsTest {
         assertEquals(new URealValue(3, 2.3), e.eval(op, state), op.toString());
     }
 
-    /**
-     * Test neg : UReal -> UReal
-     */
-
     @Test
     void testURealNeg() throws ExpInvalidException {
         Expression [] args;
@@ -230,10 +210,6 @@ class URealExpOpsTest {
         op = ExpStdOp.create("neg", args);
         assertEquals(new URealValue(-3, 2.3), e.eval(op, state), op.toString());
     }
-
-    /**
-     * Test floor : UReal -> UReal
-     */
 
     @Test
     void testURealFloor() throws ExpInvalidException {
@@ -272,10 +248,6 @@ class URealExpOpsTest {
         assertEquals(new URealValue(-4, 2.3), e.eval(op, state), op.toString());
     }
 
-    /**
-     * Test round : UReal -> UReal
-     */
-
     @Test
     void testURealRound() throws ExpInvalidException {
         Expression [] args;
@@ -305,10 +277,6 @@ class URealExpOpsTest {
         op = ExpStdOp.create("round", args);
         assertEquals(new URealValue(-1, 3), e.eval(op, state), op.toString());
     }
-
-    /**
-     * Test power : UReal -> UReal
-     */
 
     @Test
     void testURealPower() throws ExpInvalidException {
@@ -443,10 +411,6 @@ class URealExpOpsTest {
         op = ExpStdOp.create("power", args);
         assertEquals(new URealValue(1, 0.5), e.eval(op, state), op.toString());
     }
-
-    /**
-     * Test sqrt: UReal -> UReal
-     */
 
     @Test
     void testURealSqrt() throws ExpInvalidException {
@@ -587,10 +551,6 @@ class URealExpOpsTest {
         assertEquals(new URealValue(Math.atan(1), 0.4 / (1 + 1 * 1)), e.eval(op, state), op.toString());
     }
 
-    /**
-     * Test value : UReal -> Real
-     */
-
     @Test
     void testURealValue() throws ExpInvalidException {
         Expression [] args;
@@ -609,10 +569,6 @@ class URealExpOpsTest {
         assertEquals(new RealValue(3), e.eval(op, state), op.toString());
     }
 
-    /**
-     * Test uncertainty : UReal -> Real
-     */
-
     @Test
     void testURealUncertainty() throws ExpInvalidException {
         Expression [] args;
@@ -627,10 +583,6 @@ class URealExpOpsTest {
         assertEquals(new RealValue(0), e.eval(op, state), op.toString());
     }
 
-    /**
-     * Test inv : UReal -> UReal
-     */
-
     @Test
     void testURealInv() throws ExpInvalidException {
         Expression [] args;
@@ -644,10 +596,6 @@ class URealExpOpsTest {
         op = ExpStdOp.create("inv", args);
         assertTrue(e.eval(op, state).isUndefined(), op.toString());
     }
-
-    /**
-     * Test min,max : UReal x UReal -> UReal
-     */
 
     @Test
     void testURealxURealMinMax() throws ExpInvalidException {
@@ -798,10 +746,6 @@ class URealExpOpsTest {
         assertEquals(new URealValue(5, 2), (e.eval(op, state)), op.toString());
     }
 
-    /**
-     * Test min,max : UReal x Integer -> UReal
-     */
-
     @Test
     void testURealxIntegerMinMax() throws ExpInvalidException {
         Expression [] args, args_inv;
@@ -887,10 +831,6 @@ class URealExpOpsTest {
         op = ExpStdOp.create("max", args_inv);
         assertEquals(new URealValue(3, 2), (e.eval(op, state)), op.toString());
     }
-
-    /**
-     * Test min,max : UReal x Integer -> UReal
-     */
 
     @Test
     void testURealxRealMinMax() throws ExpInvalidException {
@@ -979,10 +919,6 @@ class URealExpOpsTest {
 
     }
 
-    /**
-     * Test, min, max : UReal x OtherValue -> Not Defined
-     */
-
     @Test
     void testURealxOtherMinMax() throws ExpInvalidException {
         Expression [] args, args_inv;
@@ -1037,10 +973,6 @@ class URealExpOpsTest {
         });
     }
 
-    /**
-     * Test UReal, (UReal)
-     */
-
     @Test
     void testUrealIdentical() throws ExpInvalidException {
         Expression [] args;
@@ -1079,10 +1011,6 @@ class URealExpOpsTest {
         assertEquals(BooleanValue.FALSE, e.eval(op, state), op.toString());
 
     }
-
-    /**
-     * Test add : UReal x UReal
-     */
 
     @Test
     void testAddURealxUReal() throws ExpInvalidException {
@@ -1291,10 +1219,6 @@ class URealExpOpsTest {
 
     }
 
-    /**
-     * Test add : UReal x Real
-     */
-
     @Test
     void testAddURealxReal() throws ExpInvalidException {
         Expression [] args;
@@ -1398,10 +1322,6 @@ class URealExpOpsTest {
 
     }
 
-    /**
-     * Test add : UReal x Integer
-     */
-
     @Test
     void testAddURealxInteger() throws ExpInvalidException {
         Expression [] args;
@@ -1503,10 +1423,6 @@ class URealExpOpsTest {
         op = ExpStdOp.create("+", args);
         assertEquals((new URealValue(67, 5)), (e.eval(op, state)), op.toString());
     }
-
-    /**
-     * Test multiply : UReal x UReal
-     */
 
     @Test
     void testMultiplyURealxUReal() throws ExpInvalidException {
@@ -1706,10 +1622,6 @@ class URealExpOpsTest {
         assertEquals(new URealValue(10.0, 17.0), e.eval(op, state), op.toString());
     }
 
-    /**
-     * Test multiply : UReal x Real
-     */
-
     @Test
     void testMultiplyURealxReal() throws ExpInvalidException {
         Expression[] args;
@@ -1812,10 +1724,6 @@ class URealExpOpsTest {
         assertEquals(new URealValue(1.0, 2.5), e.eval(op, state), op.toString());
     }
 
-    /**
-     * Test multiply : UReal x Integer
-     */
-
     @Test
     void testMultiplyURealxInteger() throws ExpInvalidException {
         Expression[] args;
@@ -1917,10 +1825,6 @@ class URealExpOpsTest {
         op = ExpStdOp.create("*", args);
         assertEquals(new URealValue(130.0, 325.0), e.eval(op, state), op.toString());
     }
-
-    /**
-     * Test minus : UReal x UReal -> UReal
-     */
 
     @Test
     void testMinusURealxUReal() throws ExpInvalidException {
@@ -2121,10 +2025,6 @@ class URealExpOpsTest {
 
     }
 
-    /**
-     * Test minus : UReal x Real -> UReal
-     */
-
     @Test
     void testMinusURealxReal() throws ExpInvalidException {
         Expression[] args;
@@ -2228,10 +2128,6 @@ class URealExpOpsTest {
 
     }
 
-    /**
-     * Test minus : UReal x Integer -> UReal
-     */
-
     @Test
     void testMinusURealxInteger() throws ExpInvalidException {
         Expression[] args;
@@ -2333,10 +2229,6 @@ class URealExpOpsTest {
         op = ExpStdOp.create("-", args);
         assertEquals((new URealValue(-63.0, 5.0)), (e.eval(op, state)), op.toString());
     }
-
-    /**
-     * Test division : UReal x UReal -> UReal
-     */
 
     @Test
     void testDivisionURealxUReal() throws ExpInvalidException {
@@ -2536,10 +2428,6 @@ class URealExpOpsTest {
         assertEquals((new URealValue(0.4, 1.379275172)), e.eval(op, state), op.toString());
     }
 
-    /**
-     * Test division : UReal x Real -> UReal
-     */
-
     @Test
     void testDivisionURealxReal() throws ExpInvalidException {
         Expression[] args;
@@ -2640,10 +2528,6 @@ class URealExpOpsTest {
         assertEquals((new URealValue(4.0, 10)), e.eval(op, state), op.toString());
 
     }
-
-    /**
-     * Test division : UReal x Integer -> UReal
-     */
 
     @Test
     void testDivisionURealxInteger() throws ExpInvalidException {
@@ -2748,10 +2632,6 @@ class URealExpOpsTest {
 
     }
 
-    /**
-     * Test setValue : UReal -> UReal
-     */
-
     @Test
     void testSetValue() throws ExpInvalidException {
         ExpStdOp op;
@@ -2782,10 +2662,6 @@ class URealExpOpsTest {
         assertEquals(new URealValue(-2, 3), e.eval(op, state), op.toString());
 
     }
-
-    /**
-     * Test UReal.setUncertainty : UReal -> UReal
-     */
 
     @Test
     void testURealSetUncertainty() throws ExpInvalidException {

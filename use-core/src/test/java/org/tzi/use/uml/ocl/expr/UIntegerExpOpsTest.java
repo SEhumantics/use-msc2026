@@ -666,8 +666,6 @@ class UIntegerExpOpsTest {
 
     }
 
-    // Test UInteger.add
-
     @Test
     void testAddBetweenUInteger() throws ExpInvalidException {
         Expression [] args;
@@ -1318,7 +1316,6 @@ class UIntegerExpOpsTest {
         assertEquals(new UIntegerValue(3, 2.3), e.eval(op, state), op.toString());
     }
 
-    // Testing Sqrt
     @Test
     void testSQRT() throws ExpInvalidException {
         Expression [] args;
@@ -1353,9 +1350,6 @@ class UIntegerExpOpsTest {
         assertEquals(new UIntegerValue(2, 0.5), e.eval(op, state), op.toString());
 
     }
-
-
-    // Testing operator ABS()
 
     @Test
     void testABS() throws ExpInvalidException {
@@ -2591,9 +2585,6 @@ class UIntegerExpOpsTest {
         assertEquals(new UIntegerValue(130, 325.0), e.eval(op, state), op.toString());
     }
 
-
-    // Test UInteger.divideBy
-
     @Test
     void testDividyByRBetweenUInteger() throws ExpInvalidException {
         Expression [] args;
@@ -3798,8 +3789,6 @@ class UIntegerExpOpsTest {
         op = ExpStdOp.create("mod", args);
         assertEquals(new UIntegerValue(2, 0.0769230769), e.eval(op, state), op.toString());
     }
-
-    // Testing power
 
     @Test
     void testPower() throws ExpInvalidException {
