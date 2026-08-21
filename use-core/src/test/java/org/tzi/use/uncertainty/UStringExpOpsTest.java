@@ -132,6 +132,21 @@ class UStringExpOpsTest {
         }
 
         @Test
+        @DisplayName("unary + on a non-numeric operand reports a type error instead of crashing")
+        void unaryPlusOnNonNumericOperandDoesNotCrash() {
+            // '+' is also OCL's unary-plus operator, so every '+' expression -- including these,
+            // which have no unary-plus overload at all -- is tried against
+            // Op_uString_uConcat.matches() too. That used to index params[1] on a 1-element array.
+            StringWriter err = new StringWriter();
+            assertNull(OCLCompiler.compileExpression(new ModelFactory().createModel("m"), "+'a'",
+                    "test", new PrintWriter(err), new VarBindings()));
+
+            err = new StringWriter();
+            assertNull(OCLCompiler.compileExpression(new ModelFactory().createModel("m"), "+true",
+                    "test", new PrintWriter(err), new VarBindings()));
+        }
+
+        @Test
         @DisplayName("indexOf: fixed declared type (M-37-class), now statically Integer")
         void indexOf() {
             Expression e = compile("UString('hello', 0.9).indexOf('l')");

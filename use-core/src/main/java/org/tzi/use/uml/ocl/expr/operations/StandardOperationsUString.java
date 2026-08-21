@@ -27,7 +27,6 @@ public class StandardOperationsUString {
         OpGeneric.registerOperation(new Op_uString_character(), opmap);
         OpGeneric.registerOperation(new Op_uString_uConcat(), opmap);
         OpGeneric.registerOperation(new Op_uString_size(), opmap);
-        OpGeneric.registerOperation(new Op_uString_uConcat(), opmap);
         OpGeneric.registerOperation(new Op_uString_indexOf(), opmap);
         OpGeneric.registerOperation(new Op_uString_substring(), opmap);
         OpGeneric.registerOperation(new Op_uString_toLowerCase(), opmap);
@@ -268,11 +267,23 @@ final class Op_uString_uConcat extends OpGeneric {
         return false;
     }
 
+    /**
+     * @implNote Guards on {@code params.length} before indexing {@code params[1]}: {@code "+"} is
+     *     also registered as OCL's unary-plus operator ({@code Op_number_unaryplus} and siblings),
+     *     so this {@code matches()} is tried against every unary {@code +} expression too (e.g.
+     *     {@code +'a'}, {@code +true}) with a 1-element {@code params} array. The original
+     *     unconditional {@code params[1]} access threw {@code ArrayIndexOutOfBoundsException} for
+     *     any such expression instead of returning {@code null} (no match), crashing OCL
+     *     type-checking wherever unary {@code +} was used on a non-numeric operand.
+     */
     @Override
     public Type matches(Type[] params) {
+        if (params.length != 2)
+            return null;
+
         boolean someOfThemIsUString = params[0].isTypeOfUString() || params[1].isTypeOfUString();
 
-        return params.length == 2 && params[0].isKindOfUString(Type.VoidHandling.EXCLUDE_VOID) &&
+        return params[0].isKindOfUString(Type.VoidHandling.EXCLUDE_VOID) &&
                 params[1].isKindOfUString(Type.VoidHandling.EXCLUDE_VOID) && someOfThemIsUString ?
                 TypeFactory.mkUString() : null;
     }

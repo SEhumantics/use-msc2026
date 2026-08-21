@@ -3,6 +3,7 @@ package org.tzi.use.uncertainty;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.PrintWriter;
@@ -258,6 +259,21 @@ class UncertainQueryAndMembershipTest {
         void emptyCollectionEdgeCases() {
             assertEquals("UBoolean(true, 0.0)", run("Set{}->includes(UReal(2, 3))").toString());
             assertEquals("UBoolean(true, 1.0)", run("Set{}->excludes(UReal(1, 2))").toString());
+        }
+
+        @Test
+        @DisplayName("SBoolean elements fail with a clear error instead of crashing (not full membership support)")
+        void sBooleanElementsFailClearlyRatherThanCrash() {
+            // matches() declares this UBoolean regardless of element type, but SBoolean.uEquals
+            // returns an SBooleanValue, which CollectionValue.requireUBoolean cannot coerce.
+            // Uncertain collection membership for SBoolean elements is not implemented; this only
+            // checks the failure is CollectionValue.requireUBoolean's documented ClassCastException,
+            // not the uncaught NullPointerException it used to be.
+            String sboolSet = "Set{SBoolean(0.8, 0.1, 0.1, 0.5)}";
+            assertThrows(ClassCastException.class,
+                    () -> run(sboolSet + "->includes(SBoolean(0.8, 0.1, 0.1, 0.5))"));
+            assertThrows(ClassCastException.class,
+                    () -> run(sboolSet + "->uCountC(SBoolean(0.8, 0.1, 0.1, 0.5), 0.5)"));
         }
     }
 

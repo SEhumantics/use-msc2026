@@ -179,4 +179,31 @@ class SBooleanExpOpsTest {
                     + "not throw a NullPointerException at eval time as it did before this stage's fix");
         }
     }
+
+    @Nested
+    @DisplayName("Q2: UBoolean widens to SBoolean for operations UBoolean has none of its own")
+    class UBooleanWidening {
+
+        @Test
+        @DisplayName("minimumBeliefFusion is reachable on a UBoolean receiver, coerced to SBoolean")
+        void uBooleanReceiverWidensToSBoolean() {
+            String expr = "UBoolean(true, 0.9).minimumBeliefFusion(Set{" + A + "})";
+            StringWriter err = new StringWriter();
+            Expression e = OCLCompiler.compileExpression(new ModelFactory().createModel("m"), expr,
+                    "test", new PrintWriter(err), new VarBindings());
+            assertEquals("SBoolean", e.type().toString());
+            assertEquals("SBoolean(0.5, 0.3, 0.2, 0.5)", run(expr).toString());
+        }
+
+        @Test
+        @DisplayName("plain crisp Boolean does not get this widening: it has no isKindOfSBoolean override")
+        void plainBooleanDoesNotWiden() {
+            StringWriter err = new StringWriter();
+            Expression e = OCLCompiler.compileExpression(new ModelFactory().createModel("m"),
+                    "true.minimumBeliefFusion(Set{" + A + "})", "test", new PrintWriter(err),
+                    new VarBindings());
+            assertTrue(e == null, "Boolean inherits isKindOfSBoolean=false from TypeImpl, so this "
+                    + "must not compile without first becoming UBoolean");
+        }
+    }
 }

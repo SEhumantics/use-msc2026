@@ -117,6 +117,18 @@ public abstract class CollectionValue extends Value implements Iterable<Value> {
      * second collection with AND — every element of {@code coll2} must (in)clude, for the whole
      * collection to (in)clude.
      */
+    /**
+     * @implNote {@code matches()} in {@code Op_collection_includes} (StandardOperationsCollection.java)
+     *     declares this operation's result as {@code UBoolean} for every uncertain element type, but
+     *     {@link UncertainValue#uEquals} on an {@link SBooleanValue} element returns an
+     *     {@code SBooleanValue}, which {@link UBooleanValue#valueOf(Value)} cannot coerce (it only
+     *     accepts {@code UBoolean}/{@code Boolean}) and silently returns {@code null} for. Without a
+     *     check, that null reached {@code aux.probability()} below as an uncaught
+     *     {@code NullPointerException}. {@code requireUBoolean} turns that into the same
+     *     {@code ClassCastException} {@link #uExcludes} already produces for the identical case (via
+     *     {@code UBooleanValue.and}'s own coercion) -- uncertain collection membership is not defined
+     *     for {@code SBoolean} elements, and now fails the same documented way everywhere it's asked.
+     */
     public UBooleanValue uIncludes(Value v) {
         UBooleanValue res = UBooleanValue.FALSE, aux;
 
@@ -125,9 +137,9 @@ public abstract class CollectionValue extends Value implements Iterable<Value> {
                 break;
 
             if (elemVal instanceof UncertainValue)
-                aux = UBooleanValue.valueOf(((UncertainValue) elemVal).uEquals(v));
+                aux = requireUBoolean(((UncertainValue) elemVal).uEquals(v));
             else if (v instanceof UncertainValue)
-                aux = UBooleanValue.valueOf(((UncertainValue) v).uEquals(elemVal));
+                aux = requireUBoolean(((UncertainValue) v).uEquals(elemVal));
             else
                 aux = UBooleanValue.valueOf(v.equals(elemVal), 1);
 
@@ -136,6 +148,15 @@ public abstract class CollectionValue extends Value implements Iterable<Value> {
         }
 
         return res;
+    }
+
+    private static UBooleanValue requireUBoolean(Value value) {
+        UBooleanValue result = UBooleanValue.valueOf(value);
+
+        if (result == null)
+            throw new ClassCastException("A value kind of UBoolean expected");
+
+        return result;
     }
 
     public UBooleanValue uIncludesAll(CollectionValue coll2) {
@@ -197,9 +218,9 @@ public abstract class CollectionValue extends Value implements Iterable<Value> {
 
         for (Value v : this) {
             if (v instanceof UncertainValue)
-                equals = UBooleanValue.valueOf(((UncertainValue) v).uEquals(value));
+                equals = requireUBoolean(((UncertainValue) v).uEquals(value));
             else if (value instanceof UncertainValue)
-                equals = UBooleanValue.valueOf(((UncertainValue) value).uEquals(v));
+                equals = requireUBoolean(((UncertainValue) value).uEquals(v));
             else
                 equals = UBooleanValue.valueOf(v.equals(value), 1);
 

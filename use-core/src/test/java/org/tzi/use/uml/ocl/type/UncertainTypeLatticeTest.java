@@ -63,6 +63,38 @@ public class UncertainTypeLatticeTest {
                 "element type of Set{UReal(2,0.5), 1, 2.5}");
     }
 
+    /**
+     * Not an uncertainty case -- {@code Integer} and {@code UnlimitedNatural} are both classic USE
+     * types, and this is a plain-USE defect docs/port2/adaptation/01-types.md &sect;C-08 found: they
+     * are mutually conformant (each {@code conformsTo} the other via the same "is a kind of number"
+     * check), so {@link UniqueLeastCommonSupertypeDeterminator}'s greedy tie-break had no fixpoint
+     * and returned whichever element the {@code HashSet}-backed iteration yielded last -- ordered by
+     * {@code BasicType.hashCode()}, the JVM's lazily-assigned identity hash of the type's
+     * {@code Class} object, so the answer could differ across JVM runs of the same binary (confirmed
+     * in &sect;C-08's own experiment; not reproducible as a same-run flip, since a class's identity
+     * hash is fixed for the rest of that process once requested). Lives here because this is where
+     * {@code ulcs()} already exists, not because it's about uncertainty.
+     *
+     * <p>What this pins down is the fix's actual claim -- {@code calculateFor} is now a pure function
+     * of the input types (iterates a {@code TreeSet} ordered by {@code toString()}, not identity
+     * hash) and so returns the same answer on every call, every run, regardless of input order. It
+     * does not test "same run, forward vs reversed insertion order" -- with a fixed class-identity
+     * hash for the run's whole lifetime, the pre-fix code passes that check too, for the same reason
+     * it fails across runs: the answer is stable WITHIN a run and unstable BETWEEN runs. Which of the
+     * two mutually-conformant types wins is still an open call (decision B11b); this only asserts
+     * that it is now the same call every time.
+     */
+    @Test
+    public void mutuallyConformantPairResolvesToTheSameDeterministicAnswer() {
+        Type forward = ulcs(TypeFactory.mkInteger(), TypeFactory.mkUnlimitedNatural());
+        Type reversed = ulcs(TypeFactory.mkUnlimitedNatural(), TypeFactory.mkInteger());
+        assertEquals(forward, reversed,
+                "ULCS(Integer, UnlimitedNatural) must not depend on input iteration order");
+        // Pinned outcome of the toString()-ordered tie-break, not a claim that this answer is the
+        // "correct" one -- see the class doc above and decision B11b.
+        assertEquals(TypeFactory.mkUnlimitedNatural(), forward);
+    }
+
     @Test
     public void eachUncertainTypeAbsorbsItsCrispCounterpart() {
         assertEquals(TypeFactory.mkUReal(), ulcs(TypeFactory.mkUReal(), TypeFactory.mkInteger()));

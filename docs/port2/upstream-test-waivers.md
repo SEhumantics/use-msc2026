@@ -93,11 +93,19 @@ is load-bearing:
 * The fork tests it directly and in the same direction — `FORK/src/test/.../type/TypeTest.java:138`
   asserts `TypeFactory.mkReal().conformsTo(TypeFactory.mkUReal())`, `:153`
   `mkInteger().conformsTo(mkUReal())`, `:156` `mkInteger().conformsTo(mkUInteger())`.
-* It is what makes the mixed collection literal work. `Set{UReal(2,0.5), 1, 2.5}` has type
-  `Set(UReal)` in the fork and is a compile error in plain USE 7.5.0 (measured on both sides,
-  `adaptation-policy-refutation.md`). The element type is decided by
-  `UniqueLeastCommonSupertypeDeterminator`, which reads `allSupertypes()`. Without the crisp→uncertain
-  edges the fork's own worked example does not typecheck.
+* The mixed collection literal works in the fork: `Set{UReal(2,0.5), 1, 2.5}` has type `Set(UReal)`
+  there and is a compile error in plain USE 7.5.0 (measured on both sides,
+  `adaptation-policy-refutation.md`). Its element type is decided by
+  `UniqueLeastCommonSupertypeDeterminator`, but that decision runs on `conformsTo` alone (steps 2/3
+  never read `allSupertypes()` beyond seeding the candidate pool with each input type's own
+  closure) — so the worked example survives on the `conformsTo` edges by themselves and is not, on
+  its own, why `allSupertypes()` needs to change. (This sentence originally claimed otherwise;
+  refuted by measurement and corrected in `adaptation-policy-refutation.md` §6.1.) The actual reason
+  is **pairwise** `Type.getLeastCommonSupertype`, which has roughly sixty call sites (`ExpIf:42,48`
+  and the `StandardOperationsSet/Bag/Sequence/OrderedSet/Collection/Any` registries) and collapses to
+  `OclAny` without the `allSupertypes()` edges — measured, `Set{UReal(2,0.5)}->including(1)` becomes
+  `Set(OclAny)` and `if true then 1 else UReal(2,0.5) endif` becomes `OclAny` under the untested
+  conformsTo-only alternative.
 * Mixed **binary arithmetic** (`UReal(0,0) + 3`) does *not* depend on it — that goes through operation
   signatures (`StandardOperationsUReal.java:164-165`). So the lattice is not redundant scaffolding for
   arithmetic; collections are precisely what needs it.
