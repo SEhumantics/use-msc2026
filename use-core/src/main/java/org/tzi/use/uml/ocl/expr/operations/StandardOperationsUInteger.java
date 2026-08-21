@@ -60,25 +60,17 @@ final class Op_uInteger_value extends OpGeneric {
     }
 
     /**
-     * B7 / ledger M-37 — <strong>behaviour deliberately changed from the fork.</strong>
+     * Declares the static result type of {@code value}/{@code toInteger} as {@link
+     * org.tzi.use.uml.ocl.type.IntegerType Integer}, matching what {@link #eval} actually returns.
      *
-     * <p>The fork returned {@code TypeFactory.mkUInteger()} here (fork
-     * {@code src/main/org/tzi/use/uml/ocl/expr/operations/StandardOperationsUInteger.java:54-64})
-     * while {@link #eval} two methods below returns an {@code IntegerValue}. The comment above this
-     * class has always said {@code value : UInteger -> Integer}; the sibling
-     * {@code Op_ureal_value} correctly declares {@code mkReal()}.
-     *
-     * <p>This is not cosmetic. {@code ExpStdOp.create} stores what {@code matches} returns as the
-     * expression's <strong>static</strong> type, so type-checking of any <em>enclosing</em>
-     * expression was performed against {@code UInteger} while the value that actually arrived at
-     * runtime was an {@code Integer}.
-     *
-     * <p><strong>Declared consequence.</strong> {@code TYPE} only. The printed type suffix does not
-     * move: {@code Value.toStringWithType} uses {@code getRuntimeType()}, so the nine corpus entries
-     * that exercise this operation already read {@code -> 3 : Integer}. That was checked before the
-     * change rather than after.
-     *
-     * <p>Decided by the user on 2026-08-17 (B7); {@code docs/port2/b7-fix-plan.md} section 2 M-37.
+     * @implNote The fork declared {@code TypeFactory.mkUInteger()} here while {@code eval} returns an
+     *     {@code IntegerValue} (the sibling {@code Op_ureal_value} correctly declares {@code
+     *     mkReal()} for the analogous case). Not cosmetic: {@code ExpStdOp.create} stores this
+     *     method's return as the expression's <em>static</em> type, so the fork mistyped every
+     *     <em>enclosing</em> expression that consumes {@code x.value()}. The printed suffix is
+     *     unaffected either way &mdash; {@code Value.toStringWithType} prints the runtime type, not
+     *     this one &mdash; so no corpus expectation changes.
+     * @see "docs/port2/b7-fix-plan.md &sect;2 M-37 &mdash; deviation ledger (decided 2026-08-17)"
      */
     @Override
     public Type matches(Type[] params) {

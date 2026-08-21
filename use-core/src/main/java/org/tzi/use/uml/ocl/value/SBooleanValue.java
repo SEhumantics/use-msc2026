@@ -187,51 +187,21 @@ public final class SBooleanValue extends UncertainBooleanValue {
 	}
 
 	/**
-	 * B7 / ledger M-18 — <strong>behaviour deliberately changed from the fork.</strong>
+	 * Compares this opinion to {@code o}, ordering {@link SBooleanValue} arguments lexicographically
+	 * over their four masses (belief, disbelief, uncertainty, base rate) and falling back to a
+	 * {@code toString()} comparison for any other kind of {@link Value}, so the order stays total.
 	 *
-	 * <p>The fork's entire body was {@code return 0;} (fork
-	 * {@code src/main/org/tzi/use/uml/ocl/value/SBooleanValue.java:150-153}). Every
-	 * {@code SBooleanValue} therefore compared equal to every {@code Value} it was ever handed —
-	 * another opinion, an {@code UndefinedValue}, a {@code StringValue}, anything. Sorting a
-	 * collection containing opinions left them in insertion order while claiming they were ordered,
-	 * and {@code Collections.sort} had no way to know.
-	 *
-	 * <h4>Why this does not delegate to {@code SBoolean.compareTo}</h4>
-	 * The obvious fix — hand the job to the library, as every sibling does — would trade one defect
-	 * for a crash. {@code uDataTypes.SBoolean.compareTo} is:
-	 * <pre>
-	 *   double x = |b1-b2| + |d1-d2| + |u1-u2| + |a1-a2|;
-	 *   if (x &lt; 0.001D) return 0;
-	 *   return this.projection() - other.projection() &lt; 0 ? -1 : 1;
-	 * </pre>
-	 * A tolerance-based "equal" is <strong>not transitive</strong>: three opinions spaced 0.0006
-	 * apart give {@code a == b}, {@code b == c} and {@code a &lt; c}. That is precisely the input
-	 * Java's TimSort rejects with
-	 * {@code IllegalArgumentException: Comparison method violates its general contract}, and it does
-	 * so at 32 elements and above. The port would then crash where the fork merely mis-sorted, on
-	 * collections no existing test reaches. So the order is implemented here instead, totally.
-	 *
-	 * <h4>The order</h4>
-	 * Lexicographic {@link Double#compare} over the four masses, which is a genuine total order
-	 * (antisymmetric, transitive, and consistent with {@link #equals(Object)}, which compares the
-	 * same four components through {@code SBoolean.equals}). The {@code UndefinedValue} and
-	 * {@code toString()} arms are the idiom {@link URealValue#compareTo(Value)} and
-	 * {@link UStringValue#compareTo(Value)} already use, so a mixed collection behaves the way the
-	 * rest of this package behaves.
-	 *
-	 * <p><strong>Declared consequence.</strong> {@code SET} (order) and {@code ERR}. Any collection
-	 * containing an {@code SBooleanValue} may now print in a different order — a correct one.
-	 *
-	 * <p><strong>Declared residual.</strong> This makes <em>this</em> comparator total; it does not
-	 * repair the pre-existing asymmetries elsewhere in the package ({@code RealValue.compareTo} falls
-	 * through to a {@code toString()} comparison for a {@code URealValue} argument while
-	 * {@code URealValue.compareTo} compares numerically). A mixed sort with an asymmetric comparator
-	 * is still undefined; at the corpus sizes in this repo TimSort uses binary insertion sort and
-	 * performs no contract check, so it is latent rather than live. See
-	 * {@code docs/port2/b7-fix-plan.md} section 7.2 item 4.
-	 *
-	 * <p>Decided by the user on 2026-08-17 (B7). Designed in
-	 * {@code docs/port2/b7-fix-plan.md} section 2 M-18.
+	 * @implNote The fork's entire body was {@code return 0;}: every opinion compared equal to every
+	 *     {@code Value}, including {@code UndefinedValue} and {@code StringValue}. This deliberately
+	 *     does not delegate to {@code SBoolean.compareTo}: that method treats opinions within 0.001 L1
+	 *     distance as equal, which is not a transitive relation, and a non-transitive comparator makes
+	 *     Java's TimSort throw {@code IllegalArgumentException} at 32+ elements — trading a mis-sort
+	 *     for a crash. The lexicographic order here is a genuine total order, consistent with {@link
+	 *     #equals(Object)}. Residual: this does not repair the pre-existing asymmetry between {@code
+	 *     RealValue#compareTo} and {@link URealValue#compareTo(Value)} elsewhere in the package, so a
+	 *     mixed sort against those two remains technically undefined — latent rather than live at this
+	 *     corpus's sizes.
+	 * @see "docs/port2/b7-fix-plan.md &sect;2 M-18 &mdash; deviation ledger (decided 2026-08-17)"
 	 */
 	@Override
 	public int compareTo(Value o) {
@@ -256,28 +226,17 @@ public final class SBooleanValue extends UncertainBooleanValue {
 	}
 
 	/**
-	 * B7 / ledger M-6 — <strong>DECIDED NOT TO CHANGE, and that decision is the fix.</strong>
+	 * Narrows {@code value} to {@link SBooleanValue}, delegating to {@link #valueOf(Value)}.
 	 *
-	 * <p>The recommendation this row considered was narrowing {@code RuntimeException} to
-	 * {@code IllegalArgumentException}, on the ordinary grounds that a bare {@code RuntimeException}
-	 * is the least informative exception type available. It was not taken.
-	 *
-	 * <p><strong>Why not.</strong> {@code ExpQueryUncertaintyTest.java:179,200} catches
-	 * {@code RuntimeException} — a subclass would still satisfy that {@code catch}, so those two
-	 * sites are safe either way. But {@code ExpConstSBoolean.java:57} and
-	 * {@code ASTSBooleanLiteral.java:35} both {@code catch (Exception ex)} and swallow it, silently
-	 * converting whatever escapes into {@code Undefined} or a discarded error — and the full
-	 * downstream {@code catch} set reachable from this method <strong>could not be enumerated</strong>.
-	 * A narrower type is {@code ERR}-shaped risk with no offsetting benefit: nothing in this codebase
-	 * discriminates {@code RuntimeException} from {@code IllegalArgumentException}, so narrowing
-	 * could only ever change behaviour by accident, never on purpose.
-	 *
-	 * <p>Decided by the user on 2026-08-17 (B7); {@code docs/port2/b7-fix-plan.md} section 2 M-6.
-	 *
+	 * @implNote Deliberately throws the broad {@code RuntimeException} rather than narrowing to
+	 *     {@code IllegalArgumentException}: some callers ({@code ExpConstSBoolean}, {@code
+	 *     ASTSBooleanLiteral}) catch {@code Exception} generically and the full downstream catch set
+	 *     could not be enumerated, so narrowing risks silently changing behavior for no benefit.
 	 * @param value the value to coerce
 	 * @return {@code value} narrowed to {@code SBoolean}
-	 * @throws RuntimeException if {@code value} is not a kind of {@code SBoolean}. Deliberately the
-	 *         broad type: see the note above.
+	 * @throws RuntimeException if {@code value} is not a kind of {@code SBoolean} (deliberately the
+	 *     broad type, see {@code @implNote})
+	 * @see "docs/port2/b7-fix-plan.md &sect;2 M-6 &mdash; deviation ledger (decided 2026-08-17)"
 	 */
 	public static SBooleanValue assertKindOfSBoolean(Value value) {
 		SBooleanValue sbool = valueOf(value);

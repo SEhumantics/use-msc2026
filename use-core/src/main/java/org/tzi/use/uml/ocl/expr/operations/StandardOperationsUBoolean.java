@@ -452,6 +452,25 @@ final class Op_uBoolean_or extends BooleanOperation {
                 TypeFactory.mkUBoolean() : null;
     }
 
+    /**
+     * Boolean "or" of the two uncertain operands, short-circuiting to the certainly-true operand
+     * without evaluating the other when tree evaluation is disabled.
+     *
+     * @implNote When {@code v1} is undefined, the fork read {@code ub2 = UBooleanValue.valueOf(v2);
+     *     if (ub2.probability() == 1)} with no null guard (fork
+     *     {@code .../operations/StandardOperationsUBoolean.java:470-478}). {@code
+     *     UBooleanValue.valueOf} returns {@code null} for an undefined value, so a second undefined
+     *     operand dereferenced {@code null} and threw {@code NullPointerException} out of {@code
+     *     eval} instead of yielding {@code Undefined} like every other operation in this file; the
+     *     sibling {@code Op_uBoolean_and} already guards the equivalent branch at :411-414. Fixed by
+     *     checking {@code ub2 != null} before use. Unreachable from the existing test corpus &mdash;
+     *     {@code Op_boolean_or} is registered first and matches {@code (OclVoid, OclVoid)} under
+     *     {@code INCLUDE_VOID}, so plain {@code Undefined or Undefined} never reaches here; the fix
+     *     is only observable with an operand statically typed {@code UBoolean} whose runtime value
+     *     is undefined, e.g. {@code UBoolean(true, 3 - 5) or UBoolean(true, 3 - 5)}.
+     * @see "docs/port2/b7-fix-plan.md &sect;1 C3, ledger M-38 &mdash; deviation ledger (decided
+     *     2026-08-17)"
+     */
     @Override
     public Value evalWithArgs(EvalContext ctx, Expression[] args) {
         Value v1 = args[0].eval(ctx);
@@ -480,26 +499,6 @@ final class Op_uBoolean_or extends BooleanOperation {
             if (!ctx.isEnableEvalTree())
                 v2 = args[1].eval(ctx);
 
-            // B7 / ledger M-38 -- behaviour deliberately changed from the fork.
-            //
-            // This read `ub2 = UBooleanValue.valueOf(v2); if (ub2.probability() == 1)` with no null
-            // guard (fork .../operations/StandardOperationsUBoolean.java:470-478).
-            // UBooleanValue.valueOf returns null for an UndefinedValue, so
-            // `UBoolean(true, p) or Undefined` -- with the FIRST operand also undefined, which is
-            // how control reaches this branch -- dereferenced null and threw a
-            // NullPointerException out of eval. The sibling Op_uBoolean_and guards exactly this at
-            // :411-414; only `or` was missing it.
-            //
-            // Declared consequence: ERR. An NPE escaping eval becomes Undefined, which is what an
-            // undefined operand should produce and what every other operation in this file does.
-            //
-            // UNREACHABLE FROM THE CORPUS, and the port must not claim otherwise. Op_boolean_or is
-            // registered FIRST (OpGeneric.java:90 before :94) and matches (OclVoid, OclVoid) under
-            // INCLUDE_VOID, and ExpStdOp.create stops at the first match -- so the four corpus
-            // entries that write `Undefined or Undefined` never arrive here. The witness that this
-            // fix does anything has to be written by hand; see the S9 record.
-            //
-            // Decided by the user on 2026-08-17 (B7); docs/port2/b7-fix-plan.md section 1 C3.
             ub2 = UBooleanValue.valueOf(v2);
 
             if (ub2 != null && ub2.probability() == 1)

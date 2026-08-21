@@ -203,10 +203,12 @@ public class URealValue extends UncertainValue {
     }
 
     /**
-     * TODO: better description
+     * Returns the uncertain degree to which this value equals {@code other}, as an {@link
+     * UncertainBooleanValue} rather than a crisp {@code boolean}.
      *
      * @param other Value to compare.
-     * @return
+     * @return {@code UBoolean(false, 1)} if {@code other} does not narrow to {@link URealValue}, else
+     *     the {@link UBoolean} degree of equality delegated to the wrapped {@link UReal}.
      */
 
     @Override

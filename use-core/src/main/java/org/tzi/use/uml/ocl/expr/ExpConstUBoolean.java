@@ -33,30 +33,18 @@ public class ExpConstUBoolean extends Expression {
     }
 
     /**
-     * B7 / ledger M-29 — <strong>behaviour deliberately changed from the fork.</strong>
+     * Evaluates the value and probability sub-expressions and builds a {@link UBooleanValue}.
      *
-     * <p>The fork's guard was {@code if (probability.isUndefined())}. An undefined {@code value}
-     * was not checked at all: {@code value.toString()} on an {@code UndefinedValue} is the literal
-     * text {@code "Undefined"}, {@code Boolean.valueOf("Undefined")} is {@code false} (no exception
-     * — {@code Boolean.valueOf} accepts any string and only recognises {@code "true"}), and
-     * {@code UBooleanValue.valueOf(false, p)} normalises that to {@code (true, 1-p)}. So
-     * {@code UBoolean(Undefined, 0.8)} silently produced a <strong>defined</strong> {@code UBoolean}
-     * — a value manufactured from an operand that was not there.
-     *
-     * <p>Both operands are now checked, matching {@code ExpConstUInteger} and {@code ExpConstUReal},
-     * which already guard both of theirs.
-     *
-     * <p><strong>M-28 is unaffected and deliberately not revisited here</strong>: the
-     * {@code Boolean.valueOf(value.toString())} round-trip stays, because it is also what converts a
-     * malformed string into the {@code NumberFormatException} the surrounding {@code catch} turns
-     * into {@code Undefined} — see the class comment on the parameter-shaped ledger row M-28.
-     *
-     * <p><strong>Declared consequence.</strong> {@code VALUE} — an undefined value operand now
-     * yields {@code Undefined} instead of a fabricated {@code UBoolean}. <strong>Unreachable from the
-     * corpus</strong>: {@code UBoolean(3 + 2, 1)} and {@code UBoolean(3 / 0, 1)} are both compile
-     * errors at the constructor's own type guard above, so neither corpus attempt reaches {@code eval}.
-     *
-     * <p>Decided by the user on 2026-08-17 (B7); {@code docs/port2/b7-fix-plan.md} section 2 M-29.
+     * @implNote Both operands are now checked for undefined before use, matching {@code
+     *     ExpConstUInteger} and {@code ExpConstUReal}. The fork only checked {@code
+     *     probability.isUndefined()}: an undefined {@code value} slipped through because {@code
+     *     value.toString()} on {@code UndefinedValue} is the literal text {@code "Undefined"}, {@code
+     *     Boolean.valueOf("Undefined")} silently returns {@code false} (no exception — it only
+     *     recognises {@code "true"}), and {@code UBooleanValue.valueOf(false, p)} normalises that to
+     *     {@code (true, 1-p)} — a defined {@code UBoolean} manufactured from an operand that was
+     *     never there. Unaffected by, and not to be confused with, the separate M-28 decision on the
+     *     {@code Boolean.valueOf(value.toString())} round-trip a few lines below.
+     * @see "docs/port2/b7-fix-plan.md &sect;2 M-29 &mdash; deviation ledger (decided 2026-08-17)"
      */
     @Override
     public Value eval(EvalContext ctx) {
@@ -70,23 +58,13 @@ public class ExpConstUBoolean extends Expression {
         if (value.isUndefined() || probability.isUndefined())
             res = UndefinedValue.instance;
         else try {
-            // B7 / ledger M-28 -- DECIDED NOT TO CHANGE, and that decision is the fix.
-            //
-            // The recommendation this row considered was replacing the round-trip through String
-            // (Boolean.valueOf(value.toString()), Double.valueOf(probability.toString())) with
-            // direct accessors: ((BooleanValue) value).value() and
-            // ((RealValue) probability).value(). It was not taken.
-            //
-            // Why not: the round-trip is not an oversight, it is TWO behaviours in one expression.
-            // First, Double.valueOf(anIntegerValue.toString()) yields 1.0 where a direct accessor
-            // ((IntegerValue) probability).value() yields the int 1 -- a real value shift a rewrite
-            // would introduce silently. Second, and load-bearing: the NumberFormatException a
-            // malformed string raises here is exactly what the catch two lines below converts to
-            // Undefined. A direct-accessor rewrite has no string to fail to parse, so it deletes
-            // that error path along with the string conversion, changing which malformed inputs
-            // become Undefined and which throw.
-            //
-            // Decided by the user on 2026-08-17 (B7); docs/port2/b7-fix-plan.md section 2 M-28.
+            // implNote: deliberately NOT rewritten to direct accessors ((BooleanValue) value).value()
+            // / ((RealValue) probability).value(). The String round-trip carries two behaviours at
+            // once: Double.valueOf(anIntegerValue.toString()) yields 1.0 where a direct accessor
+            // would yield the int 1, and a malformed string's NumberFormatException here is exactly
+            // what the catch below converts to Undefined -- a direct accessor has no string to fail
+            // to parse, so it would silently delete that error path.
+            // See docs/port2/b7-fix-plan.md section 2 M-28 -- deviation ledger (decided 2026-08-17).
             res = UBooleanValue.valueOf(Boolean.valueOf(value.toString()), Double.valueOf(probability.toString()));
         }
         catch (RuntimeException ex) {

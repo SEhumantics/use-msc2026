@@ -72,22 +72,13 @@ public class UBooleanType extends UncertainBooleanType {
     }
 
     /**
-     * B7 / ledger M-21 — the self-entry is {@code this}, not {@code TypeFactory.mkUBoolean()}.
+     * Returns the set of types this type conforms to, including itself.
      *
-     * <p>The fork used the two interchangeably across the five uncertain types: {@code URealType}
-     * and {@code UIntegerType} added {@code this}, while {@code UBooleanType}, {@code UStringType}
-     * and {@code SBooleanType} added the factory singleton. For the singletons the factory hands out
-     * those are the same object, so the inconsistency is invisible — until a type is constructed
-     * directly, which {@code TypeTest} does at {@code :380-403}. For such an instance
-     * {@code this != mkUBoolean()}, and its own supertype set did not contain it.
-     *
-     * <p>Unified on {@code this}, because "the set of types this one conforms to" containing
-     * <em>this</em> one is what every other {@code allSupertypes()} in the tree means, and because a
-     * type that is not among its own supertypes fails {@code conformsTo} against itself.
-     *
-     * <p><strong>Declared consequence.</strong> {@code SET} — {@code allSupertypes()} contents, for
-     * directly-constructed instances only. Decided by the user on 2026-08-17 (B7);
-     * {@code docs/port2/b7-fix-plan.md} section 2 M-21.
+     * @implNote The fork added {@code TypeFactory.mkUBoolean()} here instead of {@code this};
+     *     harmless for the factory singleton but wrong for a directly-constructed instance (as
+     *     {@code TypeTest} does), whose own supertype set then would not contain it. This adds
+     *     {@code this}, matching what every other {@code allSupertypes()} in the tree means.
+     * @see "docs/port2/b7-fix-plan.md &sect;2 M-21 &mdash; deviation ledger (decided 2026-08-17)"
      */
     @Override
     public Set<? extends Type> allSupertypes() {

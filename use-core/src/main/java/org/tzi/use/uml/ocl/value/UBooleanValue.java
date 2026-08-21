@@ -256,6 +256,14 @@ public class UBooleanValue extends UncertainBooleanValue {
      * @param obj A objecto to check if equals.
      *
      * @return True if equals and false if not.
+     * @implNote The {@code BooleanValue} arm's false branch used to carry a dead third conjunct,
+     *     {@code && !this.value()}. {@link #valueOf(Value)} normalises every instance to {@code value
+     *     == true} (encoding false as probability {@code 0}), so that conjunct was false for every
+     *     value this class can produce and {@code UBooleanValue.FALSE.equals(BooleanValue.FALSE)}
+     *     always answered {@code false}. Removed; do not "fix" the normalisation instead — other
+     *     arithmetic in {@link #valueOf(Value)} depends on values always being stored as {@code value
+     *     == true}.
+     * @see "docs/port2/b7-fix-plan.md &sect;2 M-8 &mdash; deviation ledger (decided 2026-08-17)"
      */
 
     @Override
@@ -268,21 +276,6 @@ public class UBooleanValue extends UncertainBooleanValue {
         if (obj instanceof BooleanValue) {
             BooleanValue other = (BooleanValue) obj;
 
-            // B7 / ledger M-8 -- behaviour deliberately changed from the fork.
-            //
-            // The second disjunct was `other.isFalse() && probability() == 0 && !this.value()`
-            // (fork src/main/org/tzi/use/uml/ocl/value/UBooleanValue.java:233-234). Its last
-            // conjunct is dead: valueOf normalises EVERY value to value == true (:100-103), turning
-            // (false, p) into (true, 1-p), so !this.value() is false for every instance this class
-            // can produce and UBooleanValue.FALSE.equals(BooleanValue.FALSE) answered false.
-            //
-            // Deleting `&& !this.value()` leaves `other.isFalse() && probability() == 0`, which IS
-            // the normalised encoding of false -- the same statement the surviving first disjunct
-            // makes about true. Do NOT instead "fix" the normalisation: F-7 and F-8 pin valueOf's
-            // exact arithmetic and four value-test assertions depend on it.
-            //
-            // Declared consequence: VALUE. OCL `UBoolean(true, 0) = false` flips false -> true.
-            // Decided by the user on 2026-08-17 (B7); docs/port2/b7-fix-plan.md section 2 M-8.
             equals = (other.isTrue() && this.probability() == 1 && this.value() ) ||
                      (other.isFalse() && this.probability() == 0);
 

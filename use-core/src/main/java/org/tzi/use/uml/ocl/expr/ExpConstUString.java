@@ -34,28 +34,17 @@ public class ExpConstUString extends Expression {
     }
 
     /**
-     * B7 / ledger M-30 — <strong>behaviour deliberately changed from the fork.</strong>
+     * Evaluates the value and confidence sub-expressions and builds a {@link UStringValue}.
      *
-     * <p>Two unguarded operations could escape {@code eval} as an uncaught exception (fork
-     * {@code src/main/org/tzi/use/uml/ocl/expr/ExpConstUString.java:44,48}): the cast
-     * {@code (StringValue) eValue.eval(ctx)}, and {@code Double.valueOf(confidence.toString())}.
-     * Both {@code eValue} and {@code eConf} are statically typed by the constructor's guards above,
-     * but a <em>statically</em> well-typed OCL expression can still evaluate to
-     * {@code UndefinedValue} at runtime — an attribute read through an undefined navigation, an
-     * {@code if}-branch, a failed {@code oclAsType}. When it did, the cast raised
-     * {@code ClassCastException} and the parse raised {@code NumberFormatException}, and neither was
-     * caught: the fork has no guard here at all, unlike every sibling uncertain literal.
-     *
-     * <p>The fix wraps the body in {@code try}/{@code catch (Exception)}, matching
-     * {@code ExpConstSBoolean.eval} exactly — the model B7 names for this row.
-     *
-     * <p><strong>Declared consequence.</strong> {@code ERR} — an escaping exception becomes
-     * {@code Undefined}, which is what every other uncertain literal constructor in this package
-     * does with a malformed or undefined operand. {@code UString(...)} has no corpus example at all
-     * ({@code specification.md} section 6.5), so this correction is unobserved by the historical
-     * oracle and needed a purpose-built test.
-     *
-     * <p>Decided by the user on 2026-08-17 (B7); {@code docs/port2/b7-fix-plan.md} section 2 M-30.
+     * @implNote The body is wrapped in {@code try}/{@code catch (Exception)}, matching {@code
+     *     ExpConstSBoolean.eval}. The fork had no guard here at all: {@code eValue} and {@code eConf}
+     *     are statically typed by the constructor's guards, but a statically well-typed OCL
+     *     expression can still evaluate to {@code UndefinedValue} at runtime (an undefined
+     *     navigation, an {@code if}-branch, a failed {@code oclAsType}), and the fork's unguarded
+     *     {@code (StringValue)} cast and {@code Double.valueOf(confidence.toString())} then escaped
+     *     as an uncaught {@code ClassCastException}/{@code NumberFormatException} instead of yielding
+     *     {@code Undefined} like every sibling uncertain literal does.
+     * @see "docs/port2/b7-fix-plan.md &sect;2 M-30 &mdash; deviation ledger (decided 2026-08-17)"
      */
     @Override
     public Value eval(EvalContext ctx) {

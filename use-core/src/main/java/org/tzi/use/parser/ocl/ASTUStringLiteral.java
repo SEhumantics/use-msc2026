@@ -39,22 +39,15 @@ public class ASTUStringLiteral extends ASTExpression {
     }
 
     /**
-     * B7 / ledger M-33 — <strong>behaviour deliberately changed from the fork.</strong>
+     * Returns readable OCL source text for this node, e.g. {@code UString(x, 0.8)}.
      *
-     * <p>The fork's whole file had no {@code toString()} override, unlike the other four uncertain
-     * AST literals — {@code ASTURealLiteral}, {@code ASTUIntegerLiteral}, {@code ASTUBooleanLiteral}
-     * and {@code ASTSBooleanLiteral} all have one. Without it, this node fell through to
-     * {@code Object.toString()}: an identity hash such as
-     * {@code org.tzi.use.parser.ocl.ASTUStringLiteral@1a2b3c4d} in place of readable OCL source text.
-     *
-     * <p>Added here, matching {@link ASTURealLiteral#toString()}'s form.
-     *
-     * <p><strong>Declared consequence.</strong> {@code TEXT} — the text of every
-     * {@code SemanticException} that interpolates this node via {@code getStringRep()} or similar.
-     * <strong>No corpus entry mentions {@code UString}</strong> ({@code specification.md} section
-     * 6.5), so no recorded expectation moves.
-     *
-     * <p>Decided by the user on 2026-08-17 (B7); {@code docs/port2/b7-fix-plan.md} section 2 M-33.
+     * @implNote The fork had no {@code toString()} override for this node at all, unlike the other
+     *     four uncertain AST literals ({@code ASTURealLiteral}, {@code ASTUIntegerLiteral}, {@code
+     *     ASTUBooleanLiteral}, {@code ASTSBooleanLiteral}), so it fell through to {@code
+     *     Object.toString()}'s identity hash — including inside every {@code SemanticException}
+     *     message that interpolates this node. Added here, matching {@link
+     *     ASTURealLiteral#toString()}.
+     * @see "docs/port2/b7-fix-plan.md &sect;2 M-33 &mdash; deviation ledger (decided 2026-08-17)"
      */
     @Override
     public String toString() {

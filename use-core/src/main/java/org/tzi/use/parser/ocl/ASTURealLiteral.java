@@ -19,26 +19,16 @@ public class ASTURealLiteral extends ASTExpression {
     }
 
     /**
-     * B7 / ledger M-32 — <strong>behaviour deliberately changed from the fork.</strong>
+     * Type-checks the value and uncertainty sub-expressions and builds an {@link ExpConstUReal}.
      *
-     * <p>The fork called {@code eValue.gen(ctx)} and {@code eUncertainty.gen(ctx)} each
-     * <strong>twice</strong> — once here for the type check, and again at construction — building
-     * two distinct {@link Expression} graphs per operand and installing the <em>second</em> one
-     * (fork {@code src/main/org/tzi/use/parser/ocl/ASTURealLiteral.java:23-24} and {@code :34}).
-     * {@code ASTExpression.gen(Context)} is not documented pure: for a sub-expression carrying
-     * variable declarations it registers into {@code ctx} as a side effect, so calling it twice
-     * mutates the context twice and keeps only the later graph.
-     *
-     * <p>Both children are now generated exactly once and reused for the type check and the
-     * construction, halving the number of {@code ctx} mutations and installing the graph the type
-     * check actually inspected — the first one, not the second.
-     *
-     * <p><strong>Declared consequence.</strong> {@code TREE}, and possibly {@code VALUE} for an
-     * operand carrying a variable declaration. Whether any shipped corpus entry observes this is
-     * {@code UNVERIFIABLE} without a test written for exactly this shape — no existing entry passes
-     * a variable-declaring expression as a {@code UReal} operand.
-     *
-     * <p>Decided by the user on 2026-08-17 (B7); {@code docs/port2/b7-fix-plan.md} section 2 M-32.
+     * @implNote Each child is generated exactly once, into a local, and that local is reused for
+     *     both the type check and the construction. The fork called {@code eValue.gen(ctx)} and
+     *     {@code eUncertainty.gen(ctx)} twice each — once here, again at construction — building two
+     *     distinct {@link Expression} graphs per operand and installing the second one, even though
+     *     {@code gen} is not documented pure and mutates {@code ctx} as a side effect for
+     *     sub-expressions carrying variable declarations. Do not re-inline the calls at their second
+     *     use site: that reintroduces the double mutation and installs the wrong graph.
+     * @see "docs/port2/b7-fix-plan.md &sect;2 M-32 &mdash; deviation ledger (decided 2026-08-17)"
      */
     @Override
     public Expression gen(Context ctx) throws SemanticException {

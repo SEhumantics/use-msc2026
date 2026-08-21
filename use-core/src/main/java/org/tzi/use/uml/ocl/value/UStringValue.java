@@ -76,28 +76,17 @@ public class UStringValue extends UncertainValue {
     }
 
     /**
-     * B7 / ledger M-6 — <strong>DECIDED NOT TO CHANGE, and that decision is the fix.</strong>
+     * Narrows {@code value} to {@link UStringValue}, delegating to {@link #valueOf(Value)}.
      *
-     * <p>The recommendation this row considered was narrowing {@code RuntimeException} to
-     * {@code IllegalArgumentException}, on the ordinary grounds that a bare {@code RuntimeException}
-     * is the least informative exception type available. It was not taken.
-     *
-     * <p><strong>Why not.</strong> {@code ExpQueryUncertaintyTest.java:179,200} catches
-     * {@code RuntimeException} — a subclass would still satisfy that {@code catch}, so those two
-     * sites are safe either way. But {@code ExpConstSBoolean.java:57} and
-     * {@code ASTSBooleanLiteral.java:35} both {@code catch (Exception ex)} and swallow it, silently
-     * converting whatever escapes into {@code Undefined} or a discarded error — and the full
-     * downstream {@code catch} set reachable from this method <strong>could not be enumerated</strong>.
-     * A narrower type is {@code ERR}-shaped risk with no offsetting benefit: nothing in this codebase
-     * discriminates {@code RuntimeException} from {@code IllegalArgumentException}, so narrowing
-     * could only ever change behaviour by accident, never on purpose.
-     *
-     * <p>Decided by the user on 2026-08-17 (B7); {@code docs/port2/b7-fix-plan.md} section 2 M-6.
-     *
+     * @implNote Deliberately throws the broad {@code RuntimeException} rather than narrowing to
+     *     {@code IllegalArgumentException}: some callers ({@code ExpConstSBoolean}, {@code
+     *     ASTSBooleanLiteral}) catch {@code Exception} generically and the full downstream catch set
+     *     could not be enumerated, so narrowing risks silently changing behavior for no benefit.
      * @param value the value to coerce
      * @return {@code value} narrowed to {@code UString}
-     * @throws RuntimeException if {@code value} is not a kind of {@code UString}. Deliberately the
-     *         broad type: see the note above.
+     * @throws RuntimeException if {@code value} is not a kind of {@code UString} (deliberately the
+     *     broad type, see {@code @implNote})
+     * @see "docs/port2/b7-fix-plan.md &sect;2 M-6 &mdash; deviation ledger (decided 2026-08-17)"
      */
     private UStringValue assertKindOfUString(Value value) {
         UStringValue ustring = valueOf(value);
@@ -134,41 +123,21 @@ public class UStringValue extends UncertainValue {
     }
 
     /**
-     * B7 / ledger M-11 — <strong>behaviour deliberately changed from the fork.</strong>
+     * Returns whether this value equals {@code obj}, comparing the wrapped string and confidence via
+     * {@code UString.equals} when {@code obj} narrows to {@link UStringValue}.
      *
-     * <p>The fork's body was:
-     * <pre>
-     *   eq = wrapper.getString().equals(ustring.wrapper) &amp;&amp;
-     *           wrapper.getsConf() == wrapper.getsConf();
-     * </pre>
-     * (fork {@code src/main/org/tzi/use/uml/ocl/value/UStringValue.java:79-91}), and it carries two
-     * independent defects in one expression:
-     * <ol>
-     *   <li>{@code wrapper.getString()} is a {@code java.lang.String} and {@code ustring.wrapper} is a
-     *       {@code UString}, so {@code String.equals(Object)} is {@code false} for <em>every</em>
-     *       argument;</li>
-     *   <li>the second conjunct compares the receiver's confidence <strong>to itself</strong> — the
-     *       argument is never read.</li>
-     * </ol>
-     * Net effect: {@code equals} is the constant {@code false}. {@code a.equals(a)} is {@code false},
-     * reflexivity is broken, and no {@code UStringValue} can be found in any {@code HashSet},
-     * {@code HashMap} or {@code SetValue} — even though {@link #hashCode()} delegates correctly, so
-     * the two were never consistent.
-     *
-     * <p>The port delegates to {@code UString.equals}, which compares the string and the confidence
-     * (vendored {@code org.tzi.use.uncertainty.datatypes.UString}, from
-     * {@code uDataTypes/UString.java:111-119}). That is the only body under which this class's own
-     * {@code hashCode} is contract-correct.
-     *
-     * <p><strong>Declared consequence.</strong> {@link #valueOf(Value)} lifts a {@link StringValue}
-     * to confidence {@code 1.0}, so the fix makes {@code UString('x', 1.0) = 'x'} evaluate
-     * <em>true</em> where the fork gave <em>false</em>. {@link StringValue#equals(Object)} has no
-     * {@code UStringValue} arm and is not edited here, so the relation stays asymmetric across the
-     * String/UString boundary. That asymmetry is a declared residual, not an oversight —
-     * {@code docs/port2/b7-fix-plan.md} section 7.2 item 2.
-     *
-     * <p>Decided by the user on 2026-08-17 (B7: fix the historical defects rather than reproduce them
-     * bug-for-bug). Designed in {@code docs/port2/b7-fix-plan.md} section 1 C1.
+     * @implNote The fork compared {@code wrapper.getString().equals(ustring.wrapper)} — a {@code
+     *     java.lang.String} against a {@code UString}, always {@code false} — conjoined with {@code
+     *     wrapper.getsConf() == wrapper.getsConf()}, which compared the receiver's confidence to
+     *     itself and never read the argument. Net effect: {@code equals} was the constant {@code
+     *     false}, so {@code a.equals(a)} was {@code false} and no {@code UStringValue} could be found
+     *     in a {@code HashSet} even though {@link #hashCode()} delegated correctly. Now delegates to
+     *     {@code UString.equals}, comparing string and confidence, the only body under which {@code
+     *     hashCode} is contract-correct. Consequence: {@link #valueOf(Value)} lifts a {@link
+     *     StringValue} to confidence {@code 1.0}, so {@code UString('x', 1.0) = 'x'} now evaluates
+     *     true; {@link StringValue#equals(Object)} still has no {@code UStringValue} arm, so the
+     *     relation stays asymmetric across that boundary (a declared residual, not an oversight).
+     * @see "docs/port2/b7-fix-plan.md &sect;2 M-11 &mdash; deviation ledger (decided 2026-08-17)"
      */
     @Override
     public boolean equals(Object obj) {
@@ -186,32 +155,19 @@ public class UStringValue extends UncertainValue {
     }
 
     /**
-     * B7 / ledger M-12 — <strong>behaviour deliberately changed from the fork</strong>, in one of the
-     * two places the ledger names.
+     * Compares this value to {@code o}: against a {@link StringValue} it compares the two bare
+     * strings, and against anything else (including another {@link UStringValue}) it falls back to a
+     * {@code toString()} comparison so the order stays total.
      *
-     * <p><strong>What changed.</strong> The last line was
-     * {@code wrapper.getString().compareTo(valueOf(o).toString())} (fork
-     * {@code src/main/org/tzi/use/uml/ocl/value/UStringValue.java:103}). The receiver contributes its
-     * bare string; the argument — already known to be a {@link StringValue} by the guard above —
-     * contributes {@code valueOf(o).toString()}, which is the <em>wrapper rendering</em>
-     * {@code UString('x', 1.0)}. So {@code UString('x',1) . compareTo('x')} compared {@code "x"}
-     * against {@code "UString('x', 1.0)"} and answered a large negative number. Every plain string
-     * sorts after every {@code UString}, whatever the strings are. Both sides now contribute their
-     * bare string.
-     *
-     * <p><strong>What deliberately did not change.</strong> The guard is
-     * {@code !(o instanceof StringValue)}, so a {@code UStringValue} argument does <em>not</em> reach
-     * the line below — it is diverted to the {@code toString().compareTo(...)} route on the line
-     * above, comparing two full wrapper renderings. That is odd, but it is total, self-consistent,
-     * and orders {@code UString} against {@code UString} by string and then by confidence, which is a
-     * defensible order. Widening the guard is a separate decision with its own consequences and is
-     * not taken here. See {@code docs/port2/b7-fix-plan.md} section 2 M-12.
-     *
-     * <p><strong>Declared consequence.</strong> {@code SET} (order) — the sort position of a
-     * {@code UString} relative to a plain {@code String}. No {@code .in} corpus entry contains a
-     * {@code UString} token, so no recorded expectation moves.
-     *
-     * <p>Decided by the user on 2026-08-17 (B7).
+     * @implNote The {@code StringValue} arm used to compare the receiver's bare string against the
+     *     argument's <em>wrapper rendering</em>, {@code valueOf(o).toString()} (e.g. {@code
+     *     "UString('x', 1.0)"} rather than {@code "x"}), so every plain string sorted after every
+     *     {@code UString} regardless of content. Fixed to compare both sides' bare strings. The guard
+     *     {@code !(o instanceof StringValue)} deliberately still diverts {@code UStringValue}
+     *     arguments to the {@code toString()} route above — that is odd but total and self-consistent,
+     *     ordering {@code UString} against {@code UString} by string then confidence; widening the
+     *     guard is a separate, unmade decision with its own consequences.
+     * @see "docs/port2/b7-fix-plan.md &sect;2 M-12 &mdash; deviation ledger (decided 2026-08-17)"
      */
     @Override
     public int compareTo(Value o) {
