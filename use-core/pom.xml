@@ -335,6 +335,11 @@
                             <placement>m</placement>
                             <head>Precondition:</head>
                         </tag>
+                        <tag>
+                            <name>implNote</name>
+                            <placement>a</placement>
+                            <head>Implementation Note:</head>
+                        </tag>
                     </tags>
                 </configuration>
             </plugin>
