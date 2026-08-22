@@ -1,7 +1,7 @@
 # KK-ModelValidator: modernizing the Kodkod Model Validator plugin
 
 **Location note:** this module now lives at `msc-modelvalidators/kk-modelvalidator/`, grouped
-alongside the `benchmark` module that measures it and the reserved `z3-umodelvalidator` slot for the
+alongside the `benchmark` module that measures it and the reserved `unc-modelvalidator` slot for the
 thesis's actual contribution (see "Seventh pass" below). Everything written before that regrouping
 below still describes real, unchanged history — only the path changed, not the content.
 
