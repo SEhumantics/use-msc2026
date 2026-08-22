@@ -6,11 +6,14 @@
     color-scheme: light;
     /* Chart chrome & ink (dataviz skill reference palette) */
     --surface-1: #f9f9f7; --surface-2: #fcfcfb; --surface-3: #f1f1ee;
-    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #898781;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #6f6d67;
     --border: #e1e0d9; --border-strong: #c3c2b7;
     --accent: #1c2b4a; --accent-soft: #eef2fa;
-    /* Status palette -- reserved for run HEALTH (mismatch/error/pass), never reused for a data value */
-    --status-good: #0ca30c; --status-warning: #fab219; --status-serious: #ec835a; --status-critical: #d03b3b;
+    /* Status palette -- reserved for run HEALTH (mismatch/error/pass), never reused for a data value.
+       Only ever painted as a dot/icon/background tint, never as text color directly (WCAG 1.4.3) --
+       any label next to one of these always sits in a --text-* token, per the dataviz skill's own
+       rule ("text wears text tokens, never the series/status color"). */
+    --status-good: #008100; --status-warning: #fab219; --status-serious: #ec835a; --status-critical: #d03b3b;
     --status-good-soft: #e8f6e8; --status-critical-soft: #fbe9e9; --status-warning-soft: #fef4e2;
     /* Categorical (solver identity) -- fixed order, never cycled/reassigned */
     --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; --series-5: #e87ba4;
@@ -25,10 +28,10 @@
     :root:where(:not([data-theme="light"])) .viz-root {
       color-scheme: dark;
       --surface-1: #0d0d0d; --surface-2: #1a1a19; --surface-3: #232322;
-      --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+      --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8c8a84;
       --border: #2c2c2a; --border-strong: #383835;
       --accent: #8fb4e8; --accent-soft: #1a2233;
-      --status-good: #0ca30c; --status-warning: #fab219; --status-serious: #ec835a; --status-critical: #d03b3b;
+      --status-good: #0ca30c; --status-warning: #fab219; --status-serious: #ec835a; --status-critical: #d86060;
       --status-good-soft: #12291a; --status-critical-soft: #2e1818; --status-warning-soft: #2c2312;
       --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181;
       --diverge-sat: #3987e5; --diverge-unsat: #e66767; --diverge-mid: #383835;
@@ -38,10 +41,10 @@
   :root[data-theme="dark"] .viz-root {
     color-scheme: dark;
     --surface-1: #0d0d0d; --surface-2: #1a1a19; --surface-3: #232322;
-    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8c8a84;
     --border: #2c2c2a; --border-strong: #383835;
     --accent: #8fb4e8; --accent-soft: #1a2233;
-    --status-good: #0ca30c; --status-warning: #fab219; --status-serious: #ec835a; --status-critical: #d03b3b;
+    --status-good: #0ca30c; --status-warning: #fab219; --status-serious: #ec835a; --status-critical: #d86060;
     --status-good-soft: #12291a; --status-critical-soft: #2e1818; --status-warning-soft: #2c2312;
     --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181;
     --diverge-sat: #3987e5; --diverge-unsat: #e66767; --diverge-mid: #383835;
@@ -50,6 +53,10 @@
 
   .viz-root { background: var(--surface-1); color: var(--text-primary); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; min-height: 100vh; padding: 2.5rem 1.5rem 4rem; font-size: var(--fs-body); line-height: 1.5; }
   .viz-root * { box-sizing: border-box; }
+  /* Chromium's UA stylesheet gives <table> its own default text color instead of inheriting like
+     every other element -- without this, every table in the report silently renders black text
+     regardless of --text-primary, invisible against a dark surface. */
+  .viz-root table { color: inherit; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .tabular { font-variant-numeric: tabular-nums; }
   .wrap { max-width: 76rem; margin: 0 auto; }
@@ -72,7 +79,9 @@
   .filterbar button { font-family: ui-monospace, monospace; font-size: var(--fs-tiny); padding: 0.32rem 0.7rem; border-radius: 99px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-secondary); cursor: pointer; }
   .filterbar button:hover { border-color: var(--border-strong); }
   .filterbar button.active { background: var(--accent); color: var(--surface-2); border-color: var(--accent); }
-  .filterbar button:focus-visible, select:focus-visible, .expand-btn:focus-visible, .sortable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .filterbar button:focus-visible, select:focus-visible, .expand-btn:focus-visible, .sortable:focus-visible,
+  .col-head:focus-visible, .area-name:focus-visible, .scenario-chip:focus-visible, .status-badge:focus-visible,
+  .hm-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .filterbar select { font-family: ui-monospace, monospace; font-size: var(--fs-tiny); padding: 0.3rem 0.6rem; border-radius: 99px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-secondary); max-width: 14rem; }
   .filterbar .sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 0.2rem; }
 
@@ -85,8 +94,7 @@
   .kpi:last-child { border-right: none; }
   .kpi-value { font-size: 1.55rem; font-weight: 650; letter-spacing: -0.01em; line-height: 1.1; }
   .kpi-value.tabular { font-variant-numeric: tabular-nums; }
-  .kpi-value.crit { color: var(--status-critical); }
-  .kpi-value.warn { color: var(--status-serious); }
+  .kpi-value.crit, .kpi-value.warn { color: var(--status-critical); }
   .kpi-label { font-size: var(--fs-tiny); color: var(--text-muted); margin-top: 0.3rem; }
   .kpi-divbar { flex: 1 1 14rem; min-width: 12rem; padding: 0.95rem 1.15rem; }
   .divbar-caption { display: flex; justify-content: space-between; font-size: var(--fs-tiny); color: var(--text-secondary); margin-bottom: 0.4rem; }
@@ -95,23 +103,33 @@
   .divbar .seg-unsat { background: var(--diverge-unsat); }
   .divbar .seg { display: flex; align-items: center; justify-content: center; font-size: var(--fs-tiny); font-weight: 600; color: #fff; min-width: 1.6em; }
 
-  /* ---------- Chips / pills / badges (shared) ---------- */
-  .chip { display: inline-flex; align-items: center; gap: 0.3rem; font-family: ui-monospace, monospace; font-size: var(--fs-tiny); letter-spacing: 0.02em; padding: 0.12rem 0.5rem; border-radius: 99px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
-  .chip.finding { color: var(--series-1); }
-  .chip.validating { color: var(--series-3); }
-  .outcome-pill { display: inline-flex; align-items: center; gap: 0.35rem; font-family: ui-monospace, monospace; font-size: var(--fs-tiny); font-weight: 600; padding: 0.15rem 0.55rem; border-radius: 99px; white-space: nowrap; }
+  /* ---------- Chips / pills / badges (shared) ----------
+     Text always sits in a --text-* token (never a status/series/diverge hue directly) so every
+     label clears WCAG 1.4.3 in both themes; the hue itself carries identity via a small dot plus
+     the tinted background, matching the dataviz skill's "text wears text tokens" rule. */
+  .chip { display: inline-flex; align-items: center; gap: 0.35rem; font-family: ui-monospace, monospace; font-size: var(--fs-tiny); letter-spacing: 0.02em; padding: 0.12rem 0.5rem; border-radius: 99px; background: var(--accent-soft); color: var(--text-primary); white-space: nowrap; }
+  .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--accent); }
+  .chip.finding::before { background: var(--series-1); }
+  .chip.validating::before { background: var(--series-3); }
+  .outcome-pill { display: inline-flex; align-items: center; gap: 0.35rem; font-family: ui-monospace, monospace; font-size: var(--fs-tiny); font-weight: 600; padding: 0.15rem 0.55rem; border-radius: 99px; white-space: nowrap; color: var(--text-primary); }
   .outcome-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex: none; }
-  .outcome-pill.sat { color: var(--diverge-sat); background: color-mix(in srgb, var(--diverge-sat) 12%, transparent); }
+  .outcome-pill.sat { background: color-mix(in srgb, var(--diverge-sat) 14%, transparent); }
   .outcome-pill.sat::before { background: var(--diverge-sat); }
-  .outcome-pill.unsat { color: var(--diverge-unsat); background: color-mix(in srgb, var(--diverge-unsat) 12%, transparent); }
+  .outcome-pill.unsat { background: color-mix(in srgb, var(--diverge-unsat) 14%, transparent); }
   .outcome-pill.unsat::before { background: var(--diverge-unsat); }
 
-  .status-badge { display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--fs-tiny); font-weight: 650; padding: 0.15rem 0.5rem; border-radius: 6px; white-space: nowrap; }
-  .status-badge.match { color: var(--status-good); background: var(--status-good-soft); }
-  .status-badge.mismatch { color: var(--status-critical); background: var(--status-critical-soft); }
-  .status-badge.error { color: var(--status-critical); background: var(--status-critical-soft); }
-  .status-badge.no-oracle { color: var(--text-muted); background: var(--surface-3); }
-  .status-badge.mixed { color: var(--status-serious); background: var(--status-warning-soft); }
+  .status-badge { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--fs-tiny); font-weight: 650; padding: 0.15rem 0.5rem; border-radius: 6px; white-space: nowrap; color: var(--text-primary); }
+  .status-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .status-badge.match::before, .status-badge.supported::before { background: var(--status-good); }
+  .status-badge.match, .status-badge.supported { background: var(--status-good-soft); }
+  .status-badge.mismatch::before, .status-badge.error::before, .status-badge.known-defect::before { background: var(--status-critical); }
+  .status-badge.mismatch, .status-badge.error, .status-badge.known-defect { background: var(--status-critical-soft); }
+  .status-badge.no-oracle::before, .status-badge.unsupported::before { background: var(--text-muted); }
+  .status-badge.no-oracle, .status-badge.unsupported { background: var(--surface-3); }
+  .status-badge.mixed::before, .status-badge.degraded::before { background: var(--status-serious); }
+  .status-badge.mixed, .status-badge.degraded { background: var(--status-warning-soft); }
+  .status-badge.unverified::before { background: var(--accent); }
+  .status-badge.unverified { background: var(--accent-soft); }
 
   /* ---------- Solver leaderboard ---------- */
   .callouts { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1rem; }
@@ -183,8 +201,8 @@
   .heatmap-table th.col-head { border-left: 1px solid var(--border); }
   .hm-swatch { display: block; width: 100%; height: 1.9rem; border: none; cursor: pointer; background: var(--surface-3); color: inherit; font: inherit; }
   .hm-swatch.match { background: var(--status-good-soft); }
-  .hm-swatch.mismatch { background: var(--status-critical-soft); color: var(--status-critical); font-weight: 700; }
-  .hm-swatch.error { background: var(--status-critical-soft); color: var(--status-critical); font-weight: 700; }
+  .hm-swatch.mismatch { background: var(--status-critical-soft); color: var(--text-primary); font-weight: 700; }
+  .hm-swatch.error { background: var(--status-critical-soft); color: var(--text-primary); font-weight: 700; }
   .hm-swatch.no-oracle { background: var(--surface-3); color: var(--text-muted); }
   .hm-swatch.no-data { background: transparent; color: var(--border-strong); }
   .hm-swatch:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -193,11 +211,8 @@
   .hm-legend .dot { width: 0.65rem; height: 0.65rem; border-radius: 3px; flex: none; }
 
   /* ---------- Plugin feature support ---------- */
-  .status-badge.supported { color: var(--status-good); background: var(--status-good-soft); }
-  .status-badge.degraded { color: var(--status-serious); background: var(--status-warning-soft); }
-  .status-badge.known-defect { color: var(--status-critical); background: var(--status-critical-soft); }
-  .status-badge.unsupported { color: var(--text-muted); background: var(--surface-3); }
-  .status-badge.unverified { color: var(--accent); background: var(--accent-soft); }
+  /* .status-badge.supported/.degraded/.known-defect/.unsupported/.unverified are defined once,
+     with the rest of the .status-badge family, in the "Chips / pills / badges" block above. */
 
   .plugin-summary-row { display: flex; flex-wrap: wrap; gap: 1.5rem; }
   .plugin-card { flex: 1 1 16rem; min-width: 15rem; }
@@ -218,7 +233,7 @@
 
   .area-breakdown { display: flex; flex-direction: column; gap: 0.5rem; }
   .area-row { display: grid; grid-template-columns: 11rem 1fr 3rem; align-items: center; gap: 0.7rem; font-size: var(--fs-tiny); }
-  .area-row .area-name { color: var(--text-secondary); font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+  .area-row .area-name { color: var(--text-secondary); font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; background: none; border: none; padding: 0; font: inherit; text-align: left; }
   .area-row .area-name:hover { color: var(--accent); }
   .area-row.active .area-name { color: var(--accent); font-weight: 650; }
   .area-row .area-count { text-align: right; color: var(--text-muted); font-variant-numeric: tabular-nums; }
@@ -227,13 +242,25 @@
   .feature-cell-id { display: block; font-family: ui-monospace, monospace; font-size: var(--fs-tiny); color: var(--text-muted); margin-top: 0.1rem; }
   .scenario-chip-row { display: flex; flex-wrap: wrap; gap: 0.3rem; }
   .scenario-chip { font-family: ui-monospace, monospace; font-size: var(--fs-tiny); padding: 0.1rem 0.45rem; border-radius: 99px; background: var(--surface-3); color: var(--text-secondary); }
-  .oracle-caveat { display: flex; gap: 0.5rem; align-items: flex-start; font-size: var(--fs-tiny); color: var(--status-serious); background: var(--status-warning-soft); border: 1px solid transparent; border-radius: 7px; padding: 0.5rem 0.7rem; line-height: 1.5; }
-  .oracle-caveat b { color: var(--status-serious); }
+  .oracle-caveat { display: flex; gap: 0.5rem; align-items: flex-start; font-size: var(--fs-tiny); color: var(--text-primary); background: var(--status-warning-soft); border: 1px solid transparent; border-radius: 7px; padding: 0.5rem 0.7rem; line-height: 1.5; }
+  .oracle-caveat b { color: var(--text-primary); }
 
   footer.viz-foot { margin-top: 2.5rem; color: var(--text-muted); font-size: var(--fs-tiny); line-height: 1.6; max-width: 72ch; }
   .hidden { display: none !important; }
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
   @media (max-width: 30rem) { .viz-root { padding: 1.5rem 1rem 3rem; } }
+  @media (prefers-reduced-motion: reduce) {
+    .viz-root * { transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
+  }
+  @media print {
+    .viz-root { padding: 0; background: #fff; color: #000; }
+    .theme-toggle, .filterbar, .expand-btn { display: none !important; }
+    .table-scroll { max-height: none !important; overflow: visible !important; }
+    table.data-table thead th, table.heatmap-table thead th, table.data-table td:first-child, table.heatmap-table td:first-child { position: static !important; }
+    /* Only already-expanded rows print with detail (their content is only built into the DOM on
+       expand, not lazily on print) -- expand what you want captured before printing. */
+    .status-badge, .outcome-pill, .chip { border: 1px solid currentColor; }
+  }
 </style>
 
 <main class="viz-root">
@@ -264,8 +291,8 @@
         <div class="callouts" id="callouts"></div>
         <div class="table-scroll short"><table class="leaderboard-table" id="leaderboardTable">
           <thead><tr>
-            <th>#</th><th>Solver</th><th>Win rate</th><th>Matched SAT</th><th>Matched UNSAT</th>
-            <th>Mismatch</th><th>Error</th><th>Median time</th>
+            <th scope="col">#</th><th scope="col">Solver</th><th scope="col">Win rate</th><th scope="col">Matched SAT</th><th scope="col">Matched UNSAT</th>
+            <th scope="col">Mismatch</th><th scope="col">Error</th><th scope="col">Median time</th>
           </tr></thead>
           <tbody id="leaderboardBody"></tbody>
         </table></div>
@@ -285,11 +312,11 @@
       <div class="filterbar" id="featureFilterbar" style="margin-bottom:0.6rem"></div>
       <div class="table-scroll"><table class="data-table" id="featureTable">
         <thead><tr>
-          <th style="width:1.6rem"><span class="sr-only">Expand</span></th>
-          <th class="sortable" data-sort="status">Status<span class="arrow">&#9660;</span></th>
-          <th class="sortable" data-sort="area">Area<span class="arrow">&#9660;</span></th>
-          <th class="sortable" data-sort="name">Feature<span class="arrow">&#9660;</span></th>
-          <th>Scenarios</th>
+          <th scope="col" style="width:1.6rem"><span class="sr-only">Expand</span></th>
+          <th scope="col" class="sortable" tabindex="0" data-sort="status">Status<span class="arrow">&#9660;</span></th>
+          <th scope="col" class="sortable" tabindex="0" data-sort="area">Area<span class="arrow">&#9660;</span></th>
+          <th scope="col" class="sortable" tabindex="0" data-sort="name">Feature<span class="arrow">&#9660;</span></th>
+          <th scope="col">Scenarios</th>
         </tr></thead>
         <tbody id="featureBody"></tbody>
       </table></div>
@@ -309,14 +336,14 @@
       </div>
       <div class="table-scroll"><table class="data-table" id="scenarioTable">
         <thead><tr>
-          <th style="width:1.6rem"><span class="sr-only">Expand</span></th>
-          <th class="sortable" data-sort="status">Status<span class="arrow">&#9660;</span></th>
-          <th class="sortable" data-sort="id">Scenario<span class="arrow">&#9660;</span></th>
-          <th class="sortable" data-sort="category">Category<span class="arrow">&#9660;</span></th>
-          <th>Mode</th>
-          <th class="sortable" data-sort="expected">Expected<span class="arrow">&#9660;</span></th>
-          <th class="sortable" data-sort="time">Fastest<span class="arrow">&#9660;</span></th>
-          <th>SOIL</th>
+          <th scope="col" style="width:1.6rem"><span class="sr-only">Expand</span></th>
+          <th scope="col" class="sortable" tabindex="0" data-sort="status">Status<span class="arrow">&#9660;</span></th>
+          <th scope="col" class="sortable" tabindex="0" data-sort="id">Scenario<span class="arrow">&#9660;</span></th>
+          <th scope="col" class="sortable" tabindex="0" data-sort="category">Category<span class="arrow">&#9660;</span></th>
+          <th scope="col">Mode</th>
+          <th scope="col" class="sortable" tabindex="0" data-sort="expected">Expected<span class="arrow">&#9660;</span></th>
+          <th scope="col" class="sortable" tabindex="0" data-sort="time">Fastest<span class="arrow">&#9660;</span></th>
+          <th scope="col">SOIL</th>
         </tr></thead>
         <tbody id="scenarioBody"></tbody>
       </table></div>
@@ -359,9 +386,27 @@
   // "Set<IClass>"), which a browser's HTML parser would silently interpret as a tag and drop if
   // inserted into innerHTML unescaped. Any data-derived value going into innerHTML must pass through
   // this first.
+  const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   function escapeHtml(s) {
     if (s == null) return '';
     return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // Toggling a row's expand state fully rewrites its <tbody> (simplest correct way to keep the
+  // detail markup in sync), which destroys and recreates whichever element had keyboard focus --
+  // for a mouse click that's invisible, but for a keyboard user tabbed onto the expand button it
+  // silently drops focus to <body>, so a second Enter/Space does nothing. Re-find the same row by
+  // its data attribute after the rebuild and refocus its button.
+  function preservingFocus(rowAttr, renderFn) {
+    const active = document.activeElement;
+    const row = active && active.closest && active.closest(`[${rowAttr}]`);
+    const id = row ? row.getAttribute(rowAttr) : null;
+    renderFn();
+    if (id) {
+      const newRow = document.querySelector(`[${rowAttr}="${CSS.escape(id)}"]`);
+      const btn = newRow && newRow.querySelector('.expand-btn');
+      if (btn) btn.focus();
+    }
   }
 
   // ---------------------------------------------------------------- theme
@@ -566,21 +611,22 @@
 
     const kpiDiv = document.createElement('div');
     kpiDiv.className = 'kpi-divbar';
-    kpiDiv.innerHTML = `<div class="divbar-caption"><span>${satN} SAT</span><span>${unsatN} UNSAT</span></div><div class="divbar" id="divBar"></div>`;
+    kpiDiv.innerHTML = `<div class="divbar-caption"><span>${satN} SAT</span><span>${unsatN} UNSAT</span></div><div class="divbar" id="divBar" aria-hidden="true"></div>`;
     row.appendChild(kpiDiv);
+    // Counts are already given as accessible text in .divbar-caption above -- this bar is a purely
+    // decorative proportion indicator (aria-hidden), so it doesn't need its own in-segment labels
+    // (which would otherwise need white text small enough to fail contrast on a thin colored strip).
     const divBar = kpiDiv.querySelector('#divBar');
     if (satN > 0) {
       const seg = document.createElement('div');
       seg.className = 'seg seg-sat';
       seg.style.width = (satN / satTotal * 100) + '%';
-      seg.textContent = satN;
       divBar.appendChild(seg);
     }
     if (unsatN > 0) {
       const seg = document.createElement('div');
       seg.className = 'seg seg-unsat';
       seg.style.width = (unsatN / satTotal * 100) + '%';
-      seg.textContent = unsatN;
       divBar.appendChild(seg);
     }
 
@@ -758,10 +804,17 @@
     headRow.appendChild(cornerTh);
     cols.forEach(ex => {
       const th = document.createElement('th');
+      th.scope = 'col';
       th.className = 'col-head';
       th.title = ex.id;
+      th.tabIndex = 0;
+      th.setAttribute('role', 'button');
+      th.setAttribute('aria-label', 'Jump to scenario ' + ex.id);
       th.textContent = ex.id.length > 22 ? ex.id.slice(0, 20) + '…' : ex.id;
       th.onclick = () => jumpToScenario(ex.id);
+      th.addEventListener('keydown', (evt) => {
+        if (evt.key === 'Enter' || evt.key === ' ') { evt.preventDefault(); jumpToScenario(ex.id); }
+      });
       headRow.appendChild(th);
     });
     thead.appendChild(headRow);
@@ -771,6 +824,7 @@
     SOLVERS.forEach(solver => {
       const tr = document.createElement('tr');
       const rowHead = document.createElement('th');
+      rowHead.scope = 'row';
       rowHead.className = 'row-head';
       rowHead.textContent = solver;
       tr.appendChild(rowHead);
@@ -873,15 +927,20 @@
     return withKeys.map(w => w.ex);
   }
 
+  function sortScenarioBy(th) {
+    const key = th.dataset.sort;
+    if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
+    document.querySelectorAll('#scenarioTable thead th.sortable').forEach(h => {
+      h.classList.toggle('active', h === th);
+      h.querySelector('.arrow').textContent = h === th ? (sortDir === 1 ? '▲' : '▼') : '▼';
+      h.setAttribute('aria-sort', h === th ? (sortDir === 1 ? 'ascending' : 'descending') : 'none');
+    });
+    renderScenarioTable(visibleExamples());
+  }
   document.querySelectorAll('#scenarioTable thead th.sortable').forEach(th => {
-    th.addEventListener('click', () => {
-      const key = th.dataset.sort;
-      if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
-      document.querySelectorAll('#scenarioTable thead th.sortable').forEach(h => {
-        h.classList.toggle('active', h === th);
-        h.querySelector('.arrow').textContent = h === th ? (sortDir === 1 ? '▲' : '▼') : '▼';
-      });
-      renderScenarioTable(visibleExamples());
+    th.addEventListener('click', () => sortScenarioBy(th));
+    th.addEventListener('keydown', (evt) => {
+      if (evt.key === 'Enter' || evt.key === ' ') { evt.preventDefault(); sortScenarioBy(th); }
     });
   });
 
@@ -907,6 +966,7 @@
       btn.className = 'expand-btn';
       btn.type = 'button';
       btn.setAttribute('aria-label', 'Toggle detail for ' + ex.id);
+      btn.setAttribute('aria-expanded', String(expandedIds.has(ex.id)));
       btn.textContent = '▸';
       toggleTd.appendChild(btn);
       tr.appendChild(toggleTd);
@@ -976,7 +1036,7 @@
 
   function toggleExpand(id) {
     if (expandedIds.has(id)) expandedIds.delete(id); else expandedIds.add(id);
-    renderScenarioTable(visibleExamples());
+    preservingFocus('data-example', () => renderScenarioTable(visibleExamples()));
   }
 
   function jumpToScenario(id) {
@@ -987,7 +1047,7 @@
     renderAll();
     const row = document.querySelector(`tr.scenario-row[data-example="${CSS.escape(id)}"]`);
     if (row) {
-      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row.scrollIntoView({ behavior: REDUCED_MOTION ? 'auto' : 'smooth', block: 'center' });
       row.style.outline = '2px solid var(--accent)';
       setTimeout(() => { row.style.outline = ''; }, 1200);
     }
@@ -1004,8 +1064,8 @@
       const table = document.createElement('table');
       table.className = 'detail-table';
       table.innerHTML = `<thead><tr>
-        <th>Solver</th><th>Time (min &ndash; median &ndash; max)</th><th>Kodkod solve</th>
-        <th>Kodkod translate</th><th>Outcome</th><th>Match</th><th>Witness</th>
+        <th scope="col">Solver</th><th scope="col">Time (min &ndash; median &ndash; max)</th><th scope="col">Kodkod solve</th>
+        <th scope="col">Kodkod translate</th><th scope="col">Outcome</th><th scope="col">Match</th><th scope="col">Witness</th>
       </tr></thead>`;
       const tbody = document.createElement('tbody');
       [...rows].sort((a, b) => a.solver.localeCompare(b.solver)).forEach(r => {
@@ -1092,9 +1152,10 @@
       ex.features.forEach(fid => {
         const meta = featureIndex.get(fid);
         const support = meta ? meta.support[pluginId] : null;
-        const chip = document.createElement('span');
+        const chip = document.createElement('button');
+        chip.type = 'button';
         chip.className = 'status-badge ' + (support ? support.status : 'unverified');
-        chip.style.cursor = 'pointer';
+        chip.style.cssText = 'cursor:pointer;border:none;font-family:inherit';
         chip.textContent = meta ? meta.name : fid;
         chip.title = fid;
         chip.onclick = () => jumpToFeature(fid);
@@ -1178,7 +1239,8 @@
       });
       const row = document.createElement('div');
       row.className = 'area-row' + (activeFeatureArea === area.key ? ' active' : '');
-      const name = document.createElement('div');
+      const name = document.createElement('button');
+      name.type = 'button';
       name.className = 'area-name';
       name.textContent = area.name;
       name.onclick = () => {
@@ -1201,7 +1263,7 @@
   function scenarioChipsHtml(ids, roleLabel) {
     if (!ids.length) return '';
     return `<div class="scenario-chip-row"><span class="h2-sub" style="align-self:center">${roleLabel}</span>` +
-      ids.map(id => `<span class="scenario-chip" data-jump="${escapeHtml(id)}" style="cursor:pointer">${escapeHtml(id)}</span>`).join('') +
+      ids.map(id => `<span class="scenario-chip" data-jump="${escapeHtml(id)}" tabindex="0" role="button" aria-label="Jump to scenario ${escapeHtml(id)}" style="cursor:pointer">${escapeHtml(id)}</span>`).join('') +
       '</div>';
   }
 
@@ -1232,6 +1294,9 @@
     }
     chips.querySelectorAll('[data-jump]').forEach(el => {
       el.onclick = () => jumpToScenario(el.dataset.jump);
+      el.addEventListener('keydown', (evt) => {
+        if (evt.key === 'Enter' || evt.key === ' ') { evt.preventDefault(); jumpToScenario(el.dataset.jump); }
+      });
     });
     wrap.appendChild(chips);
     return wrap;
@@ -1239,22 +1304,27 @@
 
   function toggleFeatureExpand(id) {
     if (expandedFeatureIds.has(id)) expandedFeatureIds.delete(id); else expandedFeatureIds.add(id);
-    renderFeatureTable();
+    preservingFocus('data-feature', renderFeatureTable);
   }
 
   const FEATURE_STATUS_RANK = { 'known-defect': 0, unverified: 0, degraded: 1, unsupported: 2, supported: 3 };
   let featureSortKey = 'status';
   let featureSortDir = 1;
 
+  function sortFeatureBy(th) {
+    const key = th.dataset.sort;
+    if (featureSortKey === key) featureSortDir *= -1; else { featureSortKey = key; featureSortDir = 1; }
+    document.querySelectorAll('#featureTable thead th.sortable').forEach(h => {
+      h.classList.toggle('active', h === th);
+      h.querySelector('.arrow').textContent = h === th ? (featureSortDir === 1 ? '▲' : '▼') : '▼';
+      h.setAttribute('aria-sort', h === th ? (featureSortDir === 1 ? 'ascending' : 'descending') : 'none');
+    });
+    renderFeatureTable();
+  }
   document.querySelectorAll('#featureTable thead th.sortable').forEach(th => {
-    th.addEventListener('click', () => {
-      const key = th.dataset.sort;
-      if (featureSortKey === key) featureSortDir *= -1; else { featureSortKey = key; featureSortDir = 1; }
-      document.querySelectorAll('#featureTable thead th.sortable').forEach(h => {
-        h.classList.toggle('active', h === th);
-        h.querySelector('.arrow').textContent = h === th ? (featureSortDir === 1 ? '▲' : '▼') : '▼';
-      });
-      renderFeatureTable();
+    th.addEventListener('click', () => sortFeatureBy(th));
+    th.addEventListener('keydown', (evt) => {
+      if (evt.key === 'Enter' || evt.key === ' ') { evt.preventDefault(); sortFeatureBy(th); }
     });
   });
 
@@ -1288,6 +1358,7 @@
       const btn = document.createElement('button');
       btn.className = 'expand-btn'; btn.type = 'button'; btn.textContent = '▸';
       btn.setAttribute('aria-label', 'Toggle detail for ' + f.id);
+      btn.setAttribute('aria-expanded', String(expandedFeatureIds.has(f.id)));
       toggleTd.appendChild(btn);
       tr.appendChild(toggleTd);
 
@@ -1335,7 +1406,7 @@
     renderFeatureSupport();
     const row = document.querySelector(`#featureBody tr[data-feature="${CSS.escape(id)}"]`);
     if (row) {
-      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row.scrollIntoView({ behavior: REDUCED_MOTION ? 'auto' : 'smooth', block: 'center' });
       row.style.outline = '2px solid var(--accent)';
       setTimeout(() => { row.style.outline = ''; }, 1200);
     }

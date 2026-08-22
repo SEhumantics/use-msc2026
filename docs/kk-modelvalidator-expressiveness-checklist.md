@@ -8,29 +8,15 @@ completion, targeted `-invIndep`) were never exercised anywhere, and
 correctness was verified by one-time manual `check -v` rather than automated,
 regression-protected tests for anything past `Library`.
 
-- [x] `AssociationClass` — new domain model, real plugin feature
-      (`IAssociationClass`/`AssociationClass` exist in source) never tested at
-      any level (not even upstream's own JUnit suite). Built and verified by
-      an agent; independently spot-checked.
-- [x] `Inheritance` — new domain model, class hierarchy / generalization,
-      `oclIsTypeOf`/`oclAsType`, polymorphic navigation. Built and verified.
-- [x] `AggregationComposition` — new domain model, whole-part association,
-      `aggregationcyclefreeness`/`forbiddensharing` toggles shown on vs off.
-      Built and verified; **independently re-run by me and confirmed** — also
-      surfaced a real plugin limitation (toggle is dead code for the single-
-      association/same-class case), documented in the README.
-- [x] `Genealogy` extended — partial-solution completion
-      (`automaticDiagramExtraction := on`) and classifying terms
-      (`-scrollingCT`/`-scrollingAllCT`, descLevel0/1/2 — explicitly left out
-      of the original port pass, now working). Both **independently re-run by
-      me and confirmed**, exact number match.
-- [x] Single-step `-scrolling` (EmployeeInvariants) and targeted
-      `-invIndep <properties> className::invName` (CompanyERSchema) added
-      and verified.
-- [x] `CollectionSemantics` — new small domain model explicitly
-      demonstrating the Bag/Sequence-collapsed-to-Set translation limit, with
-      a "smoking gun" true-via-OCL/false-via-mv? comparison. Built and
-      verified.
+- [x] `AssociationClass`, `Inheritance`, `AggregationComposition`, `Genealogy`
+      (extended: partial-solution completion + classifying terms),
+      single-step `-scrolling` (`EmployeeInvariants`), targeted `-invIndep`
+      (`CompanyERSchema`), and `CollectionSemantics` all built and verified —
+      **superseded as a reference**: `docs/modelvalidator-feature-matrix.md`
+      now tracks each of these capabilities per-feature with exact source
+      citations and scenario evidence, independently re-verified by a 22-agent
+      audit (see `docs/kk-modelvalidator-port.md`'s "Eighth pass"). Use the
+      matrix, not this bullet, for what's actually supported today.
 - [x] SOIL-based validation tests for every domain (existing 5 + new 3, i.e.
       01 through 08): a `valid-instance.soil`/`.cmd` and an
       `invalid-instance.soil`/`.cmd` violating exactly one named invariant,
@@ -114,17 +100,25 @@ strongest, not a JDK-hobbled stand-in.
       `NQueens`, `GraphColoring`, `ZebraPuzzle` (performance, mostly authored from
       scratch) — built by an 8-agent workflow, every one independently confirmed to exist with
       real content and a real manifest entry (17/17 entries survived the concurrent-write risk).
-- [x] Five genuine, previously-unknown plugin findings surfaced and documented, none fixed: a
-      bitwidth-driven false-negative bug (GraphColoring), a `redefines` soundness gap
-      (Redefines), dead `subsets`/`UnionAssociation` code (Subsets), two crashes in
-      multiplicity/attribute-binding code (Sudoku), and a pre-existing authoring bug in
-      upstream's own bundled `Tree.use` fixture (RecursiveTree, not a port issue at all).
+- [x] Five genuine, previously-unknown plugin findings surfaced and documented, none fixed —
+      **superseded as a reference**: the four plugin-side findings (GraphColoring's bitwidth
+      false-negative, Redefines' soundness gap, Subsets' dead `UnionAssociation` code, Sudoku's
+      multiplicity/attribute-binding crashes) are now individual matrix rows with exact source
+      line ranges (`config.bitwidth-insufficient-false-negative`, `assoc.redefines`,
+      `assoc.subsets`, `config.fixed-multiplicity-parsing` / `config.attribute-named-object-binding`
+      in `docs/modelvalidator-feature-matrix.md`). The fifth — a pre-existing authoring bug in
+      upstream's own bundled `Tree.use` fixture (RecursiveTree, not a port issue at all) — has no
+      matrix counterpart (the matrix scores plugin capability, not fixture authorship) and remains
+      recorded only here and in `RecursiveTree`'s own header comment.
 - [x] Full 17-example, 85-cell benchmark run (in-process, real solve/reconstruct, per-example
       repeat overrides for the 3 genuinely slow performance examples) — a new solver-choice
       extreme found: MiniSat 598ms vs DefaultSAT4J 11.4s on the same GraphColoring instance.
 - [x] Final report published as an Artifact and sent to the user (feature/expressiveness matrix
       with click-through, per-example `(?)` tooltips carrying model/question/attribution
       metadata, finding-vs-validating mode labels, category filter, witness-agreement counts).
+      **Superseded**: this was the first dashboard design; the "Eighth pass" in
+      `docs/kk-modelvalidator-port.md` describes the current one (solver leaderboard, scenario x
+      solver heatmap, and the feature-matrix browser this checklist now points to elsewhere).
 - [x] Full reactor `mvn clean verify` + Track E gate re-confirmed green after every structural
       change in this round.
 
