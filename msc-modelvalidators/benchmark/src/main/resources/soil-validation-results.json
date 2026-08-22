@@ -1,6 +1,6 @@
 [
   {
-    "exampleId": "01-Library",
+    "exampleId": "Library",
     "cmdFile": "valid-instance.cmd",
     "kind": "valid",
     "passed": true,
@@ -11,7 +11,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "01-Library",
+    "exampleId": "Library",
     "cmdFile": "invalid-instance.cmd",
     "kind": "invalid",
     "passed": true,
@@ -25,7 +25,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "02-EmployeeInvariants",
+    "exampleId": "EmployeeInvariants",
     "cmdFile": "valid-instance.cmd",
     "kind": "valid",
     "passed": true,
@@ -36,7 +36,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "02-EmployeeInvariants",
+    "exampleId": "EmployeeInvariants",
     "cmdFile": "invalid-instance.cmd",
     "kind": "invalid",
     "passed": true,
@@ -49,7 +49,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "03-CompanyERSchema",
+    "exampleId": "CompanyERSchema",
     "cmdFile": "valid-instance.cmd",
     "kind": "valid",
     "passed": true,
@@ -60,7 +60,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "03-CompanyERSchema",
+    "exampleId": "CompanyERSchema",
     "cmdFile": "invalid-instance.cmd",
     "kind": "invalid",
     "passed": true,
@@ -73,7 +73,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "04-CivilStatus",
+    "exampleId": "CivilStatus",
     "cmdFile": "valid-instance.cmd",
     "kind": "valid",
     "passed": true,
@@ -84,7 +84,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "04-CivilStatus",
+    "exampleId": "CivilStatus",
     "cmdFile": "invalid-instance.cmd",
     "kind": "invalid",
     "passed": true,
@@ -97,7 +97,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "05-Genealogy",
+    "exampleId": "Genealogy",
     "cmdFile": "valid-instance.cmd",
     "kind": "valid",
     "passed": true,
@@ -110,7 +110,7 @@
     "note": "as expected (excluding documented out-of-scope [Person::balancedBinaryTree])"
   },
   {
-    "exampleId": "05-Genealogy",
+    "exampleId": "Genealogy",
     "cmdFile": "invalid-instance.cmd",
     "kind": "invalid",
     "passed": true,
@@ -124,7 +124,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "06-AssociationClass",
+    "exampleId": "AssociationClass",
     "cmdFile": "valid-instance.cmd",
     "kind": "valid",
     "passed": true,
@@ -135,7 +135,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "06-AssociationClass",
+    "exampleId": "AssociationClass",
     "cmdFile": "invalid-instance.cmd",
     "kind": "invalid",
     "passed": true,
@@ -148,7 +148,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "07-Inheritance",
+    "exampleId": "Inheritance",
     "cmdFile": "valid-instance.cmd",
     "kind": "valid",
     "passed": true,
@@ -159,7 +159,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "07-Inheritance",
+    "exampleId": "Inheritance",
     "cmdFile": "invalid-instance.cmd",
     "kind": "invalid",
     "passed": true,
@@ -172,7 +172,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "08-AggregationComposition",
+    "exampleId": "AggregationComposition",
     "cmdFile": "valid-instance.cmd",
     "kind": "valid",
     "passed": true,
@@ -183,7 +183,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "08-AggregationComposition",
+    "exampleId": "AggregationComposition",
     "cmdFile": "invalid-instance.cmd",
     "kind": "invalid",
     "passed": true,
@@ -196,7 +196,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "10-MultipleInheritance",
+    "exampleId": "MultipleInheritance",
     "cmdFile": "valid-instance.cmd",
     "kind": "valid",
     "passed": true,
@@ -207,7 +207,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "10-MultipleInheritance",
+    "exampleId": "MultipleInheritance",
     "cmdFile": "invalid-instance.cmd",
     "kind": "invalid",
     "passed": true,
@@ -220,7 +220,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "13-Redefines",
+    "exampleId": "Redefines",
     "cmdFile": "valid-instance.cmd",
     "kind": "valid",
     "passed": true,
@@ -231,7 +231,7 @@
     "note": "as expected"
   },
   {
-    "exampleId": "13-Redefines",
+    "exampleId": "Redefines",
     "cmdFile": "invalid-instance.cmd",
     "kind": "invalid",
     "passed": true,

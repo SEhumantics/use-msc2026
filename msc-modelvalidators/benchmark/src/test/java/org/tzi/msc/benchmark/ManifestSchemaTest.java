@@ -22,9 +22,9 @@ import com.google.gson.Gson;
  * for the sibling bug in outcome classification):
  * <ul>
  * <li>{@code mode} claiming "validating" for 5 examples that had no genuine standalone SOIL fixture
- * (17-ZebraPuzzle, 12-RecursiveTree, 16-GraphColoring, 15-NQueens, 11-Subsets) -- caught here as
+ * (ZebraPuzzle, RecursiveTree, GraphColoring, NQueens, Subsets) -- caught here as
  * "mode.contains('validating') must equal hasValidationTests".</li>
- * <li>{@code hasValidationTests} independently wrong for 12-RecursiveTree.</li>
+ * <li>{@code hasValidationTests} independently wrong for RecursiveTree.</li>
  * </ul>
  * Reads the real file directly (not a fixture copy) so this test fails the moment the committed
  * manifest regresses, not just when a fixture happens to be kept in sync.

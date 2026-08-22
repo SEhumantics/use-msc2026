@@ -32,7 +32,7 @@ import org.tzi.use.uml.sys.MSystem;
 import org.tzi.use.uml.sys.MSystemState;
 
 /**
- * Regression-protects {@code examples/06-AssociationClass}, exercising a real, previously-untested
+ * Regression-protects {@code examples/AssociationClass}, exercising a real, previously-untested
  * plugin feature: {@code IAssociationClass}/{@code AssociationClass} in the plugin's own source had no
  * coverage at any level -- not one example, not one unit test -- anywhere in this plugin's history
  * before this example was built and this test automated it (see {@code examples/README.md}).

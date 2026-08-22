@@ -106,7 +106,7 @@ public class SoilValidationRunnerTest {
 	@Test
 	public void validFixtureWithDocumentedOutOfScopeFailurePasses() {
 		// Same transcript as above, but now with the documented allowlist applied (matching
-		// manifest.json's 05-Genealogy.soilKnownOutOfScopeInvariants) -- must pass.
+		// manifest.json's Genealogy.soilKnownOutOfScopeInvariants) -- must pass.
 		SoilValidationResult r = apply(GENEALOGY_VALID, "valid", List.of("Person::balancedBinaryTree"));
 		assertTrue(r.passed);
 		// failedInvariants still records the raw failure either way -- only the pass/fail judgment

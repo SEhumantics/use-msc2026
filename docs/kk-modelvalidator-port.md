@@ -299,7 +299,7 @@ Plugin load and functional check, now reproducible from a stock build with no ma
 cd use-msc2026 && mvn -B clean verify -Djava.awt.headless=true
 tar xzf use-assembly/target/use-7.5.0-use-bin.tar.gz
 cd use-7.5.0
-bash examples/KK-ModelValidator/run-example.sh lib/use-gui.jar examples/KK-ModelValidator/01-Library validate.cmd
+bash examples/KK-ModelValidator/run-example.sh lib/use-gui.jar examples/KK-ModelValidator/Library validate.cmd
 # or directly: java -jar lib/use-gui.jar -nogui <model>.use <script>.cmd   (script.cmd: mv -validate <properties-file> -- the long form "modelvalidator ..." does not parse from a .cmd file, see "Third pass" below)
 ```
 
@@ -402,9 +402,9 @@ built distribution, alongside the existing top-level `examples/`. Contents, ever
 executed against a real built distribution (not just written by inspection — see `examples/README.md`
 for full transcripts):
 
-- **`01-Library/`** — the historical Library fixture, `validate.cmd` running `-config` + `-validate` +
+- **`Library/`** — the historical Library fixture, `validate.cmd` running `-config` + `-validate` +
   `info state`. Confirmed: `SATISFIABLE`, 9 objects (3 User/3 Copy/3 Book), 6 links.
-- **`02-EmployeeInvariants/`** — a small model authored for this pass specifically to exercise commands
+- **`EmployeeInvariants/`** — a small model authored for this pass specifically to exercise commands
   the Library example doesn't: one class, two invariants where one (`salary > -1`) is a logical
   consequence of the other (`salary > 0`).
   - `invIndep.cmd` → confirmed `PositiveSalary: Independent`, `NotBelowMinusOne: Not independent for
@@ -438,7 +438,7 @@ which model pairs with which script or the exact CLI invocation shape. Verified 
 the packaged distribution (not just the source tree):
 
 ```
-bash examples/KK-ModelValidator/run-example.sh lib/use-gui.jar examples/KK-ModelValidator/01-Library validate.cmd
+bash examples/KK-ModelValidator/run-example.sh lib/use-gui.jar examples/KK-ModelValidator/Library validate.cmd
 ```
 
 ### Fresh test numbers (re-measured this pass, not carried over from memory)
@@ -499,14 +499,14 @@ so the additional three come from the tool authors' own academic publication arc
 Bremen DBIS group, publicly reachable, not formally licensed — see the attribution/licensing caveat in
 `examples/README.md`):
 
-- **`03-CompanyERSchema`** — the classic COMPANY ER schema (`chen_pk_fk.use`), ported essentially
+- **`CompanyERSchema`** — the classic COMPANY ER schema (`chen_pk_fk.use`), ported essentially
   verbatim from an artifact archive for Gogolla, Hilken & Doan's COMLAN 2017 paper. Compiled with zero
   syntax changes. `-validate`: SATISFIABLE, all 29 invariants confirmed OK via `check -v`. `-invIndep`:
   confirmed several FK/business-rule invariants come back "not independent" in this bounded space — a
   genuine, only-partly-explained finding, documented as such rather than investigated to exhaustion.
   `-scrollingAll`: confirmed **does not** finish in 60s at this class count — documented as a known
   limitation rather than forced.
-- **`04-CivilStatus`** — Martin Gogolla's 2010 "civstat" tutorial model (a Person/Marriage model,
+- **`CivilStatus`** — Martin Gogolla's 2010 "civstat" tutorial model (a Person/Marriage model,
   predates Kodkod). Reproduced unchanged; `.properties` authored from scratch (none existed in the
   source). Surfaced a real, plugin-wide fact: this plugin's OCL→Kodkod translator has no operation
   group for `String.substring`/`.size` at all — one invariant (`nameCapitalThenSmallLetters`) is silently
@@ -519,7 +519,7 @@ Bremen DBIS group, publicly reachable, not formally licensed — see the attribu
   mechanism can throw `UnboundLeafException: Unbound relation` when a query compares against a specific
   enum *literal* that wasn't actually allocated in the particular solution found (fixed by querying
   attribute-to-attribute instead).
-- **`05-Genealogy`** — the Person/Parenthood ("Corleone family") example from the same COMLAN paper.
+- **`Genealogy`** — the Person/Parenthood ("Corleone family") example from the same COMLAN paper.
   Unlike the other two, **no working `.use` file survives in the source archive** — only PDF/EPS
   renderings of the resulting diagrams. Reconstructed from verbatim OCL invariant bodies and bound
   tables quoted directly in the paper's own LaTeX source. Confirmed to reproduce the paper's own
@@ -542,8 +542,8 @@ the criticism: no association class, no inheritance, no aggregation/composition 
 completion, no classifying terms, no single-step scrolling, no targeted `-invIndep`, and — the sharpest
 finding — **every one of the plugin's 3308 unit tests lives under `transform/ocl/*`**: 100% OCL-expression
 translation, zero coverage of any model-*structural* feature, at any level, ever, in this plugin's history.
-Correctness for `03-CompanyERSchema`/`04-CivilStatus`/`05-Genealogy` also rested on a one-time manual
-`check -v` pass, not an automated, regression-protected test the way `01-Library` has.
+Correctness for `CompanyERSchema`/`CivilStatus`/`Genealogy` also rested on a one-time manual
+`check -v` pass, not an automated, regression-protected test the way `Library` has.
 
 Closed via a 14-agent workflow (checklist: `docs/kk-modelvalidator-expressiveness-checklist.md`), run
 against a pre-built distribution jar so agents needed no `mvn` access at all (avoiding the concurrent-build
@@ -554,18 +554,18 @@ re-running the two most surprising findings myself, byte-for-byte matching the a
 
 **Three new domain models**, none from upstream, each exercising a feature no other example touches:
 
-- **`06-AssociationClass`** — `Employment associationclass between Person[0..*] ... Company[0..1] ...`.
+- **`AssociationClass`** — `Employment associationclass between Person[0..*] ... Company[0..1] ...`.
   Confirmed the reconstructed link objects are simultaneously valid class instances (`Employment.allInstances()`)
   and association links (`info state`'s link count) at once. `-invIndep` surfaced a genuinely new result shape:
   `InvariantIndepChecker` reports structural tautologies (e.g. "every association-class instance has both
   ends bound") as `Dependent` via `trivially_unsatisfiable()` — rejected before the SAT solver even runs —
   distinct from the solver-driven `Not independent for given properties` every prior example produced.
-- **`07-Inheritance`** — a `Vehicle` superclass (abstract, 0 direct instances) with `Car`/`Truck` subclasses.
+- **`Inheritance`** — a `Vehicle` superclass (abstract, 0 direct instances) with `Car`/`Truck` subclasses.
   Confirmed polymorphic navigation (`Vehicle.allInstances()` transparently includes both subclasses) and
   `oclIsTypeOf`/`oclAsType` downcasting work correctly through the plugin's reconstruction path. Every
   invariant confirmed genuinely enforced (not vacuously true) by separately forcing each governing attribute
   outside its legal range and observing `TRIVIALLY_UNSATISFIABLE`.
-- **`08-AggregationComposition`** — a `Folder`/`File`/`Archive` filesystem model built around
+- **`AggregationComposition`** — a `Folder`/`File`/`Archive` filesystem model built around
   `aggregationcyclefreeness`/`forbiddensharing`. **A real, previously-unknown plugin limitation surfaced and
   independently re-confirmed by me**: for the single most natural shape a modeler would reach for — one
   self-referential composition association, or two different classes composing the exact same class directly
@@ -577,19 +577,19 @@ re-running the two most surprising findings myself, byte-for-byte matching the a
   associations for the cycle case, an inheritance-widened part class for the sharing case) specifically
   because those are the only shapes where the toggle has any observable effect at all in this plugin build.
 
-**`05-Genealogy` extended** with two paper use cases the original port pass explicitly skipped as too
+**`Genealogy` extended** with two paper use cases the original port pass explicitly skipped as too
 uncertain to attempt: **partial-solution completion** (`automaticDiagramExtraction := on`, growing a
 hand-built SOIL state instead of starting from nothing — the one place in this whole example suite that
 option is demonstrated on rather than off) and **classifying terms** (`-scrollingCT`/`-scrollingAllCT`
 against new `descLevel0/1/2` operations) — both now implemented, working, and independently re-confirmed by
 me to produce exactly the reported numbers.
 
-**Two smaller command demonstrations**: single-step `-scrolling` (`02-EmployeeInvariants`, which surfaced
+**Two smaller command demonstrations**: single-step `-scrolling` (`EmployeeInvariants`, which surfaced
 another genuine quirk — the `mv ?` query cache doesn't track `previous`/`show(n)`, only the last *searched*
-solution) and targeted `-invIndep <properties> className::invName` (`03-CompanyERSchema`, confirmed
+solution) and targeted `-invIndep <properties> className::invName` (`CompanyERSchema`, confirmed
 identical per-invariant output to the full sweep, ~2x faster).
 
-**`09-CollectionSemantics`**, a new small model turning an easy-to-miss buried log line into an explicit,
+**`CollectionSemantics`**, a new small model turning an easy-to-miss buried log line into an explicit,
 reproducible demonstration: this plugin's OCL→Kodkod translator has no real Bag/Sequence support — a
 `->collect()` that should produce a Bag is implemented as an ordinary Kodkod relational join, so duplicates
 are structurally lost, not merely mislabeled (confirmed by reading `SetOperationGroup.collect`, not just
@@ -604,7 +604,7 @@ confirmed `check -v` reports every applicable invariant `OK`) and an `invalid-in
 otherwise-identical instance deliberately violating exactly one named invariant, confirmed `check -v`
 reports `FAILED` for that invariant alone). This tests model **validation** of a hand-built instance as a
 concern distinct from model **finding** via search — 16 scripts, every one actually executed, none written
-by inspection alone. One finding specific to this: `04-CivilStatus`'s `nameCapitalThenSmallLetters` (silently
+by inspection alone. One finding specific to this: `CivilStatus`'s `nameCapitalThenSmallLetters` (silently
 dropped from every Kodkod search, see Fourth pass) genuinely *is* evaluated correctly by `check -v`, since
 that path uses USE's base OCL interpreter rather than the Kodkod translation layer at all — SOIL-based
 validation can exercise strictly more of a model's invariants than search-based finding can, wherever a
@@ -687,7 +687,7 @@ any.
 **Witness agreement, not just SAT/UNSAT agreement.** Every result row now carries a canonical
 content-based digest of the reconstructed solution (sorted per-class attribute-value lists, deliberately
 ignoring object identity/order). Checked directly: solvers agree on SAT/UNSAT always, but can and do find
-different concrete witnesses for the same scenario (confirmed on `03-CompanyERSchema`: `{3,9}` vs `{3,3}`
+different concrete witnesses for the same scenario (confirmed on `CompanyERSchema`: `{3,9}` vs `{3,3}`
 for the same two employees' salaries under `DefaultSAT4J` vs `MiniSat`/`Lingeling`) — expected, not a bug,
 now visible in the report rather than requiring a manual side-by-side check.
 
@@ -698,26 +698,26 @@ unknown plugin findings surfaced and documented — **none fixed**, per the stan
 porting-relevant compile fixes touch the plugin, everything else is characterized and left alone for a
 fair comparison against Z3 later:
 
-- **`16-GraphColoring` — a real false-negative bug**: at bitwidth 4–6, a provably-3-colorable graph
+- **`GraphColoring` — a real false-negative bug**: at bitwidth 4–6, a provably-3-colorable graph
   (constructed so a valid coloring exists by hidden construction) comes back UNSATISFIABLE in ~20ms; only
   bitwidth≥8 gives the correct, genuinely-searched SATISFIABLE answer (~10–19s). Also the largest
   solver-choice spread measured anywhere in this suite: MiniSat 598ms vs DefaultSAT4J 11.4s on the
   identical instance — an 19x difference.
-- **`13-Redefines` — a real soundness gap**: an invariant written via a superclass-redefined association
+- **`Redefines` — a real soundness gap**: an invariant written via a superclass-redefined association
   end is evaluated over an empty relation during Kodkod's search (the translator has no `redefines`
   special-casing at all) — silently vacuously true, so `-validate` reports SATISFIABLE on a state where
   `check -v` reports that exact invariant FAILED.
-- **`11-Subsets` — dead code**: the plugin ships a dedicated `UnionAssociation` class and translator case
+- **`Subsets` — dead code**: the plugin ships a dedicated `UnionAssociation` class and translator case
   for `subsets`/`union` ends, but nothing in the plugin ever constructs one (confirmed by grep) — a
   `union`-declared association compiles as a plain independent one, with no SAT-level tie to what it
   subsets. USE core's own OCL evaluator still gets the right answer (a separate code path), but the
   plugin's own relational query mechanism and `info state` link count do not.
-- **`14-Sudoku` — two real crashes**: `MultiplicityTransformator` parses fixed multiplicities by string
+- **`Sudoku` — two real crashes**: `MultiplicityTransformator` parses fixed multiplicities by string
   length and crashes (`ArrayIndexOutOfBoundsException`) on any two-digit cardinality; `AttributeConfigurator`
   cannot look up a named object atom to pin its attribute by name at all (a naming-convention mismatch
   with no fallback, unlike the analogous association-side code, which has one) — confirmed to break for
   any model attempting that specific binding pattern, not just Sudoku.
-- **`12-RecursiveTree` — an authoring bug in the untouched upstream fixture itself**: the bundled
+- **`RecursiveTree` — an authoring bug in the untouched upstream fixture itself**: the bundled
   `Tree.use`'s own `AcyclicParentship` invariant evaluates `false` unconditionally (its helper operation
   seeds its accumulator with `Set{self}`), confirmed against the pristine original `.use`+`.cmd` — not a
   Kodkod-port issue at all, a pre-existing bug in the example USE itself ships.
@@ -780,9 +780,9 @@ independent cross-checks on the highest-risk scenarios) found and fixed:
 **Oracle review**: all 14 scenarios touching a known-defect/degraded/unverified feature were checked for
 whether the defect could plausibly be *forcing* the recorded SAT/UNSAT expectation rather than the model's
 real semantics forcing it (independently re-checked twice for the two highest-risk cases,
-`08-AggregationComposition` and `13-Redefines`). Every one came back high-confidence, keep-as-is — the
+`AggregationComposition` and `Redefines`). Every one came back high-confidence, keep-as-is — the
 regression oracles hold up. One genuine, currently-dormant fragility was documented as a new
-`oracleCaveats` entry rather than a generic warning: `16-GraphColoring`'s SAT verdict depends on staying at
+`oracleCaveats` entry rather than a generic warning: `GraphColoring`'s SAT verdict depends on staying at
 bitwidth ≥ 8, silently becoming a false negative below that with no warning from the plugin's own
 bitwidth-sufficiency check.
 

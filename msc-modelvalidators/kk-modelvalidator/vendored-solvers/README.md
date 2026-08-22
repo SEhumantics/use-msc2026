@@ -23,7 +23,7 @@ is set at JVM *launch* (the standard, supported mechanism) instead of mutated at
 runtime — see `bin/use`/`bin/use.bat` and `examples/run-example.sh`, both of which now
 point it at this directory automatically.
 
-Confirmed via `mv -config satsolver := <Name>` against `03-CompanyERSchema`, actually run:
+Confirmed via `mv -config satsolver := <Name>` against `CompanyERSchema`, actually run:
 
 | Name | Works | Notes |
 |---|---|---|

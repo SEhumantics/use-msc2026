@@ -7,8 +7,8 @@
 #   run-example.sh <path-to-use-gui.jar> <example-dir> [script.cmd]
 #
 # Examples:
-#   run-example.sh ../../use-assembly/target/.../lib/use-gui.jar 01-Library
-#   run-example.sh ../../use-assembly/target/.../lib/use-gui.jar 02-EmployeeInvariants invIndep.cmd
+#   run-example.sh ../../use-assembly/target/.../lib/use-gui.jar Library
+#   run-example.sh ../../use-assembly/target/.../lib/use-gui.jar EmployeeInvariants invIndep.cmd
 set -euo pipefail
 
 if [ "$#" -lt 2 ]; then

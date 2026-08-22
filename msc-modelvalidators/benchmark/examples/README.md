@@ -20,8 +20,8 @@ From a USE distribution root (`use-7.5.0/`, i.e. the directory containing `lib/`
 and `examples/`):
 
 ```bash
-java -jar lib/use-gui.jar -nogui examples/KK-ModelValidator/01-Library/Library.use \
-    examples/KK-ModelValidator/01-Library/validate.cmd
+java -jar lib/use-gui.jar -nogui examples/KK-ModelValidator/Library/Library.use \
+    examples/KK-ModelValidator/Library/validate.cmd
 ```
 
 Or use the bundled runner, which finds the `.use` model in a directory and
@@ -30,7 +30,7 @@ does not require knowing which model file goes with which script:
 
 ```bash
 bash examples/KK-ModelValidator/run-example.sh lib/use-gui.jar \
-    examples/KK-ModelValidator/01-Library
+    examples/KK-ModelValidator/Library
 ```
 
 **Important, discovered empirically, not documented anywhere upstream:** only
@@ -51,7 +51,7 @@ generally faster) also work out of the box in this distribution — `bin/use` an
 `CryptoMiniSat` don't, for reasons unrelated to this port) and `docs/kk-modelvalidator-port.md`'s "Sixth
 pass" for the full story of why this was broken and how it was fixed without touching any plugin code.
 
-## 01-Library
+## Library
 
 The plugin's own historical Library/User/Copy/Book test fixture (same model
 used by `EndToEndValidationTest`), demonstrating the single most common
@@ -61,7 +61,7 @@ Copies, 3 Books), 6 links.
 
 - `validate.cmd` — configure + validate + `info state`
 
-## 02-EmployeeInvariants
+## EmployeeInvariants
 
 A minimal, purpose-built model (not from upstream) with two invariants where
 one is a logical consequence of the other (`self.salary > 0` implies
@@ -95,7 +95,7 @@ something meaningful to demonstrate:
   which is why this script uses plain USE `?` instead of `mv ?` to show state
   after each step.
 
-## 03-CompanyERSchema
+## CompanyERSchema
 
 The classic entity-relationship COMPANY schema (Employee, Department,
 Dependent, Project, ProjectWork, Supplier, Part/Component bill-of-materials,
@@ -131,9 +131,9 @@ with zero syntax changes against USE 7.5.0.
   and killed after 60s without finishing — too many symmetric foreign-key
   reassignments to enumerate exhaustively at this class count. No
   scrollingAll-friendly config was produced for this example (would need most
-  classes bounded to 0 objects, as `02-EmployeeInvariants` does).
+  classes bounded to 0 objects, as `EmployeeInvariants` does).
 
-## 04-CivilStatus
+## CivilStatus
 
 Martin Gogolla's "civstat" tutorial model (a 2010 teaching example, predates
 Kodkod entirely) — a self-referential Person/Marriage model with
@@ -153,7 +153,7 @@ had none).
   quietly removing things that don't work.
 - `invIndep.cmd` — confirmed `nameIsUnique`/`femaleHasNoWife`/`maleHasNoHusband`
   all `Independent` of each other (a genuinely different story from
-  `02-EmployeeInvariants`, where one invariant *is* redundant).
+  `EmployeeInvariants`, where one invariant *is* redundant).
 - `scrollingAll.cmd` — the default bounds (2-4 Persons, unrestricted
   civstat/gender/alive) do **not** finish enumerating in 60s (confirmed by
   actually running it); a separate, much smaller `[scrolling]` section (exactly
@@ -170,11 +170,11 @@ had none).
   `#male` here), is safe; the two queries above were rewritten to avoid this
   after hitting it firsthand.
 
-## 05-Genealogy
+## Genealogy
 
 The Person/Parenthood ("Corleone family") example from Gogolla, Hilken & Doan,
 *"Achieving Model Quality through Model Validation, Verification and
-Exploration"* (COMLAN). Unlike `03-CompanyERSchema`, **no working `.use` file
+Exploration"* (COMLAN). Unlike `CompanyERSchema`, **no working `.use` file
 exists anywhere in the source archive** — only PDF/EPS renderings of the
 resulting diagrams survive. `Genealogy.use` and `corleone*.properties` are
 therefore a from-scratch reconstruction assembled from verbatim OCL invariant
@@ -227,7 +227,7 @@ seconds — the paper's own numbers took 5.7–16s per its reported timings.
   `scrollingAll.cmd` already finds — `(1,2,0)` and `(2,1,0)` — also
   independently re-confirmed.
 
-## 06-AssociationClass
+## AssociationClass
 
 A small model (`CompanyEmployment.use`, not from upstream) built specifically
 to exercise **association classes** — `Employment` is declared
@@ -259,7 +259,7 @@ unit test — before this.
   cross-attribute FK-style check (`e.salary < e.employer.budget`, reaching
   from the link's own attribute through to an endpoint's attribute) → `[[true]]`.
 
-## 07-Inheritance
+## Inheritance
 
 A minimal, purpose-built model (not from upstream): an `abstract class
 Vehicle` superclass (attributes `licensePlate`, `wheels`) with two concrete
@@ -297,7 +297,7 @@ on each subclass, and polymorphic navigation over the superclass collection.
   slow or failed search. See the header comment in `Vehicle.properties` for
   the side-by-side confirmation.
 
-## 08-AggregationComposition
+## AggregationComposition
 
 A small filesystem-flavored model (`FileSystem.use`, not from upstream) built
 around a whole-part composition (`Folder` containing `Folder`s and `File`s)
@@ -337,7 +337,7 @@ cycle) and an inheritance-widened part class (for sharing) specifically
 because those are the only shapes, in this plugin build, where the toggle has
 any observable effect via `-validate`.
 
-## 09-CollectionSemantics
+## CollectionSemantics
 
 A small model (`CollectionSemantics.use`, not from upstream) built to make an
 existing, easy-to-miss limitation impossible to miss: this plugin's
@@ -361,7 +361,7 @@ plugin's own source, not inferred from behavior alone.
   `mv ?`, on the same solution, every run.
 - `NOTES.md` — the full write-up, with exact source line citations.
 
-## 10-MultipleInheritance
+## MultipleInheritance
 
 `MultipleInheritance.use` preserves `use-core`'s own bundled diamond
 hierarchy exactly (`B`/`C < A`; `D < B, C, E`) — a UML feature with zero
@@ -380,11 +380,11 @@ space; the inheritance structure itself is untouched.
   reports exactly `D::LevelsDiffer` FAILED for the deliberately-violating
   instance, others OK.
 - **Discovered empirically**: `String.size()` has no Kodkod encoding (same
-  gap family as `04-CivilStatus`'s `substring` finding) — silently dropped
+  gap family as `CivilStatus`'s `substring` finding) — silently dropped
   from the search and rejected outright by the query mechanism. Rewrote the
   affected invariant/query to use `<>` instead, which is supported.
 
-## 11-Subsets
+## Subsets
 
 `Subsets.use` is `use-core`'s own bundled
 `examples/Others/Subsets/twoSubsets.use`, ported verbatim (zero syntax
@@ -444,11 +444,11 @@ anywhere upstream, all confirmed by actually running the commands above:**
 See `Subsets.properties`' header comment for the full derivation of all
 three findings, including the exact commands run.
 
-## 12-RecursiveTree
+## RecursiveTree
 
 `Tree.use` is `use-core`'s own bundled tree/DAG example, ported to
 demonstrate *user-defined recursive OCL operations* — distinct from
-`05-Genealogy`'s recursion, which uses the built-in `closure()`. Its own
+`Genealogy`'s recursion, which uses the built-in `closure()`. Its own
 `AcyclicParentship` invariant calls a self-recursive helper operation
 (`childPlus2` → `childPlusOnNodeSet`).
 
@@ -471,13 +471,13 @@ demonstrate *user-defined recursive OCL operations* — distinct from
   working `AcyclicParentshipClosure` (`self.child->closure(child)->excludes(self)`)
   that Kodkod can actually solve. `validate.cmd` confirms `SATISFIABLE` with
   the closure-based invariant OK and the original recursive one FAILED
-  (expected, matching `05-Genealogy`'s "`check -v` re-validates every
+  (expected, matching `Genealogy`'s "`check -v` re-validates every
   declared invariant regardless of active/inactive" behavior); a
   `[forcedCycle]` section confirms the corrected invariant genuinely
   rejects a forced 3-cycle (`TRIVIALLY_UNSATISFIABLE`), not just passing
   vacuously.
 
-## 13-Redefines
+## Redefines
 
 `Redefines.use` ports `use-core`'s own bundled association-end redefinition
 example (`CD`'s ends `redefines` `AB`'s ends) — zero prior coverage.
@@ -499,9 +499,9 @@ USE OCL, reaching attributes that exist only on the redefining type.
   than silently worked around.
 - `mv ? c.b` (the plugin's own relational query) also returns empty for the
   redefined role, while plain OCL `?` and `.d` both resolve correctly —
-  same family of gap as `11-Subsets`' `subsets` finding.
+  same family of gap as `Subsets`' `subsets` finding.
 
-## 14-Sudoku
+## Sudoku
 
 `Sudoku.use` ports `use-core`'s own bundled Sudoku model (previously solved
 only via ASSL, never through Kodkod) — a deliberate **performance** stress
@@ -530,7 +530,7 @@ model/config shape that avoids triggering them:
   Confirmed `SATISFIABLE`, ~2.5–5.0s solving time, `check -v` → all 18
   invariants OK.
 
-## 15-NQueens
+## NQueens
 
 Authored from scratch — the classic N-Queens puzzle, chosen specifically as
 a solver-choice-sensitive performance stress test. Structural
@@ -555,7 +555,7 @@ counts + `[1]-[1]` multiplicities) leaves one arithmetic invariant,
   diagonal sum — a configuration mistake, not a plugin defect. Kept as a
   documented lesson in `NQueens.use`'s own header rather than erased.
 
-## 16-GraphColoring
+## GraphColoring
 
 Authored from scratch — classic k-coloring, built as a deliberately hard
 instance: 40 regions, 67 edges, constructed via the same "flat graph" method
@@ -584,7 +584,7 @@ construction while staying hidden from the solver.
   such limitation and is used for the actual correctness check
   (`query.cmd`'s central `properColoring` re-check returns `[[true]]`).
 
-## 17-ZebraPuzzle
+## ZebraPuzzle
 
 A dedicated **performance** stress test (`ZebraPuzzle.use`, not from
 upstream, no prior encoding anywhere in this plugin's history): the classic
@@ -624,7 +624,7 @@ brute-force enumerator, which is exactly why it is worth having here.
   merely the two headline facts in isolation.
   **Discovered empirically, not documented anywhere upstream** (a sharper,
   root-caused instance of the enum-literal pattern already noted in
-  `04-CivilStatus`): the plugin's `mv ?` relational query mechanism only
+  `CivilStatus`): the plugin's `mv ?` relational query mechanism only
   builds a Kodkod relation for an enum literal that is referenced *by name*
   somewhere in the model's own invariants. `Water` (Drink) and `Zebra` (Pet)
   are, by the puzzle's own construction, the *only* literals in their
@@ -656,31 +656,31 @@ invariant alone and `OK` for every other one — a surgical, not incidental,
 violation). Every one of these 16 scripts was actually executed and its
 output compared against the intended result, not written by inspection.
 
-One finding specific to this approach: `04-CivilStatus`'s
+One finding specific to this approach: `CivilStatus`'s
 `nameCapitalThenSmallLetters` invariant — silently dropped from every Kodkod
 search because the translator has no `String.substring` support (see
-`04-CivilStatus`'s own section above) — genuinely *is* evaluated, correctly,
+`CivilStatus`'s own section above) — genuinely *is* evaluated, correctly,
 by `check -v` in the SOIL-based tests, since that path uses USE's own base
 OCL interpreter rather than going through the Kodkod translation layer at
 all. SOIL-based validation can therefore exercise strictly more of a model's
 invariants than search-based finding can, for any model that hits a
 translation gap like this one.
 
-**Attribution and licensing caveat (applies to `03-CompanyERSchema` and
-`05-Genealogy`):** both are sourced from `COMLAN-274-Gogolla.zip`, downloaded
+**Attribution and licensing caveat (applies to `CompanyERSchema` and
+`Genealogy`):** both are sourced from `COMLAN-274-Gogolla.zip`, downloaded
 from the University of Bremen DBIS group's own `publications/intern/` web
 directory — publicly reachable, authored by the plugin's own creators, but
 **not accompanied by a license file or a formal citable release**. Treat
 anything ported from it as "source-available for academic citation," not as
 freely redistributable, and cite the COMLAN paper (Gogolla, Hilken, Doan) or
 Gogolla's 2010 "How to Check UML and OCL Models with USE" tutorial (for
-`04-CivilStatus`) explicitly wherever these examples are used or published.
+`CivilStatus`) explicitly wherever these examples are used or published.
 
 ## Why not just the Library example
 
 The plugin's own trunk source (`.git/reference-repositories/use-plugins/ModelValidator/`,
 all branches) ships exactly one worked example internally (`test2/t002.*`,
-the Library model used in `01-Library`) — there is no larger example corpus to
+the Library model used in `Library`) — there is no larger example corpus to
 port from the plugin's own history. Everything else here exists specifically
 to exercise commands and model features Library alone doesn't demonstrate:
 `-invIndep` (including a single targeted invariant, `03`), `-scrollingAll`,

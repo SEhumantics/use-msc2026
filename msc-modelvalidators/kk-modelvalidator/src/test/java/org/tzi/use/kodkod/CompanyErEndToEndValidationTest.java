@@ -32,7 +32,7 @@ import org.tzi.use.uml.sys.MSystem;
 import org.tzi.use.uml.sys.MSystemState;
 
 /**
- * Regression-protects {@code examples/03-CompanyERSchema}, previously verified only once, manually,
+ * Regression-protects {@code examples/CompanyERSchema}, previously verified only once, manually,
  * via an interactive {@code mv -validate}/{@code check -v} session (see {@code examples/README.md}).
  * This model exercises derived (FK-string-computed) associations and a 29-invariant PK/FK/business-rule
  * constraint block -- structural OCL/UML features the {@code transform/ocl} unit suite never touches.

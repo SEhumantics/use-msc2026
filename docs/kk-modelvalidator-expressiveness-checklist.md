@@ -6,28 +6,28 @@ correctness and basic commands well, but no model-structural feature
 commands (`-scrolling`, `-scrollingCT`/`-scrollingAllCT`, partial-solution
 completion, targeted `-invIndep`) were never exercised anywhere, and
 correctness was verified by one-time manual `check -v` rather than automated,
-regression-protected tests for anything past `01-Library`.
+regression-protected tests for anything past `Library`.
 
-- [x] `06-AssociationClass` — new domain model, real plugin feature
+- [x] `AssociationClass` — new domain model, real plugin feature
       (`IAssociationClass`/`AssociationClass` exist in source) never tested at
       any level (not even upstream's own JUnit suite). Built and verified by
       an agent; independently spot-checked.
-- [x] `07-Inheritance` — new domain model, class hierarchy / generalization,
+- [x] `Inheritance` — new domain model, class hierarchy / generalization,
       `oclIsTypeOf`/`oclAsType`, polymorphic navigation. Built and verified.
-- [x] `08-AggregationComposition` — new domain model, whole-part association,
+- [x] `AggregationComposition` — new domain model, whole-part association,
       `aggregationcyclefreeness`/`forbiddensharing` toggles shown on vs off.
       Built and verified; **independently re-run by me and confirmed** — also
       surfaced a real plugin limitation (toggle is dead code for the single-
       association/same-class case), documented in the README.
-- [x] `05-Genealogy` extended — partial-solution completion
+- [x] `Genealogy` extended — partial-solution completion
       (`automaticDiagramExtraction := on`) and classifying terms
       (`-scrollingCT`/`-scrollingAllCT`, descLevel0/1/2 — explicitly left out
       of the original port pass, now working). Both **independently re-run by
       me and confirmed**, exact number match.
-- [x] Single-step `-scrolling` (02-EmployeeInvariants) and targeted
-      `-invIndep <properties> className::invName` (03-CompanyERSchema) added
+- [x] Single-step `-scrolling` (EmployeeInvariants) and targeted
+      `-invIndep <properties> className::invName` (CompanyERSchema) added
       and verified.
-- [x] `09-CollectionSemantics` — new small domain model explicitly
+- [x] `CollectionSemantics` — new small domain model explicitly
       demonstrating the Bag/Sequence-collapsed-to-Set translation limit, with
       a "smoking gun" true-via-OCL/false-via-mv? comparison. Built and
       verified.
@@ -109,9 +109,9 @@ strongest, not a JDK-hobbled stand-in.
       own API, not a subprocess per run), structured JSON output (manifest + per-solver results,
       including a witness digest), a template-based HTML report builder, backend-agnostic by
       design for the eventual `unc-modelvalidator` results.
-- [x] 8 more examples (17 total): `10-MultipleInheritance`, `11-Subsets`, `12-RecursiveTree`,
-      `13-Redefines` (expressiveness, ported from `use-core`'s own bundled examples), `14-Sudoku`,
-      `15-NQueens`, `16-GraphColoring`, `17-ZebraPuzzle` (performance, mostly authored from
+- [x] 8 more examples (17 total): `MultipleInheritance`, `Subsets`, `RecursiveTree`,
+      `Redefines` (expressiveness, ported from `use-core`'s own bundled examples), `Sudoku`,
+      `NQueens`, `GraphColoring`, `ZebraPuzzle` (performance, mostly authored from
       scratch) — built by an 8-agent workflow, every one independently confirmed to exist with
       real content and a real manifest entry (17/17 entries survived the concurrent-write risk).
 - [x] Five genuine, previously-unknown plugin findings surfaced and documented, none fixed: a

@@ -1,0 +1,151 @@
+-- $ProjectHeader: use 0.393 Wed, 16 May 2007 14:10:28 +0200 opti $
+--
+-- Ported from this repo's own bundled USE example
+-- use-core/src/main/resources/examples/Others/Tree/Tree.use (see Info.txt
+-- alongside it), for the KK-ModelValidator plugin. Class, association and
+-- the four operation bodies below (childPlus1/childPlus2/
+-- childPlusOnNodeSet/childPlus3) are copied verbatim from that file, only
+-- reformatted/commented. This is a deliberately DIFFERENT recursive-
+-- structure demonstration than Genealogy: Genealogy's Person/Parenthood
+-- model states its cycle-freedom invariant directly with OCL's *built-in*
+-- closure() iterator; Tree.use instead defines its own *user-level
+-- recursive OCL operations* (an operation whose body calls itself, directly
+-- or through another operation) to compute the same kind of transitive
+-- reachability. That difference turns out to matter a great deal for this
+-- plugin -- see the two findings below, both confirmed by actually running
+-- the plugin, not assumed from reading its source.
+--
+-- FINDING 1 (transform-time rejection, confirmed against the plugin's own
+-- source and by actually running it -- see validate.cmd's
+-- recursiveOpProbe section):
+-- org.tzi.use.kodkod.transform.ocl.OperationExpressionVisitor keeps a
+-- global OperationStack (org.tzi.use.kodkod.transform.OperationStack) of
+-- operations currently being inlined while transforming an OCL invariant to
+-- a Kodkod formula. If the same MOperation is encountered twice on that
+-- stack -- i.e. the operation calls itself, directly or via another
+-- operation -- the transform throws
+-- TransformationException("Operation '<name>' is recursive and thereby
+-- cannot be transformed."). All four operations below are recursive in
+-- exactly this sense (childPlus1 calls itself inside collect(); childPlus2
+-- delegates to childPlusOnNodeSet, which calls itself; childPlus3 avoids
+-- operation-level recursion by using `iterate` instead, but its use of
+-- `iterate` over TreeNode.allInstances() is untested by this example and
+-- not relied upon below). So the ORIGINAL upstream invariant --
+--   context TreeNode inv AcyclicParentship:
+--     not(self.childPlus2()->includes(self))
+-- -- can never be handed to Kodkod as-is by this plugin build. It is kept
+-- below, verbatim, as AcyclicParentshipRecursive -- its active/inactive
+-- toggle is set to `inactive` in every Tree.properties section except
+-- recursiveOpProbe, a dedicated, deliberately tiny probe section whose
+-- whole point is to set it `active` instead (see validate.cmd). Note
+-- this toggle does not actually change whether the transform is
+-- ATTEMPTED (confirmed: it is attempted, and fails, regardless -- see
+-- Tree.properties' header); it only controls whether a successfully
+-- transformed invariant's formula would have been asserted, had
+-- transformation succeeded.
+--
+-- FINDING 2 (a genuine, confirmed authoring quirk in the ORIGINAL upstream
+-- invariant, independent of Finding 1 and independent of Kodkod entirely --
+-- reproduced with plain USE, no plugin involved at all): childPlus2() is
+-- defined as self.childPlusOnNodeSet(Set{self}) -- the accumulator set
+-- handed to the very first call is seeded with `self` itself, and every
+-- recursive step only ever *unions into* that accumulator, never removes
+-- from it. So self is a member of self.childPlus2()'s result from the very
+-- first line of the recursion, for EVERY TreeNode, in EVERY instance --
+-- including instances with no cycle whatsoever. That makes
+-- "not(self.childPlus2()->includes(self))" evaluate to `false` for every
+-- TreeNode in every non-empty population, acyclic or not: it is not
+-- actually an acyclicity check as shipped. Confirmed directly against the
+-- untouched upstream Tree.use, no changes of any kind:
+--   * Tree.cmd's own 9-node graph (which does contain a real cycle):
+--     `check -v` -> "checked 1 invariant in 0.089s, 1 failure."
+--   * Tree2.cmd's 2-node mutual cycle (the one case Info.txt explicitly
+--     calls out as "the invariant evaluates to false"): also 1 failure.
+--   * A FRESH, perfectly acyclic 2-node instance (one root, one child,
+--     built from scratch, no cycle anywhere): STILL "1 failure" -- the
+--     exact same result as the two cyclic cases above. So Info.txt's
+--     framing (implying Tree2.cmd is the interesting/different case) does
+--     not hold up: the invariant fails identically whether or not the
+--     instance actually has a cycle. This is evidently a 2007-era authoring
+--     slip in the bundled example (the seed should presumably have been
+--     Set{} or the accumulator should track *strict* descendants), not
+--     something introduced by this port.
+--
+-- Given both findings, the invariant this example actually hands to Kodkod
+-- (AcyclicParentshipClosure below) restates the SAME intended property --
+-- "a node is never its own descendant" -- the same way Genealogy states
+-- its own acyclicParenthood invariant: with closure() over the child role,
+-- which this plugin does support (Genealogy's own
+-- "recursive-association" feature). It is intentionally NOT a rename of
+-- the broken original; it is a from-scratch, independently-correct
+-- statement of the property Info.txt describes ("does not allow cycles"),
+-- checked genuinely both ways below: SATISFIABLE on a hand-built acyclic
+-- tree (Tree.properties [tree]), and TRIVIALLY_UNSATISFIABLE the moment a
+-- cycle is forced into a same-shaped instance ([forcedCycle]).
+--
+-- Info.txt also describes multiplicity, not an extra invariant: "a parent
+-- may have several children but only one parent or no parent, if it is the
+-- root node" is exactly the `TreeNode [0..1] role parent` bound below, not
+-- a class invariant -- Tree.use declares no explicit "single root" /
+-- "fully connected" invariant anywhere, and none is added here either. The
+-- [tree] section below happens to reconstruct a single-rooted, fully
+-- connected instance (verified with a query in query.cmd), but that is a
+-- property of the chosen population/link bounds (TreeNode_max = 7,
+-- Parentship_max = 6 -- with `parent` capped at 0..1 per node, exactly
+-- n-1 links among n nodes forces exactly one parentless node), not of an
+-- extra invariant.
+
+model Tree
+
+class TreeNode
+attributes
+  name : String
+operations
+  -- Kept verbatim from upstream for documentation/fidelity. Never invoked
+  -- from any constraint below (see Finding 1 above) -- their presence here
+  -- does not affect -validate at all, since the plugin only ever attempts
+  -- to transform an operation body when a constraint actually calls it.
+  -- They remain perfectly usable through the ordinary (non-Kodkod) OCL
+  -- interpreter, e.g. from a plain `?` query against a concrete object
+  -- diagram -- query.cmd demonstrates exactly that, post-validate.
+
+  -- works for dags
+  childPlus1():Set(TreeNode) =
+    Set{self}->union(self.child)->union(self.child->collect(tn | tn.childPlus1())->flatten->asSet)
+  -- works for graphs
+  childPlus2():Set(TreeNode) =
+    self.childPlusOnNodeSet(Set{self})
+  childPlusOnNodeSet(aTreeNodeSet:Set(TreeNode)):Set(TreeNode) =
+    if aTreeNodeSet->includesAll(self.child) then
+      aTreeNodeSet
+    else
+      self.child->collect(tn |
+        tn.childPlusOnNodeSet(aTreeNodeSet->union(Set{tn})->union(self.child)))->flatten->asSet
+    endif
+  childPlus3():Set(TreeNode) =
+    TreeNode.allInstances->iterate(tn1:TreeNode; result:Set(TreeNode)=Set{self} |
+      result->union(result->collect(tn2 | tn2.child)->flatten->asSet))
+end
+
+association Parentship between
+  TreeNode [0..1] role parent
+  TreeNode [0..*] role child
+end
+
+constraints
+
+-- Verbatim upstream invariant (see Finding 1 and Finding 2 above). Its
+-- own active/inactive toggle (`TreeNode_AcyclicParentshipRecursive`) is
+-- `inactive` in every .properties section except recursiveOpProbe's,
+-- which sets it `active` purely as a minimal, isolated repro of the
+-- transform-time recursion rejection -- the ERROR line itself fires
+-- regardless of this toggle (see FINDING 1 above).
+context self:TreeNode inv AcyclicParentshipRecursive:
+  not(self.childPlus2()->includes(self))
+
+-- Working restatement actually solved for by Tree.properties'
+-- [tree]/[forcedCycle] sections: self is never its own descendant,
+-- computed via closure() (supported -- see Genealogy's
+-- acyclicParenthood) instead of a self-recursive user operation.
+context self:TreeNode inv AcyclicParentshipClosure:
+  self.child->closure(child)->excludes(self)

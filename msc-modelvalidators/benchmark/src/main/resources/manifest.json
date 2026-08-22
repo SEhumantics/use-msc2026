@@ -1,8 +1,8 @@
 {
   "examples": [
     {
-      "id": "01-Library",
-      "directory": "01-Library",
+      "id": "Library",
+      "directory": "Library",
       "useFile": "Library.use",
       "propertiesFile": "Library.properties",
       "section": null,
@@ -47,8 +47,8 @@
       ]
     },
     {
-      "id": "02-EmployeeInvariants",
-      "directory": "02-EmployeeInvariants",
+      "id": "EmployeeInvariants",
+      "directory": "EmployeeInvariants",
       "useFile": "Employee.use",
       "propertiesFile": "Employee.properties",
       "section": null,
@@ -91,8 +91,8 @@
       ]
     },
     {
-      "id": "03-CompanyERSchema",
-      "directory": "03-CompanyERSchema",
+      "id": "CompanyERSchema",
+      "directory": "CompanyERSchema",
       "useFile": "CompanyER.use",
       "propertiesFile": "CompanyER.properties",
       "section": "small",
@@ -144,8 +144,8 @@
       ]
     },
     {
-      "id": "04-CivilStatus",
-      "directory": "04-CivilStatus",
+      "id": "CivilStatus",
+      "directory": "CivilStatus",
       "useFile": "CivilStatus.use",
       "propertiesFile": "CivilStatus.properties",
       "section": null,
@@ -202,8 +202,8 @@
       ]
     },
     {
-      "id": "05-Genealogy",
-      "directory": "05-Genealogy",
+      "id": "Genealogy",
+      "directory": "Genealogy",
       "useFile": "Genealogy.use",
       "propertiesFile": "corleone.properties",
       "section": "consistency",
@@ -256,8 +256,8 @@
       ]
     },
     {
-      "id": "06-AssociationClass",
-      "directory": "06-AssociationClass",
+      "id": "AssociationClass",
+      "directory": "AssociationClass",
       "useFile": "CompanyEmployment.use",
       "propertiesFile": "CompanyEmployment.properties",
       "section": "small",
@@ -301,8 +301,8 @@
       ]
     },
     {
-      "id": "07-Inheritance",
-      "directory": "07-Inheritance",
+      "id": "Inheritance",
+      "directory": "Inheritance",
       "useFile": "Vehicle.use",
       "propertiesFile": "Vehicle.properties",
       "section": null,
@@ -350,8 +350,8 @@
       ]
     },
     {
-      "id": "08-AggregationComposition",
-      "directory": "08-AggregationComposition",
+      "id": "AggregationComposition",
+      "directory": "AggregationComposition",
       "useFile": "FileSystem.use",
       "propertiesFile": "FileSystem_default.properties",
       "section": "cycle",
@@ -394,8 +394,8 @@
       ]
     },
     {
-      "id": "09-CollectionSemantics",
-      "directory": "09-CollectionSemantics",
+      "id": "CollectionSemantics",
+      "directory": "CollectionSemantics",
       "useFile": "CollectionSemantics.use",
       "propertiesFile": "CollectionSemantics.properties",
       "section": null,
@@ -436,8 +436,8 @@
       ]
     },
     {
-      "id": "10-MultipleInheritance",
-      "directory": "10-MultipleInheritance",
+      "id": "MultipleInheritance",
+      "directory": "MultipleInheritance",
       "useFile": "MultipleInheritance.use",
       "propertiesFile": "MultipleInheritance.properties",
       "section": null,
@@ -484,8 +484,8 @@
       ]
     },
     {
-      "id": "17-ZebraPuzzle",
-      "directory": "17-ZebraPuzzle",
+      "id": "ZebraPuzzle",
+      "directory": "ZebraPuzzle",
       "useFile": "ZebraPuzzle.use",
       "propertiesFile": "ZebraPuzzle.properties",
       "section": null,
@@ -533,8 +533,8 @@
       ]
     },
     {
-      "id": "12-RecursiveTree",
-      "directory": "12-RecursiveTree",
+      "id": "RecursiveTree",
+      "directory": "RecursiveTree",
       "useFile": "Tree.use",
       "propertiesFile": "Tree.properties",
       "section": "tree",
@@ -578,8 +578,8 @@
       ]
     },
     {
-      "id": "16-GraphColoring",
-      "directory": "16-GraphColoring",
+      "id": "GraphColoring",
+      "directory": "GraphColoring",
       "useFile": "GraphColoring.use",
       "propertiesFile": "GraphColoring.properties",
       "section": "main",
@@ -629,8 +629,8 @@
       ]
     },
     {
-      "id": "13-Redefines",
-      "directory": "13-Redefines",
+      "id": "Redefines",
+      "directory": "Redefines",
       "useFile": "Redefines.use",
       "propertiesFile": "Redefines.properties",
       "section": "default",
@@ -672,8 +672,8 @@
       ]
     },
     {
-      "id": "15-NQueens",
-      "directory": "15-NQueens",
+      "id": "NQueens",
+      "directory": "NQueens",
       "useFile": "NQueens.use",
       "propertiesFile": "NQueens.properties",
       "section": "large",
@@ -719,8 +719,8 @@
       ]
     },
     {
-      "id": "11-Subsets",
-      "directory": "11-Subsets",
+      "id": "Subsets",
+      "directory": "Subsets",
       "useFile": "Subsets.use",
       "propertiesFile": "Subsets.properties",
       "section": "demo",
@@ -765,8 +765,8 @@
       ]
     },
     {
-      "id": "14-Sudoku",
-      "directory": "14-Sudoku",
+      "id": "Sudoku",
+      "directory": "Sudoku",
       "useFile": "Sudoku.use",
       "propertiesFile": "Sudoku.properties",
       "section": null,
@@ -826,8 +826,8 @@
       ]
     },
     {
-      "id": "01-Library-UNSAT",
-      "directory": "01-Library",
+      "id": "Library-UNSAT",
+      "directory": "Library",
       "useFile": "Library.use",
       "propertiesFile": "Library.properties",
       "section": "titleCollision",
@@ -836,7 +836,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 01-Library, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 01-Library, new [titleCollision] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of Library, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as Library, new [titleCollision] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.binary",
@@ -873,8 +873,8 @@
       ]
     },
     {
-      "id": "02-EmployeeInvariants-UNSAT",
-      "directory": "02-EmployeeInvariants",
+      "id": "EmployeeInvariants-UNSAT",
+      "directory": "EmployeeInvariants",
       "useFile": "Employee.use",
       "propertiesFile": "Employee.properties",
       "section": "belowThreshold",
@@ -883,7 +883,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 02-EmployeeInvariants, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 02-EmployeeInvariants, new [belowThreshold] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of EmployeeInvariants, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as EmployeeInvariants, new [belowThreshold] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.binary",
@@ -918,8 +918,8 @@
       ]
     },
     {
-      "id": "03-CompanyERSchema-UNSAT",
-      "directory": "03-CompanyERSchema",
+      "id": "CompanyERSchema-UNSAT",
+      "directory": "CompanyERSchema",
       "useFile": "CompanyER.use",
       "propertiesFile": "CompanyER.properties",
       "section": "pkcollision",
@@ -928,7 +928,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 03-CompanyERSchema, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 03-CompanyERSchema, new [pkcollision] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of CompanyERSchema, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as CompanyERSchema, new [pkcollision] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.binary",
@@ -972,8 +972,8 @@
       ]
     },
     {
-      "id": "04-CivilStatus-UNSAT",
-      "directory": "04-CivilStatus",
+      "id": "CivilStatus-UNSAT",
+      "directory": "CivilStatus",
       "useFile": "CivilStatus.use",
       "propertiesFile": "CivilStatus.properties",
       "section": "everyoneMarried",
@@ -982,7 +982,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 04-CivilStatus, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 04-CivilStatus, new [everyoneMarried] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of CivilStatus, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as CivilStatus, new [everyoneMarried] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.binary",
@@ -1031,8 +1031,8 @@
       ]
     },
     {
-      "id": "05-Genealogy-UNSAT",
-      "directory": "05-Genealogy",
+      "id": "Genealogy-UNSAT",
+      "directory": "Genealogy",
       "useFile": "Genealogy.use",
       "propertiesFile": "corleone.properties",
       "section": "generation_gap_overflow",
@@ -1041,7 +1041,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 05-Genealogy, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 05-Genealogy, new [generation_gap_overflow] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of Genealogy, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as Genealogy, new [generation_gap_overflow] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.binary",
@@ -1083,8 +1083,8 @@
       ]
     },
     {
-      "id": "06-AssociationClass-UNSAT",
-      "directory": "06-AssociationClass",
+      "id": "AssociationClass-UNSAT",
+      "directory": "AssociationClass",
       "useFile": "CompanyEmployment.use",
       "propertiesFile": "CompanyEmployment.properties",
       "section": "linkcap",
@@ -1093,7 +1093,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 06-AssociationClass, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 06-AssociationClass, new [linkcap] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of AssociationClass, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as AssociationClass, new [linkcap] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.association-class",
@@ -1129,8 +1129,8 @@
       ]
     },
     {
-      "id": "07-Inheritance-UNSAT",
-      "directory": "07-Inheritance",
+      "id": "Inheritance-UNSAT",
+      "directory": "Inheritance",
       "useFile": "Vehicle.use",
       "propertiesFile": "Vehicle.properties",
       "section": "nonpositivewheels",
@@ -1139,7 +1139,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 07-Inheritance, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 07-Inheritance, new [nonpositivewheels] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of Inheritance, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as Inheritance, new [nonpositivewheels] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.binary",
@@ -1179,8 +1179,8 @@
       ]
     },
     {
-      "id": "09-CollectionSemantics-UNSAT",
-      "directory": "09-CollectionSemantics",
+      "id": "CollectionSemantics-UNSAT",
+      "directory": "CollectionSemantics",
       "useFile": "CollectionSemantics.use",
       "propertiesFile": "CollectionSemantics.properties",
       "section": "shortage",
@@ -1189,7 +1189,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 09-CollectionSemantics, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 09-CollectionSemantics, new [shortage] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of CollectionSemantics, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as CollectionSemantics, new [shortage] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.binary",
@@ -1222,8 +1222,8 @@
       ]
     },
     {
-      "id": "10-MultipleInheritance-UNSAT",
-      "directory": "10-MultipleInheritance",
+      "id": "MultipleInheritance-UNSAT",
+      "directory": "MultipleInheritance",
       "useFile": "MultipleInheritance.use",
       "propertiesFile": "MultipleInheritance.properties",
       "section": "collision",
@@ -1232,7 +1232,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 10-MultipleInheritance, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 10-MultipleInheritance, new [collision] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of MultipleInheritance, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as MultipleInheritance, new [collision] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.binary",
@@ -1271,8 +1271,8 @@
       ]
     },
     {
-      "id": "17-ZebraPuzzle-UNSAT",
-      "directory": "17-ZebraPuzzle",
+      "id": "ZebraPuzzle-UNSAT",
+      "directory": "ZebraPuzzle",
       "useFile": "ZebraPuzzle.use",
       "propertiesFile": "ZebraPuzzle.properties",
       "section": "clue10_contradiction",
@@ -1281,7 +1281,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 17-ZebraPuzzle, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 17-ZebraPuzzle, new [clue10_contradiction] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of ZebraPuzzle, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as ZebraPuzzle, new [clue10_contradiction] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.binary",
@@ -1321,8 +1321,8 @@
       ]
     },
     {
-      "id": "12-RecursiveTree-UNSAT",
-      "directory": "12-RecursiveTree",
+      "id": "RecursiveTree-UNSAT",
+      "directory": "RecursiveTree",
       "useFile": "Tree.use",
       "propertiesFile": "Tree.properties",
       "section": "noRoot",
@@ -1331,7 +1331,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 12-RecursiveTree, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 12-RecursiveTree, new [noRoot] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of RecursiveTree, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as RecursiveTree, new [noRoot] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.binary",
@@ -1367,8 +1367,8 @@
       ]
     },
     {
-      "id": "16-GraphColoring-UNSAT",
-      "directory": "16-GraphColoring",
+      "id": "GraphColoring-UNSAT",
+      "directory": "GraphColoring",
       "useFile": "GraphColoring.use",
       "propertiesFile": "GraphColoring.properties",
       "section": "twocolors",
@@ -1377,7 +1377,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 16-GraphColoring, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 16-GraphColoring, new [twocolors] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of GraphColoring, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as GraphColoring, new [twocolors] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.binary",
@@ -1415,8 +1415,8 @@
       ]
     },
     {
-      "id": "13-Redefines-UNSAT",
-      "directory": "13-Redefines",
+      "id": "Redefines-UNSAT",
+      "directory": "Redefines",
       "useFile": "Redefines.use",
       "propertiesFile": "Redefines.properties",
       "section": "tagBoundGap",
@@ -1425,7 +1425,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 13-Redefines, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 13-Redefines, new [tagBoundGap] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of Redefines, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as Redefines, new [tagBoundGap] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.binary",
@@ -1459,8 +1459,8 @@
       ]
     },
     {
-      "id": "15-NQueens-UNSAT",
-      "directory": "15-NQueens",
+      "id": "NQueens-UNSAT",
+      "directory": "NQueens",
       "useFile": "NQueens.use",
       "propertiesFile": "NQueens.properties",
       "section": "tooSmall",
@@ -1469,7 +1469,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 15-NQueens, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 15-NQueens, new [tooSmall] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of NQueens, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as NQueens, new [tooSmall] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.binary",
@@ -1505,8 +1505,8 @@
       ]
     },
     {
-      "id": "11-Subsets-UNSAT",
-      "directory": "11-Subsets",
+      "id": "Subsets-UNSAT",
+      "directory": "Subsets",
       "useFile": "Subsets.use",
       "propertiesFile": "Subsets.properties",
       "section": "cdOverflow",
@@ -1515,7 +1515,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 11-Subsets, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 11-Subsets, new [cdOverflow] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of Subsets, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as Subsets, new [cdOverflow] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.binary",
@@ -1552,8 +1552,8 @@
       ]
     },
     {
-      "id": "14-Sudoku-UNSAT",
-      "directory": "14-Sudoku",
+      "id": "Sudoku-UNSAT",
+      "directory": "Sudoku",
       "useFile": "Sudoku.use",
       "propertiesFile": "Sudoku.properties",
       "section": "squareClash",
@@ -1562,7 +1562,7 @@
       "mode": "finding",
       "hasValidationTests": false,
       "provenanceType": "authored-for-thesis",
-      "provenanceDetail": "Paired UNSAT mutation of 14-Sudoku, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as 14-Sudoku, new [squareClash] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
+      "provenanceDetail": "Paired UNSAT mutation of Sudoku, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as Sudoku, new [squareClash] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
         "assoc.binary",

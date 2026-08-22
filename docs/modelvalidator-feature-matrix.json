@@ -31,37 +31,37 @@
               "evidence": "org/tzi/kodkod/model/impl/Class.java (relation=Relation.unary(name), lowerBound/upperBound delegate to configurator); org/tzi/use/kodkod/transform/ModelTransformator.java:120-129 transformClasses(); org/tzi/kodkod/model/config/impl/ClassConfigurator.java:20-46 generateObjectsTuple",
               "notes": "Each MClass becomes a unary Kodkod relation with configurable min/max object bounds; verified working end-to-end in every example.",
               "satScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "09-CollectionSemantics",
-                "10-MultipleInheritance",
-                "17-ZebraPuzzle",
-                "12-RecursiveTree",
-                "16-GraphColoring",
-                "13-Redefines",
-                "15-NQueens",
-                "11-Subsets",
-                "14-Sudoku"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "CollectionSemantics",
+                "MultipleInheritance",
+                "ZebraPuzzle",
+                "RecursiveTree",
+                "GraphColoring",
+                "Redefines",
+                "NQueens",
+                "Subsets",
+                "Sudoku"
               ],
               "unsatScenarioIds": [
-                "08-AggregationComposition"
+                "AggregationComposition"
               ],
               "validationOracleScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "08-AggregationComposition",
-                "10-MultipleInheritance",
-                "13-Redefines"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "AggregationComposition",
+                "MultipleInheritance",
+                "Redefines"
               ],
               "coverageNote": ""
             }
@@ -74,13 +74,13 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/kodkod/model/impl/Class.java:41,191-193 (abstractC field / isAbstract()); org/tzi/kodkod/model/config/impl/ClassConfigurator.java:23-34 generateObjectsTuple returns empty TupleSet when clazz.isAbstract()",
-              "notes": "Abstract class's own relation is forced empty (both lower and upper bound) while its inheritance relation still admits concrete subclass instances. Confirmed by examples/07-Inheritance/Vehicle.properties (abstract Vehicle pinned to 0/0, Car/Truck populate the hierarchy).",
+              "notes": "Abstract class's own relation is forced empty (both lower and upper bound) while its inheritance relation still admits concrete subclass instances. Confirmed by examples/Inheritance/Vehicle.properties (abstract Vehicle pinned to 0/0, Car/Truck populate the hierarchy).",
               "satScenarioIds": [
-                "07-Inheritance"
+                "Inheritance"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "07-Inheritance"
+                "Inheritance"
               ],
               "coverageNote": ""
             }
@@ -93,13 +93,13 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/use/kodkod/transform/ModelTransformator.java:237-250 transformGeneralization() (source.addParent(target); target.addChild(source)); org/tzi/kodkod/model/impl/Class.java:254-265 inheritanceDefinition()",
-              "notes": "Each class gets an '_inh' relation equal to its own relation unioned with every child's inheritance-or-regular relation, applied bottom-up. Confirmed by examples/07-Inheritance (Vehicle/Car/Truck), which solves and polymorphic queries (Vehicle.allInstances()) return mixed subtypes correctly per query.cmd.",
+              "notes": "Each class gets an '_inh' relation equal to its own relation unioned with every child's inheritance-or-regular relation, applied bottom-up. Confirmed by examples/Inheritance (Vehicle/Car/Truck), which solves and polymorphic queries (Vehicle.allInstances()) return mixed subtypes correctly per query.cmd.",
               "satScenarioIds": [
-                "07-Inheritance"
+                "Inheritance"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "07-Inheritance"
+                "Inheritance"
               ],
               "coverageNote": ""
             }
@@ -112,13 +112,13 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/kodkod/model/impl/Class.java:45-46 (parents/children are Set<IClass>, not a single field); org/tzi/use/kodkod/transform/ModelTransformator.java:237-250 iterates every MGeneralization edge and calls addParent/addChild per edge, with no cardinality restriction",
-              "notes": "Structurally supports N parents per class since parents is a Set. Confirmed by examples/10-MultipleInheritance (class D < B, C, E): validate.cmd/query.cmd confirm D is simultaneously oclIsKindOf A, B, C and E, with attributes from all three direct parents (levelB, levelC, tag) reachable through d.",
+              "notes": "Structurally supports N parents per class since parents is a Set. Confirmed by examples/MultipleInheritance (class D < B, C, E): validate.cmd/query.cmd confirm D is simultaneously oclIsKindOf A, B, C and E, with attributes from all three direct parents (levelB, levelC, tag) reachable through d.",
               "satScenarioIds": [
-                "10-MultipleInheritance"
+                "MultipleInheritance"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "10-MultipleInheritance"
+                "MultipleInheritance"
               ],
               "coverageNote": ""
             }
@@ -131,13 +131,13 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/kodkod/model/impl/Class.java:158-167 allParents() (recursive LinkedHashSet dedup); Class.java:254-265 inheritanceDefinition() union-based construction",
-              "notes": "allParents()/allAttributes()/allInvariants() use LinkedHashSet union so a class reached via two paths (B<A, C<A, D<B,C) is not double-counted. Confirmed by examples/10-MultipleInheritance's D<B,C,E where B,C both <A: query.cmd shows D.allInstances()->size()=1 while oclIsKindOf(A) holds via both paths, and d.name (declared on the shared ancestor A) resolves to a single value, not a conflict.",
+              "notes": "allParents()/allAttributes()/allInvariants() use LinkedHashSet union so a class reached via two paths (B<A, C<A, D<B,C) is not double-counted. Confirmed by examples/MultipleInheritance's D<B,C,E where B,C both <A: query.cmd shows D.allInstances()->size()=1 while oclIsKindOf(A) holds via both paths, and d.name (declared on the shared ancestor A) resolves to a single value, not a conflict.",
               "satScenarioIds": [
-                "10-MultipleInheritance"
+                "MultipleInheritance"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "10-MultipleInheritance"
+                "MultipleInheritance"
               ],
               "coverageNote": ""
             }
@@ -150,15 +150,15 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/kodkod/model/impl/Class.java:80-101 allAttributes()/getAttribute() (walk parents); org/tzi/kodkod/model/impl/Attribute.java:104-106 getOwnerRelation() returns owner.inheritanceOrRegularRelation(); org/tzi/use/kodkod/transform/InvariantTransformator.java:106 uses invariantClass.inheritanceOrRegularRelation()",
-              "notes": "An attribute/invariant declared on class D is bound/quantified over D's inheritance relation, which already includes every subclass instance. Confirmed by 07-Inheritance's PositiveWheels invariant (declared on abstract Vehicle) applying to both Car and Truck instances, and by 10-MultipleInheritance's A::name reaching D.",
+              "notes": "An attribute/invariant declared on class D is bound/quantified over D's inheritance relation, which already includes every subclass instance. Confirmed by Inheritance's PositiveWheels invariant (declared on abstract Vehicle) applying to both Car and Truck instances, and by MultipleInheritance's A::name reaching D.",
               "satScenarioIds": [
-                "07-Inheritance",
-                "10-MultipleInheritance"
+                "Inheritance",
+                "MultipleInheritance"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "07-Inheritance",
-                "10-MultipleInheritance"
+                "Inheritance",
+                "MultipleInheritance"
               ],
               "coverageNote": ""
             }
@@ -171,13 +171,13 @@
             "kk-modelvalidator": {
               "status": "degraded",
               "evidence": "org/tzi/kodkod/model/impl/Class.java:267-318 forbiddingSharingDefinition() \u2014 quantifies over inheritanceOrRegularRelation() and forbids an object being part of two sibling compositions simultaneously",
-              "notes": "Class.forbiddingSharingDefinition() (Class.java:267-318) selects which associations feed the mutual-exclusion formula via exact class equality (assoc.associationEnds().get(1).associatedClass().equals(this)), NOT subtype-inclusive matching -- so if two DIFFERENT subclasses are each the exact part-end of separate compositions (the inheritance-widened case this feature's name promises), neither subclass's own check collects the other's association, and no constraint is generated at all: Kodkod permits the shared object. Confirmed live by 08-AggregationComposition/FileSystem.use (Folder/File/MediaFile: FolderHasFile's part end is File, ArchiveHasMedia's part end is subclass MediaFile), whose header comment documents this exact gap. The forbiddensharing .properties toggle is also never read anywhere in Class.java -- the mechanism is unconditional. Works only for the narrow same-exact-class case; silently permits the broader cross-subclass case.",
+              "notes": "Class.forbiddingSharingDefinition() (Class.java:267-318) selects which associations feed the mutual-exclusion formula via exact class equality (assoc.associationEnds().get(1).associatedClass().equals(this)), NOT subtype-inclusive matching -- so if two DIFFERENT subclasses are each the exact part-end of separate compositions (the inheritance-widened case this feature's name promises), neither subclass's own check collects the other's association, and no constraint is generated at all: Kodkod permits the shared object. Confirmed live by AggregationComposition/FileSystem.use (Folder/File/MediaFile: FolderHasFile's part end is File, ArchiveHasMedia's part end is subclass MediaFile), whose header comment documents this exact gap. The forbiddensharing .properties toggle is also never read anywhere in Class.java -- the mechanism is unconditional. Works only for the narrow same-exact-class case; silently permits the broader cross-subclass case.",
               "satScenarioIds": [],
               "unsatScenarioIds": [
-                "08-AggregationComposition"
+                "AggregationComposition"
               ],
               "validationOracleScenarioIds": [],
-              "coverageNote": "08-AggregationComposition's 'sharing' section specifically builds the cross-subclass (File vs. MediaFile) case that demonstrates this gap -- the manifest's single scenario entry for this directory maps to the 'cycle' section's oracle, not 'sharing', so this citation documents source-level behavior confirmed by the example, not the recorded expected-outcome oracle."
+              "coverageNote": "AggregationComposition's 'sharing' section specifically builds the cross-subclass (File vs. MediaFile) case that demonstrates this gap -- the manifest's single scenario entry for this directory maps to the 'cycle' section's oracle, not 'sharing', so this citation documents source-level behavior confirmed by the example, not the recorded expected-outcome oracle."
             }
           }
         },
@@ -190,37 +190,37 @@
               "evidence": "org/tzi/kodkod/model/impl/Attribute.java:52-99 constraints()/domainDefinition()/typeDefinition()/multiplicityDefinition()",
               "notes": "Binary Kodkod relation Class x Value with domain-in-owner, type-membership, and functional (or optional-functional for collection-typed attributes) constraints, all generated from the model. Exercised successfully in nearly every example (Vehicle.wheels, CivilStatus.civstat, etc.).",
               "satScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "09-CollectionSemantics",
-                "10-MultipleInheritance",
-                "17-ZebraPuzzle",
-                "12-RecursiveTree",
-                "16-GraphColoring",
-                "13-Redefines",
-                "15-NQueens",
-                "11-Subsets",
-                "14-Sudoku"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "CollectionSemantics",
+                "MultipleInheritance",
+                "ZebraPuzzle",
+                "RecursiveTree",
+                "GraphColoring",
+                "Redefines",
+                "NQueens",
+                "Subsets",
+                "Sudoku"
               ],
               "unsatScenarioIds": [
-                "08-AggregationComposition"
+                "AggregationComposition"
               ],
               "validationOracleScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "08-AggregationComposition",
-                "10-MultipleInheritance",
-                "13-Redefines"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "AggregationComposition",
+                "MultipleInheritance",
+                "Redefines"
               ],
               "coverageNote": ""
             }
@@ -237,7 +237,7 @@
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
-              "coverageNote": "zero coverage - 03-CompanyERSchema's 'derived-associations' tag concerns derived association ends re-derived from FK attributes, not a derived attribute itself; no scenario declares/tests a derive: attribute"
+              "coverageNote": "zero coverage - CompanyERSchema's 'derived-associations' tag concerns derived association ends re-derived from FK attributes, not a derived attribute itself; no scenario declares/tests a derive: attribute"
             }
           }
         },
@@ -265,12 +265,12 @@
               "evidence": "org/tzi/kodkod/model/type/EnumType.java:27-39 (upperBound() literally returns lowerBound(); both equal exactly the literal set); EnumType.java:41-47 createAtomList() names atoms name()+\"_\"+literal",
               "notes": "Enum domain is fully closed: lower bound == upper bound == exactly one atom per declared literal, so Kodkod never invents extra/missing enum values.",
               "satScenarioIds": [
-                "04-CivilStatus",
-                "17-ZebraPuzzle"
+                "CivilStatus",
+                "ZebraPuzzle"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "04-CivilStatus"
+                "CivilStatus"
               ],
               "coverageNote": ""
             }
@@ -283,14 +283,14 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/use/kodkod/transform/ocl/DefaultExpressionVisitor.java:186-196 visitConstEnum()",
-              "notes": "ExpConstEnum is mapped directly to the corresponding EnumType literal relation. Exercised throughout examples/04-CivilStatus (civstat=#single, #married, etc.), which solves successfully.",
+              "notes": "ExpConstEnum is mapped directly to the corresponding EnumType literal relation. Exercised throughout examples/CivilStatus (civstat=#single, #married, etc.), which solves successfully.",
               "satScenarioIds": [
-                "04-CivilStatus",
-                "17-ZebraPuzzle"
+                "CivilStatus",
+                "ZebraPuzzle"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "04-CivilStatus"
+                "CivilStatus"
               ],
               "coverageNote": ""
             }
@@ -303,10 +303,10 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/use/kodkod/transform/ocl/OperationExpressionVisitor.java:34-107,156-162 visitInstanceOp()/visitOperation() (operation.expression().processWithVisitor(...))",
-              "notes": "Non-recursive query operations are inlined (macro-expanded) at every call site, with parameter binding (visitParams) and self-rebinding (visitOperationVariable). Exercised in examples/14-Sudoku (getField/getValues) and examples/12-RecursiveTree (non-recursive operations).",
+              "notes": "Non-recursive query operations are inlined (macro-expanded) at every call site, with parameter binding (visitParams) and self-rebinding (visitOperationVariable). Exercised in examples/Sudoku (getField/getValues) and examples/RecursiveTree (non-recursive operations).",
               "satScenarioIds": [
-                "14-Sudoku",
-                "12-RecursiveTree"
+                "Sudoku",
+                "RecursiveTree"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -336,9 +336,9 @@
             "kk-modelvalidator": {
               "status": "unsupported",
               "evidence": "org/tzi/use/kodkod/transform/InvariantTransformator.java (transform()/transformAndAdd() only ever iterate MClassInvariant, never MOperation or any pre/post structure); org/tzi/use/kodkod/transform/ModelTransformator.java:57-107 transform() never calls mModel.operations() or touches any pre/post-condition list; no MPrePostCondition/precondition/postcondition symbol appears anywhere under kk-modelvalidator/src/main",
-              "notes": "There is no transformation path for behavioral operation contracts at all \u2014 only class invariants and query-style (`= expr`) operations are ever handed to Kodkod. Confirmed empirically by examples/04-CivilStatus, whose Person class declares birth/marry/divorce operations each with several pre:/post: clauses (a textbook pre/post-condition example): none of the three operations is referenced anywhere in CivilStatus.properties, validate.cmd, or query.cmd \u2014 they are simply inert with respect to -validate, consistent with the transformer never looking at them.",
+              "notes": "There is no transformation path for behavioral operation contracts at all \u2014 only class invariants and query-style (`= expr`) operations are ever handed to Kodkod. Confirmed empirically by examples/CivilStatus, whose Person class declares birth/marry/divorce operations each with several pre:/post: clauses (a textbook pre/post-condition example): none of the three operations is referenced anywhere in CivilStatus.properties, validate.cmd, or query.cmd \u2014 they are simply inert with respect to -validate, consistent with the transformer never looking at them.",
               "satScenarioIds": [
-                "04-CivilStatus"
+                "CivilStatus"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -359,39 +359,39 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "Association.java: isBinaryAssociation() (line 355-357: associationEnds.size()==2); typeDefinitions()/multiplicityDefinitions()/AssociationConfigurator.numberOfLinks() all take dedicated binary-optimized branches (Undefined-padding for 0..1 ends). ModelTransformator.transformAssociation() builds the relation and ends generically.",
-              "notes": "Core, best-tested path; exercised end-to-end by 01-Library and nearly every example.",
+              "notes": "Core, best-tested path; exercised end-to-end by Library and nearly every example.",
               "satScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "09-CollectionSemantics",
-                "10-MultipleInheritance",
-                "17-ZebraPuzzle",
-                "12-RecursiveTree",
-                "16-GraphColoring",
-                "13-Redefines",
-                "15-NQueens",
-                "11-Subsets",
-                "14-Sudoku"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "CollectionSemantics",
+                "MultipleInheritance",
+                "ZebraPuzzle",
+                "RecursiveTree",
+                "GraphColoring",
+                "Redefines",
+                "NQueens",
+                "Subsets",
+                "Sudoku"
               ],
               "unsatScenarioIds": [
-                "08-AggregationComposition"
+                "AggregationComposition"
               ],
               "validationOracleScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "08-AggregationComposition",
-                "10-MultipleInheritance",
-                "13-Redefines"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "AggregationComposition",
+                "MultipleInheritance",
+                "Redefines"
               ],
               "coverageNote": ""
             }
@@ -418,18 +418,18 @@
           "support": {
             "kk-modelvalidator": {
               "status": "supported",
-              "evidence": "Association.cycleFreenessDefinitions() (Association.java:76-117) explicitly detects aggregateEnd.associatedClass().equals(otherEnd.associatedClass()) or a parent/child relationship and builds a Kodkod closure()-based acyclicity constraint for that case ('reflexive case'). 04-CivilStatus (self-referential Marriage) and 12-RecursiveTree exercise self-associations successfully.",
+              "evidence": "Association.cycleFreenessDefinitions() (Association.java:76-117) explicitly detects aggregateEnd.associatedClass().equals(otherEnd.associatedClass()) or a parent/child relationship and builds a Kodkod closure()-based acyclicity constraint for that case ('reflexive case'). CivilStatus (self-referential Marriage) and RecursiveTree exercise self-associations successfully.",
               "notes": "Type/multiplicity constraints are class-identity-agnostic and work regardless; the composition-specific cycle check is the only part that special-cases self-reference.",
               "satScenarioIds": [
-                "04-CivilStatus",
-                "05-Genealogy",
-                "12-RecursiveTree",
-                "16-GraphColoring"
+                "CivilStatus",
+                "Genealogy",
+                "RecursiveTree",
+                "GraphColoring"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "04-CivilStatus",
-                "05-Genealogy"
+                "CivilStatus",
+                "Genealogy"
               ],
               "coverageNote": ""
             }
@@ -442,13 +442,13 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "Association.cycleFreenessDefinitions() (Association.java:76-117) builds an UNCONDITIONAL Kodkod closure() constraint whenever a composition/aggregation end's class equals or is related to the other end's class -- it never consults the aggregationcyclefreeness .properties toggle (that toggle is read only later, in ObjectDiagramCreator.hasDiagramErrors(), lines ~81-89).",
-              "notes": "08-AggregationComposition/FileSystem.use header comment + README 08-section: confirmed empirically that the aggregationcyclefreeness toggle has NO observable effect for a single self-referential composition (or two different classes composing the same class directly) -- it's TRIVIALLY_UNSATISFIABLE in both on/off configs. The toggle only works for cycles spanning two different associations, checked post-solve.",
+              "notes": "AggregationComposition/FileSystem.use header comment + README 08-section: confirmed empirically that the aggregationcyclefreeness toggle has NO observable effect for a single self-referential composition (or two different classes composing the same class directly) -- it's TRIVIALLY_UNSATISFIABLE in both on/off configs. The toggle only works for cycles spanning two different associations, checked post-solve.",
               "satScenarioIds": [],
               "unsatScenarioIds": [
-                "08-AggregationComposition"
+                "AggregationComposition"
               ],
               "validationOracleScenarioIds": [
-                "08-AggregationComposition"
+                "AggregationComposition"
               ],
               "coverageNote": ""
             }
@@ -461,13 +461,13 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "Class.forbiddingSharingDefinition() (Class.java:267-318) is called unconditionally from Class.constraints() with no read of the forbiddensharing config value at all; it only fires when \u22652 binary, non-association-class compositions target the identical part class (assoc.associationEnds().get(1).associatedClass().equals(this)).",
-              "notes": "08-AggregationComposition README: 'Sharing of the same object between two DIFFERENT composition associations that both declare the EXACT SAME class at their part end is likewise an unconditional Kodkod constraint, ignoring the forbiddensharing toggle.' The toggle only has effect once inheritance widens the part-class match (checked post-solve in ObjectDiagramCreator.hasDiagramErrors(), lines 81-96, which does read isForbiddensharing()).",
+              "notes": "AggregationComposition README: 'Sharing of the same object between two DIFFERENT composition associations that both declare the EXACT SAME class at their part end is likewise an unconditional Kodkod constraint, ignoring the forbiddensharing toggle.' The toggle only has effect once inheritance widens the part-class match (checked post-solve in ObjectDiagramCreator.hasDiagramErrors(), lines 81-96, which does read isForbiddensharing()).",
               "satScenarioIds": [],
               "unsatScenarioIds": [
-                "08-AggregationComposition"
+                "AggregationComposition"
               ],
               "validationOracleScenarioIds": [
-                "08-AggregationComposition"
+                "AggregationComposition"
               ],
               "coverageNote": ""
             }
@@ -484,7 +484,7 @@
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
-              "coverageNote": "zero coverage - notes flag this as an unfinished TODO path; 08-AggregationComposition only exercises the reflexive (self-referential) cycle case, not two unrelated classes"
+              "coverageNote": "zero coverage - notes flag this as an unfinished TODO path; AggregationComposition only exercises the reflexive (self-referential) cycle case, not two unrelated classes"
             }
           }
         },
@@ -510,13 +510,13 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "AssociationClass.java (extends Class, implements IAssociationClass); Association.associationClassMultiplicityDefinitions() (Association.java:221-253); ModelTransformator.transformAssociationClasses() (lines 217-233); LinkObjectStrategy.createElement() materializes MLinkObject instances from the solved relation.",
-              "notes": "06-AssociationClass example confirms end-to-end: SATISFIABLE, all 5 invariants OK, and 'info state' counts the same objects consistently as both class instances and association links.",
+              "notes": "AssociationClass example confirms end-to-end: SATISFIABLE, all 5 invariants OK, and 'info state' counts the same objects consistently as both class instances and association links.",
               "satScenarioIds": [
-                "06-AssociationClass"
+                "AssociationClass"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "06-AssociationClass"
+                "AssociationClass"
               ],
               "coverageNote": ""
             }
@@ -561,30 +561,30 @@
               "evidence": "MultiplicityTransformator.transform() (MultiplicityTransformator.java:16-37) splits on ',' for multiple ranges and on '..' per range, mapping '*' to Multiplicity.MANY; Association.multiplicityDefinitions() (Association.java:182-203) iterates multiplicity.getRanges() and OR's the resulting range formulas together.",
               "notes": "General range logic (arbitrary lower/upper, disjoint ranges, unbounded upper) is sound.",
               "satScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "10-MultipleInheritance",
-                "17-ZebraPuzzle",
-                "15-NQueens",
-                "11-Subsets",
-                "14-Sudoku"
+                "Library",
+                "EmployeeInvariants",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "MultipleInheritance",
+                "ZebraPuzzle",
+                "NQueens",
+                "Subsets",
+                "Sudoku"
               ],
               "unsatScenarioIds": [
-                "08-AggregationComposition"
+                "AggregationComposition"
               ],
               "validationOracleScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "08-AggregationComposition",
-                "10-MultipleInheritance"
+                "Library",
+                "EmployeeInvariants",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "AggregationComposition",
+                "MultipleInheritance"
               ],
               "coverageNote": "multi-range multiplicity syntax (e.g. '1,3..5') is untested by any scenario in the suite."
             }
@@ -599,11 +599,11 @@
               "evidence": "Association.zeroOneMultiplicity() (Association.java:258-274) and typeDefinitions() (lines 143-149) special-case isZeroOne()+isBinaryAssociation() to union in model.typeFactory().undefinedType().relation(); AssociationConfigurator.upperBound() (lines 80-135) builds matching Undefined tuples.",
               "notes": "This Undefined-padding mechanism is binary-only by design (n-ary 0..1 ends use plain absent-tuple semantics instead, via the .lone() branch in zeroOneMultiplicity).",
               "satScenarioIds": [
-                "01-Library"
+                "Library"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "01-Library"
+                "Library"
               ],
               "coverageNote": ""
             }
@@ -618,19 +618,19 @@
               "evidence": "AssociationConfigurator.lowerBound()/setSpecificValues() (AssociationConfigurator.java:38-67,161-165); PropertyConfigurationVisitor.readComplexElements()/setAssociationConfigurator() (PropertyConfigurationVisitor.java ~356-465); LegendEntry.java:55 documents the '(ada,bob),(cyd,dan)' syntax.",
               "notes": "Includes a documented FIXME in AssociationConfigurator.lowerBound() (lines 52-56) about a naming clash between automatic-diagram-extraction and .properties-driven atom naming for these forced tuples, but the base mechanism works.",
               "satScenarioIds": [
-                "05-Genealogy",
-                "08-AggregationComposition",
-                "11-Subsets",
-                "12-RecursiveTree",
-                "13-Redefines",
-                "14-Sudoku",
-                "16-GraphColoring"
+                "Genealogy",
+                "AggregationComposition",
+                "Subsets",
+                "RecursiveTree",
+                "Redefines",
+                "Sudoku",
+                "GraphColoring"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "05-Genealogy",
-                "08-AggregationComposition",
-                "13-Redefines"
+                "Genealogy",
+                "AggregationComposition",
+                "Redefines"
               ],
               "coverageNote": ""
             }
@@ -645,12 +645,12 @@
               "evidence": "AssociationConfigurator.setLimits()/numberOfLinks() (AssociationConfigurator.java:173-241); PropertyConfigurationVisitor.setAssociationConfigurator() reads PropertyEntry.linksMin/linksMax per association name.",
               "notes": "Correctly special-cases the count expression for binary associations with 0..1 ends (excluding Undefined atoms from the count) vs. plain relation.count() otherwise.",
               "satScenarioIds": [
-                "01-Library",
-                "14-Sudoku"
+                "Library",
+                "Sudoku"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "01-Library"
+                "Library"
               ],
               "coverageNote": ""
             }
@@ -663,13 +663,13 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "DerivedAssociation.java (constraints() overridden to Formula.and(multiplicityDefinitions(), cycleFreenessDefinitions()), both stubbed to Formula.TRUE -- SAT-level relation is left unconstrained); DerivedAssociationEnd.java carries the actual OCL derive expression + parameters; VariableOperationVisitor.handleDerivedAssociationNavigation() (VariableOperationVisitor.java:178-274) evaluates the derive expression live (forward and backward join direction) instead of reading the (deliberately unbound) relation; LinkStrategy.canDo() (LinkStrategy.java:30-32) explicitly excludes derived associations from object-diagram link materialization ('!mAssociation.isDerived()').",
-              "notes": "Design is coherent: the derived association's own Kodkod relation is intentionally never constrained or materialized -- all derivation happens live through the OCL expression during navigation/query. 03-CompanyERSchema exercises this extensively (every association derived from FK attributes; SATISFIABLE, all 29 invariants OK).",
+              "notes": "Design is coherent: the derived association's own Kodkod relation is intentionally never constrained or materialized -- all derivation happens live through the OCL expression during navigation/query. CompanyERSchema exercises this extensively (every association derived from FK attributes; SATISFIABLE, all 29 invariants OK).",
               "satScenarioIds": [
-                "03-CompanyERSchema"
+                "CompanyERSchema"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "03-CompanyERSchema"
+                "CompanyERSchema"
               ],
               "coverageNote": ""
             }
@@ -697,9 +697,9 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "UnionAssociation.java exists (extends Association, constraints() is a no-op stub: '// TODO Auto-generated method stub / return super.constraints();'); grep for 'new UnionAssociation' across the entire src/main/java tree returns zero hits -- nothing in ModelTransformator or anywhere else ever constructs one, so mAssociation.isDerived() paths always create a plain DerivedAssociation, never UnionAssociation, and a plain factory.createAssociation() is used for a non-derived 'union' end. VariableOperationVisitor.handleUnionAssociationNavigation() (line 276-279) is dead code that would throw TransformationException if ever reached.",
-              "notes": "11-Subsets example (SimpleSubset.use ported from use-core's twoSubsets.use), finding #1: a union end ('ab') compiles as a completely ordinary, independent association with no SAT-level tie to the ends that subset it -- confirmed by forcing ab to 2 tuples disjoint from cd's/ef's own links and observing the Kodkod-level relation diverge from plain-OCL union semantics.",
+              "notes": "Subsets example (SimpleSubset.use ported from use-core's twoSubsets.use), finding #1: a union end ('ab') compiles as a completely ordinary, independent association with no SAT-level tie to the ends that subset it -- confirmed by forcing ab to 2 tuples disjoint from cd's/ef's own links and observing the Kodkod-level relation diverge from plain-OCL union semantics.",
               "satScenarioIds": [
-                "11-Subsets"
+                "Subsets"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -714,9 +714,9 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "grep -rn 'subset' (case-insensitive) over src/main/java returns zero hits anywhere in the Kodkod-side translator; also: kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/ModelTransformator.java:170-198 -- the per-end loop only inspects mAssociationEnd.isDerived(); there is no call to MAssociationEnd.getSubsettedRole() (or equivalent) anywhere in src/main under org.tzi.use.kodkod.transform",
-              "notes": "11-Subsets README/finding #1, confirmed directly by grep in this audit: subsetting ends (cd's 'c subsets a', 'd subsets b'; ef's analogous ends) compile and solve as fully independent associations at the Kodkod/SAT level -- containment in the union end only holds under USE core's separate, non-Kodkod OCL evaluator, never enforced or checked by the plugin's own search. The plugin ships a dedicated UnionAssociation class and translator case for subsets/union ends, but nothing ever constructs one ('new UnionAssociation' returns zero hits in src/main) -- so even VariableOperationVisitor's special-cased handleUnionAssociationNavigation() branch is unreachable dead code. Consolidated here from 3 separate rows across 2 areas describing this one defect.",
+              "notes": "Subsets README/finding #1, confirmed directly by grep in this audit: subsetting ends (cd's 'c subsets a', 'd subsets b'; ef's analogous ends) compile and solve as fully independent associations at the Kodkod/SAT level -- containment in the union end only holds under USE core's separate, non-Kodkod OCL evaluator, never enforced or checked by the plugin's own search. The plugin ships a dedicated UnionAssociation class and translator case for subsets/union ends, but nothing ever constructs one ('new UnionAssociation' returns zero hits in src/main) -- so even VariableOperationVisitor's special-cased handleUnionAssociationNavigation() branch is unreachable dead code. Consolidated here from 3 separate rows across 2 areas describing this one defect.",
               "satScenarioIds": [
-                "11-Subsets"
+                "Subsets"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -731,13 +731,13 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "grep for 'redefin' across src/main/java returns only unrelated 'qualifiedName' hits -- zero association-redefinition handling anywhere. ModelTransformator.transformAssociation() (lines 162-201) and VariableOperationVisitor.findAssociationEndIndex() (lines 365-385) treat the redefining association (e.g. CD) and the redefined association (AB) as two entirely separate, uncorrelated IAssociation/relation objects; navigating the superclass-declared role resolves against AB's own (uncorrelated, empty in practice) relation; also: kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/ModelTransformator.java:170-198 (no getRedefinedEnd()/redefines lookup at all, same loop as subsets above); grep for 'redefin' (case-insensitive) across kk-modelvalidator/src/main returns zero real hits (only unrelated 'predefined' substrings); ModelTransformator.transformAssociation() and VariableOperationVisitor.findAssociationEndIndex() have no getRedefinedEnd()/redefines lookup at all.",
-              "notes": "Confirmed live soundness gap: an invariant written via a superclass-redefined association end (e.g. 13-Redefines' RedefinedRoleTagCheck) is evaluated over the redefined (superclass) association's own empty/uncorrelated relation during Kodkod's search -- silently vacuously true -- so -validate reports SATISFIABLE on a state where check -v on the same reconstructed state reports that exact invariant FAILED. The plugin's own log even prints the invariant violation without changing the reported outcome. Separately observable via the query path: on the same object, plain OCL 'c1.b' correctly substitutes the narrower redefined role, while 'mv ? c1.b' (the plugin's own Kodkod query) queries the superclass association's untouched relation and returns empty for the same role name -- two different answers depending on query path, entirely because the Kodkod-side translator has no `redefines` encoding at all. This is a single root cause (no MRedefinedRole/redefines handling anywhere in org.tzi.use.kodkod.transform), consolidated here from 5 separate rows across 4 areas that had independently documented the same defect from different angles (soundness gap, navigation, inheritance-level framing, query-path divergence).",
+              "notes": "Confirmed live soundness gap: an invariant written via a superclass-redefined association end (e.g. Redefines' RedefinedRoleTagCheck) is evaluated over the redefined (superclass) association's own empty/uncorrelated relation during Kodkod's search -- silently vacuously true -- so -validate reports SATISFIABLE on a state where check -v on the same reconstructed state reports that exact invariant FAILED. The plugin's own log even prints the invariant violation without changing the reported outcome. Separately observable via the query path: on the same object, plain OCL 'c1.b' correctly substitutes the narrower redefined role, while 'mv ? c1.b' (the plugin's own Kodkod query) queries the superclass association's untouched relation and returns empty for the same role name -- two different answers depending on query path, entirely because the Kodkod-side translator has no `redefines` encoding at all. This is a single root cause (no MRedefinedRole/redefines handling anywhere in org.tzi.use.kodkod.transform), consolidated here from 5 separate rows across 4 areas that had independently documented the same defect from different angles (soundness gap, navigation, inheritance-level framing, query-path divergence).",
               "satScenarioIds": [
-                "13-Redefines"
+                "Redefines"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "13-Redefines"
+                "Redefines"
               ],
               "coverageNote": ""
             }
@@ -765,10 +765,10 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "Association.typeDefinitions() and multiplicityDefinitions() (Association.java) use associatedClass().inheritanceOrRegularRelation() (Class.java:222-225) throughout, which folds in inheritanceRelation() (union of the class's own relation with all children's inheritanceOrRegularRelation()) whenever existsInheritance() is true.",
-              "notes": "07-Inheritance and 10-MultipleInheritance confirm polymorphic navigation/typing works correctly, including diamond inheritance, though attribute/association bounds must be declared under the *declaring* superclass's own name in .properties (a documented, separate .properties-authoring gotcha, not an association-transform bug per se).",
+              "notes": "Inheritance and MultipleInheritance confirm polymorphic navigation/typing works correctly, including diamond inheritance, though attribute/association bounds must be declared under the *declaring* superclass's own name in .properties (a documented, separate .properties-authoring gotcha, not an association-transform bug per se).",
               "satScenarioIds": [],
               "unsatScenarioIds": [
-                "08-AggregationComposition"
+                "AggregationComposition"
               ],
               "validationOracleScenarioIds": [],
               "coverageNote": ""
@@ -790,35 +790,35 @@
               "evidence": "transform/ocl/DefaultExpressionVisitor.java:176-184 visitConstBoolean; ocl/operation/BooleanOperationGroup.java and(), or(), not(), xor(), implies() all four Expression/Formula overload combinations",
               "notes": "Boolean type has exactly 2 fixed atoms (BooleanType.java createAtomList/lowerBound=upperBound). Standard two-valued short-circuit-free logic is implemented via eq(booleanTrue)/eq(booleanFalse) comparisons for every Expression/Formula argument combination.",
               "satScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "09-CollectionSemantics",
-                "10-MultipleInheritance",
-                "17-ZebraPuzzle",
-                "12-RecursiveTree",
-                "16-GraphColoring",
-                "13-Redefines",
-                "15-NQueens",
-                "11-Subsets",
-                "14-Sudoku"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "CollectionSemantics",
+                "MultipleInheritance",
+                "ZebraPuzzle",
+                "RecursiveTree",
+                "GraphColoring",
+                "Redefines",
+                "NQueens",
+                "Subsets",
+                "Sudoku"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "08-AggregationComposition",
-                "10-MultipleInheritance",
-                "13-Redefines"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "AggregationComposition",
+                "MultipleInheritance",
+                "Redefines"
               ],
               "coverageNote": ""
             }
@@ -848,15 +848,15 @@
               "evidence": "ocl/operation/IntegerOperationGroup.java plus/minus/multiply/div/mod/abs/negation/min/max (lines 31-88); transform/ocl/StandardOperationVisitor.java handleMinus() folds constant unary minus",
               "notes": "All arithmetic ops propagate undefined via l.eq(undefined).or(r.eq(undefined)).thenElse(undefined, ...); div/mod additionally test for divide-by-zero and yield undefined.",
               "satScenarioIds": [
-                "14-Sudoku",
-                "15-NQueens",
-                "16-GraphColoring",
-                "17-ZebraPuzzle",
-                "03-CompanyERSchema"
+                "Sudoku",
+                "NQueens",
+                "GraphColoring",
+                "ZebraPuzzle",
+                "CompanyERSchema"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "03-CompanyERSchema"
+                "CompanyERSchema"
               ],
               "coverageNote": ""
             }
@@ -871,15 +871,15 @@
               "evidence": "ocl/operation/IntegerOperationGroup.java less/lessOrEqual/greater/greaterOrEqual (lines 44-58); symbolOperationMapping registers <,<=,>,>= to these methods (lines 25-28)",
               "notes": "Each comparison is guarded with l.eq(undefined).not().and(r.eq(undefined).not()) so a comparison involving an undefined operand evaluates to Formula.FALSE rather than propagating OclUndefined (OCL spec says comparisons with undefined should themselves be undefined, but Kodkod formulas cannot represent an undefined boolean, so USE/plugin architecture forces false here) \u2014 acceptable/expected within this plugin's Formula-vs-Expression design, not flagged as a separate defect.",
               "satScenarioIds": [
-                "14-Sudoku",
-                "15-NQueens",
-                "16-GraphColoring",
-                "17-ZebraPuzzle",
-                "03-CompanyERSchema"
+                "Sudoku",
+                "NQueens",
+                "GraphColoring",
+                "ZebraPuzzle",
+                "CompanyERSchema"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "03-CompanyERSchema"
+                "CompanyERSchema"
               ],
               "coverageNote": ""
             }
@@ -909,7 +909,7 @@
               "evidence": "transform/ocl/DefaultExpressionVisitor.java visitConstInteger(int) lines 423-434: LOG.error(...) is emitted when KodkodModelValidatorConfiguration.calculateRequiredBitwidth(value) > configured bitwidth, but the literal is still added and transformation proceeds",
               "notes": "Overflowing constants only produce a log message, not a TransformationException \u2014 the resulting SAT encoding silently uses a wrapped/incorrect two's-complement value instead of failing fast.",
               "satScenarioIds": [
-                "15-NQueens"
+                "NQueens"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -956,13 +956,13 @@
               "evidence": "transform/ocl/DefaultExpressionVisitor.java visitConstString() lines 214-221; ocl/operation/AnyOperationGroup.java equality/inequality (generic, used for all Expression pairs including Strings)",
               "notes": "String literals become atoms of StringType; equality/inequality/isDefined work through the generic AnyOperationGroup since String has no dedicated operation group.",
               "satScenarioIds": [
-                "04-CivilStatus",
-                "01-Library"
+                "CivilStatus",
+                "Library"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "04-CivilStatus",
-                "01-Library"
+                "CivilStatus",
+                "Library"
               ],
               "coverageNote": ""
             }
@@ -975,13 +975,13 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "kk-modelvalidator/src/main/java/org/tzi/kodkod/ocl/operation/ (only AnyOperationGroup, BooleanOperationGroup, IntegerOperationGroup, SetOperationGroup, ClassOperationGroup, ConditionalOperationGroup, CollectionConstructorGroup, VariableOperationGroup exist \u2014 grep confirms no StringOperationGroup file or class); PluginModelFactory.java:83-90 registers exactly those 8 groups, none for String manipulation",
-              "notes": "examples/04-CivilStatus/CivilStatus.properties and validate.cmd document this directly: the invariant nameCapitalThenSmallLetters uses String.substring/.size, which has no operation-group method; InvariantTransformator.transformAndAdd catches the resulting TransformationException ('OCL operation substring is not supported') per-invariant and silently drops it from the search rather than aborting the whole model load.",
+              "notes": "examples/CivilStatus/CivilStatus.properties and validate.cmd document this directly: the invariant nameCapitalThenSmallLetters uses String.substring/.size, which has no operation-group method; InvariantTransformator.transformAndAdd catches the resulting TransformationException ('OCL operation substring is not supported') per-invariant and silently drops it from the search rather than aborting the whole model load.",
               "satScenarioIds": [
-                "04-CivilStatus"
+                "CivilStatus"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "04-CivilStatus"
+                "CivilStatus"
               ],
               "coverageNote": ""
             }
@@ -996,12 +996,12 @@
               "evidence": "transform/ocl/DefaultExpressionVisitor.java visitConstEnum() lines 187-196; model/type/EnumType.java createAtomList()/addTypeLiteral()",
               "notes": "Enum literals are lazily added to EnumType's literal map as encountered during transformation and compared via the generic AnyOperationGroup.equality; the plugin correctly errors ('Cannot find enum ...') if the enum type is unresolvable.",
               "satScenarioIds": [
-                "04-CivilStatus",
-                "17-ZebraPuzzle"
+                "CivilStatus",
+                "ZebraPuzzle"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "04-CivilStatus"
+                "CivilStatus"
               ],
               "coverageNote": ""
             }
@@ -1013,14 +1013,14 @@
           "support": {
             "kk-modelvalidator": {
               "status": "known-defect",
-              "evidence": "examples/04-CivilStatus/query.cmd NOTES comment",
+              "evidence": "examples/CivilStatus/query.cmd NOTES comment",
               "notes": "Documented as directly observed: 'mv ? p.civstat = #married' can throw kodkod.engine.fol2sat.UnboundLeafException when that literal's atom was never allocated in the specific solution found, because the query mechanism only builds relations for values actually reachable in that run, not for every declared enum literal \u2014 a query-time gap distinct from the core transform (which does support enum equality inside invariants/searches).",
               "satScenarioIds": [
-                "04-CivilStatus"
+                "CivilStatus"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "04-CivilStatus"
+                "CivilStatus"
               ],
               "coverageNote": ""
             }
@@ -1035,12 +1035,12 @@
               "evidence": "model/type/ObjectType.java (relation = clazz.relation(), atoms from clazz bounds); ocl/operation/AnyOperationGroup.java equality()/isDefined()/isUndefined() lines 26-64",
               "notes": "Object references reuse the class's own Kodkod relation as their type; equality/definedness go through the same generic AnyOperationGroup used for all Expression-typed values.",
               "satScenarioIds": [
-                "01-Library",
-                "15-NQueens"
+                "Library",
+                "NQueens"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "01-Library"
+                "Library"
               ],
               "coverageNote": ""
             }
@@ -1055,13 +1055,13 @@
               "evidence": "ocl/operation/VariableOperationGroup.java access() lines 90-98 and navigation() lines 22-70 both wrap the result in srcExpr.eq(undefined).thenElse(undefined[.Set], result); transform/ocl/DefaultExpressionVisitor.java visitUndefined() lines 383-390 dispatches to model.typeFactory().undefinedType()/undefinedSetType() relations",
               "notes": "undefined.attr and undefined.assocEnd both correctly propagate to undefined (scalar) or the dedicated undefined_Set (collection-valued) relation rather than crashing or silently defaulting.",
               "satScenarioIds": [
-                "04-CivilStatus",
-                "06-AssociationClass"
+                "CivilStatus",
+                "AssociationClass"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "04-CivilStatus",
-                "06-AssociationClass"
+                "CivilStatus",
+                "AssociationClass"
               ],
               "coverageNote": ""
             }
@@ -1076,12 +1076,12 @@
               "evidence": "ocl/operation/ConditionalOperationGroup.java if_then_else() overloads lines 21-52; transform/ocl/DefaultExpressionVisitor.java visitIf() lines 260-279",
               "notes": "cond.eq(undefined).thenElse(undefined, ...) is applied in every Expression-typed condition overload, so 'if undefinedBool then ... else ...' correctly yields undefined rather than picking a branch.",
               "satScenarioIds": [
-                "03-CompanyERSchema",
-                "14-Sudoku"
+                "CompanyERSchema",
+                "Sudoku"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "03-CompanyERSchema"
+                "CompanyERSchema"
               ],
               "coverageNote": ""
             }
@@ -1096,12 +1096,12 @@
               "evidence": "transform/ocl/DefaultExpressionVisitor.java visitLet() lines 234-258",
               "notes": "Handles both scalar and collection-valued let-bound variables (registers into collectionVariables when visitor.isSet()), and correctly threads variableClasses for object-typed lets so later attribute/navigation lookups on the let-variable resolve; correctly removes bindings after the in-expression.",
               "satScenarioIds": [
-                "14-Sudoku",
-                "03-CompanyERSchema"
+                "Sudoku",
+                "CompanyERSchema"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "03-CompanyERSchema"
+                "CompanyERSchema"
               ],
               "coverageNote": ""
             }
@@ -1116,13 +1116,13 @@
               "evidence": "transform/ocl/DefaultExpressionVisitor.java visitIsTypeOf/visitIsKindOf/visitAsType lines 153-160, 282-291 -> visitTypeOperation(); ocl/operation/AnyOperationGroup.java oclIsTypeOf/oclIsKindOf/oclAsType lines 66-88",
               "notes": "For class targets, visitTypeOperation resolves cls.relation() (exact type) vs. cls.inheritanceOrRegularRelation() (kind-of, useInheritance=true) and delegates to AnyOperationGroup/SetOperationGroup's src.in(cls)/src.in(cls).thenElse(src,undefined) encodings; correctly errors ('No support for ... as target type') for unconvertible target types.",
               "satScenarioIds": [
-                "07-Inheritance",
-                "10-MultipleInheritance"
+                "Inheritance",
+                "MultipleInheritance"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "07-Inheritance",
-                "10-MultipleInheritance"
+                "Inheritance",
+                "MultipleInheritance"
               ],
               "coverageNote": ""
             }
@@ -1152,14 +1152,14 @@
               "evidence": "transform/ocl/DefaultExpressionVisitor.java visitAllInstances() lines 130-150 uses clazz.inheritanceOrRegularRelation(); ocl/operation/ClassOperationGroup.java allInstances() line 28-30 (identity) and returnsSet override for 'allInstances'",
               "notes": "Straightforward relation lookup; correctly includes subclass instances via inheritanceOrRegularRelation().",
               "satScenarioIds": [
-                "07-Inheritance",
-                "10-MultipleInheritance",
-                "12-RecursiveTree"
+                "Inheritance",
+                "MultipleInheritance",
+                "RecursiveTree"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "07-Inheritance",
-                "10-MultipleInheritance"
+                "Inheritance",
+                "MultipleInheritance"
               ],
               "coverageNote": ""
             }
@@ -1189,19 +1189,19 @@
               "evidence": "transform/ocl/VariableOperationVisitor.java visitAttrOp()/handleRegularAttribute() lines 66-98, 124-134; ocl/operation/VariableOperationGroup.java access()",
               "notes": "Resolves the source class (falling back to TypeConverter when the visitor's tracked attributeClass is null), looks up IAttribute by name, and emits an 'access' call that threads undefined correctly (see prim.oclundefined-literal).",
               "satScenarioIds": [
-                "01-Library",
-                "04-CivilStatus",
-                "07-Inheritance",
-                "10-MultipleInheritance",
-                "14-Sudoku",
-                "17-ZebraPuzzle"
+                "Library",
+                "CivilStatus",
+                "Inheritance",
+                "MultipleInheritance",
+                "Sudoku",
+                "ZebraPuzzle"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "01-Library",
-                "04-CivilStatus",
-                "07-Inheritance",
-                "10-MultipleInheritance"
+                "Library",
+                "CivilStatus",
+                "Inheritance",
+                "MultipleInheritance"
               ],
               "coverageNote": ""
             }
@@ -1231,20 +1231,20 @@
               "evidence": "transform/ocl/VariableOperationVisitor.java handleRegularAssociationNavigation() lines 281-311; ocl/operation/VariableOperationGroup.java navigation()",
               "notes": "Correctly builds from-role/to-role indices and joins through the association relation, handling association-class ends and multi-arity associations via repeated Expression.UNIV joins.",
               "satScenarioIds": [
-                "01-Library",
-                "04-CivilStatus",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "10-MultipleInheritance",
-                "14-Sudoku"
+                "Library",
+                "CivilStatus",
+                "AssociationClass",
+                "Inheritance",
+                "MultipleInheritance",
+                "Sudoku"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "01-Library",
-                "04-CivilStatus",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "10-MultipleInheritance"
+                "Library",
+                "CivilStatus",
+                "AssociationClass",
+                "Inheritance",
+                "MultipleInheritance"
               ],
               "coverageNote": ""
             }
@@ -1259,11 +1259,11 @@
               "evidence": "transform/ocl/VariableOperationVisitor.java handleDerivedAssociationNavigation() lines 178-274",
               "notes": "Forward navigation (to the derived end) substitutes the derive-parameter and re-visits the expression; backward navigation builds a set-comprehension over the opposite class. Marked with an explicit '//TODO recursion detector' (no cycle guard) and n-ary derived associations are explicitly unsupported (line 269-273: 'Derived association ends for n-ary associations are not supported yet.').",
               "satScenarioIds": [
-                "03-CompanyERSchema"
+                "CompanyERSchema"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "03-CompanyERSchema"
+                "CompanyERSchema"
               ],
               "coverageNote": ""
             }
@@ -1275,12 +1275,12 @@
           "support": {
             "kk-modelvalidator": {
               "status": "known-defect",
-              "evidence": "examples/12-RecursiveTree header/NOTES per task framing; VariableOperationVisitor.java handleDerivedAssociationNavigation TODO recursion detector (lines 179, 101)",
+              "evidence": "examples/RecursiveTree header/NOTES per task framing; VariableOperationVisitor.java handleDerivedAssociationNavigation TODO recursion detector (lines 179, 101)",
               "notes": "The RecursiveTree example documents that a self-referential derived navigation is rejected/loops at transform time before Kodkod is ever invoked, matching the absence of any recursion guard visible in handleDerivedAssociationNavigation/handleDerivedAttribute.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
-              "coverageNote": "zero coverage - no example contains a self-referential derived association/attribute; 12-RecursiveTree exercises a different, separately-guarded mechanism (recursive user-defined operations via OperationStack), tracked by constraints-and-configuration/invariant.recursive-operation-rejection instead."
+              "coverageNote": "zero coverage - no example contains a self-referential derived association/attribute; RecursiveTree exercises a different, separately-guarded mechanism (recursive user-defined operations via OperationStack), tracked by constraints-and-configuration/invariant.recursive-operation-rejection instead."
             }
           }
         },
@@ -1291,9 +1291,9 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "transform/ocl/VariableOperationVisitor.java handleUnionAssociationNavigation() lines 276-279: 'throw new TransformationException(\"Union association ends for n-ary associations are not supported yet.\")' unconditionally; model/impl/UnionAssociation.java exists but is never constructed (grep 'new UnionAssociation' over src/main returns zero hits)",
-              "notes": "Confirmed both in source (dead UnionAssociation class, unconditional throw for the union case) and in examples/11-Subsets/Subsets.properties, whose header documents by direct execution that a 'union' end compiles as an ordinary independent association with zero constraint tying it to the ends that subset it, and that 'subsets' itself has zero references anywhere in src/main (grep -rn subset). Plain USE OCL evaluation (non-Kodkod) gets this right; only the Kodkod-solved path is broken.",
+              "notes": "Confirmed both in source (dead UnionAssociation class, unconditional throw for the union case) and in examples/Subsets/Subsets.properties, whose header documents by direct execution that a 'union' end compiles as an ordinary independent association with zero constraint tying it to the ends that subset it, and that 'subsets' itself has zero references anywhere in src/main (grep -rn subset). Plain USE OCL evaluation (non-Kodkod) gets this right; only the Kodkod-solved path is broken.",
               "satScenarioIds": [
-                "11-Subsets"
+                "Subsets"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -1310,13 +1310,13 @@
               "evidence": "transform/ocl/DefaultExpressionVisitor.java visitSelectByKind/visitExpSelectByType lines 336-345; ocl/operation/SetOperationGroup.java selectByKind/selectByType lines 349-356 (both implemented as src.intersection(type))",
               "notes": "Straightforward relational intersection against the (inheritance or exact) class relation.",
               "satScenarioIds": [
-                "07-Inheritance",
-                "10-MultipleInheritance"
+                "Inheritance",
+                "MultipleInheritance"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "07-Inheritance",
-                "10-MultipleInheritance"
+                "Inheritance",
+                "MultipleInheritance"
               ],
               "coverageNote": ""
             }
@@ -1344,11 +1344,11 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "transform/ocl/DefaultExpressionVisitor.java visitRange() lines 399-416, invokes 'mkSetRange'",
-              "notes": "Delegates through OCLMethodInvoker to a 'mkSetRange' operation (implemented in CollectionConstructorGroup, registered in PluginModelFactory); used successfully in examples/04-CivilStatus (Set{2..name.size}, though that particular invariant is dropped for the unrelated substring reason).",
+              "notes": "Delegates through OCLMethodInvoker to a 'mkSetRange' operation (implemented in CollectionConstructorGroup, registered in PluginModelFactory); used successfully in examples/CivilStatus (Set{2..name.size}, though that particular invariant is dropped for the unrelated substring reason).",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
-              "coverageNote": "zero coverage - the sole scenario citing this (04-CivilStatus's nameCapitalThenSmallLetters invariant) never completes transformation for an unrelated reason (String.substring/size are unsupported), so the range literal itself is never actually reached by any scenario."
+              "coverageNote": "zero coverage - the sole scenario citing this (CivilStatus's nameCapitalThenSmallLetters invariant) never completes transformation for an unrelated reason (String.substring/size are unsupported), so the range literal itself is never actually reached by any scenario."
             }
           }
         }
@@ -1367,12 +1367,12 @@
               "evidence": "DefaultExpressionVisitor.visitSetLiteral (transform/ocl/DefaultExpressionVisitor.java:355-358) -> CollectionConstructorGroup.setLiteral (kodkod/ocl/operation/CollectionConstructorGroup.java:42-56)",
               "notes": "Elements are unioned into a Kodkod relation; the only literal with no semantic loss since the target representation IS a set.",
               "satScenarioIds": [
-                "04-CivilStatus",
-                "14-Sudoku"
+                "CivilStatus",
+                "Sudoku"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "04-CivilStatus"
+                "CivilStatus"
               ],
               "coverageNote": ""
             }
@@ -1389,7 +1389,7 @@
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
-              "coverageNote": "zero coverage - no scenario uses an explicit Bag{...} literal (09-CollectionSemantics exercises Bag semantics via collect(), not the literal constructor)"
+              "coverageNote": "zero coverage - no scenario uses an explicit Bag{...} literal (CollectionSemantics exercises Bag semantics via collect(), not the literal constructor)"
             }
           }
         },
@@ -1404,7 +1404,7 @@
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
-              "coverageNote": "17-ZebraPuzzle/query.cmd:54 does write an explicit Sequence{...} literal, but it's evaluated via plain USE '?' (not 'mv ?', since it's paired with sortedBy(), itself unsupported) -- so the plugin's own Sequence-literal translator is still never actually invoked by any scenario."
+              "coverageNote": "ZebraPuzzle/query.cmd:54 does write an explicit Sequence{...} literal, but it's evaluated via plain USE '?' (not 'mv ?', since it's paired with sortedBy(), itself unsupported) -- so the plugin's own Sequence-literal translator is still never actually invoked by any scenario."
             }
           }
         },
@@ -1430,9 +1430,9 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "PrimitiveTypeFactory.bagType/orderedSetType/sequenceType/collectionType (model/type/PrimitiveTypeFactory.java:45-67) each warn then `return setType(elemType)`; no BagType/SequenceType/OrderedSetType class exists under model/type (only SetType.java present); root cause traced further: TypeConverter.java:83-102 convertCollection() routes every USE-side Bag/Sequence/OrderedSet/generic-Collection type through typeFactory.bagType()/sequenceType()/orderedSetType()/collectionType(), and PrimitiveTypeFactory's overrides of all four do nothing but warn and `return setType(elemType)` -- so ANY Bag/Sequence/OrderedSet-typed OCL construct (not just collect() results) collapses to Set at the Kodkod type-system level, unconditionally. LogMessages.java:132 self-documents this: \"This approach does not support X. All collections will be handled like sets.\"",
-              "notes": "Root cause of every other collapse row -- the type system has no multiset/ordered representation at all. Observable end-to-end effect confirmed in examples/09-CollectionSemantics/NOTES.md.",
+              "notes": "Root cause of every other collapse row -- the type system has no multiset/ordered representation at all. Observable end-to-end effect confirmed in examples/CollectionSemantics/NOTES.md.",
               "satScenarioIds": [
-                "09-CollectionSemantics"
+                "CollectionSemantics"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -1449,11 +1449,11 @@
               "evidence": "DefaultExpressionVisitor.visitRange (DefaultExpressionVisitor.java:398-416) -> CollectionConstructorGroup.mkSetRange (CollectionConstructorGroup.java:32-37)",
               "notes": "Built as a Kodkod comprehension over Expression.INTS; correctly yields a Set (ranges have no duplicates in OCL anyway).",
               "satScenarioIds": [
-                "04-CivilStatus"
+                "CivilStatus"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "04-CivilStatus"
+                "CivilStatus"
               ],
               "coverageNote": ""
             }
@@ -1483,12 +1483,12 @@
               "evidence": "QueryExpressionVisitor.visitSelect (transform/ocl/QueryExpressionVisitor.java:140-142) -> SetOperationGroup.select (kodkod/ocl/operation/SetOperationGroup.java:339-347)",
               "notes": "Compiles to a Kodkod comprehension `body.comprehension(var.oneOf(src))`, with undefined-set propagation.",
               "satScenarioIds": [
-                "03-CompanyERSchema",
-                "17-ZebraPuzzle"
+                "CompanyERSchema",
+                "ZebraPuzzle"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "03-CompanyERSchema"
+                "CompanyERSchema"
               ],
               "coverageNote": ""
             }
@@ -1518,32 +1518,32 @@
               "evidence": "QueryExpressionVisitor.visitForAll (QueryExpressionVisitor.java:97-99) -> SetOperationGroup.forAll (SetOperationGroup.java:186-199)",
               "notes": "Variable... vars supports the multi-declarator form (e.g. c->forAll(a,b|...)); returns undefined if src is undefined.",
               "satScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "10-MultipleInheritance",
-                "17-ZebraPuzzle",
-                "12-RecursiveTree",
-                "16-GraphColoring",
-                "13-Redefines",
-                "15-NQueens"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "MultipleInheritance",
+                "ZebraPuzzle",
+                "RecursiveTree",
+                "GraphColoring",
+                "Redefines",
+                "NQueens"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "08-AggregationComposition",
-                "10-MultipleInheritance",
-                "13-Redefines"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "AggregationComposition",
+                "MultipleInheritance",
+                "Redefines"
               ],
               "coverageNote": ""
             }
@@ -1558,12 +1558,12 @@
               "evidence": "QueryExpressionVisitor.visitExists (QueryExpressionVisitor.java:101-104) -> SetOperationGroup.exists (SetOperationGroup.java:165-178)",
               "notes": "Mirrors forAll's multi-variable Decls-based encoding using body.forSome(d).",
               "satScenarioIds": [
-                "03-CompanyERSchema",
-                "17-ZebraPuzzle"
+                "CompanyERSchema",
+                "ZebraPuzzle"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "03-CompanyERSchema"
+                "CompanyERSchema"
               ],
               "coverageNote": ""
             }
@@ -1578,13 +1578,13 @@
               "evidence": "QueryExpressionVisitor.visitOne (QueryExpressionVisitor.java:129-132) -> SetOperationGroup.one (SetOperationGroup.java:318-327)",
               "notes": "Requires select(src,body,var).one() to hold exactly; correct standard encoding.",
               "satScenarioIds": [
-                "03-CompanyERSchema",
-                "05-Genealogy"
+                "CompanyERSchema",
+                "Genealogy"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "03-CompanyERSchema",
-                "05-Genealogy"
+                "CompanyERSchema",
+                "Genealogy"
               ],
               "coverageNote": ""
             }
@@ -1612,9 +1612,9 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "QueryExpressionVisitor.collectTypeCheck+visitCollect (QueryExpressionVisitor.java:73-88) warn \"results in unsupported type 'Bag'/'Sequence'. It will be interpreted as 'Set'\" -> SetOperationGroup.collect (SetOperationGroup.java:98-119), registered set-returning at line 31",
-              "notes": "Confirmed end-to-end in examples/09-CollectionSemantics/NOTES.md: 3 Songs with only 2 possible album values must yield a Bag of size 3 by OCL semantics, but the plugin returns a Set of size 2, so `collect()->size() = source->size()` evaluates false when it should be true.",
+              "notes": "Confirmed end-to-end in examples/CollectionSemantics/NOTES.md: 3 Songs with only 2 possible album values must yield a Bag of size 3 by OCL semantics, but the plugin returns a Set of size 2, so `collect()->size() = source->size()` evaluates false when it should be true.",
               "satScenarioIds": [
-                "09-CollectionSemantics"
+                "CollectionSemantics"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -1631,7 +1631,7 @@
               "evidence": "QueryExpressionVisitor.collectTypeCheck+visitCollectNested (QueryExpressionVisitor.java:73-82,90-94) same Bag/Sequence warning; SetOperationGroup.collectNested (SetOperationGroup.java:121-127) literally delegates to collect(...) with no distinct nesting behavior; ValueConverter.convertCollection (transform/ValueConverter.java:55-69, error at line 62) logs LogMessages.valueConversionNestedCollections (\"Nested collections not supported!\") whenever a collection-of-collections value is seen",
               "notes": "Same Bag/Sequence collapse as collect() (same example applies), plus collectNested's defining feature -- preserving nesting instead of flattening -- is simply not implemented; the method body is textually identical to collect().",
               "satScenarioIds": [
-                "09-CollectionSemantics"
+                "CollectionSemantics"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -1648,7 +1648,7 @@
               "evidence": "QueryExpressionVisitor.visitIsUnique (QueryExpressionVisitor.java:106-127) -> SetOperationGroup.isUnique (SetOperationGroup.java:249-263), encoded via forAll(v1,v2 | v1<>v2 implies body1<>body2)",
               "notes": "The pairwise-forAll encoding is sound in isolation, but since a Bag-typed source is already collapsed to a Set before reaching isUnique (see collection.type-system-collapse), isUnique on a Bag can silently report \"unique\" for a source that in real OCL terms contains duplicate elements.",
               "satScenarioIds": [
-                "14-Sudoku"
+                "Sudoku"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -1665,12 +1665,12 @@
               "evidence": "QueryExpressionVisitor.visitClosure (QueryExpressionVisitor.java:55-71) requires sourceType.isKindOfCollection(...) with elemType().isTypeOfClass(), else throws LogMessages.closureObjectMessage/closureCollectionMessage (helper/LogMessages.java:100,102); SetOperationGroup.closure (SetOperationGroup.java:85-96) builds a reflexive-transitive Kodkod .closure()",
               "notes": "Restricted to collections of class/object-typed elements (the typical OCL use case for graph navigation); raises a clear TransformationException rather than silently degrading for any other element type.",
               "satScenarioIds": [
-                "05-Genealogy",
-                "12-RecursiveTree"
+                "Genealogy",
+                "RecursiveTree"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "05-Genealogy"
+                "Genealogy"
               ],
               "coverageNote": ""
             }
@@ -1751,37 +1751,37 @@
               "evidence": "src/main/java/org/tzi/use/kodkod/transform/InvariantTransformator.java: transform()/createInvariant() (wraps body in forAll over the class relation); org.tzi.kodkod.model.impl.Invariant.java",
               "notes": "Each MClassInvariant is compiled into a kodkod.ast.Formula quantified over the owning class's relation. Works for the ordinary OCL subset covered by the ocl.operation groups.",
               "satScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "09-CollectionSemantics",
-                "10-MultipleInheritance",
-                "17-ZebraPuzzle",
-                "12-RecursiveTree",
-                "16-GraphColoring",
-                "13-Redefines",
-                "15-NQueens",
-                "11-Subsets",
-                "14-Sudoku"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "CollectionSemantics",
+                "MultipleInheritance",
+                "ZebraPuzzle",
+                "RecursiveTree",
+                "GraphColoring",
+                "Redefines",
+                "NQueens",
+                "Subsets",
+                "Sudoku"
               ],
               "unsatScenarioIds": [
-                "08-AggregationComposition"
+                "AggregationComposition"
               ],
               "validationOracleScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "08-AggregationComposition",
-                "10-MultipleInheritance",
-                "13-Redefines"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "AggregationComposition",
+                "MultipleInheritance",
+                "Redefines"
               ],
               "coverageNote": ""
             }
@@ -1796,11 +1796,11 @@
               "evidence": "PropertyConfigurationVisitor.visitInvariant() (kk-modelvalidator/.../model/config/impl/PropertyConfigurationVisitor.java:139-155): reads 'ClassName_invName := active|inactive|negate' and calls invariant.activate()/deactivate()/negate()",
               "notes": "Only activated invariants are conjoined into the search formula (ConstraintVisitor.visitInvariant, line 48-52); negated ones contribute formula.not().",
               "satScenarioIds": [
-                "02-EmployeeInvariants"
+                "EmployeeInvariants"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "02-EmployeeInvariants"
+                "EmployeeInvariants"
               ],
               "coverageNote": ""
             }
@@ -1813,15 +1813,15 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "InvariantTransformator.transformAndAdd()/transformAndAdd(list) catches Exception and only logs via printTransformationError (lines 130-166); no operation group exists for String.substring/.size in org.tzi.kodkod.ocl.operation/*.java (grep for \"substring\"/\"size\" returns zero hits)",
-              "notes": "Confirmed by examples/04-CivilStatus (Person::nameCapitalThenSmallLetters silently dropped, logged as 'operation substring is not supported') and examples/10-MultipleInheritance (String.size() same gap). The invariant is dropped from every Kodkod search regardless of its active/inactive setting, while USE's own SOIL-based check -v still evaluates it correctly (separate interpreter path). Note: only 04-CivilStatus is live/reproducible by running the checked-in scenario as shipped -- 10-MultipleInheritance's own header comment documents that its originally-affected invariants were rewritten to work around this exact bug, so the shipped file no longer triggers it; it corroborates the defect's prior discovery, not a currently-reproducible instance.",
+              "notes": "Confirmed by examples/CivilStatus (Person::nameCapitalThenSmallLetters silently dropped, logged as 'operation substring is not supported') and examples/MultipleInheritance (String.size() same gap). The invariant is dropped from every Kodkod search regardless of its active/inactive setting, while USE's own SOIL-based check -v still evaluates it correctly (separate interpreter path). Note: only CivilStatus is live/reproducible by running the checked-in scenario as shipped -- MultipleInheritance's own header comment documents that its originally-affected invariants were rewritten to work around this exact bug, so the shipped file no longer triggers it; it corroborates the defect's prior discovery, not a currently-reproducible instance.",
               "satScenarioIds": [
-                "04-CivilStatus",
-                "10-MultipleInheritance"
+                "CivilStatus",
+                "MultipleInheritance"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "04-CivilStatus",
-                "10-MultipleInheritance"
+                "CivilStatus",
+                "MultipleInheritance"
               ],
               "coverageNote": ""
             }
@@ -1834,9 +1834,9 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "org/tzi/use/kodkod/transform/ocl/OperationExpressionVisitor.java:65-70 (OperationStack.INSTANCE.contains(...) \u2192 throw TransformationException(\"... is recursive and thereby cannot be transformed.\")); org/tzi/use/kodkod/transform/OperationStack.java",
-              "notes": "Confirmed in examples/12-RecursiveTree: AcyclicParentship (which calls self-recursive childPlus2\u2192childPlusOnNodeSet) is detected and dropped from the search; the plugin continues with remaining invariants rather than aborting. closure()-based recursion (05-Genealogy) is unaffected since it's a built-in operator, not a user-defined recursive call.",
+              "notes": "Confirmed in examples/RecursiveTree: AcyclicParentship (which calls self-recursive childPlus2\u2192childPlusOnNodeSet) is detected and dropped from the search; the plugin continues with remaining invariants rather than aborting. closure()-based recursion (Genealogy) is unaffected since it's a built-in operator, not a user-defined recursive call.",
               "satScenarioIds": [
-                "12-RecursiveTree"
+                "RecursiveTree"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -1851,21 +1851,21 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/kodkod/InvariantIndepChecker.java: validate(IModel) (lines 72-89) \u2014 negates each invariant in turn and re-solves, restoring state afterward",
-              "notes": "Confirmed by examples/02-EmployeeInvariants, 03-CompanyERSchema, 04-CivilStatus, 05-Genealogy, 06-AssociationClass \u2014 each reports per-invariant Independent/Dependent/Not-independent results.",
+              "notes": "Confirmed by examples/EmployeeInvariants, CompanyERSchema, CivilStatus, Genealogy, AssociationClass \u2014 each reports per-invariant Independent/Dependent/Not-independent results.",
               "satScenarioIds": [
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass"
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass"
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass"
               ],
               "coverageNote": ""
             }
@@ -1878,13 +1878,13 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "InvariantIndepChecker.validate(IModel, String className, String invariantName) (lines 48-70); org/tzi/use/kodkod/plugin/InvariantIndepCmd.java:66-75 splits the 'Class::Inv' argument and dispatches to it",
-              "notes": "Confirmed by examples/03-CompanyERSchema's invIndepSingle.cmd: identical per-invariant result to the full sweep, at roughly half the wall-clock time.",
+              "notes": "Confirmed by examples/CompanyERSchema's invIndepSingle.cmd: identical per-invariant result to the full sweep, at roughly half the wall-clock time.",
               "satScenarioIds": [
-                "03-CompanyERSchema"
+                "CompanyERSchema"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "03-CompanyERSchema"
+                "CompanyERSchema"
               ],
               "coverageNote": ""
             }
@@ -1897,13 +1897,13 @@
             "kk-modelvalidator": {
               "status": "degraded",
               "evidence": "InvariantIndepCmd.performCommand() (lines 37-52): 'if(arguments.length != 2 && arguments.length != 3){ ... error ...}' \u2014 there is no code path that runs validate(model) when the third argument is simply omitted without also omitting the property-file section argument in a way that still supplies an invariant token",
-              "notes": "examples/02-EmployeeInvariants explicitly documents that the upstream PDF guide describes the invariant-name argument as optional (defaulting to all); this build's actual InvariantIndepCmd rejects the command outright without it. Behavioral drift from the documented contract, reproduced against the unmodified plugin source.",
+              "notes": "examples/EmployeeInvariants explicitly documents that the upstream PDF guide describes the invariant-name argument as optional (defaulting to all); this build's actual InvariantIndepCmd rejects the command outright without it. Behavioral drift from the documented contract, reproduced against the unmodified plugin source.",
               "satScenarioIds": [
-                "02-EmployeeInvariants"
+                "EmployeeInvariants"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "02-EmployeeInvariants"
+                "EmployeeInvariants"
               ],
               "coverageNote": ""
             }
@@ -1918,19 +1918,19 @@
               "evidence": "InvariantIndepChecker.activateAllInvariants()/resetInvariantStates() (lines 97-119): every invariant gets inv.reset() (which activates it) before the sweep; originally-inactive/negated invariants are tracked and restored afterward",
               "notes": "Intentional design: independence of an invariant is checked against the full invariant set, not just the subset a particular .properties config happened to leave active. State is correctly restored via resetInvariantStates() after the sweep.",
               "satScenarioIds": [
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass"
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass"
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass"
               ],
               "coverageNote": ""
             }
@@ -1943,13 +1943,13 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "InvariantIndepChecker.trivially_unsatisfiable() \u2192 'Dependent'; .unsatisfiable() \u2192 'Not independent for given properties' (lines 172-180)",
-              "notes": "Confirmed in examples/06-AssociationClass: EmployeeAndEmployerAlwaysLinked/AtMostOneEmployer come back 'Dependent' because their negation is rejected as trivially unsatisfiable by Kodkod's bound propagation before the SAT solver ever runs (they restate structural facts already enforced by the association-class/multiplicity declaration itself), a genuinely different code path from the searched 'Not independent for given properties' case.",
+              "notes": "Confirmed in examples/AssociationClass: EmployeeAndEmployerAlwaysLinked/AtMostOneEmployer come back 'Dependent' because their negation is rejected as trivially unsatisfiable by Kodkod's bound propagation before the SAT solver ever runs (they restate structural facts already enforced by the association-class/multiplicity declaration itself), a genuinely different code path from the searched 'Not independent for given properties' case.",
               "satScenarioIds": [
-                "06-AssociationClass"
+                "AssociationClass"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "06-AssociationClass"
+                "AssociationClass"
               ],
               "coverageNote": ""
             }
@@ -1964,37 +1964,37 @@
               "evidence": "org/tzi/kodkod/KodkodModelValidator.java: validate() switch on solution.outcome() (lines 49-66), dispatching to abstract satisfiable()/trivially_satisfiable()/trivially_unsatisfiable()/unsatisfiable()",
               "notes": "The trivial/non-trivial distinction itself is Kodkod's own bound-propagation short-circuit (kodkod.engine.Solver), not plugin logic; the plugin correctly surfaces the distinction to every subclass (UseKodkodModelValidator, InvariantIndepChecker, scrolling validators).",
               "satScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "09-CollectionSemantics",
-                "10-MultipleInheritance",
-                "17-ZebraPuzzle",
-                "12-RecursiveTree",
-                "16-GraphColoring",
-                "13-Redefines",
-                "15-NQueens",
-                "11-Subsets",
-                "14-Sudoku"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "CollectionSemantics",
+                "MultipleInheritance",
+                "ZebraPuzzle",
+                "RecursiveTree",
+                "GraphColoring",
+                "Redefines",
+                "NQueens",
+                "Subsets",
+                "Sudoku"
               ],
               "unsatScenarioIds": [
-                "08-AggregationComposition"
+                "AggregationComposition"
               ],
               "validationOracleScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "08-AggregationComposition",
-                "10-MultipleInheritance",
-                "13-Redefines"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "AggregationComposition",
+                "MultipleInheritance",
+                "Redefines"
               ],
               "coverageNote": ""
             }
@@ -2007,14 +2007,14 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/kodkod/helper/ProofHelper.java: buildProofString()/minimize() (uses kodkod.engine.ucore.HybridStrategy); UseKodkodModelValidator.handleFailure() (lines 70-74) calls it when solution.proof() != null; requires solver.options().setLogTranslation(1), set in KodkodSolver.solve() line 51",
-              "notes": "Confirmed by examples/07-Inheritance (an explicit proof node naming 'Undefined in (univ . Vehicle_licensePlate)' for a mis-scoped attribute bound) and examples/14-Sudoku (proof node for a contradictory association bound).",
+              "notes": "Confirmed by examples/Inheritance (an explicit proof node naming 'Undefined in (univ . Vehicle_licensePlate)' for a mis-scoped attribute bound) and examples/Sudoku (proof node for a contradictory association bound).",
               "satScenarioIds": [
-                "07-Inheritance",
-                "14-Sudoku"
+                "Inheritance",
+                "Sudoku"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "07-Inheritance"
+                "Inheritance"
               ],
               "coverageNote": ""
             }
@@ -2027,13 +2027,13 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "KodkodModelValidatorConfiguration.getModelEnricher() returns ObjectDiagramModelEnricher when automaticDiagramExtraction is on; org/tzi/use/kodkod/transform/enrich/ObjectDiagramModelEnricher.java extractObjects()/extractLinks()/extractAttributeValues() seed each class/attribute/association Configurator's specificValues from the current MSystemState before the search runs; toggled via ConfigurationCmd's 'automaticDiagramExtraction:=on/off' (also documented in useplugin.xml's -config help text: '...determines if the current object diagram should be used as partial solution')",
-              "notes": "Confirmed by examples/05-Genealogy's partial-state.soil + partialCompletion.cmd: a hand-built 2-object/1-link instance loaded via SOIL survives unchanged into a Kodkod-completed 4-object/2-link solution when automaticDiagramExtraction:=on precedes -validate.",
+              "notes": "Confirmed by examples/Genealogy's partial-state.soil + partialCompletion.cmd: a hand-built 2-object/1-link instance loaded via SOIL survives unchanged into a Kodkod-completed 4-object/2-link solution when automaticDiagramExtraction:=on precedes -validate.",
               "satScenarioIds": [
-                "05-Genealogy"
+                "Genealogy"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "05-Genealogy"
+                "Genealogy"
               ],
               "coverageNote": ""
             }
@@ -2046,13 +2046,13 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/use/kodkod/plugin/KodkodCTScrollingValidateCmd.java (reads terms from file/-ct or interactively, compiles each with OCLCompiler + DefaultExpressionVisitor); org/tzi/use/kodkod/UseCTScrollingKodkodModelValidator.java: readSolutionTerms()/genClassifyingTermFormula()/evaluateKodkod() cross-checks the Kodkod-evaluated term value against USE's own OCL evaluator; registered as 'mv -scrollingCT' in useplugin.xml",
-              "notes": "Confirmed by examples/05-Genealogy's descLevels.ct + classifyingTermsCmd: pages through solutions with distinct term-value triples (4,2,0)\u2192(4,1,1)\u2192(3,3,0), independently re-run and confirmed.",
+              "notes": "Confirmed by examples/Genealogy's descLevels.ct + classifyingTermsCmd: pages through solutions with distinct term-value triples (4,2,0)\u2192(4,1,1)\u2192(3,3,0), independently re-run and confirmed.",
               "satScenarioIds": [
-                "05-Genealogy"
+                "Genealogy"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "05-Genealogy"
+                "Genealogy"
               ],
               "coverageNote": ""
             }
@@ -2065,13 +2065,13 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/use/kodkod/plugin/KodkodCTScrollingAllValidateCmd.java; org/tzi/use/kodkod/UseCTScrollingAllKodkodModelValidator.java; registered as 'mv -scrollingAllCT' in useplugin.xml",
-              "notes": "Confirmed by examples/05-Genealogy: finds exactly 2 term-distinct classes ((1,2,0),(2,1,0)) among the 6 raw solutions -scrollingAll already finds for the same [scrolling] section.",
+              "notes": "Confirmed by examples/Genealogy: finds exactly 2 term-distinct classes ((1,2,0),(2,1,0)) among the 6 raw solutions -scrollingAll already finds for the same [scrolling] section.",
               "satScenarioIds": [
-                "05-Genealogy"
+                "Genealogy"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "05-Genealogy"
+                "Genealogy"
               ],
               "coverageNote": ""
             }
@@ -2084,39 +2084,39 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/kodkod/model/config/impl/ClassConfigurator.java: setLimits()/generateObjectsTuple(); PropertyConfigurationVisitor.setClassConfigurator()/visitClass() reads 'ClassName_min'/'ClassName_max'/'ClassName := Set{a,b,c}'",
-              "notes": "Used successfully throughout every example (e.g. 01-Library's 3 Users/3 Copies/3 Books, 14-Sudoku's Row/Column/Square/Field bounds).",
+              "notes": "Used successfully throughout every example (e.g. Library's 3 Users/3 Copies/3 Books, Sudoku's Row/Column/Square/Field bounds).",
               "satScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "09-CollectionSemantics",
-                "10-MultipleInheritance",
-                "17-ZebraPuzzle",
-                "12-RecursiveTree",
-                "16-GraphColoring",
-                "13-Redefines",
-                "15-NQueens",
-                "11-Subsets",
-                "14-Sudoku"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "CollectionSemantics",
+                "MultipleInheritance",
+                "ZebraPuzzle",
+                "RecursiveTree",
+                "GraphColoring",
+                "Redefines",
+                "NQueens",
+                "Subsets",
+                "Sudoku"
               ],
               "unsatScenarioIds": [
-                "08-AggregationComposition"
+                "AggregationComposition"
               ],
               "validationOracleScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "08-AggregationComposition",
-                "10-MultipleInheritance",
-                "13-Redefines"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "AggregationComposition",
+                "MultipleInheritance",
+                "Redefines"
               ],
               "coverageNote": ""
             }
@@ -2131,37 +2131,37 @@
               "evidence": "org/tzi/kodkod/model/config/impl/AttributeConfigurator.java: setLimits()/setCollectionSize()/numberOfDefinedValues()/numberOfCollectionValues(); PropertyConfigurationVisitor.setAttributeConfigurator() reads '<Class>_<attr>_min/_max/_minSize/_maxSize'",
               "notes": "Domain-level attribute value declarations (e.g. 'Book_price := Set{10,20,30}', no specific object) go through this path and work correctly across every example.",
               "satScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "09-CollectionSemantics",
-                "10-MultipleInheritance",
-                "17-ZebraPuzzle",
-                "12-RecursiveTree",
-                "16-GraphColoring",
-                "13-Redefines",
-                "15-NQueens",
-                "11-Subsets",
-                "14-Sudoku"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "CollectionSemantics",
+                "MultipleInheritance",
+                "ZebraPuzzle",
+                "RecursiveTree",
+                "GraphColoring",
+                "Redefines",
+                "NQueens",
+                "Subsets",
+                "Sudoku"
               ],
               "unsatScenarioIds": [
-                "08-AggregationComposition"
+                "AggregationComposition"
               ],
               "validationOracleScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "08-AggregationComposition",
-                "10-MultipleInheritance",
-                "13-Redefines"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "AggregationComposition",
+                "MultipleInheritance",
+                "Redefines"
               ],
               "coverageNote": ""
             }
@@ -2174,9 +2174,9 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "AttributeConfigurator.lowerBound() (kk-modelvalidator/.../model/config/impl/AttributeConfigurator.java:63-92): 'object = specific[0]; ... lower.add(tupleFactory.tuple(object, ...))' uses the bare object name directly as the Kodkod atom, whereas ClassConfigurator.generateObjectsTuple() (ClassConfigurator.java:20-36) always names class atoms '<Class>_<object>' \u2014 no equivalent prefix/fallback exists here (unlike AssociationConfigurator.lowerBound(), which does have a universe.contains()-guarded fallback, lines 56-61)",
-              "notes": "Confirmed by examples/14-Sudoku (Sudoku.properties header + Sudoku.use header): 'Field1_value := 6' / 'Row1_index := 1' throws 'No such atom in the universe: Row1' from mv -validate, for any model, not just Sudoku. Worked around there by leaving such attributes solver-chosen and encoding givens as coordinate-conditioned invariants instead.",
+              "notes": "Confirmed by examples/Sudoku (Sudoku.properties header + Sudoku.use header): 'Field1_value := 6' / 'Row1_index := 1' throws 'No such atom in the universe: Row1' from mv -validate, for any model, not just Sudoku. Worked around there by leaving such attributes solver-chosen and encoding givens as coordinate-conditioned invariants instead.",
               "satScenarioIds": [
-                "14-Sudoku"
+                "Sudoku"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -2191,39 +2191,39 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/kodkod/model/config/impl/AssociationConfigurator.java: setLimits()/numberOfLinks(); PropertyConfigurationVisitor.setAssociationConfigurator()/readComplexElements() reads '<Assoc>_min/_max' and '<Assoc> := Set{(a1,b1),(a2,b2)}'",
-              "notes": "Used throughout every example with associations (01-Library's 6 links, 03-CompanyERSchema's derived-FK associations, etc.).",
+              "notes": "Used throughout every example with associations (Library's 6 links, CompanyERSchema's derived-FK associations, etc.).",
               "satScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "09-CollectionSemantics",
-                "10-MultipleInheritance",
-                "17-ZebraPuzzle",
-                "12-RecursiveTree",
-                "16-GraphColoring",
-                "13-Redefines",
-                "15-NQueens",
-                "11-Subsets",
-                "14-Sudoku"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "CollectionSemantics",
+                "MultipleInheritance",
+                "ZebraPuzzle",
+                "RecursiveTree",
+                "GraphColoring",
+                "Redefines",
+                "NQueens",
+                "Subsets",
+                "Sudoku"
               ],
               "unsatScenarioIds": [
-                "08-AggregationComposition"
+                "AggregationComposition"
               ],
               "validationOracleScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "08-AggregationComposition",
-                "10-MultipleInheritance",
-                "13-Redefines"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "AggregationComposition",
+                "MultipleInheritance",
+                "Redefines"
               ],
               "coverageNote": ""
             }
@@ -2236,9 +2236,9 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "PropertyConfigurationVisitor.setAssociationConfigurator() (PropertyConfigurationVisitor.java:356-364) unconditionally calls configurator.setLimits(readSize(...,DefaultConfigurationValues.linksPerAssocMin=1,...), readSize(...,linksPerAssocMax=1,...)) a second time AFTER configurator.setSpecificValues(values) already derived limits from the literal's own tuple count; inside AssociationConfigurator.setLimits() (AssociationConfigurator.java:173-192), the 'max <= min' branch then overwrites the larger specific-value-derived max down to the smaller default, while min (already set higher by setSpecificValues) is left unchanged",
-              "notes": "Confirmed by examples/14-Sudoku's Sudoku.properties header: omitting 'BoardRows_min/_max' while still giving a 9-tuple Set{} literal produces the self-contradictory bound '#(BoardRows) >= 9 && #(BoardRows) <= 1' and an immediate TRIVIALLY_UNSATISFIABLE, root-caused to this exact source location by the example author. Every plain association therefore needs explicit _min/_max even when a Set{} literal is also given.",
+              "notes": "Confirmed by examples/Sudoku's Sudoku.properties header: omitting 'BoardRows_min/_max' while still giving a 9-tuple Set{} literal produces the self-contradictory bound '#(BoardRows) >= 9 && #(BoardRows) <= 1' and an immediate TRIVIALLY_UNSATISFIABLE, root-caused to this exact source location by the example author. Every plain association therefore needs explicit _min/_max even when a Set{} literal is also given.",
               "satScenarioIds": [
-                "14-Sudoku"
+                "Sudoku"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -2255,9 +2255,9 @@
               "evidence": "KodkodModelValidatorConfiguration.setBitwidth() (range-validated 1-32); KodkodSolver.solve() line 56 passes it straight to solver.options().setBitwidth(...); PropertyConfigurationVisitor.visitConfigurableType() (lines 199-241) warns via calculateRequiredBitwidth() when specific/min/max Integer values need more bits than configured",
               "notes": "Set via 'mv -config bitwidth:=<i>' (ConfigurationCmd) or GUI; persisted to mv.ini via saveFile()/readFile().",
               "satScenarioIds": [
-                "16-GraphColoring",
-                "14-Sudoku",
-                "15-NQueens"
+                "GraphColoring",
+                "Sudoku",
+                "NQueens"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -2272,9 +2272,9 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "KodkodSolver.solve() passes bitwidth straight through with no semantic sufficiency check beyond PropertyConfigurationVisitor's literal-value-vs-bitwidth warnings, which only inspect configured domain/specific values, not values arising from derived expressions inside invariants",
-              "notes": "Confirmed by examples/16-GraphColoring: bitwidth 4/5/6 reports UNSATISFIABLE in ~15-25ms for an instance constructively proven 3-colorable (colors only ever need values 1..3); only bitwidth\u22658 gives the correct SATISFIABLE result. No warning fires because the failure comes from Kodkod's internal two's-complement overflow handling in constraint translation, which the plugin's own bitwidth-sufficiency check doesn't model.",
+              "notes": "Confirmed by examples/GraphColoring: bitwidth 4/5/6 reports UNSATISFIABLE in ~15-25ms for an instance constructively proven 3-colorable (colors only ever need values 1..3); only bitwidth\u22658 gives the correct SATISFIABLE result. No warning fires because the failure comes from Kodkod's internal two's-complement overflow handling in constraint translation, which the plugin's own bitwidth-sufficiency check doesn't model.",
               "satScenarioIds": [
-                "16-GraphColoring"
+                "GraphColoring"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -2289,9 +2289,9 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "org/tzi/use/kodkod/transform/MultiplicityTransformator.java: transform()/singleValue() \u2014 dispatches on 'part.length() == 1' to treat it as a single fixed value, else splits on '..' assuming a range",
-              "notes": "Single-digit fixed multiplicities (Row[9], Field[6]) parse correctly and are used throughout the examples. Confirmed broken for any 2+-digit fixed (non-ranged) cardinality by examples/14-Sudoku: 'Field[81]'/'Field[36]'/'Field[12]' all throw ArrayIndexOutOfBoundsException at transform time, since singleValue()'s length-based dispatch wrongly routes a plain 2-digit number into the '..'-split range-parsing branch, which finds no separator. Worked around in the example by using 'Field[*]' plus explicit .properties bounds instead.",
+              "notes": "Single-digit fixed multiplicities (Row[9], Field[6]) parse correctly and are used throughout the examples. Confirmed broken for any 2+-digit fixed (non-ranged) cardinality by examples/Sudoku: 'Field[81]'/'Field[36]'/'Field[12]' all throw ArrayIndexOutOfBoundsException at transform time, since singleValue()'s length-based dispatch wrongly routes a plain 2-digit number into the '..'-split range-parsing branch, which finds no separator. Worked around in the example by using 'Field[*]' plus explicit .properties bounds instead.",
               "satScenarioIds": [
-                "14-Sudoku"
+                "Sudoku"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -2359,53 +2359,53 @@
               "evidence": "kk-modelvalidator/src/main/java/org/tzi/use/kodkod/plugin/KodkodValidateCmd.java (performCommand/handleArguments/extractConfigureAndValidate); registered as shellcmd=\"modelvalidator -validate\" alias=\"mv -validate\" in src/main/resources/resources/*.xml; drives org.tzi.use.kodkod.UseKodkodModelValidator.handleSolution()/createObjectDiagram()",
               "notes": "Loads/creates a properties config, transforms+enriches the model, runs KodkodSolver, and on SATISFIABLE reconstructs an object diagram via ObjectDiagramCreator, retrying (session.reset()+forbid tuples) if structural checks fail. Outcome also echoed directly to the shell (reportOutcomeDirectly) to work around a log4j classloader issue noted in-code.",
               "satScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "09-CollectionSemantics",
-                "10-MultipleInheritance",
-                "17-ZebraPuzzle",
-                "12-RecursiveTree",
-                "16-GraphColoring",
-                "13-Redefines",
-                "15-NQueens",
-                "11-Subsets",
-                "14-Sudoku"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "CollectionSemantics",
+                "MultipleInheritance",
+                "ZebraPuzzle",
+                "RecursiveTree",
+                "GraphColoring",
+                "Redefines",
+                "NQueens",
+                "Subsets",
+                "Sudoku"
               ],
               "unsatScenarioIds": [
-                "08-AggregationComposition",
-                "01-Library-UNSAT",
-                "02-EmployeeInvariants-UNSAT",
-                "03-CompanyERSchema-UNSAT",
-                "04-CivilStatus-UNSAT",
-                "05-Genealogy-UNSAT",
-                "06-AssociationClass-UNSAT",
-                "07-Inheritance-UNSAT",
-                "09-CollectionSemantics-UNSAT",
-                "10-MultipleInheritance-UNSAT",
-                "11-Subsets-UNSAT",
-                "12-RecursiveTree-UNSAT",
-                "13-Redefines-UNSAT",
-                "14-Sudoku-UNSAT",
-                "15-NQueens-UNSAT",
-                "16-GraphColoring-UNSAT",
-                "17-ZebraPuzzle-UNSAT"
+                "AggregationComposition",
+                "Library-UNSAT",
+                "EmployeeInvariants-UNSAT",
+                "CompanyERSchema-UNSAT",
+                "CivilStatus-UNSAT",
+                "Genealogy-UNSAT",
+                "AssociationClass-UNSAT",
+                "Inheritance-UNSAT",
+                "CollectionSemantics-UNSAT",
+                "MultipleInheritance-UNSAT",
+                "Subsets-UNSAT",
+                "RecursiveTree-UNSAT",
+                "Redefines-UNSAT",
+                "Sudoku-UNSAT",
+                "NQueens-UNSAT",
+                "GraphColoring-UNSAT",
+                "ZebraPuzzle-UNSAT"
               ],
               "validationOracleScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "08-AggregationComposition",
-                "10-MultipleInheritance",
-                "13-Redefines"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "AggregationComposition",
+                "MultipleInheritance",
+                "Redefines"
               ],
               "coverageNote": ""
             }
@@ -2420,16 +2420,16 @@
               "evidence": "kk-modelvalidator/src/main/java/org/tzi/use/kodkod/plugin/KodkodQueryCmd.java performCommand/evaluateQuery; org/tzi/kodkod/KodkodQueryCache.java; shellcmd=\"modelvalidator ?\" alias=\"mv ?\"",
               "notes": "Compiles an OCL expression with the real USE OCLCompiler, transforms it through DefaultExpressionVisitor into a Kodkod Formula/Expression/IntExpression, then evaluates it against the kodkod.engine.Evaluator cached from the last validate()/scroll call. Query evaluation is OFF by default (KodkodQueryCache.queryEnabled=false) and must be turned on with 'mv ? enable' before -validate runs, since PropertyConfigurationVisitor:322 only builds the extra query-support relations when isQueryEnabled() is true.",
               "satScenarioIds": [
-                "04-CivilStatus",
-                "09-CollectionSemantics",
-                "11-Subsets",
-                "13-Redefines",
-                "14-Sudoku"
+                "CivilStatus",
+                "CollectionSemantics",
+                "Subsets",
+                "Redefines",
+                "Sudoku"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "04-CivilStatus",
-                "13-Redefines"
+                "CivilStatus",
+                "Redefines"
               ],
               "coverageNote": ""
             }
@@ -2444,11 +2444,11 @@
               "evidence": "kk-modelvalidator/src/main/java/org/tzi/use/kodkod/plugin/KodkodScrollingValidateCmd.java, KodkodScrollingAllValidateCmd.java; UseScrollingKodkodModelValidator.java / UseScrollingAllKodkodModelValidator.java (nextSolution/previousSolution/showSolution)",
               "notes": "Static validator instance is kept across cmd invocations; 'next'/'previous'/'show(i)' route to a growing solutions list, re-solving via forbid-and-search (newSolution -> ModelConfigurator.forbid) only when advancing past the last cached solution. -scrollingAll eagerly exhausts the search space up front.",
               "satScenarioIds": [
-                "02-EmployeeInvariants"
+                "EmployeeInvariants"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "02-EmployeeInvariants"
+                "EmployeeInvariants"
               ],
               "coverageNote": ""
             }
@@ -2463,34 +2463,34 @@
               "evidence": "kk-modelvalidator/src/main/java/org/tzi/use/kodkod/solution/ObjectDiagramCreator.java create()/createObjects()/createElements()/createAssociationClasses(); ElementStrategy subclasses ObjectStrategy/LinkStrategy/LinkObjectStrategy/AttributeStrategy",
               "notes": "Classifies each Kodkod Relation by name-splitting/type lookups into object, link, link-object (association class) or attribute relations and replays them into a real MSystem via UseSystemApi. hasDiagramErrors() re-checks structure (checkStructure) plus re-evaluates every activated invariant's expandedExpression() with USE's own Evaluator against the reconstructed state -- a genuine cross-check, not a rubber stamp.",
               "satScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "09-CollectionSemantics",
-                "10-MultipleInheritance",
-                "17-ZebraPuzzle",
-                "12-RecursiveTree",
-                "16-GraphColoring",
-                "13-Redefines",
-                "15-NQueens",
-                "11-Subsets",
-                "14-Sudoku"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "CollectionSemantics",
+                "MultipleInheritance",
+                "ZebraPuzzle",
+                "RecursiveTree",
+                "GraphColoring",
+                "Redefines",
+                "NQueens",
+                "Subsets",
+                "Sudoku"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "01-Library",
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass",
-                "07-Inheritance",
-                "10-MultipleInheritance",
-                "13-Redefines"
+                "Library",
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass",
+                "Inheritance",
+                "MultipleInheritance",
+                "Redefines"
               ],
               "coverageNote": ""
             }
@@ -2595,11 +2595,11 @@
               "evidence": "kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/ModelTransformator.java:162-198 transformAssociation() branches on mAssociation.isDerived()/mAssociationEnd.isDerived() into factory.createDerivedAssociation/createDerivedAssociationEnd, wiring the OCL derive-expression and its VarDecl parameters; org/tzi/kodkod/model/impl/DerivedAssociation.java, DerivedAssociationEnd.java",
               "notes": "Genuinely distinct code path (not dead code like UnionAssociation): derive expressions and their typed parameters are captured and used to build the derived relation. Derived association classes are explicitly rejected instead (ModelTransformator.java:221-224, LOG.error 'Derived association classes are not supported', example is skipped/ignored rather than crashing).",
               "satScenarioIds": [
-                "03-CompanyERSchema"
+                "CompanyERSchema"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "03-CompanyERSchema"
+                "CompanyERSchema"
               ],
               "coverageNote": ""
             }
@@ -2612,9 +2612,9 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "kk-modelvalidator/src/main/java/org/tzi/kodkod/model/impl/UnionAssociation.java (empty class, constraints() just calls super.constraints() with a literal '// TODO Auto-generated method stub'); grep across src/main confirms the only IModelFactory implementation, SimpleFactory.java:47-53, has createAssociation()->`new Association(...)` and createDerivedAssociation()->`new DerivedAssociation(...)` but never `new UnionAssociation(...)` anywhere in the codebase",
-              "notes": "UnionAssociation is referenced only via `instanceof UnionAssociation` checks in VariableOperationVisitor.java:168-169/276 and two GUI files (PropertiesWriter.java:87, ChangeConfiguration.java:108/246) that can never be true since nothing ever instantiates it -- genuinely dead code. examples/11-Subsets's manifest question explicitly asks 'given the plugin's own Kodkod-side translator never reads subsets at all and never instantiates its own dedicated UnionAssociation class', and its features list includes 'dead-unionassociation-code'.",
+              "notes": "UnionAssociation is referenced only via `instanceof UnionAssociation` checks in VariableOperationVisitor.java:168-169/276 and two GUI files (PropertiesWriter.java:87, ChangeConfiguration.java:108/246) that can never be true since nothing ever instantiates it -- genuinely dead code. examples/Subsets's manifest question explicitly asks 'given the plugin's own Kodkod-side translator never reads subsets at all and never instantiates its own dedicated UnionAssociation class', and its features list includes 'dead-unionassociation-code'.",
               "satScenarioIds": [
-                "11-Subsets"
+                "Subsets"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -2629,9 +2629,9 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "kk-modelvalidator/src/main/java/org/tzi/kodkod/model/config/impl/AttributeConfigurator.java:104-187 upperBound() domainValues branch; PropertyConfigurationVisitor.java:125 `domainValues.addAll(readAttributeValues(attribute.type(), className + \"_\" + attribute.name(), ...))`",
-              "notes": "Unlike the per-object binding path above, the whole-class attribute value-set restriction (e.g. `Song_album = Set{1,2}` in examples/09-CollectionSemantics.properties, used successfully to force the pigeonhole collision) does not go through the buggy object-prefixing path at all -- it only restricts the attribute's value domain, not which object gets which value, so it is unaffected by the per-object bug above.",
+              "notes": "Unlike the per-object binding path above, the whole-class attribute value-set restriction (e.g. `Song_album = Set{1,2}` in examples/CollectionSemantics.properties, used successfully to force the pigeonhole collision) does not go through the buggy object-prefixing path at all -- it only restricts the attribute's value domain, not which object gets which value, so it is unaffected by the per-object bug above.",
               "satScenarioIds": [
-                "09-CollectionSemantics"
+                "CollectionSemantics"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -2648,19 +2648,19 @@
               "evidence": "kk-modelvalidator/src/main/java/org/tzi/use/kodkod/plugin/InvariantIndepCmd.java; org/tzi/kodkod/InvariantIndepChecker.java (createObjectDiagram/diagramCreator.create, mirrors UseKodkodModelValidator's reconstruction path); shellcmd=\"modelvalidator -invIndep\"",
               "notes": "Not explicitly requested in the task's feature list but directly adjacent to -validate; reuses the same ObjectDiagramCreator reconstruction machinery, so it inherits all of that path's tuple/UnlimitedNatural/oclInState/bag-semantics limitations identically.",
               "satScenarioIds": [
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass"
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "02-EmployeeInvariants",
-                "03-CompanyERSchema",
-                "04-CivilStatus",
-                "05-Genealogy",
-                "06-AssociationClass"
+                "EmployeeInvariants",
+                "CompanyERSchema",
+                "CivilStatus",
+                "Genealogy",
+                "AssociationClass"
               ],
               "coverageNote": ""
             }
@@ -2673,16 +2673,16 @@
             "kk-modelvalidator": {
               "status": "degraded",
               "evidence": "kk-modelvalidator/src/main/java/org/tzi/use/kodkod/UseCTScrollingKodkodModelValidator.java:readSolutionTerms() (lines ~152-167) explicitly evaluates each classifying term BOTH via the Kodkod evaluator and via USE's own OCL Evaluator on the same reconstructed state, and LOG.error's a divergence when found ('Kodkod and USE evaluate classifying term ... differently')",
-              "notes": "Agreement is actively checked and enforced (USE's own evaluation wins) inside the classifying-term-scrolling path specifically -- a genuine cross-check exists there. But the general-purpose mv ? query command (KodkodQueryCmd) has no such cross-check at all; it just evaluates directly against the cached kodkod.engine.Evaluator with no comparison to plain OCL. Concretely confirmed to diverge in examples/09-CollectionSemantics (collect() Bag collapse) and examples/13-Redefines (redefines substitution), i.e. the two query paths are known to disagree in exactly the cases documented elsewhere in this table.",
+              "notes": "Agreement is actively checked and enforced (USE's own evaluation wins) inside the classifying-term-scrolling path specifically -- a genuine cross-check exists there. But the general-purpose mv ? query command (KodkodQueryCmd) has no such cross-check at all; it just evaluates directly against the cached kodkod.engine.Evaluator with no comparison to plain OCL. Concretely confirmed to diverge in examples/CollectionSemantics (collect() Bag collapse) and examples/Redefines (redefines substitution), i.e. the two query paths are known to disagree in exactly the cases documented elsewhere in this table.",
               "satScenarioIds": [
-                "05-Genealogy",
-                "09-CollectionSemantics",
-                "13-Redefines"
+                "Genealogy",
+                "CollectionSemantics",
+                "Redefines"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "05-Genealogy",
-                "13-Redefines"
+                "Genealogy",
+                "Redefines"
               ],
               "coverageNote": ""
             }

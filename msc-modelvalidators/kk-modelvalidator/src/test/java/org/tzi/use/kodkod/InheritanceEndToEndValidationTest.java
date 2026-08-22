@@ -32,7 +32,7 @@ import org.tzi.use.uml.sys.MSystem;
 import org.tzi.use.uml.sys.MSystemState;
 
 /**
- * Regression-protects {@code examples/07-Inheritance}: a class hierarchy (generalization) with a
+ * Regression-protects {@code examples/Inheritance}: a class hierarchy (generalization) with a
  * superclass-level invariant and subclass-specific invariants -- a structural OCL/UML feature the
  * {@code transform/ocl} unit suite never touches, and which had no example anywhere in this plugin
  * before this one (see {@code examples/README.md}).
