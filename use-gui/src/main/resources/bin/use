@@ -18,5 +18,11 @@ fi
 
 export LD_LIBRARY_PATH="$USE_HOME/lib:$LD_LIBRARY_PATH"
 
+# Native SAT solvers for the Kodkod Model Validator plugin (MiniSat/MiniSatProver/Lingeling;
+# see kk-modelvalidator/vendored-solvers/README.md). Set via the standard JVM flag at launch
+# rather than the plugin's own runtime java.library.path mutation, which relies on a
+# JDK-8-only reflection trick (ClassLoader.usr_paths) that no longer exists on modern JDKs.
+SOLVER_LIB_DIR="$USE_HOME/lib/plugins/modelValidatorPlugin/x64"
+
 # set cmd for running USE
-java $VMARGS -jar "$USE_JAR" "$@"
+java $VMARGS -Djava.library.path="$SOLVER_LIB_DIR" -jar "$USE_JAR" "$@"

@@ -115,7 +115,9 @@ fabric.properties
 /use-core/target
 /use-gui/target
 /use-assembly/target
-/kk-modelvalidator/target
+/msc-modelvalidators/kk-modelvalidator/target
+/msc-modelvalidators/benchmark/target
+/msc-modelvalidators/unc-modelvalidator/target
 
 **/.DS_Store
 

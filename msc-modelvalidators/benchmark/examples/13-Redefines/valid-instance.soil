@@ -1,0 +1,29 @@
+-- Hand-built (NOT Kodkod-searched) instance of the Redefines model: one
+-- plain AB link (a1-b1) and one redefining CD link (c1-d1). Loaded via the
+-- plain USE `open' command (see valid-instance.cmd), which auto-detects a
+-- non-".use"/non-model file and executes it line by line exactly like a
+-- .cmd script.
+--
+-- a1/b1: ordinary A/B instances, linked only via AB, non-empty tags.
+-- c1/d1: C < A and D < B, linked only via CD, which redefines AB's slot for
+--        these two -- so c1.b (the SUPERCLASS-declared role) resolves to
+--        d1, not to some separate B. d1.tagD = 'child-d' satisfies
+--        RedefinedRoleTagCheck.
+
+!create a1 : A
+!set a1.tagA := 'root-a'
+
+!create b1 : B
+!set b1.tagB := 'root-b'
+
+!insert (a1,b1) into AB
+
+!create c1 : C
+!set c1.tagA := 'child-a'
+!set c1.tagC := 'child-c'
+
+!create d1 : D
+!set d1.tagB := 'child-b'
+!set d1.tagD := 'child-d'
+
+!insert (c1,d1) into CD

@@ -20,7 +20,9 @@
         </dependency>
         <!-- Declared so Maven's reactor builds kk-modelvalidator before this assembly step, exactly
              like the use-gui dependency above: assembly.xml pulls the built jar from
-             kk-modelvalidator/target, same pattern as use-gui.jar from use-gui/target. -->
+             msc-modelvalidators/kk-modelvalidator/target, same pattern as use-gui.jar from
+             use-gui/target. Dependency resolution is by GAV, not path, so this reference is
+             unaffected by kk-modelvalidator's move under msc-modelvalidators/. -->
         <dependency>
             <groupId>org.tzi.use</groupId>
             <artifactId>kk-modelvalidator</artifactId>

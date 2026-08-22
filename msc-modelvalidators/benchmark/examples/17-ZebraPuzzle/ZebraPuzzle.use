@@ -1,0 +1,190 @@
+-- ZebraPuzzle.use -- the classic "Einstein's riddle" / Zebra Puzzle,
+-- authored from scratch for this thesis project (msc-4, Trong-Nghia Be) as
+-- a performance stress test for the KK-ModelValidator plugin.
+--
+-- Not adapted from any upstream USE example or paper -- there is no prior
+-- .use encoding of the Zebra Puzzle anywhere in this repository or in the
+-- plugin's own history. The puzzle itself is the well-known "Life
+-- International" version first published in Life International magazine,
+-- 17 December 1962 (often reprinted, e.g. in Yin Wang's widely cited essay
+-- "Zebra Puzzle in Prolog and Logic Programming"). The clue wording below
+-- is a direct, faithful restatement of that canonical 15-clue version
+-- (5 houses in a row, 5 categories of 5 distinct values each), chosen
+-- specifically because a weaker/simplified variant would defeat the point
+-- of using it as a hard combinatorial stress test.
+--
+-- Five houses, in a row, each with a distinct color, a resident of a
+-- distinct nationality, a distinct drink, a distinct brand of cigarette/
+-- tobacco, and a distinct pet. 14 substantive interlocking clues (a 15th,
+-- "there are five houses", is just the population bound) determine the
+-- entire arrangement uniquely. The two questions the puzzle is famous for:
+-- who drinks water, and who owns the zebra? (Answer, confirmed by actual
+-- execution below: the Norwegian drinks water; the Japanese owns the
+-- zebra.)
+--
+-- Modeled as a single House class: one attribute per category, plus an
+-- Integer "position" (1..5, left to right) used to express the "immediately
+-- left/right of" and "next to" clues arithmetically. All-different is
+-- expressed directly as a pairwise OCL invariant per attribute (no
+-- pre-existing "key" concept applies here, since none of these attributes
+-- are string-typed identifiers) -- structurally this makes every category
+-- a permutation of the 5 houses, which is exactly what makes the puzzle
+-- hard for a naive/uninformed solver: 5 interacting bijections (120^5
+-- raw combinations before any clue is even applied) with only local
+-- (adjacency-based) constraints to prune the search.
+
+model ZebraPuzzle
+
+enum Color {Red, Green, Ivory, Yellow, Blue}
+enum Nationality {Englishman, Spaniard, Ukrainian, Norwegian, Japanese}
+enum Drink {Coffee, Tea, Milk, OrangeJuice, Water}
+enum Smoke {OldGold, Kools, Chesterfields, LuckyStrike, Parliaments}
+enum Pet {Dog, Snails, Fox, Horse, Zebra}
+
+class House
+
+attributes
+  position    : Integer
+  color       : Color
+  nationality : Nationality
+  drink       : Drink
+  smoke       : Smoke
+  pet         : Pet
+
+constraints
+
+  -- Structural facts: 5 houses in a row, numbered 1..5 left to right, and
+  -- every category is a bijection onto the 5 houses (all-different).
+  inv PositionRange:
+    self.position >= 1 and self.position <= 5
+
+  inv DistinctPosition:
+    House.allInstances->forAll(h1, h2 |
+      h1 <> h2 implies h1.position <> h2.position)
+
+  inv DistinctColor:
+    House.allInstances->forAll(h1, h2 |
+      h1 <> h2 implies h1.color <> h2.color)
+
+  inv DistinctNationality:
+    House.allInstances->forAll(h1, h2 |
+      h1 <> h2 implies h1.nationality <> h2.nationality)
+
+  inv DistinctDrink:
+    House.allInstances->forAll(h1, h2 |
+      h1 <> h2 implies h1.drink <> h2.drink)
+
+  inv DistinctSmoke:
+    House.allInstances->forAll(h1, h2 |
+      h1 <> h2 implies h1.smoke <> h2.smoke)
+
+  inv DistinctPet:
+    House.allInstances->forAll(h1, h2 |
+      h1 <> h2 implies h1.pet <> h2.pet)
+
+  -- Clue 2: The Englishman lives in the red house.
+  inv Clue02_EnglishmanRedHouse:
+    self.nationality = #Englishman implies self.color = #Red
+
+  -- Clue 3: The Spaniard owns the dog.
+  inv Clue03_SpaniardOwnsDog:
+    self.nationality = #Spaniard implies self.pet = #Dog
+
+  -- Clue 4: Coffee is drunk in the green house.
+  inv Clue04_CoffeeInGreenHouse:
+    self.color = #Green implies self.drink = #Coffee
+
+  -- Clue 5: The Ukrainian drinks tea.
+  inv Clue05_UkrainianDrinksTea:
+    self.nationality = #Ukrainian implies self.drink = #Tea
+
+  -- Clue 6: The green house is immediately to the right of the ivory
+  -- house. (Directional, not symmetric: green = ivory's position + 1.)
+  inv Clue06_GreenRightOfIvory:
+    self.color = #Ivory implies
+      House.allInstances->exists(h2 |
+        h2.color = #Green and h2.position = self.position + 1)
+
+  -- Clue 7: The Old Gold smoker owns snails.
+  inv Clue07_OldGoldOwnsSnails:
+    self.smoke = #OldGold implies self.pet = #Snails
+
+  -- Clue 8: Kools are smoked in the yellow house.
+  inv Clue08_KoolsInYellowHouse:
+    self.color = #Yellow implies self.smoke = #Kools
+
+  -- Clue 9: Milk is drunk in the middle house (house 3 of 5).
+  inv Clue09_MilkInMiddleHouse:
+    self.position = 3 implies self.drink = #Milk
+
+  -- Clue 10: The Norwegian lives in the first house.
+  inv Clue10_NorwegianFirstHouse:
+    self.nationality = #Norwegian implies self.position = 1
+
+  -- Clue 11: The Chesterfields smoker lives next to the man with the fox.
+  inv Clue11_ChesterfieldsNextToFox:
+    self.smoke = #Chesterfields implies
+      House.allInstances->exists(h2 |
+        h2.pet = #Fox and
+        (h2.position = self.position + 1 or h2.position = self.position - 1))
+
+  -- Clue 12: Kools are smoked in the house next to the house with the
+  -- horse.
+  inv Clue12_KoolsNextToHorse:
+    self.smoke = #Kools implies
+      House.allInstances->exists(h2 |
+        h2.pet = #Horse and
+        (h2.position = self.position + 1 or h2.position = self.position - 1))
+
+  -- Clue 13: The Lucky Strike smoker drinks orange juice.
+  inv Clue13_LuckyStrikeDrinksOJ:
+    self.smoke = #LuckyStrike implies self.drink = #OrangeJuice
+
+  -- Clue 14: The Japanese smokes Parliaments.
+  inv Clue14_JapaneseSmokesParliaments:
+    self.nationality = #Japanese implies self.smoke = #Parliaments
+
+  -- Clue 15: The Norwegian lives next to the blue house.
+  inv Clue15_NorwegianNextToBlue:
+    self.nationality = #Norwegian implies
+      House.allInstances->exists(h2 |
+        h2.color = #Blue and
+        (h2.position = self.position + 1 or h2.position = self.position - 1))
+
+  -- Clue16_FirstHouseIsNorwegian_Corollary -- NOT one of the puzzle's
+  -- original 14 clues (see the header comment above); added for this
+  -- port's own paired SAT/UNSAT benchmark scenario (see the header comment
+  -- of ZebraPuzzle.properties for the UNSAT section that uses it).
+  --
+  -- This is the converse of Clue10 (Norwegian implies position=1), and is a
+  -- direct, provable logical consequence of Clue10 ALONE, given the
+  -- structure already established by DistinctPosition/DistinctNationality:
+  -- since House_min=House_max=5 and both `position` (5 values, 1..5) and
+  -- `nationality` (5 enum literals) range over exactly 5 possible values on
+  -- exactly 5 House objects, an injective (all-different) map between two
+  -- sets of equal finite size is automatically a BIJECTION -- so both
+  -- "position" and "nationality" are bijections between House and their
+  -- respective 5-value domains, not merely injections. Consequently:
+  --   1) exactly one House has nationality = #Norwegian (call it hN) --
+  --      by the nationality bijection;
+  --   2) hN.position = 1 -- by Clue10, applied to hN;
+  --   3) exactly one House has position = 1 (call it h1) -- by the
+  --      position bijection;
+  --   4) hN.position = 1 = h1.position, and position is injective, so
+  --      hN = h1 (they are the same House object) -- therefore
+  --      h1.nationality = hN.nationality = #Norwegian.
+  -- This chain uses only Clue10 + the two bijection invariants -- none of
+  -- the other 13 named clues are needed -- so this invariant is TRUE (and
+  -- redundant) in every model that already satisfies Clue10, independently
+  -- of whether the rest of the puzzle is even solvable. Activating it
+  -- alongside the other 21 invariants (the default, unnamed section of
+  -- ZebraPuzzle.properties, left untouched) changes nothing: it is already
+  -- implied there, confirmed by re-running that section unchanged after
+  -- adding this invariant (see ZebraPuzzle.properties's header comment).
+  -- NEGATING it, however (done only in this port's dedicated UNSAT
+  -- section), directly and provably contradicts Clue10 by the same chain
+  -- run in reverse -- see that section's own comment for the full argument.
+  inv Clue16_FirstHouseIsNorwegian_Corollary:
+    self.position = 1 implies self.nationality = #Norwegian
+
+end

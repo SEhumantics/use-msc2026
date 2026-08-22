@@ -1,0 +1,28 @@
+-- Hand-built instance that is structurally valid (parses, both associations
+-- populated, the redefinition well-formedness rule satisfied) but
+-- deliberately VIOLATES exactly one invariant: A::TagANotEmpty
+-- (a.tagA <> ''). c1.tagA is set to the empty string here (c1 is a C, so it
+-- inherits TagANotEmpty from A).
+--
+-- Every other invariant still holds in this state:
+--   B::TagBNotEmpty        -- b1.tagB and d1.tagB are both non-empty (OK)
+--   C::RedefinedRoleTagCheck -- d1.tagD = 'child-d' (OK, unaffected by the
+--                               tagA change)
+
+!create a1 : A
+!set a1.tagA := 'root-a'
+
+!create b1 : B
+!set b1.tagB := 'root-b'
+
+!insert (a1,b1) into AB
+
+!create c1 : C
+!set c1.tagA := ''
+!set c1.tagC := 'child-c'
+
+!create d1 : D
+!set d1.tagB := 'child-b'
+!set d1.tagD := 'child-d'
+
+!insert (c1,d1) into CD

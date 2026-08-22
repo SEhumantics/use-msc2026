@@ -1,0 +1,246 @@
+[
+  {
+    "exampleId": "01-Library",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 9,
+    "numFailures": 0,
+    "failedInvariants": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "01-Library",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 9,
+    "numFailures": 1,
+    "failedInvariants": [
+      "Book::yearPlausible",
+      "Book::yearPlausible"
+    ],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "02-EmployeeInvariants",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 2,
+    "numFailures": 0,
+    "failedInvariants": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "02-EmployeeInvariants",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 2,
+    "numFailures": 1,
+    "failedInvariants": [
+      "Employee::PositiveSalary"
+    ],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "03-CompanyERSchema",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 29,
+    "numFailures": 0,
+    "failedInvariants": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "03-CompanyERSchema",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 29,
+    "numFailures": 1,
+    "failedInvariants": [
+      "Employee::salary_positive"
+    ],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "04-CivilStatus",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 5,
+    "numFailures": 0,
+    "failedInvariants": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "04-CivilStatus",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 5,
+    "numFailures": 1,
+    "failedInvariants": [
+      "Person::nameIsUnique"
+    ],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "05-Genealogy",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 9,
+    "numFailures": 1,
+    "failedInvariants": [
+      "Person::balancedBinaryTree"
+    ],
+    "exitCode": 0,
+    "note": "as expected (excluding documented out-of-scope [Person::balancedBinaryTree])"
+  },
+  {
+    "exampleId": "05-Genealogy",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 9,
+    "numFailures": 2,
+    "failedInvariants": [
+      "Person::balancedBinaryTree",
+      "Person::parentOlderChild"
+    ],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "06-AssociationClass",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 5,
+    "numFailures": 0,
+    "failedInvariants": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "06-AssociationClass",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 5,
+    "numFailures": 1,
+    "failedInvariants": [
+      "Employment::PositiveSalary"
+    ],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "07-Inheritance",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 3,
+    "numFailures": 0,
+    "failedInvariants": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "07-Inheritance",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 3,
+    "numFailures": 1,
+    "failedInvariants": [
+      "Car::ReasonableDoors"
+    ],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "08-AggregationComposition",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 4,
+    "numFailures": 0,
+    "failedInvariants": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "08-AggregationComposition",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 4,
+    "numFailures": 1,
+    "failedInvariants": [
+      "File::sizePositive"
+    ],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "10-MultipleInheritance",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 3,
+    "numFailures": 0,
+    "failedInvariants": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "10-MultipleInheritance",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 3,
+    "numFailures": 1,
+    "failedInvariants": [
+      "D::LevelsDiffer"
+    ],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "13-Redefines",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 3,
+    "numFailures": 0,
+    "failedInvariants": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "13-Redefines",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 3,
+    "numFailures": 1,
+    "failedInvariants": [
+      "A::TagANotEmpty"
+    ],
+    "exitCode": 0,
+    "note": "as expected"
+  }
+]

@@ -1,5 +1,10 @@
 # KK-ModelValidator: modernizing the Kodkod Model Validator plugin
 
+**Location note:** this module now lives at `msc-modelvalidators/kk-modelvalidator/`, grouped
+alongside the `benchmark` module that measures it and the reserved `z3-umodelvalidator` slot for the
+thesis's actual contribution (see "Seventh pass" below). Everything written before that regrouping
+below still describes real, unchanged history — only the path changed, not the content.
+
 **Status: builds cleanly, ships in the standard distribution, and its functionality is verified both
 by an automated end-to-end test and by manual inspection.** `mvn -B clean verify
 -Djava.awt.headless=true` from the reactor root — this project's actual acceptance command — passes,
@@ -612,6 +617,174 @@ translation gap like this one exists.
 independently of the solver's own report. All three pass. Floor gate after everything above:
 `tests=3311 errors=0 failures=461 skipped=122`, `[kk-floor] PASS` — the 3 new tests are pure additions, the
 461-failure floor is untouched.
+
+## Sixth pass: native SAT solvers, restoring a JDK-broken capability
+
+Prompted directly by a baseline-fidelity concern: does this port give the crisp Kodkod baseline its
+*maximal* power, or is it quietly weaker than what the original plugin could do? Investigation traced the
+`Only default SatSolver 'DefaultSAT4J' can be used! Failed to get field handle to set library path` WARN
+seen in every prior run to `org.tzi.kodkod.helper.LibraryPathHelper` — **unmodified original 2013 source,
+never touched by this port** — which reflects into `ClassLoader.usr_paths`, a private JDK-8-era field that
+no longer exists on JDK 21 (`NoSuchFieldException`). This would break identically on the pristine original
+plugin under any modern JDK; it is not a porting regression, but it did mean only `DefaultSAT4J` was
+reachable, when the plugin's own design supports six solver backends via `-config satsolver := <Name>`
+(reflectively resolved against `kodkod.engine.satlab.SATFactory`'s public fields — a fully generic,
+unmodified mechanism).
+
+**Fixed without touching any plugin or Kodkod code**, by setting `java.library.path` at JVM *launch*
+(the standard, supported JVM flag) instead of relying on the broken runtime mutation:
+`bin/use`/`start_use.bat` and `examples/run-example.sh` now all pass
+`-Djava.library.path=.../lib/plugins/modelValidatorPlugin/x64` unconditionally. The native solver
+binaries themselves are vendored at `kk-modelvalidator/vendored-solvers/` — the exact files the plugin's
+own `-downloadSolvers` command fetches from its original URL (still reachable, confirmed), vendored for
+reproducibility exactly like `kodkod-2.1.jar`, and placed at the precise path
+`KodkodModelValidatorConfiguration.getSolverFolder()` already expects.
+
+**Confirmed working, each actually run against a real built distribution via `bin/use`:**
+`DefaultSAT4J`, `LightSAT4J` (pure Java), `MiniSat`, `MiniSatProver`, `Lingeling` (native — load and solve
+correctly). `Glucose` and `CryptoMiniSat` do not work in this environment: Glucose's own native code fails
+Kodkod's solver-availability probe despite `ldd` showing every shared-library dependency resolving
+cleanly (a genuine incompatibility in the 2012-era build itself, not a setup problem); `CryptoMiniSat`
+isn't even a valid field on Kodkod 2.1's `SATFactory` — the plugin's own `CRYPTOMINISAT_NAME` constant is
+stale relative to this Kodkod version, predating this port. Full detail, including the exact bytecode
+trace of `NativeSolver.loadLibrary()`'s two-tier lookup (plain `System.loadLibrary`, then a
+`kodkod.<name>`-prefixed fallback), is in `kk-modelvalidator/vendored-solvers/README.md`.
+
+**Whether this matters for the thesis's own evaluation was checked, not assumed**: proposal §8's Studies
+A and B compare capability/correctness, not speed; Study C characterizes the *Z3* backend's own scaling,
+not a Kodkod-vs-Z3 race; the roadmap's own S3 validation step asks for SAT/UNSAT and structural agreement,
+never runtime. So this was optional hardening, not a correctness fix — done because "maximal baseline
+power" was explicitly requested, not because the prior state was scientifically compromised.
+
+## Seventh pass: reorganized into `msc-modelvalidators/`, a real benchmark module, 8 more examples
+
+Prompted by three things at once: wanting a repeatable, structured benchmark (not a one-off script) with
+JSON/XML output and a rendered report; a request to group this work with the eventual thesis contribution
+under one parent, since more model-validator backends are coming; and "too few examples for a real
+performance benchmark, and I want a dozen more."
+
+**Restructured.** `kk-modelvalidator/` moved to `msc-modelvalidators/kk-modelvalidator/` (`git mv`,
+history preserved), grouped under a new `msc-modelvalidators` aggregator alongside `benchmark` (new) and
+`unc-modelvalidator` (a reserved, source-free placeholder for Track R — named for "uncertain" rather than
+a specific solver, since Z3 is the pinned first backend but not necessarily the only one). Every physical
+path reference (`use-assembly/src/assembly/assembly.xml`'s three fileSets, the root `pom.xml` module list,
+`kk-modelvalidator/pom.xml`'s parent) was updated and the reactor rebuilt clean on the first try — same
+floor numbers before and after the move.
+
+**New `benchmark` module** — a real Maven module, not a scratch script, designed to outlive this pass:
+`BenchmarkRunner` calls the exact same solve/reconstruct API `EndToEndValidationTest` uses (not a
+subprocess per run), so timing is `System.nanoTime()`-precise around the whole `validate()` call, not
+quantized to Kodkod's own `System.currentTimeMillis()`-based `Statistics` (still reported alongside, for
+continuity with earlier session numbers). Solver selection happens the same way `-config satsolver :=
+<Name>` does internally (`KodkodModelValidatorConfiguration.getInstance().setSatFactory(...)`), so no
+subprocess/CLI layer is involved at all. Emits structured JSON (`manifest.json` describing every example —
+directory, config, category, provenance, feature tags — joined against per-solver timing/outcome/witness
+results); `ReportBuilder` renders that JSON into a self-contained HTML report via plain string substitution
+into a static template, kept deliberately dumb so the template stays a plain, editable HTML file. Designed
+backend-agnostic: the same builder renders `unc-modelvalidator`'s results unchanged, once that module has
+any.
+
+**Witness agreement, not just SAT/UNSAT agreement.** Every result row now carries a canonical
+content-based digest of the reconstructed solution (sorted per-class attribute-value lists, deliberately
+ignoring object identity/order). Checked directly: solvers agree on SAT/UNSAT always, but can and do find
+different concrete witnesses for the same scenario (confirmed on `03-CompanyERSchema`: `{3,9}` vs `{3,3}`
+for the same two employees' salaries under `DefaultSAT4J` vs `MiniSat`/`Lingeling`) — expected, not a bug,
+now visible in the report rather than requiring a manual side-by-side check.
+
+**8 more examples** (17 total), a mix of expressiveness gap-filling (ported from `use-core`'s own bundled
+examples, `provenanceType: "use-bundled"`) and dedicated performance stress tests (mostly authored from
+scratch), built by a parallel agent workflow and independently spot-checked. Five genuine, previously-
+unknown plugin findings surfaced and documented — **none fixed**, per the standing rule that only
+porting-relevant compile fixes touch the plugin, everything else is characterized and left alone for a
+fair comparison against Z3 later:
+
+- **`16-GraphColoring` — a real false-negative bug**: at bitwidth 4–6, a provably-3-colorable graph
+  (constructed so a valid coloring exists by hidden construction) comes back UNSATISFIABLE in ~20ms; only
+  bitwidth≥8 gives the correct, genuinely-searched SATISFIABLE answer (~10–19s). Also the largest
+  solver-choice spread measured anywhere in this suite: MiniSat 598ms vs DefaultSAT4J 11.4s on the
+  identical instance — an 19x difference.
+- **`13-Redefines` — a real soundness gap**: an invariant written via a superclass-redefined association
+  end is evaluated over an empty relation during Kodkod's search (the translator has no `redefines`
+  special-casing at all) — silently vacuously true, so `-validate` reports SATISFIABLE on a state where
+  `check -v` reports that exact invariant FAILED.
+- **`11-Subsets` — dead code**: the plugin ships a dedicated `UnionAssociation` class and translator case
+  for `subsets`/`union` ends, but nothing in the plugin ever constructs one (confirmed by grep) — a
+  `union`-declared association compiles as a plain independent one, with no SAT-level tie to what it
+  subsets. USE core's own OCL evaluator still gets the right answer (a separate code path), but the
+  plugin's own relational query mechanism and `info state` link count do not.
+- **`14-Sudoku` — two real crashes**: `MultiplicityTransformator` parses fixed multiplicities by string
+  length and crashes (`ArrayIndexOutOfBoundsException`) on any two-digit cardinality; `AttributeConfigurator`
+  cannot look up a named object atom to pin its attribute by name at all (a naming-convention mismatch
+  with no fallback, unlike the analogous association-side code, which has one) — confirmed to break for
+  any model attempting that specific binding pattern, not just Sudoku.
+- **`12-RecursiveTree` — an authoring bug in the untouched upstream fixture itself**: the bundled
+  `Tree.use`'s own `AcyclicParentship` invariant evaluates `false` unconditionally (its helper operation
+  seeds its accumulator with `Set{self}`), confirmed against the pristine original `.use`+`.cmd` — not a
+  Kodkod-port issue at all, a pre-existing bug in the example USE itself ships.
+
+Full findings, every confirmed number, and the exact reproduction commands are in each example's own
+`.use`/`.properties` header comments and `examples/README.md`. Floor gate and Track E's own gate both
+re-confirmed green after the restructuring and after the full 17-example, 85-cell benchmark run.
+
+## Eighth pass: `msc-modelvalidators` rename, a redesigned benchmark dashboard, and a plugin-comparable feature model
+
+Three requests at once: fix the double-hyphen module name before more code lands on top of it; the
+benchmark report's UX/UI was reviewed at "6/10" against real reference dashboards (SAT-competition
+leaderboards, Playwright/Codecov-style click-to-expand reports, criterion.rs/pytest-benchmark timing
+displays); and the manifest's per-example `features` tags — free-text, informally curated, never checked
+against source — needed to become a real methodology for comparing this plugin against
+`unc-modelvalidator` once that module has capability data of its own.
+
+**Rename.** `msc-model-validators` → `msc-modelvalidators` everywhere: directory, all four `pom.xml`
+artifact IDs, `.gitignore`, `use-assembly`'s `assembly.xml`, and every doc cross-reference. Mechanical,
+`git mv` + literal-string sweep, no behavior change.
+
+**Dashboard rewrite.** `report-template.html` rebuilt from scratch (same JSON-embedding/no-external-JS
+architecture, same CVD-safe palette) around patterns pulled from real reference dashboards rather than
+guesswork: a solver leaderboard ranked by win rate with auto-generated "biggest lead"/"most consistent"
+callouts (SAT-competition/SMT-COMP style); a scenario×solver outcome heatmap sorted hardest-first
+(SWE-bench's resolved-instances-matrix style); the old two overlapping tables (a summary table plus a
+separate full per-cell table) merged into one sortable, click-to-expand table, which also fixed a real
+bug — the previous hover-tooltip info button could render on top of the row below it in a dense table.
+
+**Feature model rebuilt around a 6-area, 144-row capability matrix** (`docs/kk-modelvalidator-feature-
+support-matrix.json`, produced by an earlier 7-agent source-audit workflow this same session) instead of
+the old ad-hoc tags. Restructured that matrix to `docs/modelvalidator-feature-matrix.json` with a
+plugin-keyed `support: {"kk-modelvalidator": {...}}` schema — the same feature-ID space `unc-modelvalidator`
+scores itself against later, so a second plugin's capability data slots in next to the first without any
+restructuring, and the dashboard already renders a (currently empty) comparison card for it. Every
+example's `manifest.json` `features` field is now mechanically *derived* from the matrix (which features
+does this scenario's directory appear in as SAT/UNSAT/oracle evidence for), not hand-curated, so it can't
+drift out of sync with source again; the old informal tags are preserved verbatim in a new, separate
+`scenarioTags` field (design/scale descriptors, not plugin capabilities — e.g. `combinatorial-stress-test`,
+`paired-unsat-mutation`).
+
+**The matrix itself was independently re-verified, not trusted as-is.** A 22-agent audit (6 area-auditors
+re-reading the plugin's own source line-by-line against every claimed row, 14 scenario-oracle reviewers, 2
+independent cross-checks on the highest-risk scenarios) found and fixed:
+- **1 real status misclassification**: `inherit.composition-sharing-across-hierarchy` was marked
+  `supported`; `Class.forbiddingSharingDefinition()` matches part-end classes by exact equality, not
+  subtype, so the cross-subclass case its own name promises silently isn't caught — reclassified
+  `degraded`.
+- **18 duplicate feature rows** (144 → 126): 3 exact id collisions (`assoc.subsets`, `assoc.redefines`,
+  `ocl.iterate`, each defined twice with different evidence text) from a simple id-collision scan, plus 15
+  more near-duplicates the audit found by actually reading the content — the same defect independently
+  written up under different ids in different areas (worst case: the `redefines` soundness gap existed as
+  5 separate rows across 4 areas). Consolidated to one canonical row per finding, evidence merged rather
+  than discarded.
+- **~20 scenario-mapping corrections** — rows citing a scenario as proof of a feature when that scenario's
+  actual `.use`/`.properties`/`.cmd` files don't exercise it (e.g. `ocl.one`'s only cited scenario used the
+  operator zero times, while two uncited scenarios use it 14 times combined). Status classifications were
+  left alone; only the empirical scenario citations moved.
+
+**Oracle review**: all 14 scenarios touching a known-defect/degraded/unverified feature were checked for
+whether the defect could plausibly be *forcing* the recorded SAT/UNSAT expectation rather than the model's
+real semantics forcing it (independently re-checked twice for the two highest-risk cases,
+`08-AggregationComposition` and `13-Redefines`). Every one came back high-confidence, keep-as-is — the
+regression oracles hold up. One genuine, currently-dormant fragility was documented as a new
+`oracleCaveats` entry rather than a generic warning: `16-GraphColoring`'s SAT verdict depends on staying at
+bitwidth ≥ 8, silently becoming a false negative below that with no warning from the plugin's own
+bitwidth-sufficiency check.
 
 ## Not done / explicitly out of scope this pass
 

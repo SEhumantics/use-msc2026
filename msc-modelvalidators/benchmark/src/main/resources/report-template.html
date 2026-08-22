@@ -1,0 +1,1372 @@
+<html lang="en">
+<meta charset="utf-8">
+<title>Solver Benchmark</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    /* Chart chrome & ink (dataviz skill reference palette) */
+    --surface-1: #f9f9f7; --surface-2: #fcfcfb; --surface-3: #f1f1ee;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #898781;
+    --border: #e1e0d9; --border-strong: #c3c2b7;
+    --accent: #1c2b4a; --accent-soft: #eef2fa;
+    /* Status palette -- reserved for run HEALTH (mismatch/error/pass), never reused for a data value */
+    --status-good: #0ca30c; --status-warning: #fab219; --status-serious: #ec835a; --status-critical: #d03b3b;
+    --status-good-soft: #e8f6e8; --status-critical-soft: #fbe9e9; --status-warning-soft: #fef4e2;
+    /* Categorical (solver identity) -- fixed order, never cycled/reassigned */
+    --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; --series-5: #e87ba4;
+    /* Diverging pair (outcome POLARITY: satisfiable vs unsatisfiable -- a semantic opposite, not a status) */
+    --diverge-sat: #2a78d6; --diverge-unsat: #e34948; --diverge-mid: #f0efec;
+    --gridline: #e1e0d9; --baseline: #c3c2b7;
+    /* Type scale -- carries hierarchy on its own, independent of color */
+    --fs-hero: clamp(2rem, 3.3vw, 2.75rem); --fs-h1: clamp(1.2rem, 2vw, 1.55rem); --fs-h2: 0.92rem;
+    --fs-label: 0.66rem; --fs-body: 0.87rem; --fs-small: 0.78rem; --fs-tiny: 0.7rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1: #0d0d0d; --surface-2: #1a1a19; --surface-3: #232322;
+      --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+      --border: #2c2c2a; --border-strong: #383835;
+      --accent: #8fb4e8; --accent-soft: #1a2233;
+      --status-good: #0ca30c; --status-warning: #fab219; --status-serious: #ec835a; --status-critical: #d03b3b;
+      --status-good-soft: #12291a; --status-critical-soft: #2e1818; --status-warning-soft: #2c2312;
+      --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181;
+      --diverge-sat: #3987e5; --diverge-unsat: #e66767; --diverge-mid: #383835;
+      --gridline: #2c2c2a; --baseline: #383835;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --surface-1: #0d0d0d; --surface-2: #1a1a19; --surface-3: #232322;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+    --border: #2c2c2a; --border-strong: #383835;
+    --accent: #8fb4e8; --accent-soft: #1a2233;
+    --status-good: #0ca30c; --status-warning: #fab219; --status-serious: #ec835a; --status-critical: #d03b3b;
+    --status-good-soft: #12291a; --status-critical-soft: #2e1818; --status-warning-soft: #2c2312;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181;
+    --diverge-sat: #3987e5; --diverge-unsat: #e66767; --diverge-mid: #383835;
+    --gridline: #2c2c2a; --baseline: #383835;
+  }
+
+  .viz-root { background: var(--surface-1); color: var(--text-primary); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; min-height: 100vh; padding: 2.5rem 1.5rem 4rem; font-size: var(--fs-body); line-height: 1.5; }
+  .viz-root * { box-sizing: border-box; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .tabular { font-variant-numeric: tabular-nums; }
+  .wrap { max-width: 76rem; margin: 0 auto; }
+  a { color: inherit; }
+  button { font: inherit; }
+
+  header.page { display: flex; flex-direction: column; gap: 0.6rem; padding-bottom: 1.4rem; margin-bottom: 2rem; border-bottom: 1px solid var(--border); }
+  .eyebrow-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .eyebrow { font-family: ui-monospace, monospace; font-size: var(--fs-label); letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-muted); }
+  h1 { font-size: var(--fs-hero); font-weight: 700; letter-spacing: -0.02em; margin: 0; text-wrap: balance; line-height: 1.05; }
+  h2 { font-size: var(--fs-h2); font-weight: 650; margin: 0; display: flex; align-items: baseline; gap: 0.5rem; }
+  h2 .h2-sub { font-size: var(--fs-tiny); font-weight: 450; color: var(--text-muted); }
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.85rem; }
+  .lede { max-width: 62ch; color: var(--text-secondary); font-size: var(--fs-small); line-height: 1.55; margin: 0.15rem 0 0; }
+
+  .theme-toggle { font-family: ui-monospace, monospace; font-size: var(--fs-tiny); padding: 0.35rem 0.65rem; border-radius: 7px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-secondary); cursor: pointer; flex: none; }
+  .theme-toggle:hover { border-color: var(--border-strong); color: var(--text-primary); }
+
+  .filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+  .filterbar button { font-family: ui-monospace, monospace; font-size: var(--fs-tiny); padding: 0.32rem 0.7rem; border-radius: 99px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-secondary); cursor: pointer; }
+  .filterbar button:hover { border-color: var(--border-strong); }
+  .filterbar button.active { background: var(--accent); color: var(--surface-2); border-color: var(--accent); }
+  .filterbar button:focus-visible, select:focus-visible, .expand-btn:focus-visible, .sortable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .filterbar select { font-family: ui-monospace, monospace; font-size: var(--fs-tiny); padding: 0.3rem 0.6rem; border-radius: 99px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-secondary); max-width: 14rem; }
+  .filterbar .sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 0.2rem; }
+
+  section.block { margin-bottom: 2.5rem; }
+  .panel { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 1.1rem 1.2rem; }
+
+  /* ---------- Verdict strip ---------- */
+  .verdict-row { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); overflow: hidden; }
+  .kpi { flex: 1 1 8rem; padding: 0.95rem 1.15rem; border-right: 1px solid var(--border); min-width: 8rem; }
+  .kpi:last-child { border-right: none; }
+  .kpi-value { font-size: 1.55rem; font-weight: 650; letter-spacing: -0.01em; line-height: 1.1; }
+  .kpi-value.tabular { font-variant-numeric: tabular-nums; }
+  .kpi-value.crit { color: var(--status-critical); }
+  .kpi-value.warn { color: var(--status-serious); }
+  .kpi-label { font-size: var(--fs-tiny); color: var(--text-muted); margin-top: 0.3rem; }
+  .kpi-divbar { flex: 1 1 14rem; min-width: 12rem; padding: 0.95rem 1.15rem; }
+  .divbar-caption { display: flex; justify-content: space-between; font-size: var(--fs-tiny); color: var(--text-secondary); margin-bottom: 0.4rem; }
+  .divbar { display: flex; height: 20px; border-radius: 5px; overflow: hidden; background: var(--surface-3); }
+  .divbar .seg-sat { background: var(--diverge-sat); }
+  .divbar .seg-unsat { background: var(--diverge-unsat); }
+  .divbar .seg { display: flex; align-items: center; justify-content: center; font-size: var(--fs-tiny); font-weight: 600; color: #fff; min-width: 1.6em; }
+
+  /* ---------- Chips / pills / badges (shared) ---------- */
+  .chip { display: inline-flex; align-items: center; gap: 0.3rem; font-family: ui-monospace, monospace; font-size: var(--fs-tiny); letter-spacing: 0.02em; padding: 0.12rem 0.5rem; border-radius: 99px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+  .chip.finding { color: var(--series-1); }
+  .chip.validating { color: var(--series-3); }
+  .outcome-pill { display: inline-flex; align-items: center; gap: 0.35rem; font-family: ui-monospace, monospace; font-size: var(--fs-tiny); font-weight: 600; padding: 0.15rem 0.55rem; border-radius: 99px; white-space: nowrap; }
+  .outcome-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .outcome-pill.sat { color: var(--diverge-sat); background: color-mix(in srgb, var(--diverge-sat) 12%, transparent); }
+  .outcome-pill.sat::before { background: var(--diverge-sat); }
+  .outcome-pill.unsat { color: var(--diverge-unsat); background: color-mix(in srgb, var(--diverge-unsat) 12%, transparent); }
+  .outcome-pill.unsat::before { background: var(--diverge-unsat); }
+
+  .status-badge { display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--fs-tiny); font-weight: 650; padding: 0.15rem 0.5rem; border-radius: 6px; white-space: nowrap; }
+  .status-badge.match { color: var(--status-good); background: var(--status-good-soft); }
+  .status-badge.mismatch { color: var(--status-critical); background: var(--status-critical-soft); }
+  .status-badge.error { color: var(--status-critical); background: var(--status-critical-soft); }
+  .status-badge.no-oracle { color: var(--text-muted); background: var(--surface-3); }
+  .status-badge.mixed { color: var(--status-serious); background: var(--status-warning-soft); }
+
+  /* ---------- Solver leaderboard ---------- */
+  .callouts { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1rem; }
+  .callout-line { font-size: var(--fs-small); color: var(--text-secondary); line-height: 1.5; }
+  .callout-line b { color: var(--text-primary); font-weight: 650; }
+  table.leaderboard-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); }
+  table.leaderboard-table th { text-align: left; font-family: ui-monospace, monospace; font-size: var(--fs-label); letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); font-weight: 500; padding: 0 0.65rem 0.5rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  table.leaderboard-table td { padding: 0.6rem 0.65rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  table.leaderboard-table tr:last-child td { border-bottom: none; }
+  .rank-num { font-family: ui-monospace, monospace; font-weight: 650; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .rank-num.first { color: var(--accent); }
+  .solver-id { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; }
+  .swatch { width: 0.65rem; height: 0.65rem; border-radius: 2px; flex: none; }
+  .winrate-cell { display: flex; align-items: center; gap: 0.55rem; min-width: 9rem; }
+  .winrate-bar-track { flex: 1; height: 7px; border-radius: 4px; background: var(--surface-3); overflow: hidden; }
+  .winrate-bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+  .winrate-num { font-variant-numeric: tabular-nums; color: var(--text-secondary); font-size: var(--fs-tiny); width: 2.6rem; text-align: right; flex: none; }
+  .taxo { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .taxo-num { font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; font-size: var(--fs-tiny); }
+  .taxo-num.zero { color: var(--text-muted); }
+  .taxo-num.nonzero.crit { color: var(--status-critical); font-weight: 650; }
+
+  /* ---------- Heatmap + merged table share one sticky-table mechanism ---------- */
+  .table-scroll { overflow: auto; max-height: 34rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+  .table-scroll.short { max-height: none; }
+  table.data-table, table.heatmap-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-small); }
+  table.data-table th, table.data-table td, table.heatmap-table th, table.heatmap-table td { padding: 0.55rem 0.7rem; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--border); }
+  table.data-table thead th, table.heatmap-table thead th { font-family: ui-monospace, monospace; font-size: var(--fs-label); letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); font-weight: 500; position: sticky; top: 0; background: var(--surface-2); white-space: nowrap; z-index: 2; }
+  table.data-table thead th.sortable { cursor: pointer; user-select: none; }
+  table.data-table thead th.sortable:hover { color: var(--text-primary); }
+  table.data-table thead th.sortable .arrow { font-size: 0.62em; margin-left: 0.15rem; opacity: 0.55; }
+  table.data-table thead th.sortable.active .arrow { opacity: 1; color: var(--accent); }
+  table.data-table td:first-child, table.data-table th:first-child,
+  table.heatmap-table td:first-child, table.heatmap-table th:first-child {
+    position: sticky; left: 0; background: var(--surface-2); z-index: 1; border-right: 1px solid var(--border);
+  }
+  table.data-table thead th:first-child, table.heatmap-table thead th:first-child { z-index: 3; }
+  table.data-table tbody tr:last-child > td, table.heatmap-table tbody tr:last-child > td { border-bottom: none; }
+  table.data-table tbody tr.scenario-row { cursor: pointer; }
+  table.data-table tbody tr.scenario-row:hover td { background: var(--surface-3); }
+  table.data-table tbody tr.scenario-row:hover td:first-child { background: var(--surface-3); }
+  table.data-table tbody tr.scenario-row.expanded td { background: var(--accent-soft); }
+  table.data-table tbody tr.scenario-row.expanded td:first-child { background: var(--accent-soft); }
+  table.data-table td.center, table.heatmap-table td.center { text-align: center; }
+  .expand-btn { display: inline-flex; align-items: center; justify-content: center; width: 1.2rem; height: 1.2rem; border-radius: 4px; border: none; background: transparent; color: var(--text-muted); cursor: pointer; flex: none; transition: transform 0.12s; }
+  tr.scenario-row.expanded .expand-btn { transform: rotate(90deg); color: var(--accent); }
+  .name-cell { display: flex; align-items: center; gap: 0.4rem; font-weight: 600; white-space: nowrap; }
+
+  tr.detail-row > td { padding: 0; border-bottom: 1px solid var(--border); background: var(--surface-1); }
+  tr.detail-row.hidden { display: none; }
+  .detail-wrap { padding: 0.9rem 1.1rem 1.1rem 2.6rem; display: flex; flex-direction: column; gap: 0.9rem; }
+  table.detail-table { width: 100%; border-collapse: collapse; font-size: var(--fs-small); }
+  table.detail-table th { text-align: left; font-family: ui-monospace, monospace; font-size: var(--fs-label); letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); font-weight: 500; padding: 0 0.6rem 0.4rem; }
+  table.detail-table td { padding: 0.4rem 0.6rem; border-top: 1px solid var(--border); vertical-align: middle; }
+  .bw-cell { min-width: 9rem; }
+  svg.bw { display: block; overflow: visible; }
+  svg.bw .bw-line { stroke: var(--border-strong); stroke-width: 2; }
+  svg.bw .bw-med { fill: var(--text-primary); }
+  .detail-meta { font-size: var(--fs-tiny); color: var(--text-muted); line-height: 1.6; border-top: 1px dashed var(--border); padding-top: 0.7rem; }
+  .detail-meta b { color: var(--text-secondary); font-weight: 600; }
+  .soil-list { display: flex; flex-direction: column; gap: 0.25rem; font-size: var(--fs-tiny); }
+  .soil-list .ok { color: var(--status-good); }
+  .soil-list .bad { color: var(--status-critical); }
+
+  /* ---------- Heatmap ---------- */
+  .heatmap-table th.col-head { writing-mode: vertical-rl; transform: rotate(180deg); text-align: left; height: 6.2rem; padding: 0.4rem 0.35rem; font-size: var(--fs-tiny); text-transform: none; letter-spacing: 0; font-family: ui-monospace, monospace; color: var(--text-secondary); cursor: pointer; }
+  .heatmap-table th.row-head { font-weight: 600; color: var(--text-primary); font-family: inherit; white-space: nowrap; }
+  .heatmap-table td.cell { padding: 0; text-align: center; border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); }
+  .heatmap-table th.col-head { border-left: 1px solid var(--border); }
+  .hm-swatch { display: block; width: 100%; height: 1.9rem; border: none; cursor: pointer; background: var(--surface-3); color: inherit; font: inherit; }
+  .hm-swatch.match { background: var(--status-good-soft); }
+  .hm-swatch.mismatch { background: var(--status-critical-soft); color: var(--status-critical); font-weight: 700; }
+  .hm-swatch.error { background: var(--status-critical-soft); color: var(--status-critical); font-weight: 700; }
+  .hm-swatch.no-oracle { background: var(--surface-3); color: var(--text-muted); }
+  .hm-swatch.no-data { background: transparent; color: var(--border-strong); }
+  .hm-swatch:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .hm-legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: var(--fs-tiny); color: var(--text-secondary); margin-top: 0.7rem; }
+  .hm-legend .item { display: flex; align-items: center; gap: 0.4rem; }
+  .hm-legend .dot { width: 0.65rem; height: 0.65rem; border-radius: 3px; flex: none; }
+
+  /* ---------- Plugin feature support ---------- */
+  .status-badge.supported { color: var(--status-good); background: var(--status-good-soft); }
+  .status-badge.degraded { color: var(--status-serious); background: var(--status-warning-soft); }
+  .status-badge.known-defect { color: var(--status-critical); background: var(--status-critical-soft); }
+  .status-badge.unsupported { color: var(--text-muted); background: var(--surface-3); }
+  .status-badge.unverified { color: var(--accent); background: var(--accent-soft); }
+
+  .plugin-summary-row { display: flex; flex-wrap: wrap; gap: 1.5rem; }
+  .plugin-card { flex: 1 1 16rem; min-width: 15rem; }
+  .plugin-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.5rem; }
+  .plugin-card-name { font-weight: 650; font-size: 0.95rem; }
+  .plugin-card-desc { font-size: var(--fs-tiny); color: var(--text-muted); line-height: 1.5; margin-bottom: 0.6rem; max-width: 32ch; }
+  .plugin-card.not-started .plugin-card-desc { margin-bottom: 0; }
+  .status-stack { display: flex; height: 10px; border-radius: 4px; overflow: hidden; background: var(--surface-3); margin-bottom: 0.5rem; }
+  .status-stack .seg.supported { background: var(--status-good); }
+  .status-stack .seg.degraded { background: var(--status-warning); }
+  .status-stack .seg.known-defect { background: var(--status-critical); }
+  .status-stack .seg.unsupported { background: var(--border-strong); }
+  .status-stack .seg.unverified { background: var(--accent); }
+  .status-legend-row { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; font-size: var(--fs-tiny); color: var(--text-secondary); }
+  .status-legend-row .item { display: flex; align-items: center; gap: 0.35rem; }
+  .status-legend-row .dot { width: 0.6rem; height: 0.6rem; border-radius: 2px; flex: none; }
+  .not-started-note { font-size: var(--fs-small); color: var(--text-muted); font-style: italic; }
+
+  .area-breakdown { display: flex; flex-direction: column; gap: 0.5rem; }
+  .area-row { display: grid; grid-template-columns: 11rem 1fr 3rem; align-items: center; gap: 0.7rem; font-size: var(--fs-tiny); }
+  .area-row .area-name { color: var(--text-secondary); font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+  .area-row .area-name:hover { color: var(--accent); }
+  .area-row.active .area-name { color: var(--accent); font-weight: 650; }
+  .area-row .area-count { text-align: right; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+  .feature-cell-name { font-weight: 600; }
+  .feature-cell-id { display: block; font-family: ui-monospace, monospace; font-size: var(--fs-tiny); color: var(--text-muted); margin-top: 0.1rem; }
+  .scenario-chip-row { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .scenario-chip { font-family: ui-monospace, monospace; font-size: var(--fs-tiny); padding: 0.1rem 0.45rem; border-radius: 99px; background: var(--surface-3); color: var(--text-secondary); }
+  .oracle-caveat { display: flex; gap: 0.5rem; align-items: flex-start; font-size: var(--fs-tiny); color: var(--status-serious); background: var(--status-warning-soft); border: 1px solid transparent; border-radius: 7px; padding: 0.5rem 0.7rem; line-height: 1.5; }
+  .oracle-caveat b { color: var(--status-serious); }
+
+  footer.viz-foot { margin-top: 2.5rem; color: var(--text-muted); font-size: var(--fs-tiny); line-height: 1.6; max-width: 72ch; }
+  .hidden { display: none !important; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  @media (max-width: 30rem) { .viz-root { padding: 1.5rem 1rem 3rem; } }
+</style>
+
+<main class="viz-root">
+  <div class="wrap">
+    <header class="page">
+      <div class="eyebrow-row">
+        <div class="eyebrow">Solver benchmark</div>
+        <button class="theme-toggle" id="themeToggle" type="button">Theme: system</button>
+      </div>
+      <h1>Expressiveness &amp; solver benchmark</h1>
+      <p class="lede">
+        Each scenario runs in <span class="chip finding">finding</span> mode (Kodkod search),
+        <span class="chip validating">validating</span> mode (a hand-built instance checked directly), or both.
+        Click any scenario row to see the full per-solver breakdown.
+      </p>
+      <div class="filterbar" id="filterbar"></div>
+    </header>
+
+    <section class="block">
+      <div class="verdict-row" id="verdictRow"></div>
+    </section>
+
+    <section class="block" id="leaderboardSection">
+      <div class="section-head">
+        <h2>Solver leaderboard <span class="h2-sub">ranked by win rate across finding-mode scenarios</span></h2>
+      </div>
+      <div class="panel">
+        <div class="callouts" id="callouts"></div>
+        <div class="table-scroll short"><table class="leaderboard-table" id="leaderboardTable">
+          <thead><tr>
+            <th>#</th><th>Solver</th><th>Win rate</th><th>Matched SAT</th><th>Matched UNSAT</th>
+            <th>Mismatch</th><th>Error</th><th>Median time</th>
+          </tr></thead>
+          <tbody id="leaderboardBody"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <section class="block" id="featureSupportSection">
+      <div class="section-head">
+        <h2>Plugin feature support <span class="h2-sub" id="featureSupportSub"></span></h2>
+      </div>
+      <div class="panel" style="margin-bottom:1rem">
+        <div class="plugin-summary-row" id="pluginSummaryRow"></div>
+      </div>
+      <div class="panel" style="margin-bottom:1rem">
+        <div class="area-breakdown" id="areaBreakdown"></div>
+      </div>
+      <div class="filterbar" id="featureFilterbar" style="margin-bottom:0.6rem"></div>
+      <div class="table-scroll"><table class="data-table" id="featureTable">
+        <thead><tr>
+          <th style="width:1.6rem"><span class="sr-only">Expand</span></th>
+          <th class="sortable" data-sort="status">Status<span class="arrow">&#9660;</span></th>
+          <th class="sortable" data-sort="area">Area<span class="arrow">&#9660;</span></th>
+          <th class="sortable" data-sort="name">Feature<span class="arrow">&#9660;</span></th>
+          <th>Scenarios</th>
+        </tr></thead>
+        <tbody id="featureBody"></tbody>
+      </table></div>
+    </section>
+
+    <section class="block" id="heatmapSection">
+      <div class="section-head">
+        <h2>Scenario &times; solver outcomes <span class="h2-sub">hardest scenarios first &mdash; click a cell to inspect</span></h2>
+      </div>
+      <div class="table-scroll" id="heatmapScroll"><table class="heatmap-table" id="heatmapTable"></table></div>
+      <div class="hm-legend" id="heatmapLegend"></div>
+    </section>
+
+    <section class="block">
+      <div class="section-head">
+        <h2>Scenarios <span class="h2-sub" id="scenarioCount"></span></h2>
+      </div>
+      <div class="table-scroll"><table class="data-table" id="scenarioTable">
+        <thead><tr>
+          <th style="width:1.6rem"><span class="sr-only">Expand</span></th>
+          <th class="sortable" data-sort="status">Status<span class="arrow">&#9660;</span></th>
+          <th class="sortable" data-sort="id">Scenario<span class="arrow">&#9660;</span></th>
+          <th class="sortable" data-sort="category">Category<span class="arrow">&#9660;</span></th>
+          <th>Mode</th>
+          <th class="sortable" data-sort="expected">Expected<span class="arrow">&#9660;</span></th>
+          <th class="sortable" data-sort="time">Fastest<span class="arrow">&#9660;</span></th>
+          <th>SOIL</th>
+        </tr></thead>
+        <tbody id="scenarioBody"></tbody>
+      </table></div>
+    </section>
+
+    <footer class="viz-foot" id="footNote"></footer>
+  </div>
+</main>
+
+<!--
+  Data is embedded as inert JSON (type="application/json", parsed via JSON.parse below), not as a
+  JS variable literal substituted directly into executable script source. Two reasons this matters
+  over just trusting Gson's htmlSafe (which already escapes "<"/">"/"&" and does neutralize a
+  "</script>" breakout on its own):
+    1. Defense in depth -- if a future edit ever swaps serializers or calls
+       GsonBuilder#disableHtmlEscaping(), a JS-literal substitution site becomes directly
+       exploitable, while a JSON.parse() call never executes its input as code regardless.
+    2. It keeps the actual page logic below in a single static <script> block that this build never
+       rewrites, rather than a block whose *source text* is partly generated per run.
+-->
+<script type="application/json" id="manifest-json">__MANIFEST_JSON_PLACEHOLDER__</script>
+<script type="application/json" id="results-json">__RESULTS_JSON_PLACEHOLDER__</script>
+<script type="application/json" id="soil-results-json">__SOIL_RESULTS_JSON_PLACEHOLDER__</script>
+<script type="application/json" id="run-metadata-json">__RUN_METADATA_JSON_PLACEHOLDER__</script>
+<script type="application/json" id="feature-matrix-json">__FEATURE_MATRIX_JSON_PLACEHOLDER__</script>
+
+<script>
+(function () {
+  const MANIFEST = JSON.parse(document.getElementById('manifest-json').textContent);
+  const RESULTS = JSON.parse(document.getElementById('results-json').textContent);
+  const SOIL_RESULTS = JSON.parse(document.getElementById('soil-results-json').textContent);
+  const RUN_METADATA = JSON.parse(document.getElementById('run-metadata-json').textContent);
+  const FEATURE_MATRIX = JSON.parse(document.getElementById('feature-matrix-json').textContent);
+
+  const root = document.documentElement;
+  function cssVar(name) { return getComputedStyle(document.querySelector('.viz-root')).getPropertyValue(name).trim(); }
+
+  // Every string below comes from JSON data files (manifest/results/feature-matrix), not from this
+  // script's own source -- evidence/notes text in particular quotes Java syntax verbatim (e.g.
+  // "Set<IClass>"), which a browser's HTML parser would silently interpret as a tag and drop if
+  // inserted into innerHTML unescaped. Any data-derived value going into innerHTML must pass through
+  // this first.
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // ---------------------------------------------------------------- theme
+  const themeBtn = document.getElementById('themeToggle');
+  const THEME_KEY = 'kk-benchmark-theme';
+  function applyTheme(mode) {
+    if (mode === 'light' || mode === 'dark') root.setAttribute('data-theme', mode);
+    else root.removeAttribute('data-theme');
+    themeBtn.textContent = 'Theme: ' + (mode || 'system');
+  }
+  let savedTheme = null;
+  try { savedTheme = localStorage.getItem(THEME_KEY); } catch (e) { /* storage unavailable */ }
+  applyTheme(savedTheme);
+  themeBtn.onclick = () => {
+    const cur = root.getAttribute('data-theme');
+    const next = cur === null ? 'dark' : (cur === 'dark' ? 'light' : null);
+    applyTheme(next);
+    try { localStorage.setItem(THEME_KEY, next || ''); } catch (e) { /* ignore */ }
+    renderAll(); // solver swatches read resolved CSS var colors
+  };
+
+  // ------------------------------------------------------------- indexes
+  const manifestById = new Map(MANIFEST.map(e => [e.id, e]));
+  const resultsByExample = new Map();
+  RESULTS.forEach(r => {
+    if (!resultsByExample.has(r.exampleId)) resultsByExample.set(r.exampleId, []);
+    resultsByExample.get(r.exampleId).push(r);
+  });
+  const byExampleSolver = new Map();
+  RESULTS.forEach(r => byExampleSolver.set(r.exampleId + '::' + r.solver, r));
+  const soilByExample = new Map();
+  SOIL_RESULTS.forEach(r => {
+    if (!soilByExample.has(r.exampleId)) soilByExample.set(r.exampleId, []);
+    soilByExample.get(r.exampleId).push(r);
+  });
+
+  const SERIES_PALETTE = ['--series-1', '--series-2', '--series-3', '--series-4', '--series-5'];
+  const SOLVERS = Array.from(new Set(RESULTS.map(r => r.solver))).sort();
+  const SERIES_VAR = {};
+  SOLVERS.forEach((s, i) => { SERIES_VAR[s] = SERIES_PALETTE[i % SERIES_PALETTE.length]; });
+
+  // ------------------------------------------------------- feature matrix index
+  const FEATURE_PLUGINS = FEATURE_MATRIX.plugins || [];
+  const FEATURE_AREAS = FEATURE_MATRIX.areas || [];
+  const featureIndex = new Map(); // featureId -> {id, name, areaKey, areaName, support}
+  FEATURE_AREAS.forEach(area => {
+    area.features.forEach(f => {
+      featureIndex.set(f.id, { id: f.id, name: f.name, areaKey: area.key, areaName: area.name, support: f.support || {} });
+    });
+  });
+  const STATUS_ORDER = ['supported', 'degraded', 'known-defect', 'unsupported', 'unverified'];
+  const STATUS_LABEL = { supported: 'Supported', degraded: 'Degraded', 'known-defect': 'Known defect', unsupported: 'Unsupported', unverified: 'Unverified' };
+
+  const allFeatures = Array.from(new Set(MANIFEST.flatMap(e => e.features || []))).sort();
+  const featureCounts = new Map();
+  MANIFEST.forEach(e => (e.features || []).forEach(f => featureCounts.set(f, (featureCounts.get(f) || 0) + 1)));
+
+  function isFindingMode(ex) { return (ex.mode || '').includes('finding'); }
+
+  // Whether a single (example, result) cell matches the manifest's recorded oracle.
+  // Returns one of: 'match' | 'mismatch' | 'error' | 'no-oracle'.
+  function cellStatus(ex, r) {
+    if (!r) return null;
+    if (r.outcome === 'ERROR') return 'error';
+    if (!ex.expected || !ex.expected.outcome) return 'no-oracle';
+    return r.outcome === ex.expected.outcome ? 'match' : 'mismatch';
+  }
+
+  function outcomeFamily(outcome) {
+    if (!outcome) return null;
+    if (outcome === 'ERROR') return 'error';
+    return outcome.includes('UNSATISFIABLE') ? 'unsat' : 'sat';
+  }
+
+  function provenanceLabel(ex) {
+    if (ex.provenanceType === 'authored-for-thesis') return 'Authored for this thesis';
+    if (ex.provenanceType === 'use-bundled') return "Ported from this repo's own bundled USE examples";
+    if (ex.provenanceType === 'plugin-original') return "The plugin's own original fixture";
+    if (ex.provenanceType === 'adapted-from') return 'Adapted from a published source';
+    return ex.provenanceType || 'unknown';
+  }
+
+  // ------------------------------------------------------------- filters
+  let activeCategory = 'all';
+  let activeFeature = 'all';
+  let activeExpectedClass = 'all';
+  const filterbar = document.getElementById('filterbar');
+
+  ['all', 'expressiveness', 'performance'].forEach(cat => {
+    const btn = document.createElement('button');
+    btn.textContent = cat === 'all' ? 'All scenarios' : cat;
+    btn.className = cat === 'all' ? 'active' : '';
+    btn.onclick = () => {
+      activeCategory = cat;
+      [...filterbar.querySelectorAll('button')].forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderAll();
+    };
+    filterbar.appendChild(btn);
+  });
+
+  const sep = document.createElement('div');
+  sep.className = 'sep';
+  filterbar.appendChild(sep);
+
+  const expectedSelect = document.createElement('select');
+  expectedSelect.setAttribute('aria-label', 'Filter by expected outcome');
+  expectedSelect.innerHTML = '<option value="all">SAT + UNSAT</option><option value="sat">SAT-expected only</option><option value="unsat">UNSAT-expected only</option>';
+  expectedSelect.onchange = () => { activeExpectedClass = expectedSelect.value; renderAll(); };
+  filterbar.appendChild(expectedSelect);
+
+  const featureSelect = document.createElement('select');
+  featureSelect.setAttribute('aria-label', 'Filter by plugin feature');
+  featureSelect.innerHTML = '<option value="all">Filter by plugin feature (all)</option>' +
+    allFeatures.map(f => {
+      const meta = featureIndex.get(f);
+      const label = meta ? `${meta.name} (${featureCounts.get(f)})` : `${f} (${featureCounts.get(f)})`;
+      return `<option value="${escapeHtml(f)}">${escapeHtml(label)}</option>`;
+    }).join('');
+  featureSelect.onchange = () => { activeFeature = featureSelect.value; renderAll(); };
+  filterbar.appendChild(featureSelect);
+
+  // -------------------------------------------------- feature-matrix browser filters
+  let activeFeatureStatus = 'all';
+  let activeFeatureArea = 'all';
+  const expandedFeatureIds = new Set();
+  const featureFilterbar = document.getElementById('featureFilterbar');
+  const STATUS_COLOR_VAR = { supported: '--status-good', degraded: '--status-warning', 'known-defect': '--status-critical', unsupported: '--border-strong', unverified: '--accent' };
+
+  const allStatusBtn = document.createElement('button');
+  allStatusBtn.textContent = 'All statuses';
+  allStatusBtn.className = 'active';
+  allStatusBtn.onclick = () => {
+    activeFeatureStatus = 'all';
+    [...featureFilterbar.querySelectorAll('button')].forEach(b => b.classList.remove('active'));
+    allStatusBtn.classList.add('active');
+    renderFeatureTable();
+  };
+  featureFilterbar.appendChild(allStatusBtn);
+  STATUS_ORDER.forEach(status => {
+    const btn = document.createElement('button');
+    btn.textContent = STATUS_LABEL[status];
+    btn.onclick = () => {
+      activeFeatureStatus = status;
+      [...featureFilterbar.querySelectorAll('button')].forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderFeatureTable();
+    };
+    featureFilterbar.appendChild(btn);
+  });
+
+  function primaryPluginId() {
+    const withData = FEATURE_PLUGINS.find(p => {
+      for (const f of featureIndex.values()) if (f.support[p.id]) return true;
+      return false;
+    });
+    return (withData || FEATURE_PLUGINS[0] || {}).id;
+  }
+
+  function statusStackHtml(counts, total) {
+    if (!total) return '<div class="status-stack"></div>';
+    const segs = STATUS_ORDER.filter(s => counts[s] > 0).map(s =>
+      `<div class="seg ${s}" style="width:${(counts[s] / total * 100).toFixed(2)}%" title="${STATUS_LABEL[s]}: ${counts[s]}"></div>`
+    ).join('');
+    return `<div class="status-stack">${segs}</div>`;
+  }
+
+  function visibleExamples() {
+    return MANIFEST.filter(e =>
+      (activeCategory === 'all' || e.category === activeCategory) &&
+      (activeFeature === 'all' || (e.features || []).includes(activeFeature)) &&
+      (activeExpectedClass === 'all' || (e.expected && e.expected.classification === activeExpectedClass))
+    );
+  }
+
+  // --------------------------------------------------------------- verdict
+  function renderVerdict() {
+    const vis = visibleExamples();
+    const visIds = new Set(vis.map(e => e.id));
+    const cells = RESULTS.filter(r => visIds.has(r.exampleId));
+    const statuses = cells.map(r => cellStatus(manifestById.get(r.exampleId), r));
+    const matched = statuses.filter(s => s === 'match').length;
+    const mismatched = statuses.filter(s => s === 'mismatch').length;
+    const errored = statuses.filter(s => s === 'error').length;
+    const scored = matched + mismatched + errored;
+    const matchRate = scored ? Math.round((matched / scored) * 100) : null;
+
+    const satN = vis.filter(e => e.expected && e.expected.classification === 'sat').length;
+    const unsatN = vis.filter(e => e.expected && e.expected.classification === 'unsat').length;
+    const satTotal = Math.max(1, satN + unsatN);
+
+    const visSoil = SOIL_RESULTS.filter(r => visIds.has(r.exampleId));
+    const soilPassed = visSoil.filter(r => r.passed).length;
+
+    const row = document.getElementById('verdictRow');
+    row.innerHTML = '';
+
+    const kpi1 = document.createElement('div');
+    kpi1.className = 'kpi';
+    kpi1.innerHTML = `<div class="kpi-value tabular">${vis.length}</div><div class="kpi-label">scenarios</div>`;
+    row.appendChild(kpi1);
+
+    const kpiDiv = document.createElement('div');
+    kpiDiv.className = 'kpi-divbar';
+    kpiDiv.innerHTML = `<div class="divbar-caption"><span>${satN} SAT</span><span>${unsatN} UNSAT</span></div><div class="divbar" id="divBar"></div>`;
+    row.appendChild(kpiDiv);
+    const divBar = kpiDiv.querySelector('#divBar');
+    if (satN > 0) {
+      const seg = document.createElement('div');
+      seg.className = 'seg seg-sat';
+      seg.style.width = (satN / satTotal * 100) + '%';
+      seg.textContent = satN;
+      divBar.appendChild(seg);
+    }
+    if (unsatN > 0) {
+      const seg = document.createElement('div');
+      seg.className = 'seg seg-unsat';
+      seg.style.width = (unsatN / satTotal * 100) + '%';
+      seg.textContent = unsatN;
+      divBar.appendChild(seg);
+    }
+
+    const kpi2 = document.createElement('div');
+    kpi2.className = 'kpi';
+    kpi2.innerHTML = `<div class="kpi-value tabular">${matchRate === null ? '&mdash;' : matchRate + '%'}</div><div class="kpi-label">match rate (${matched}/${scored} cells)</div>`;
+    row.appendChild(kpi2);
+
+    const kpi3 = document.createElement('div');
+    kpi3.className = 'kpi';
+    kpi3.innerHTML = `<div class="kpi-value tabular${mismatched > 0 ? ' crit' : ''}">${mismatched}</div><div class="kpi-label">${mismatched === 1 ? 'oracle mismatch' : 'oracle mismatches'}</div>`;
+    row.appendChild(kpi3);
+
+    const kpi4 = document.createElement('div');
+    kpi4.className = 'kpi';
+    kpi4.innerHTML = `<div class="kpi-value tabular${errored > 0 ? ' crit' : ''}">${errored}</div><div class="kpi-label">${errored === 1 ? 'ERROR cell' : 'ERROR cells'}</div>`;
+    row.appendChild(kpi4);
+
+    const kpi5 = document.createElement('div');
+    kpi5.className = 'kpi';
+    const soilBad = visSoil.length - soilPassed;
+    kpi5.innerHTML = `<div class="kpi-value tabular${soilBad > 0 ? ' warn' : ''}">${soilPassed}/${visSoil.length}</div><div class="kpi-label">SOIL fixtures verified</div>`;
+    row.appendChild(kpi5);
+  }
+
+  // ------------------------------------------------------------ leaderboard
+  function computeLeaderboard(vis) {
+    const findingVis = vis.filter(isFindingMode);
+    const visIds = new Set(findingVis.map(e => e.id));
+
+    // Per example: which solver(s) had the lowest wall time among that example's valid (non-error) results.
+    const winnersByExample = new Map();
+    findingVis.forEach(ex => {
+      const rows = (resultsByExample.get(ex.id) || []).filter(r => r.outcome !== 'ERROR');
+      if (!rows.length) return;
+      const minMs = Math.min(...rows.map(r => r.medianWallMs));
+      winnersByExample.set(ex.id, new Set(rows.filter(r => Math.abs(r.medianWallMs - minMs) < 1e-9).map(r => r.solver)));
+    });
+
+    const rows = SOLVERS.map(solver => {
+      let attempted = 0, validAttempts = 0, wins = 0, matchedSat = 0, matchedUnsat = 0, mismatches = 0, errors = 0;
+      const medians = [];
+      findingVis.forEach(ex => {
+        const r = byExampleSolver.get(ex.id + '::' + solver);
+        if (!r) return;
+        attempted++;
+        if (r.outcome === 'ERROR') { errors++; return; }
+        validAttempts++;
+        medians.push(r.medianWallMs);
+        const status = cellStatus(ex, r);
+        if (status === 'match') { outcomeFamily(r.outcome) === 'sat' ? matchedSat++ : matchedUnsat++; }
+        else if (status === 'mismatch') mismatches++;
+        const winners = winnersByExample.get(ex.id);
+        if (winners && winners.has(solver)) wins++;
+      });
+      medians.sort((a, b) => a - b);
+      const aggMedian = medians.length ? medians[Math.floor((medians.length - 1) / 2)] : null;
+      return {
+        solver, attempted, validAttempts, wins,
+        winRate: validAttempts ? wins / validAttempts : 0,
+        matchedSat, matchedUnsat, mismatches, errors, aggMedian,
+      };
+    }).filter(row => row.attempted > 0);
+
+    rows.sort((a, b) =>
+      b.winRate - a.winRate ||
+      (a.mismatches + a.errors) - (b.mismatches + b.errors) ||
+      (a.aggMedian ?? Infinity) - (b.aggMedian ?? Infinity)
+    );
+    return { rows, winnersByExample, findingVis };
+  }
+
+  function fmtMs(ms) {
+    if (ms == null) return '&mdash;';
+    return ms >= 1000 ? (ms / 1000).toFixed(2) + '&thinsp;s' : ms.toFixed(2) + '&thinsp;ms';
+  }
+
+  function renderLeaderboard(vis) {
+    const { rows, winnersByExample, findingVis } = computeLeaderboard(vis);
+    const body = document.getElementById('leaderboardBody');
+    body.innerHTML = '';
+    document.getElementById('leaderboardSection').classList.toggle('hidden', rows.length === 0);
+    if (!rows.length) return;
+
+    const maxWinRate = Math.max(...rows.map(r => r.winRate), 0.0001);
+    rows.forEach((row, i) => {
+      const tr = document.createElement('tr');
+      const color = cssVar(SERIES_VAR[row.solver]);
+      tr.innerHTML = `
+        <td><span class="rank-num${i === 0 ? ' first' : ''}">${i + 1}</span></td>
+        <td><span class="solver-id"><span class="swatch" style="background:${color}"></span>${row.solver}</span></td>
+        <td><div class="winrate-cell"><div class="winrate-bar-track"><div class="winrate-bar-fill" style="width:${(row.winRate / maxWinRate * 100).toFixed(0)}%"></div></div><span class="winrate-num tabular">${Math.round(row.winRate * 100)}%</span></div></td>
+        <td><span class="taxo-num">${row.matchedSat}</span></td>
+        <td><span class="taxo-num">${row.matchedUnsat}</span></td>
+        <td><span class="taxo-num${row.mismatches > 0 ? ' nonzero crit' : ' zero'}">${row.mismatches}</span></td>
+        <td><span class="taxo-num${row.errors > 0 ? ' nonzero crit' : ' zero'}">${row.errors}</span></td>
+        <td class="tabular">${fmtMs(row.aggMedian)}</td>
+      `;
+      body.appendChild(tr);
+    });
+
+    renderCallouts(rows, winnersByExample, findingVis);
+  }
+
+  function renderCallouts(rows, winnersByExample, findingVis) {
+    const el = document.getElementById('callouts');
+    el.innerHTML = '';
+    const lines = [];
+
+    // Biggest lead: largest ratio between fastest and second-fastest valid result on one scenario.
+    let biggest = null;
+    findingVis.forEach(ex => {
+      const validRows = (resultsByExample.get(ex.id) || []).filter(r => r.outcome !== 'ERROR');
+      if (validRows.length < 2) return;
+      const sorted = [...validRows].sort((a, b) => a.medianWallMs - b.medianWallMs);
+      const [fastest, second] = sorted;
+      if (fastest.medianWallMs <= 0) return;
+      const ratio = second.medianWallMs / fastest.medianWallMs;
+      if (!biggest || ratio > biggest.ratio) biggest = { ex, fastest, second, ratio };
+    });
+    if (biggest && biggest.ratio > 1.15) {
+      lines.push(`Biggest lead: <b>${biggest.fastest.solver}</b> solved <b>${biggest.ex.id}</b> ${biggest.ratio.toFixed(1)}&times; faster than ${biggest.second.solver} (${fmtMs(biggest.fastest.medianWallMs)} vs ${fmtMs(biggest.second.medianWallMs)}).`);
+    }
+
+    // Most consistent: zero mismatches/errors, smallest average relative min-max spread.
+    let mostConsistent = null;
+    rows.filter(r => r.mismatches === 0 && r.errors === 0 && r.validAttempts > 0).forEach(row => {
+      const spreads = findingVis.map(ex => byExampleSolver.get(ex.id + '::' + row.solver))
+        .filter(r => r && r.outcome !== 'ERROR' && r.medianWallMs > 0)
+        .map(r => (r.maxWallMs - r.minWallMs) / r.medianWallMs);
+      if (!spreads.length) return;
+      const avgSpread = spreads.reduce((a, b) => a + b, 0) / spreads.length;
+      if (!mostConsistent || avgSpread < mostConsistent.avgSpread) mostConsistent = { solver: row.solver, attempted: row.validAttempts, avgSpread };
+    });
+    if (mostConsistent) {
+      lines.push(`Most consistent: <b>${mostConsistent.solver}</b> matched the oracle on all ${mostConsistent.attempted} scenarios it ran, with an average min&ndash;max spread of ${Math.round(mostConsistent.avgSpread * 100)}%.`);
+    }
+
+    if (!lines.length) {
+      lines.push('Not enough finding-mode data in the current filter to compute a lead or consistency callout.');
+    }
+    lines.forEach(html => {
+      const div = document.createElement('div');
+      div.className = 'callout-line';
+      div.innerHTML = html;
+      el.appendChild(div);
+    });
+  }
+
+  // ---------------------------------------------------------------- heatmap
+  function renderHeatmap(vis) {
+    const findingVis = vis.filter(isFindingMode).filter(ex => resultsByExample.has(ex.id));
+    document.getElementById('heatmapSection').classList.toggle('hidden', findingVis.length === 0 || SOLVERS.length === 0);
+    if (!findingVis.length) return;
+
+    // Hardest first: most non-matching cells among attempted solvers.
+    const difficulty = new Map();
+    findingVis.forEach(ex => {
+      let bad = 0;
+      SOLVERS.forEach(solver => {
+        const r = byExampleSolver.get(ex.id + '::' + solver);
+        const status = cellStatus(ex, r);
+        if (status === 'mismatch' || status === 'error') bad++;
+      });
+      difficulty.set(ex.id, bad);
+    });
+    const cols = [...findingVis].sort((a, b) => difficulty.get(b.id) - difficulty.get(a.id) || a.id.localeCompare(b.id));
+
+    const table = document.getElementById('heatmapTable');
+    table.innerHTML = '';
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    const cornerTh = document.createElement('th');
+    cornerTh.innerHTML = '<span class="sr-only">Solver</span>';
+    headRow.appendChild(cornerTh);
+    cols.forEach(ex => {
+      const th = document.createElement('th');
+      th.className = 'col-head';
+      th.title = ex.id;
+      th.textContent = ex.id.length > 22 ? ex.id.slice(0, 20) + '…' : ex.id;
+      th.onclick = () => jumpToScenario(ex.id);
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    SOLVERS.forEach(solver => {
+      const tr = document.createElement('tr');
+      const rowHead = document.createElement('th');
+      rowHead.className = 'row-head';
+      rowHead.textContent = solver;
+      tr.appendChild(rowHead);
+      cols.forEach(ex => {
+        const td = document.createElement('td');
+        td.className = 'cell';
+        const r = byExampleSolver.get(ex.id + '::' + solver);
+        const status = cellStatus(ex, r) || 'no-data';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'hm-swatch ' + status;
+        btn.title = r
+          ? `${ex.id} × ${solver}: ${status} (${r.outcome}, ${fmtMs(r.medianWallMs).replace(/&thinsp;/, ' ')})`
+          : `${ex.id} × ${solver}: not run`;
+        if (status === 'error') btn.textContent = '!';
+        if (status === 'mismatch') btn.textContent = '✕';
+        btn.onclick = () => jumpToScenario(ex.id);
+        td.appendChild(btn);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+
+    const legend = document.getElementById('heatmapLegend');
+    legend.innerHTML = [
+      ['match', 'Matched oracle'],
+      ['mismatch', 'Mismatch (✕)'],
+      ['error', 'Solver error (!)'],
+      ['no-oracle', 'No recorded oracle'],
+      ['no-data', 'Not run'],
+    ].map(([cls, label]) => `<div class="item"><span class="dot hm-swatch ${cls}" style="width:0.65rem;height:0.65rem;display:inline-block"></span>${label}</div>`).join('');
+  }
+
+  // ------------------------------------------------------------ box-whisker
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  function svgEl(tag, attrs) {
+    const el = document.createElementNS(SVGNS, tag);
+    for (const k in (attrs || {})) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+  function boxWhisker(min, med, max, domainMin, domainMax, color) {
+    const w = 120, h = 16, pad = 4;
+    const span = Math.max(1e-9, domainMax - domainMin);
+    const x = v => pad + ((v - domainMin) / span) * (w - pad * 2);
+    const svg = svgEl('svg', { class: 'bw', width: w, height: h, viewBox: `0 0 ${w} ${h}` });
+    svg.appendChild(svgEl('line', { class: 'bw-line', x1: x(min), x2: x(max), y1: h / 2, y2: h / 2 }));
+    svg.appendChild(svgEl('line', { class: 'bw-line', x1: x(min), x2: x(min), y1: h / 2 - 4, y2: h / 2 + 4 }));
+    svg.appendChild(svgEl('line', { class: 'bw-line', x1: x(max), x2: x(max), y1: h / 2 - 4, y2: h / 2 + 4 }));
+    const med2 = svgEl('circle', { class: 'bw-med', cx: x(med), cy: h / 2, r: 3.4, fill: color });
+    svg.appendChild(med2);
+    return svg;
+  }
+
+  // ------------------------------------------------------------ scenario table
+  let sortKey = 'status';
+  let sortDir = 1; // 1 = ascending as defined per column's "interesting first" direction
+  const expandedIds = new Set();
+
+  function fastestTime(ex) {
+    const rows = (resultsByExample.get(ex.id) || []).filter(r => r.outcome !== 'ERROR');
+    if (!rows.length) return null;
+    return Math.min(...rows.map(r => r.medianWallMs));
+  }
+  function rowStatus(ex) {
+    const rows = resultsByExample.get(ex.id) || [];
+    if (!rows.length) return 'no-oracle';
+    const statuses = rows.map(r => cellStatus(ex, r));
+    if (statuses.some(s => s === 'error')) return statuses.every(s => s === 'error') ? 'error' : 'mixed';
+    if (statuses.some(s => s === 'mismatch')) return statuses.every(s => s === 'mismatch') ? 'mismatch' : 'mixed';
+    if (statuses.every(s => s === 'match')) return 'match';
+    return 'no-oracle';
+  }
+  const STATUS_RANK = { mismatch: 0, error: 0, mixed: 1, 'no-oracle': 2, match: 3 };
+
+  function sortExamples(list) {
+    const dirMul = sortDir;
+    const withKeys = list.map(ex => ({
+      ex,
+      status: STATUS_RANK[rowStatus(ex)] ?? 9,
+      id: ex.id,
+      category: ex.category || '',
+      expected: (ex.expected && ex.expected.classification) || '',
+      time: fastestTime(ex),
+    }));
+    withKeys.sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === 'time') {
+        const av = a.time == null ? Infinity : a.time;
+        const bv = b.time == null ? Infinity : b.time;
+        cmp = av - bv;
+      } else if (sortKey === 'status') {
+        cmp = a.status - b.status;
+      } else {
+        cmp = String(a[sortKey]).localeCompare(String(b[sortKey]));
+      }
+      if (cmp === 0) cmp = a.id.localeCompare(b.id);
+      return cmp * dirMul;
+    });
+    return withKeys.map(w => w.ex);
+  }
+
+  document.querySelectorAll('#scenarioTable thead th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
+      document.querySelectorAll('#scenarioTable thead th.sortable').forEach(h => {
+        h.classList.toggle('active', h === th);
+        h.querySelector('.arrow').textContent = h === th ? (sortDir === 1 ? '▲' : '▼') : '▼';
+      });
+      renderScenarioTable(visibleExamples());
+    });
+  });
+
+  function statusBadgeHtml(status) {
+    const labels = { match: 'match', mismatch: 'mismatch', error: 'error', mixed: 'mixed', 'no-oracle': 'no oracle' };
+    return `<span class="status-badge ${status}">${labels[status]}</span>`;
+  }
+
+  function renderScenarioTable(vis) {
+    const body = document.getElementById('scenarioBody');
+    body.innerHTML = '';
+    document.getElementById('scenarioCount').textContent = `(${vis.length} shown)`;
+    const sorted = sortExamples(vis);
+
+    sorted.forEach(ex => {
+      const status = rowStatus(ex);
+      const tr = document.createElement('tr');
+      tr.className = 'scenario-row' + (expandedIds.has(ex.id) ? ' expanded' : '');
+      tr.dataset.example = ex.id;
+
+      const toggleTd = document.createElement('td');
+      const btn = document.createElement('button');
+      btn.className = 'expand-btn';
+      btn.type = 'button';
+      btn.setAttribute('aria-label', 'Toggle detail for ' + ex.id);
+      btn.textContent = '▸';
+      toggleTd.appendChild(btn);
+      tr.appendChild(toggleTd);
+
+      const statusTd = document.createElement('td');
+      statusTd.innerHTML = statusBadgeHtml(status);
+      tr.appendChild(statusTd);
+
+      const nameTd = document.createElement('td');
+      nameTd.innerHTML = `<span class="name-cell">${escapeHtml(ex.id)}</span>`;
+      tr.appendChild(nameTd);
+
+      const catTd = document.createElement('td');
+      catTd.textContent = ex.category;
+      tr.appendChild(catTd);
+
+      const modeTd = document.createElement('td');
+      const findingChip = (ex.mode || '').includes('finding') ? '<span class="chip finding">finding</span>' : '';
+      const validatingChip = (ex.mode || '').includes('validating') ? '<span class="chip validating">validating</span>' : '';
+      modeTd.innerHTML = [findingChip, validatingChip].filter(Boolean).join(' ');
+      tr.appendChild(modeTd);
+
+      const expTd = document.createElement('td');
+      if (ex.expected && ex.expected.outcome) {
+        const cls = ex.expected.classification === 'unsat' ? 'unsat' : 'sat';
+        expTd.innerHTML = `<span class="outcome-pill ${cls}">${ex.expected.classification.toUpperCase()}</span>`;
+      } else {
+        expTd.innerHTML = '<span class="chip" style="color:var(--text-muted);background:var(--surface-3)">&mdash;</span>';
+      }
+      tr.appendChild(expTd);
+
+      const timeTd = document.createElement('td');
+      timeTd.className = 'tabular';
+      timeTd.innerHTML = fmtMs(fastestTime(ex));
+      tr.appendChild(timeTd);
+
+      const soilTd = document.createElement('td');
+      const soilRows = soilByExample.get(ex.id) || [];
+      if (!ex.hasValidationTests) {
+        soilTd.innerHTML = '<span style="color:var(--text-muted)">&mdash;</span>';
+      } else if (!soilRows.length) {
+        soilTd.innerHTML = '<span style="color:var(--text-muted)">not run</span>';
+      } else {
+        const failing = soilRows.filter(r => !r.passed);
+        soilTd.innerHTML = failing.length === 0
+          ? `<span style="color:var(--status-good);font-weight:600">&#10003; ${soilRows.length}/${soilRows.length}</span>`
+          : `<span style="color:var(--status-critical);font-weight:600">&#10007; ${failing.length}/${soilRows.length}</span>`;
+      }
+      tr.appendChild(soilTd);
+
+      tr.addEventListener('click', (evt) => {
+        if (evt.target.closest('.expand-btn') === null) toggleExpand(ex.id);
+        else toggleExpand(ex.id);
+      });
+      body.appendChild(tr);
+
+      const detailTr = document.createElement('tr');
+      detailTr.className = 'detail-row' + (expandedIds.has(ex.id) ? '' : ' hidden');
+      detailTr.dataset.exampleDetail = ex.id;
+      const detailTd = document.createElement('td');
+      detailTd.colSpan = 8;
+      if (expandedIds.has(ex.id)) detailTd.appendChild(buildDetail(ex));
+      detailTr.appendChild(detailTd);
+      body.appendChild(detailTr);
+    });
+  }
+
+  function toggleExpand(id) {
+    if (expandedIds.has(id)) expandedIds.delete(id); else expandedIds.add(id);
+    renderScenarioTable(visibleExamples());
+  }
+
+  function jumpToScenario(id) {
+    expandedIds.add(id);
+    activeCategory = 'all'; activeFeature = 'all'; activeExpectedClass = 'all';
+    [...filterbar.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b.textContent === 'All scenarios'));
+    expectedSelect.value = 'all'; featureSelect.value = 'all';
+    renderAll();
+    const row = document.querySelector(`tr.scenario-row[data-example="${CSS.escape(id)}"]`);
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row.style.outline = '2px solid var(--accent)';
+      setTimeout(() => { row.style.outline = ''; }, 1200);
+    }
+  }
+
+  function buildDetail(ex) {
+    const wrap = document.createElement('div');
+    wrap.className = 'detail-wrap';
+
+    const rows = resultsByExample.get(ex.id) || [];
+    if (rows.length) {
+      const allMs = rows.flatMap(r => [r.minWallMs, r.maxWallMs]);
+      const domainMin = Math.min(...allMs), domainMax = Math.max(...allMs, domainMin + 1e-6);
+      const table = document.createElement('table');
+      table.className = 'detail-table';
+      table.innerHTML = `<thead><tr>
+        <th>Solver</th><th>Time (min &ndash; median &ndash; max)</th><th>Kodkod solve</th>
+        <th>Kodkod translate</th><th>Outcome</th><th>Match</th><th>Witness</th>
+      </tr></thead>`;
+      const tbody = document.createElement('tbody');
+      [...rows].sort((a, b) => a.solver.localeCompare(b.solver)).forEach(r => {
+        const tr = document.createElement('tr');
+        const status = cellStatus(ex, r);
+        const solverTd = document.createElement('td');
+        solverTd.innerHTML = `<span class="solver-id"><span class="swatch" style="background:${cssVar(SERIES_VAR[r.solver])}"></span>${r.solver}</span>`;
+        tr.appendChild(solverTd);
+        const bwTd = document.createElement('td');
+        bwTd.className = 'bw-cell';
+        if (r.outcome !== 'ERROR') {
+          bwTd.appendChild(boxWhisker(r.minWallMs, r.medianWallMs, r.maxWallMs, domainMin, domainMax, cssVar(SERIES_VAR[r.solver])));
+          const cap = document.createElement('div');
+          cap.className = 'tabular';
+          cap.style.cssText = 'font-size:var(--fs-tiny);color:var(--text-muted)';
+          cap.innerHTML = fmtMs(r.medianWallMs);
+          bwTd.appendChild(cap);
+        } else {
+          bwTd.innerHTML = '<span style="color:var(--status-critical)">n/a</span>';
+        }
+        tr.appendChild(bwTd);
+        const solveTd = document.createElement('td'); solveTd.className = 'tabular'; solveTd.textContent = r.outcome === 'ERROR' ? '—' : r.medianKodkodSolvingMs + ' ms'; tr.appendChild(solveTd);
+        const transTd = document.createElement('td'); transTd.className = 'tabular'; transTd.textContent = r.outcome === 'ERROR' ? '—' : r.medianKodkodTranslationMs + ' ms'; tr.appendChild(transTd);
+        const outTd = document.createElement('td');
+        const ocls = r.outcome === 'ERROR' ? 'error' : (outcomeFamily(r.outcome) === 'unsat' ? 'unsat' : 'sat');
+        outTd.innerHTML = r.outcome === 'ERROR'
+          ? `<span class="status-badge error">ERROR</span>`
+          : `<span class="outcome-pill ${ocls}">${r.outcome}</span>`;
+        tr.appendChild(outTd);
+        const matchTd = document.createElement('td');
+        matchTd.innerHTML = statusBadgeHtml(status);
+        tr.appendChild(matchTd);
+        const witTd = document.createElement('td');
+        const digestSet = new Set((r.allWitnessDigests || []).filter(Boolean));
+        witTd.title = r.witnessDigest || '';
+        witTd.textContent = digestSet.size ? `${digestSet.size} shape${digestSet.size === 1 ? '' : 's'}` : '—';
+        tr.appendChild(witTd);
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+    } else {
+      const none = document.createElement('div');
+      none.style.cssText = 'font-size:var(--fs-small);color:var(--text-muted)';
+      none.textContent = 'No finding-mode solver results for this scenario.';
+      wrap.appendChild(none);
+    }
+
+    const soilRows = soilByExample.get(ex.id) || [];
+    if (ex.hasValidationTests) {
+      const soilWrap = document.createElement('div');
+      soilWrap.className = 'soil-list';
+      if (!soilRows.length) {
+        soilWrap.innerHTML = '<div style="color:var(--text-muted)">SOIL fixtures declared but not run in this benchmark.</div>';
+      } else {
+        soilRows.forEach(r => {
+          const line = document.createElement('div');
+          line.className = r.passed ? 'ok' : 'bad';
+          line.textContent = (r.passed ? '✓ ' : '✗ ') + r.cmdFile + ' — ' + r.note;
+          soilWrap.appendChild(line);
+        });
+      }
+      wrap.appendChild(soilWrap);
+    }
+
+    if ((ex.oracleCaveats || []).length) {
+      const caveats = document.createElement('div');
+      caveats.style.cssText = 'display:flex;flex-direction:column;gap:0.4rem';
+      ex.oracleCaveats.forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'oracle-caveat';
+        div.innerHTML = `<span>&#9888;</span><span><b>Oracle caveat:</b> ${escapeHtml(c)}</span>`;
+        caveats.appendChild(div);
+      });
+      wrap.appendChild(caveats);
+    }
+
+    if ((ex.features || []).length) {
+      const pluginId = primaryPluginId();
+      const featWrap = document.createElement('div');
+      featWrap.innerHTML = '<div class="h2-sub" style="margin-bottom:0.35rem">Plugin features exercised</div>';
+      const row = document.createElement('div');
+      row.className = 'scenario-chip-row';
+      ex.features.forEach(fid => {
+        const meta = featureIndex.get(fid);
+        const support = meta ? meta.support[pluginId] : null;
+        const chip = document.createElement('span');
+        chip.className = 'status-badge ' + (support ? support.status : 'unverified');
+        chip.style.cursor = 'pointer';
+        chip.textContent = meta ? meta.name : fid;
+        chip.title = fid;
+        chip.onclick = () => jumpToFeature(fid);
+        row.appendChild(chip);
+      });
+      featWrap.appendChild(row);
+      wrap.appendChild(featWrap);
+    }
+
+    if ((ex.scenarioTags || []).length) {
+      const tagWrap = document.createElement('div');
+      tagWrap.innerHTML = '<div class="h2-sub" style="margin-bottom:0.35rem">Scenario design tags</div>';
+      const row = document.createElement('div');
+      row.className = 'scenario-chip-row';
+      row.innerHTML = ex.scenarioTags.map(t => `<span class="scenario-chip">${escapeHtml(t)}</span>`).join('');
+      tagWrap.appendChild(row);
+      wrap.appendChild(tagWrap);
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'detail-meta';
+    const metaLines = [];
+    if (ex.question) metaLines.push(`<b>Question:</b> ${escapeHtml(ex.question)}`);
+    metaLines.push(`<b>Model:</b> ${escapeHtml(ex.directory)}/${escapeHtml(ex.useFile)}${ex.propertiesFile ? ' + ' + escapeHtml(ex.propertiesFile) : ''}`);
+    metaLines.push(`<b>Source:</b> ${escapeHtml(provenanceLabel(ex))}${ex.provenanceDetail ? ' — ' + escapeHtml(ex.provenanceDetail) : ''}${ex.provenanceCitation ? ' (' + escapeHtml(ex.provenanceCitation) + ')' : ''}`);
+    meta.innerHTML = metaLines.join('<br>');
+    wrap.appendChild(meta);
+
+    return wrap;
+  }
+
+  // ------------------------------------------------------------ plugin feature support
+  function pluginStats(pluginId) {
+    const counts = { supported: 0, degraded: 0, 'known-defect': 0, unsupported: 0, unverified: 0 };
+    let total = 0, evaluated = 0;
+    featureIndex.forEach(f => {
+      total++;
+      const s = f.support[pluginId];
+      if (s) { evaluated++; counts[s.status] = (counts[s.status] || 0) + 1; }
+    });
+    return { total, evaluated, counts };
+  }
+
+  function renderPluginSummary() {
+    document.getElementById('featureSupportSub').textContent = `${featureIndex.size} features across ${FEATURE_AREAS.length} capability areas`;
+    const row = document.getElementById('pluginSummaryRow');
+    row.innerHTML = '';
+    FEATURE_PLUGINS.forEach(p => {
+      const stats = pluginStats(p.id);
+      const card = document.createElement('div');
+      card.className = 'plugin-card' + (stats.evaluated === 0 ? ' not-started' : '');
+      let body = `<div class="plugin-card-head"><span class="plugin-card-name">${escapeHtml(p.name)}</span></div>
+        <div class="plugin-card-desc">${escapeHtml(p.description || '')}</div>`;
+      if (stats.evaluated === 0) {
+        body += `<div class="not-started-note">Not yet evaluated against this feature matrix (0/${stats.total} features).</div>`;
+      } else {
+        body += statusStackHtml(stats.counts, stats.evaluated);
+        body += '<div class="status-legend-row">' + STATUS_ORDER.filter(s => stats.counts[s] > 0).map(s =>
+          `<span class="item"><span class="dot" style="background:var(${STATUS_COLOR_VAR[s]})"></span>${STATUS_LABEL[s]} ${stats.counts[s]}</span>`
+        ).join('') + '</div>';
+        if (stats.evaluated < stats.total) {
+          const remaining = stats.total - stats.evaluated;
+          body += `<div class="not-started-note" style="margin-top:0.5rem">${remaining} feature${remaining === 1 ? '' : 's'} not yet evaluated for this plugin.</div>`;
+        }
+      }
+      card.innerHTML = body;
+      row.appendChild(card);
+    });
+  }
+
+  function renderAreaBreakdown() {
+    const pluginId = primaryPluginId();
+    const body = document.getElementById('areaBreakdown');
+    body.innerHTML = '';
+    FEATURE_AREAS.forEach(area => {
+      const counts = { supported: 0, degraded: 0, 'known-defect': 0, unsupported: 0, unverified: 0 };
+      let total = 0;
+      area.features.forEach(f => {
+        const s = f.support[pluginId];
+        if (s) { total++; counts[s.status]++; }
+      });
+      const row = document.createElement('div');
+      row.className = 'area-row' + (activeFeatureArea === area.key ? ' active' : '');
+      const name = document.createElement('div');
+      name.className = 'area-name';
+      name.textContent = area.name;
+      name.onclick = () => {
+        activeFeatureArea = (activeFeatureArea === area.key) ? 'all' : area.key;
+        renderAreaBreakdown();
+        renderFeatureTable();
+      };
+      row.appendChild(name);
+      const stackWrap = document.createElement('div');
+      stackWrap.innerHTML = statusStackHtml(counts, total);
+      row.appendChild(stackWrap.firstChild);
+      const count = document.createElement('div');
+      count.className = 'area-count';
+      count.textContent = String(total);
+      row.appendChild(count);
+      body.appendChild(row);
+    });
+  }
+
+  function scenarioChipsHtml(ids, roleLabel) {
+    if (!ids.length) return '';
+    return `<div class="scenario-chip-row"><span class="h2-sub" style="align-self:center">${roleLabel}</span>` +
+      ids.map(id => `<span class="scenario-chip" data-jump="${escapeHtml(id)}" style="cursor:pointer">${escapeHtml(id)}</span>`).join('') +
+      '</div>';
+  }
+
+  function buildFeatureDetail(f) {
+    const pluginId = primaryPluginId();
+    const support = f.support[pluginId];
+    const wrap = document.createElement('div');
+    wrap.className = 'detail-wrap';
+    if (!support) {
+      wrap.innerHTML = `<div style="font-size:var(--fs-small);color:var(--text-muted)">Not yet evaluated for ${escapeHtml(pluginId)}.</div>`;
+      return wrap;
+    }
+    const notes = document.createElement('div');
+    notes.className = 'detail-meta';
+    notes.style.borderTop = 'none';
+    notes.style.paddingTop = '0';
+    notes.innerHTML = `<b>Evidence:</b> ${support.evidence ? escapeHtml(support.evidence) : '&mdash;'}<br><b>Notes:</b> ${support.notes ? escapeHtml(support.notes) : '&mdash;'}`;
+    wrap.appendChild(notes);
+    const chips = document.createElement('div');
+    chips.style.cssText = 'display:flex;flex-direction:column;gap:0.4rem;margin-top:0.6rem';
+    chips.innerHTML = [
+      scenarioChipsHtml(support.satScenarioIds || [], 'SAT evidence'),
+      scenarioChipsHtml(support.unsatScenarioIds || [], 'UNSAT evidence'),
+      scenarioChipsHtml(support.validationOracleScenarioIds || [], 'SOIL oracle evidence'),
+    ].join('');
+    if (support.coverageNote) {
+      chips.innerHTML += `<div style="font-size:var(--fs-tiny);color:var(--text-muted)">${escapeHtml(support.coverageNote)}</div>`;
+    }
+    chips.querySelectorAll('[data-jump]').forEach(el => {
+      el.onclick = () => jumpToScenario(el.dataset.jump);
+    });
+    wrap.appendChild(chips);
+    return wrap;
+  }
+
+  function toggleFeatureExpand(id) {
+    if (expandedFeatureIds.has(id)) expandedFeatureIds.delete(id); else expandedFeatureIds.add(id);
+    renderFeatureTable();
+  }
+
+  const FEATURE_STATUS_RANK = { 'known-defect': 0, unverified: 0, degraded: 1, unsupported: 2, supported: 3 };
+  let featureSortKey = 'status';
+  let featureSortDir = 1;
+
+  document.querySelectorAll('#featureTable thead th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      if (featureSortKey === key) featureSortDir *= -1; else { featureSortKey = key; featureSortDir = 1; }
+      document.querySelectorAll('#featureTable thead th.sortable').forEach(h => {
+        h.classList.toggle('active', h === th);
+        h.querySelector('.arrow').textContent = h === th ? (featureSortDir === 1 ? '▲' : '▼') : '▼';
+      });
+      renderFeatureTable();
+    });
+  });
+
+  function renderFeatureTable() {
+    const pluginId = primaryPluginId();
+    let rows = Array.from(featureIndex.values());
+    if (activeFeatureArea !== 'all') rows = rows.filter(f => f.areaKey === activeFeatureArea);
+    if (activeFeatureStatus !== 'all') rows = rows.filter(f => (f.support[pluginId] || {}).status === activeFeatureStatus);
+
+    const withKeys = rows.map(f => ({
+      f,
+      status: FEATURE_STATUS_RANK[(f.support[pluginId] || {}).status] ?? -1,
+      area: f.areaName,
+      name: f.name,
+    }));
+    withKeys.sort((a, b) => {
+      let cmp = featureSortKey === 'status' ? a.status - b.status
+        : String(a[featureSortKey]).localeCompare(String(b[featureSortKey]));
+      if (cmp === 0) cmp = a.f.id.localeCompare(b.f.id);
+      return cmp * featureSortDir;
+    });
+
+    const body = document.getElementById('featureBody');
+    body.innerHTML = '';
+    withKeys.forEach(({ f }) => {
+      const support = f.support[pluginId];
+      const tr = document.createElement('tr');
+      tr.className = 'scenario-row' + (expandedFeatureIds.has(f.id) ? ' expanded' : '');
+      tr.dataset.feature = f.id;
+      const toggleTd = document.createElement('td');
+      const btn = document.createElement('button');
+      btn.className = 'expand-btn'; btn.type = 'button'; btn.textContent = '▸';
+      btn.setAttribute('aria-label', 'Toggle detail for ' + f.id);
+      toggleTd.appendChild(btn);
+      tr.appendChild(toggleTd);
+
+      const statusTd = document.createElement('td');
+      statusTd.innerHTML = support ? `<span class="status-badge ${support.status}">${STATUS_LABEL[support.status]}</span>` : '<span class="status-badge unverified">Not evaluated</span>';
+      tr.appendChild(statusTd);
+
+      const areaTd = document.createElement('td');
+      areaTd.textContent = f.areaName;
+      tr.appendChild(areaTd);
+
+      const nameTd = document.createElement('td');
+      nameTd.innerHTML = `<span class="feature-cell-name">${escapeHtml(f.name)}</span><span class="feature-cell-id">${escapeHtml(f.id)}</span>`;
+      tr.appendChild(nameTd);
+
+      const scenTd = document.createElement('td');
+      const n = support ? new Set([...(support.satScenarioIds || []), ...(support.unsatScenarioIds || []), ...(support.validationOracleScenarioIds || [])]).size : 0;
+      scenTd.innerHTML = n ? `<span class="tabular">${n} scenario${n === 1 ? '' : 's'}</span>` : '<span style="color:var(--text-muted)">&mdash;</span>';
+      tr.appendChild(scenTd);
+
+      tr.onclick = () => toggleFeatureExpand(f.id);
+      body.appendChild(tr);
+
+      const detailTr = document.createElement('tr');
+      detailTr.className = 'detail-row' + (expandedFeatureIds.has(f.id) ? '' : ' hidden');
+      const detailTd = document.createElement('td');
+      detailTd.colSpan = 5;
+      if (expandedFeatureIds.has(f.id)) detailTd.appendChild(buildFeatureDetail(f));
+      detailTr.appendChild(detailTd);
+      body.appendChild(detailTr);
+    });
+  }
+
+  function renderFeatureSupport() {
+    renderPluginSummary();
+    renderAreaBreakdown();
+    renderFeatureTable();
+  }
+
+  function jumpToFeature(id) {
+    activeFeatureArea = 'all';
+    activeFeatureStatus = 'all';
+    featureFilterbar.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.textContent === 'All statuses'));
+    expandedFeatureIds.add(id);
+    renderFeatureSupport();
+    const row = document.querySelector(`#featureBody tr[data-feature="${CSS.escape(id)}"]`);
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row.style.outline = '2px solid var(--accent)';
+      setTimeout(() => { row.style.outline = ''; }, 1200);
+    }
+  }
+
+  // --------------------------------------------------------------- footer
+  const metaParts = [];
+  if (RUN_METADATA.timestamp) metaParts.push(`run at ${escapeHtml(RUN_METADATA.timestamp)}`);
+  if (RUN_METADATA.gitRevision) metaParts.push(`rev ${escapeHtml(RUN_METADATA.gitRevision.slice(0, 12))}${RUN_METADATA.gitDirty ? ' (dirty)' : ''}`);
+  if (RUN_METADATA.javaVersion) metaParts.push(escapeHtml(RUN_METADATA.javaVersion));
+  if (RUN_METADATA.os) metaParts.push(escapeHtml(RUN_METADATA.os));
+  if (RUN_METADATA.safety) {
+    metaParts.push(RUN_METADATA.safety === 'off'
+      ? 'safety=off (no timeout/watchdog)'
+      : `safety=on (outer ${RUN_METADATA.overallTimeoutSeconds}s timeout + watchdog)`);
+  }
+  document.getElementById('footNote').innerHTML =
+    `${MANIFEST.length} scenarios, ${RESULTS.length} (scenario, solver) benchmark cells, ${SOLVERS.length} solver backends. ` +
+    `"Time" is this benchmark's own wall-clock measurement around the whole validate() call; "Kodkod solve/translate" ` +
+    `is Kodkod's own internal Statistics, millisecond resolution, last-attempt only.` +
+    (metaParts.length ? `<br>${metaParts.join(' &middot; ')}` : '');
+
+  function renderAll() {
+    const vis = visibleExamples();
+    renderVerdict();
+    renderLeaderboard(vis);
+    renderFeatureSupport();
+    renderHeatmap(vis);
+    renderScenarioTable(vis);
+  }
+
+  renderAll();
+})();
+</script>

@@ -1,0 +1,29 @@
+-- Hand-built instance that is structurally valid (parses, every class
+-- represented, no missing attributes) but deliberately VIOLATES exactly one
+-- invariant: D::LevelsDiffer (self.levelB <> self.levelC). d.levelB and
+-- d.levelC are both set to 1, which is equal, not distinct.
+--
+-- Every other invariant still holds in this state:
+--   A::NameNotEmpty       -- a/b/c/d all have non-empty names (OK)
+--   D::DepthMatchesTag    -- d.depth=5 > 0, d.tag='diamond-tag' <> '' (OK)
+
+!create a : A
+!set a.name := 'root-a'
+
+!create b : B
+!set b.name := 'root-b'
+!set b.levelB := 10
+
+!create c : C
+!set c.name := 'root-c'
+!set c.levelC := 20
+
+!create d : D
+!set d.name := 'root-d'
+!set d.levelB := 1
+!set d.levelC := 1
+!set d.depth := 5
+!set d.tag := 'diamond-tag'
+
+!create e : E
+!set e.tag := 'root-e'

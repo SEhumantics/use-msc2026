@@ -1,0 +1,226 @@
+model Sudoku
+
+-- -----------------------------------------------------------------------
+-- Ported from examples/Others/Sudoku/Sudoku.use (this repo's own bundled
+-- USE examples). The original ships a full 9x9 board solved via an ASSL
+-- script (Sudoku.assl / CreateBoard.cmd) that imperatively inserts a
+-- hand-built object diagram -- never solved through Kodkod. This port
+-- keeps the class/attribute/operation structure essentially unchanged and
+-- instead has KK-ModelValidator's Kodkod-backed search FIND a valid
+-- filled-in board from a set of givens (a genuine SAT-style combinatorial
+-- search, the point of this example -- see Sudoku.properties).
+--
+-- Scaled down from 9x9 to 6x6 (2x3 boxes, digits 1-6), after actually
+-- trying the full 9x9 board first and confirming it is intractable here,
+-- not just assuming so:
+--   - 9x9, 24 givens, bitwidth 12: killed after running 6m18s with no
+--     result (still "Searching solution" under DefaultSAT4J).
+--   - 9x9, 24 givens, bitwidth 8: killed after running 2m30s, same state.
+--   - 9x9, 0 givens (find ANY complete valid board), bitwidth 8: killed
+--     after running 2m30s, same state.
+-- All three were confirmed past the "trivially unsatisfiable" bounds
+-- check (which returns near-instantly when it fires -- see the
+-- Sudoku.properties header for an example of that) and were genuinely
+-- inside DefaultSAT4J's search when killed. The 6x6 board below, by
+-- contrast, is confirmed SATISFIABLE with real solver work: repeated runs
+-- land at roughly 2.5s-5s of solving time (see Sudoku.properties and
+-- validate.cmd for the exact numbers actually observed) -- squarely the
+-- "single-digit seconds" nontrivial range this example targets, not the
+-- multi-minute-plus territory the 9x9 board fell into.
+-- -----------------------------------------------------------------------
+
+class Board
+  operations
+    getField(iRow : Integer, iCol : Integer) : Field =
+	  self.rows->any(index = iRow).fields->any(column.index = iCol)
+end
+
+class Row
+  attributes
+    index : Integer
+  operations
+    getValues() : Set(Integer) =
+	  fields.value->asSet()
+end
+
+class Column
+  attributes
+    index : Integer
+  operations
+    getValues() : Set(Integer) =
+	  fields.value->asSet()
+end
+
+class Square
+  attributes
+    index : Integer
+  operations
+    getValues() : Set(Integer) =
+	  fields.value->asSet()
+end
+
+class Field
+  attributes
+	value : Integer
+end
+
+composition BoardRows between
+  Board[1]
+  Row[6] role rows
+end
+
+composition BoardColumns between
+  Board[1]
+  Column[6] role columns
+end
+
+composition BoardSquares between
+  Board[1]
+  Square[6] role squares
+end
+
+composition BoardFields between
+  Board[1]
+  -- NOTE (this port): the original bundled model declares a fixed
+  -- "Field[N]" here (81 for the 9x9 board; 36 here for 6x6). The
+  -- KK-ModelValidator plugin's MultiplicityTransformator parses a fixed
+  -- cardinality multiplicity by STRING LENGTH rather than by content
+  -- (org.tzi.use.kodkod.transform.MultiplicityTransformator.transform: any
+  -- multiplicity string of length > 1 is assumed to contain ".." and is
+  -- blindly split on it) -- confirmed by actually running -validate
+  -- against an unmodified "Field[81]"/"Field[36]" declaration: both throw
+  -- ArrayIndexOutOfBoundsException: Index 1 out of bounds for length 1
+  -- from MultiplicityTransformator.java:31, for exactly this reason (any
+  -- *fixed*, not ranged, two-or-more-digit multiplicity like [81], [36] or
+  -- [12] hits this; [9], [6], [1] etc. are single characters and parse
+  -- fine; a range like [0..81] would also parse fine, since it actually
+  -- contains ".."). This is a genuine, previously-undiscovered plugin bug,
+  -- not specific to Sudoku -- any model with a fixed two-digit-or-larger
+  -- multiplicity anywhere hits it.
+  -- Widened to Field[*] here purely to work around that bug; the exact
+  -- population (36) is still fully pinned in Sudoku.properties via
+  -- Field_min=Field_max=36 and an explicit BoardFields Set{...} literal,
+  -- so nothing about the searched instance's actual shape changes.
+  Field[*] role fields
+end
+
+association RowFields between
+  Row[1]
+  Field[6] role fields
+end
+
+association ColumnFields between
+  Column[1]
+  Field[6] role fields
+end
+
+association SquareFields between
+  Square[1]
+  Field[6] role fields
+end
+
+constraints
+
+context Field inv allowedValue:
+  self.value >= 1 and self.value <= 6
+
+context Row inv uniqueValuesRow:
+  self.fields->isUnique(value)
+
+context Column inv uniqueValuesColumn:
+  self.fields->isUnique(value)
+
+context Square inv uniqueValuesSquare:
+  self.fields->isUnique(value)
+
+-- Activated for this port (inactive/commented out in the original bundled
+-- model, which never needed them since its board layout was hand-built via
+-- ASSL rather than searched for). Needed so that Row.index/Column.index
+-- give a well-defined, injective row/column coordinate system -- see the
+-- givenRxCy invariants below, which rely on it.
+context Column inv allowedColumnIndex:
+  self.index >= 1 and self.index <= 6
+
+context Column inv columnIndexUnique:
+  Column.allInstances()->isUnique(index)
+
+context Row inv allowedRowIndex:
+  self.index >= 1 and self.index <= 6
+
+context Row inv rowIndexUnique:
+  Row.allInstances()->isUnique(index)
+
+-- -----------------------------------------------------------------------
+-- Puzzle givens (clues), encoded as OCL invariants rather than as
+-- Sudoku.properties attribute bindings.
+--
+-- Why: the KK-ModelValidator plugin's per-object attribute-value binding
+-- (a properties-file line of the form "ObjectName_attributeName = value",
+-- e.g. "Field1_value = 6") is unconditionally broken for every model, not
+-- just this one -- confirmed by actually running it and reading the
+-- plugin's own source. org.tzi.kodkod.model.type.ObjectType.createAtomList
+-- (called from ClassConfigurator) always names a class's atoms
+-- "<ClassName>_<objectName>" (e.g. object "Field1" of class "Field" becomes
+-- atom "Field_Field1"), but
+-- org.tzi.kodkod.model.config.impl.AttributeConfigurator.lowerBound looks
+-- up that atom by the *unqualified* object name alone ("Field1"), with no
+-- equivalent fallback to AssociationConfigurator.lowerBound's own dual
+-- "prefixed-name-or-raw-name" check a few lines above it in the same
+-- package. The result, confirmed by actually trying "Field1_value = 6"
+-- (and separately "Row1_index = 1") against this exact model: `mv
+-- -validate` throws `kodkod.instance.TupleFactory$...: No such atom in the
+-- universe: Field1` (resp. `Row1`) every time, unconditionally -- there is
+-- no object naming scheme that avoids it, since the mismatch is
+-- structural, not a naming-convention mistake in the .properties file.
+--
+-- Workaround used here instead: Row.index/Column.index are left as
+-- ordinary, solver-chosen Integers (only range- and uniqueness-constrained
+-- above, not pinned to any particular Row/Column object), and each given
+-- clue is expressed as a *coordinate-conditioned* invariant -- "whichever
+-- Field ends up at (row.index=R, column.index=C), its value must be V" --
+-- which only needs the (working) association-tuple binding mechanism for
+-- the fixed row/column/square/field grid skeleton (see Sudoku.properties),
+-- never the (broken) per-object attribute-value mechanism. This is a
+-- randomly generated, independently verified (by a standalone Python
+-- backtracking solver, not by this plugin) 10-clue 6x6 puzzle with a
+-- unique solution -- not a published puzzle, authored for this benchmark.
+-- -----------------------------------------------------------------------
+
+context Field inv givenR1C3:
+  (self.row.index = 1 and self.column.index = 3) implies self.value = 6
+
+context Field inv givenR1C5:
+  (self.row.index = 1 and self.column.index = 5) implies self.value = 4
+
+context Field inv givenR2C4:
+  (self.row.index = 2 and self.column.index = 4) implies self.value = 6
+
+context Field inv givenR3C3:
+  (self.row.index = 3 and self.column.index = 3) implies self.value = 4
+
+context Field inv givenR3C5:
+  (self.row.index = 3 and self.column.index = 5) implies self.value = 5
+
+context Field inv givenR4C5:
+  (self.row.index = 4 and self.column.index = 5) implies self.value = 2
+
+context Field inv givenR4C6:
+  (self.row.index = 4 and self.column.index = 6) implies self.value = 4
+
+context Field inv givenR5C1:
+  (self.row.index = 5 and self.column.index = 1) implies self.value = 2
+
+context Field inv givenR5C6:
+  (self.row.index = 5 and self.column.index = 6) implies self.value = 3
+
+context Field inv givenR6C1:
+  (self.row.index = 6 and self.column.index = 1) implies self.value = 1
+
+-- 10 givens out of 36 cells. The full grid this puzzle admits as its
+-- unique solution (rows top-to-bottom, columns left-to-right):
+--   5 3 6 2 4 1
+--   4 1 2 6 3 5
+--   3 2 4 1 5 6
+--   6 5 1 3 2 4
+--   2 6 5 4 1 3
+--   1 4 3 5 6 2

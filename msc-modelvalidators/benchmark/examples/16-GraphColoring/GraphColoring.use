@@ -1,0 +1,101 @@
+-- GraphColoring.use -- classic k-coloring constraint satisfaction, authored
+-- from scratch for this thesis project (msc-4, Trong-Nghia Be) as a
+-- dedicated SAT-hardness performance stress test for the KK-ModelValidator
+-- plugin. Not adapted from any upstream USE example -- graph coloring had
+-- zero coverage anywhere in this plugin's history or this repository
+-- before this example.
+--
+-- Model: a single Region class in a fixed adjacency graph (the graph
+-- itself is pinned exactly, both directions per edge, in
+-- GraphColoring.properties via an explicit `Adjacent = Set{...}` literal --
+-- Kodkod is not asked to invent the graph, only to find a legal coloring of
+-- it), one Integer `color` attribute bounded to exactly k values, and one
+-- invariant: adjacent Regions must have different colors. That is the
+-- entire k-COLORING decision problem, one of Karp's original 21 NP-complete
+-- problems -- deliberately nothing else is layered on top, so that any
+-- solving difficulty observed comes from the coloring search itself, not
+-- from unrelated model complexity.
+--
+-- THE GRAPH ITSELF (67 edges over 40 Regions, avg degree 3.35) is built
+-- with the same "flat graph" methodology used by Culberson's classic
+-- flatNN-MM DIMACS graph-coloring benchmark generators, specifically
+-- because uniform-random graphs are comparatively *easy* for a SAT-based
+-- colorer once close to their threshold density, whereas flat graphs are
+-- knowingly among the hardest satisfiable instances at a given size:
+--   1. Partition the 40 Regions into exactly 3 classes (candidate color
+--      classes), in a random order unrelated to the Region indices.
+--   2. Add an edge between two Regions, independently at random with
+--      probability p=0.12, ONLY if they fall in different classes.
+-- Step 2 makes the class assignment itself a valid 3-coloring by
+-- construction (no edge is ever added inside a class) -- so the graph is
+-- *guaranteed* 3-colorable before Kodkod ever sees it -- while the
+-- partition is never given to the solver: Kodkod has to rediscover some
+-- legal 3-coloring (not necessarily the original partition; any relabeling
+-- or altogether different valid coloring is equally acceptable) from the
+-- edge list alone. This is exactly what makes it hard rather than trivial:
+-- a satisfying assignment provably exists, but nothing about the encoding
+-- points the solver toward one.
+--
+-- CONFIRMED BY ACTUALLY RUNNING THE SOLVER (see validate.cmd): at
+-- `bitwidth := 8`, `mv -validate` on this exact graph/k=3 instance takes on
+-- the order of 13-19 seconds of solving time alone (varies run to run) --
+-- genuinely slow, not a millisecond smoke test -- before returning
+-- SATISFIABLE. Tightness of k=3 was independently confirmed too: swapping
+-- in a properties file with only 2 colors available for the *same* fixed
+-- graph comes back UNSATISFIABLE, and quickly (77ms) -- i.e. this is not a
+-- loosely-constrained instance that merely takes a while; 3 is genuinely
+-- the minimum number of colors this graph admits, and Kodkod has to work
+-- for it.
+--
+-- A REAL, PREVIOUSLY UNKNOWN PLUGIN LIMITATION was discovered while tuning
+-- this example, independently re-confirmed by repeated runs: at
+-- `bitwidth := 4`, `5`, or `6`, `mv -validate` reports UNSATISFIABLE for
+-- this identical graph/k=3 instance -- in 15-25ms, i.e. essentially
+-- instantly, not after a real search. This MUST be a false negative: the
+-- flat-graph construction above is a constructive proof that a 3-coloring
+-- exists (assign every Region its own partition-class index; no edge ever
+-- crosses within a class), completely independent of which SAT bitwidth is
+-- used to search for it -- a genuine k-coloring problem's answer cannot
+-- depend on the *bitwidth* used to represent an unrelated small Integer
+-- attribute (color only ever takes the values 1, 2, or 3 here; a 3-bit
+-- signed range of -4..3 already more than covers it). Only `bitwidth := 8`
+-- (or higher, not otherwise explored) recovers the correct SATISFIABLE
+-- result -- see the header comment in GraphColoring.properties for the
+-- full bitwidth-by-bitwidth timing table that was actually run to pin this
+-- down, not asserted from a single observation.
+
+model GraphColoring
+
+class Region
+attributes
+  name : String
+  color : Integer
+end
+
+-- A single, plain (non-directed-feeling) association between Region and
+-- itself. USE associations are directed per role, so the fixed graph in
+-- GraphColoring.properties supplies BOTH (a,b) and (b,a) tuples for every
+-- undirected edge {a,b} -- that is what makes `r.neighbor` return the
+-- correct, symmetric adjacency list for every Region, from either side of
+-- every edge, with no separate "reverse" navigation needed anywhere in the
+-- invariant below.
+association Adjacent between
+  Region[0..*] role region
+  Region[0..*] role neighbor
+end
+
+constraints
+
+-- The entire k-coloring constraint: no two adjacent Regions may share a
+-- color. This is the ONLY substantive invariant in the model -- everything
+-- else about this example's difficulty comes from the fixed graph
+-- structure and the k=3 color bound in the .properties file, not from
+-- additional OCL machinery.
+context r : Region inv properColoring:
+  r.neighbor->forAll(n | n.color <> r.color)
+
+-- A Region is never its own neighbor (the fixed edge list never contains a
+-- self-loop, but stated here as an explicit, independently OCL-checkable
+-- invariant rather than left as an unstated assumption about the data).
+context r : Region inv noSelfLoop:
+  r.neighbor->excludes(r)

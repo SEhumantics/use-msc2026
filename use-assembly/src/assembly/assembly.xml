@@ -80,7 +80,7 @@
                  vendored ModelValidatorPlugin-5.2.0-r1.jar removed from
                  src/main/resources/plugins/, which crashes against this fork's USE API
                  (NoSuchMethodError, confirmed and documented). -->
-            <directory>${project.basedir}/../kk-modelvalidator/target</directory>
+            <directory>${project.basedir}/../msc-modelvalidators/kk-modelvalidator/target</directory>
             <outputDirectory>lib/plugins</outputDirectory>
             <includes>
                 <include>KK-ModelValidator-1.0.jar</include>
@@ -88,15 +88,35 @@
         </fileSet>
         <fileSet>
             <!-- Runnable, verified KK-ModelValidator examples (see
-                 kk-modelvalidator/examples/README.md), covering plugin commands the
+                 benchmark/examples/README.md), covering plugin commands the
                  main USE examples above never exercise: mv -validate, -invIndep,
                  -scrollingAll, and the OCL query mechanism against a relational
-                 solution. -->
-            <directory>${project.basedir}/../kk-modelvalidator/examples</directory>
+                 solution. Lives under benchmark/ (not kk-modelvalidator/) since this same
+                 example corpus is also the benchmark module's own scenario suite, shared
+                 between "run these interactively" (this fileSet) and "run these headlessly
+                 and compare solvers" (benchmark/scripts/run-benchmark.sh); moved here to make
+                 the benchmark module self-contained and independently shareable. -->
+            <directory>${project.basedir}/../msc-modelvalidators/benchmark/examples</directory>
             <outputDirectory>examples/KK-ModelValidator</outputDirectory>
             <includes>
                 <include>**/*</include>
             </includes>
+        </fileSet>
+        <fileSet>
+            <!-- Vendored native SAT solvers (see kk-modelvalidator/vendored-solvers/README.md):
+                 same files the original plugin's own `-downloadSolvers` command fetches at
+                 runtime, vendored for reproducibility. Placed at the exact path
+                 KodkodModelValidatorConfiguration.getSolverFolder() already expects
+                 (lib/plugins/modelValidatorPlugin/x64), so both a fresh `-downloadSolvers` run
+                 and this vendored copy agree on where solvers live. bin/use and
+                 examples/run-example.sh point -Djava.library.path here so `-config satsolver :=
+                 MiniSat` (etc.) works without any extra flag. -->
+            <directory>${project.basedir}/../msc-modelvalidators/kk-modelvalidator/vendored-solvers/x64</directory>
+            <outputDirectory>lib/plugins/modelValidatorPlugin/x64</outputDirectory>
+            <includes>
+                <include>*</include>
+            </includes>
+            <fileMode>0755</fileMode>
         </fileSet>
         <fileSet>
             <!-- javafx sdk that should be shipped with the USE archive is located here -->

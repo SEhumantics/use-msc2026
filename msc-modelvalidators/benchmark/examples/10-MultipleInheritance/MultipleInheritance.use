@@ -1,0 +1,73 @@
+model MultipleInheritance
+
+-- Ported from this repo's own bundled USE examples:
+-- use-core/src/main/resources/examples/Others/MultipleInheritance/MultipleInheritance.use
+-- (its Info.txt: "generalization between several classes without attributes,
+-- operations and associations" -- five classes A, B (<A), C (<A),
+-- D (<B, C, E), E). That five-class diamond shape is preserved EXACTLY: A is
+-- the common ancestor of B and C, D genuinely inherits along two distinct
+-- paths back to A (the diamond) plus a third, unrelated parent E. This
+-- plugin has zero multiple-inheritance coverage anywhere in its history
+-- before this example.
+--
+-- The original had no attributes/operations/associations at all, so there
+-- was nothing for Kodkod to search over and nothing for a query to
+-- navigate. Attributes and invariants below are added on top, purely to
+-- give -validate a real bounded search space and to let query.cmd
+-- demonstrate attribute access reaching D through EVERY one of its three
+-- direct superclasses (B, C, E) plus the shared grandparent (A) at the top
+-- of the diamond -- the structure itself is untouched.
+
+class A
+attributes
+  name : String
+end
+
+class B < A
+attributes
+  levelB : Integer
+end
+
+class C < A
+attributes
+  levelC : Integer
+end
+
+class D < B, C, E
+attributes
+  depth : Integer
+end
+
+class E
+attributes
+  tag : String
+end
+
+constraints
+
+-- Root-level invariant: every A -- and therefore, by inheritance, every B,
+-- C and D as well -- must carry a non-empty name.
+--
+-- NOTE (discovered empirically, not documented anywhere upstream): this was
+-- originally written as `a.name.size() > 0`. `String.size()` is one more
+-- OCL operation this plugin's translator has no Kodkod encoding for (the
+-- same family of gap as 04-CivilStatus's `substring` finding) -- it logs
+-- `ERROR: Cannot transform invariant... OCL operation size is not
+-- supported.` and silently drops the invariant from the Kodkod search
+-- (though `check -v` still evaluates it correctly afterwards via USE's own
+-- interpreter, so the drop is easy to miss). Rewritten below using `<>` on
+-- String, which IS supported (string equality/inequality underlies the
+-- derived-association FK checks in 03-CompanyERSchema), so this invariant
+-- is now a genuine, Kodkod-enforced search constraint again.
+context a: A inv NameNotEmpty: a.name <> ''
+
+-- D-specific invariant reaching back along BOTH diamond paths to A: forces
+-- the two attributes D inherits from its two different A-descended parents
+-- (levelB from B, levelC from C) to actually differ, so no solution can get
+-- away with a symmetric/degenerate assignment.
+context d: D inv LevelsDiffer: d.levelB <> d.levelC
+
+-- D-specific invariant over its own attribute plus the one inherited from
+-- its third superclass E, which sits outside the A/B/C diamond entirely.
+-- (Same `.size()` rewrite as NameNotEmpty above, for the same reason.)
+context d: D inv DepthMatchesTag: d.depth > 0 and d.tag <> ''

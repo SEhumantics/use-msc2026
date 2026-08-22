@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <groupId>org.tzi.use</groupId>
+        <artifactId>msc-modelvalidators</artifactId>
+        <version>7.5.0</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>benchmark</artifactId>
+    <packaging>jar</packaging>
+    <name>msc-modelvalidators-benchmark</name>
+    <description>
+        Benchmark tooling for this thesis's model-validator backends. Runs each example in
+        examples/ (this module's own -- shared with the shipped USE distribution's
+        examples/KK-ModelValidator/ via use-assembly) in-process (reusing the same
+        solve/reconstruct API EndToEndValidationTest uses, not a subprocess per run) across every
+        usable SAT solver backend, emits a structured JSON result file, and a separate builder
+        renders that JSON into a self-contained HTML report. Designed so the runner/builder split
+        is backend-agnostic: the same builder will render results from the eventual
+        unc-modelvalidator module without changes, once that module exists.
+    </description>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.tzi.use</groupId>
+            <artifactId>use-core</artifactId>
+            <version>7.5.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.tzi.use</groupId>
+            <artifactId>kk-modelvalidator</artifactId>
+            <version>7.5.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.11.0</version>
+        </dependency>
+        <!-- Same JUnit-4-via-vintage-engine setup as kk-modelvalidator's own pom.xml, for consistency. -->
+        <dependency>
+            <groupId>org.junit.vintage</groupId>
+            <artifactId>junit-vintage-engine</artifactId>
+            <version>5.7.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <!-- No exec-maven-plugin config here: "mvn exec:java" runs in-process within Maven's own JVM,
+         which can't set -Djava.library.path for the native solvers (MiniSat/MiniSatProver/Lingeling)
+         the way scripts/run-benchmark.sh's direct "java -cp" invocation does; that script is the
+         real, working, documented way to run this module's tools. -->
+</project>

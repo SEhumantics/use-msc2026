@@ -1,0 +1,32 @@
+-- Hand-built (NOT Kodkod-searched) instance of the full diamond hierarchy:
+-- one direct instance of every class (a, b, c, d, e), all fully within
+-- every attribute range the class invariants require. Loaded via the plain
+-- USE `open' command (see valid-instance.cmd), which auto-detects a
+-- non-".use"/non-model file and executes it line by line exactly like a
+-- .cmd script.
+--
+-- a/b/c/d all get a non-empty name (A::NameNotEmpty applies to every A --
+-- and, by inheritance, every B, C and D instance too).
+-- d: levelB=1, levelC=2 (distinct, satisfies D::LevelsDiffer), depth=5,
+--    tag='diamond-tag' (satisfies D::DepthMatchesTag).
+
+!create a : A
+!set a.name := 'root-a'
+
+!create b : B
+!set b.name := 'root-b'
+!set b.levelB := 10
+
+!create c : C
+!set c.name := 'root-c'
+!set c.levelC := 20
+
+!create d : D
+!set d.name := 'root-d'
+!set d.levelB := 1
+!set d.levelC := 2
+!set d.depth := 5
+!set d.tag := 'diamond-tag'
+
+!create e : E
+!set e.tag := 'root-e'

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <groupId>org.tzi.use</groupId>
+        <artifactId>use</artifactId>
+        <version>7.5.0</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>msc-modelvalidators</artifactId>
+    <packaging>pom</packaging>
+    <name>msc-modelvalidators</name>
+    <description>
+        Aggregator for this thesis's model-validator work: the crisp Kodkod baseline
+        (kk-modelvalidator), the benchmark tooling that measures it (benchmark), and the
+        thesis's own contribution, the uncertainty-aware model validator (unc-modelvalidator,
+        not yet started -- named for "uncertain" rather than a specific backend, since Z3 is the
+        pinned first SMT solver but not necessarily the only one ever). Grouped together because
+        all three share one concern -- finding/validating bounded object models for USE/OCL
+        specifications -- and the benchmark module is designed to measure either backend without
+        modification.
+    </description>
+
+    <modules>
+        <module>kk-modelvalidator</module>
+        <module>benchmark</module>
+        <module>unc-modelvalidator</module>
+    </modules>
+</project>

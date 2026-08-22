@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <groupId>org.tzi.use</groupId>
+        <artifactId>msc-modelvalidators</artifactId>
+        <version>7.5.0</version>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>unc-modelvalidator</artifactId>
+    <packaging>pom</packaging>
+    <name>Unc-ModelValidator (reserved)</name>
+    <description>
+        Reserved slot for this thesis's actual contribution: an uncertainty-aware bounded model
+        finder/validator, supporting the four U-types (UReal/UInteger/UBoolean/UString) alongside
+        crisp OCL, evaluated in part against kk-modelvalidator on the crisp fragment both can
+        express. Named "unc" (uncertain) rather than "z3" deliberately: Z3 is the pinned first
+        backend (proposal Sec.6, z3-4.16.0), but the module name should not preclude a different
+        or additional SMT backend later without another rename. Not started -- see
+        output/milestone1_fastpath_prompt.md and output/PROGRAM_ROADMAP.md Phase 1 for the actual
+        Track R work graph. Left as packaging=pom with no source until that work begins; switches
+        to a real jar module then.
+    </description>
+</project>

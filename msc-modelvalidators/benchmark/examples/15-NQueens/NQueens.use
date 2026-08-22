@@ -1,0 +1,103 @@
+model NQueens
+
+-- Classic N-Queens combinatorial puzzle, chosen specifically as a hard
+-- SAT-solver stress test that scales with N: place N queens on an NxN
+-- board so that no two attack each other (no shared row, column, or
+-- diagonal). Demonstrating solver PERFORMANCE as N grows (not just
+-- correctness) is the whole point of this example -- see
+-- NQueens.properties for the two named sections ([small]/[large]) and
+-- validate.cmd for their measured solving times, actually run against the
+-- built plugin.
+--
+-- MODELING NOTE, discovered empirically while building this example (an
+-- own mistake, not a plugin limitation -- recorded here so it isn't
+-- repeated): a first, more "obvious" encoding -- a single Queen class with
+-- row:Integer and col:Integer attributes directly, plus one invariant
+-- requiring all four of (row-distinct, col-distinct, main-diagonal-
+-- distinct, anti-diagonal-distinct) pairwise for every two queens --
+-- reproducibly came back UNSATISFIABLE from the Kodkod solver for every
+-- N>=4 actually tried (4, 6, 8, 10), even though a hand-built object
+-- diagram satisfying that exact same OCL invariant was independently
+-- confirmed valid via `check -v` (not just eyeballed) -- i.e. solutions
+-- genuinely exist but the solver reported none. Bisecting which conjuncts
+-- triggered it (splitting the invariant apart one comparison at a time)
+-- pointed at the diagonal terms specifically; the actual root cause turned
+-- out to be our own `Integer_min`/`Integer_max` bounds in that first
+-- properties file: sized to cover row/col's own domain (0..N-1) but too
+-- narrow for the *derived* diagonal sum (row+col ranges up to 2*(N-1)).
+-- This plugin's Kodkod translation of `Integer` apparently needs
+-- Integer_min/max to cover the full range of every arithmetic result the
+-- model computes, not just each attribute's own declared domain --
+-- otherwise the formula silently comes back UNSATISFIABLE instead of
+-- erroring. Widening the bounds accordingly (see NQueens.properties) fixed
+-- it at every N subsequently tried, without changing the invariant at all.
+--
+-- The model actually shipped below additionally moves row/col off Queen's
+-- own attributes and onto two small helper classes (Row, Col) linked via
+-- mandatory 1-1 associations, so that:
+--   - "each queen gets a distinct row" and "each queen gets a distinct
+--     column" are enforced STRUCTURALLY, by the association
+--     multiplicities together with matching Row/Queen and Col/Queen
+--     population counts (a total, mandatory 1-1 association between two
+--     classes of equal fixed size IS a bijection) -- not by an extra
+--     pairwise OCL distinctness invariant.
+--   - the only OCL arithmetic invariant left on Queen is the diagonal
+--     check itself (`Queen::noAttack`), which is exactly what this
+--     example is measuring solver performance on as N grows.
+
+class Row
+attributes
+  idx : Integer  -- this Row's board row number, 0..N-1
+end
+
+class Col
+attributes
+  idx : Integer  -- this Col's board column number, 0..N-1
+end
+
+class Queen
+end
+
+------------------------------------------------------------------------
+-- Mandatory 1-1 on both ends, combined with matching Row/Queen and
+-- Col/Queen population counts (set identically in NQueens.properties),
+-- together force each association into a genuine bijection: every queen
+-- gets exactly one row and one column, and every row/column is used by
+-- exactly one queen -- "one queen per row, one queen per column" for
+-- free, with no arithmetic distinctness invariant required for it.
+
+association QueenRow between
+  Queen [1] role queen
+  Row   [1] role row
+end
+
+association QueenCol between
+  Queen [1] role queen2
+  Col   [1] role col
+end
+
+------------------------------------------------------------------------
+
+constraints
+
+-- Row/Col index values must themselves form a genuine 0..N-1 permutation
+-- (the Set{0,...,N-1} domain given in the .properties file only restricts
+-- which VALUES are allowed, it does not by itself force each to be used
+-- exactly once) -- these two invariants are what actually pin each
+-- Row/Col object to its own distinct board coordinate.
+context r1,r2:Row inv distinctRowIdx:
+  r1<>r2 implies r1.idx<>r2.idx
+
+context c1,c2:Col inv distinctColIdx:
+  c1<>c2 implies c1.idx<>c2.idx
+
+-- The actual N-Queens no-attack condition: two different queens must not
+-- share a diagonal in either direction. ("Not the same row" / "not the
+-- same column" are already guaranteed structurally by the bijective
+-- associations above, so this invariant only needs to rule out the two
+-- diagonal directions: q.row.idx - q.col.idx is constant along one
+-- diagonal direction, q.row.idx + q.col.idx is constant along the other.)
+context q1,q2:Queen inv noAttack:
+  q1<>q2 implies
+    (q1.row.idx+q1.col.idx <> q2.row.idx+q2.col.idx and
+     q1.row.idx-q1.col.idx <> q2.row.idx-q2.col.idx)

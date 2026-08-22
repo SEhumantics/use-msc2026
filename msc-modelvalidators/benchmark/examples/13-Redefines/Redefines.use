@@ -1,0 +1,82 @@
+model Redefines
+
+-- Ported from this repo's own bundled USE examples:
+-- use-core/src/main/resources/examples/Others/Redefines/redefines.use
+-- (four bare classes, two associations -- AB between A and B, CD between
+-- C < A and D < B, where CD's ends explicitly `redefines` the corresponding
+-- ends of AB). This exercises UML **property (association-end) redefinition**
+-- -- USE's grammar only offers `redefines` on association ends (see
+-- ASTAssociationEnd/ASTAssociation in use-core's own parser; there is no
+-- `redefines` keyword for a plain `attributes`/`operations` block), so a
+-- narrowing/changing association end IS the mechanism USE provides for a
+-- subclass to redefine an inherited navigable feature. Zero coverage
+-- anywhere in this plugin's history before this.
+--
+-- The original had no attributes/operations at all, so there was nothing for
+-- Kodkod to search over and nothing for a query to navigate beyond raw
+-- object identity. Attributes and invariants below are added on top, purely
+-- to give -validate a real bounded search space and to let query.cmd show
+-- that ATTRIBUTE VALUES -- not just object identity -- are reachable through
+-- the redefined role name, including an attribute (tagD) that exists ONLY on
+-- the narrower subclass D and not on the declared role type B at all. The
+-- redefines structure itself (which associations, which classes, which
+-- roles redefine which) is untouched from the original.
+
+class A
+attributes
+  tagA : String
+end
+
+class B
+attributes
+  tagB : String
+end
+
+class C < A
+attributes
+  tagC : String
+end
+
+class D < B
+attributes
+  tagD : String
+end
+
+association AB between
+  A[*] role a
+  B[*] role b
+end
+
+association CD between
+  C[*] role c redefines a
+  D[*] role d redefines b
+end
+
+constraints
+
+context a: A inv TagANotEmpty: a.tagA <> ''
+context b: B inv TagBNotEmpty: b.tagB <> ''
+
+-- Deliberately written using "b" -- the SUPERCLASS-declared role name that CD
+-- redefines -- rather than "d" (the redefining role's own name), specifically
+-- to probe whether the redefined feature is honored by every part of the
+-- toolchain that touches it, not just direct object navigation. Confirmed by
+-- direct execution (see query.cmd/validate.cmd) that:
+--   * USE core's own OCL interpreter (plain `?`) resolves "c.b" through the
+--     redefining CD link correctly, including reaching tagD -- a D-only
+--     attribute not declared on B at all -- so this invariant is genuinely
+--     meaningful under USE's own semantics.
+--   * The plugin's Kodkod translator has zero special-casing for `redefines`
+--     anywhere in its source (confirmed by grepping
+--     org.tzi.kodkod for "redefin" -- no hits at all, unlike e.g. its
+--     explicit aggregationcyclefreeness/forbiddensharing handling). It
+--     translates "c.b" using AB's own independent Kodkod relation for role
+--     "b", which stays empty whenever a C-typed object participates ONLY in
+--     CD, never directly in AB. The invariant transforms without any
+--     reported error ("Invariant transformation successful") but becomes
+--     VACUOUSLY true during the search ("empty->forAll(...) = true"),
+--     regardless of what tagD actually holds -- a genuine, previously
+--     undocumented soundness gap in `-validate`, kept here (not deleted) so
+--     it is runnable and reproducible. See validate.cmd's [translationGap]
+--     section for the confirmed false-positive SATISFIABLE this produces.
+context c: C inv RedefinedRoleTagCheck: c.b->forAll(x | x.tagD = 'child-d')
