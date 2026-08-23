@@ -796,7 +796,6 @@
                 "Genealogy",
                 "AssociationClass",
                 "Inheritance",
-                "AggregationComposition",
                 "MultipleInheritance",
                 "Redefines"
               ],
@@ -1271,14 +1270,10 @@
               "status": "supported",
               "evidence": "transform/ocl/DefaultExpressionVisitor.java visitSelectByKind/visitExpSelectByType lines 336-345; ocl/operation/SetOperationGroup.java selectByKind/selectByType lines 349-356 (both implemented as src.intersection(type))",
               "notes": "Straightforward relational intersection against the (inheritance or exact) class relation.",
-              "satScenarioIds": [
-                "Inheritance"
-              ],
+              "satScenarioIds": [],
               "unsatScenarioIds": [],
-              "validationOracleScenarioIds": [
-                "Inheritance"
-              ],
-              "coverageNote": ""
+              "validationOracleScenarioIds": [],
+              "coverageNote": "zero coverage - Inheritance was previously (mis)cited: its query.cmd actually calls plain select()+oclIsTypeOf(), not selectByKind/selectByType (see ocl.select, now correctly credited with Inheritance instead). Removed in a 2026-08-23 follow-up audit pass; status is based on source-code reading alone until a scenario genuinely calls selectByKind/selectByType."
             }
           }
         },
@@ -1438,11 +1433,13 @@
               "evidence": "QueryExpressionVisitor.visitSelect (transform/ocl/QueryExpressionVisitor.java:140-142) -> SetOperationGroup.select (kodkod/ocl/operation/SetOperationGroup.java:339-347)",
               "notes": "Compiles to a Kodkod comprehension `body.comprehension(var.oneOf(src))`, with undefined-set propagation.",
               "satScenarioIds": [
-                "CompanyERSchema"
+                "CompanyERSchema",
+                "Inheritance"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
-                "CompanyERSchema"
+                "CompanyERSchema",
+                "Inheritance"
               ],
               "coverageNote": ""
             }
@@ -1493,7 +1490,6 @@
                 "Genealogy",
                 "AssociationClass",
                 "Inheritance",
-                "AggregationComposition",
                 "MultipleInheritance",
                 "Redefines"
               ],

@@ -320,7 +320,7 @@
         "ocl.attribute-access",
         "ocl.forAll",
         "ocl.navigation-regular-assoc",
-        "ocl.selectbykind-selectbytype",
+        "ocl.select",
         "ocl.type-tests-casts",
         "prim.boolean-literals-ops",
         "reconstruction.object-diagram",
@@ -365,8 +365,6 @@
         "config.class-bounds",
         "inherit.composition-sharing-across-hierarchy",
         "invariant.transform-to-kodkod",
-        "ocl.forAll",
-        "prim.boolean-literals-ops",
         "solve.trivial-sat-unsat-dispatch"
       ],
       "question": "Does aggregationcyclefreeness/forbiddensharing actually forbid a composition cycle, and is the same structure permitted when the toggle is off?",
