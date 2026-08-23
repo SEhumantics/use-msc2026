@@ -761,7 +761,7 @@
       const color = cssVar(SERIES_VAR[row.solver]);
       tr.innerHTML = `
         <td><span class="rank-num${i === 0 ? ' first' : ''}">${i + 1}</span></td>
-        <td><span class="solver-id"><span class="swatch" style="background:${color}"></span>${row.solver}</span></td>
+        <td><span class="solver-id"><span class="swatch" style="background:${color}"></span>${escapeHtml(row.solver)}</span></td>
         <td><div class="winrate-cell"><div class="winrate-bar-track"><div class="winrate-bar-fill" style="width:${(row.winRate / maxWinRate * 100).toFixed(0)}%"></div></div><span class="winrate-num tabular">${Math.round(row.winRate * 100)}%</span></div></td>
         <td><span class="taxo-num">${row.matchedSat}</span></td>
         <td><span class="taxo-num">${row.matchedUnsat}</span></td>
@@ -792,7 +792,7 @@
       if (!biggest || ratio > biggest.ratio) biggest = { ex, fastest, second, ratio };
     });
     if (biggest && biggest.ratio > 1.15) {
-      lines.push(`Biggest lead: <b>${biggest.fastest.solver}</b> solved <b>${biggest.ex.id}</b> ${biggest.ratio.toFixed(1)}&times; faster than ${biggest.second.solver} (${fmtMs(biggest.fastest.medianWallMs)} vs ${fmtMs(biggest.second.medianWallMs)}).`);
+      lines.push(`Biggest lead: <b>${escapeHtml(biggest.fastest.solver)}</b> solved <b>${escapeHtml(biggest.ex.id)}</b> ${biggest.ratio.toFixed(1)}&times; faster than ${escapeHtml(biggest.second.solver)} (${fmtMs(biggest.fastest.medianWallMs)} vs ${fmtMs(biggest.second.medianWallMs)}).`);
     }
 
     // Most consistent: zero mismatches/errors, smallest average relative min-max spread.
@@ -806,7 +806,7 @@
       if (!mostConsistent || avgSpread < mostConsistent.avgSpread) mostConsistent = { solver: row.solver, attempted: row.validAttempts, avgSpread };
     });
     if (mostConsistent) {
-      lines.push(`Most consistent: <b>${mostConsistent.solver}</b> matched the oracle on all ${mostConsistent.attempted} scenarios it ran, with an average min&ndash;max spread of ${Math.round(mostConsistent.avgSpread * 100)}%.`);
+      lines.push(`Most consistent: <b>${escapeHtml(mostConsistent.solver)}</b> matched the oracle on all ${mostConsistent.attempted} scenarios it ran, with an average min&ndash;max spread of ${Math.round(mostConsistent.avgSpread * 100)}%.`);
     }
 
     if (!lines.length) {
@@ -1149,8 +1149,13 @@
 
     const rows = resultsByExample.get(ex.id) || [];
     if (rows.length) {
-      const allMs = rows.flatMap(r => [r.minWallMs, r.maxWallMs]);
-      const domainMin = Math.min(...allMs), domainMax = Math.max(...allMs, domainMin + 1e-6);
+      // ERROR rows carry minWallMs/maxWallMs=0 (no real timing was ever recorded) -- excluded from the
+      // shared chart domain so one errored solver doesn't collapse domainMin to 0 and compress every
+      // other solver's real box-whisker into a sliver of the chart width.
+      const timedRows = rows.filter(r => r.outcome !== 'ERROR');
+      const allMs = timedRows.flatMap(r => [r.minWallMs, r.maxWallMs]);
+      const domainMin = allMs.length ? Math.min(...allMs) : 0;
+      const domainMax = allMs.length ? Math.max(...allMs, domainMin + 1e-6) : 1;
       if (rows.length > 1) {
         const chartWrap = document.createElement('div');
         chartWrap.className = 'detail-chart';
@@ -1169,7 +1174,7 @@
         const tr = document.createElement('tr');
         const status = cellStatus(ex, r);
         const solverTd = document.createElement('td');
-        solverTd.innerHTML = `<span class="solver-id"><span class="swatch" style="background:${cssVar(SERIES_VAR[r.solver])}"></span>${r.solver}</span>`;
+        solverTd.innerHTML = `<span class="solver-id"><span class="swatch" style="background:${cssVar(SERIES_VAR[r.solver])}"></span>${escapeHtml(r.solver)}</span>`;
         tr.appendChild(solverTd);
         const bwTd = document.createElement('td');
         bwTd.className = 'bw-cell';

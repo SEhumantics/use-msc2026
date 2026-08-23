@@ -268,17 +268,42 @@ public class BenchmarkRunner {
 			}
 		}
 
+		finalizeResult(result, outcome, wallMs, kodkodSolveMs, kodkodTranslateMs, digests);
+		return result;
+	}
+
+	/**
+	 * Populates {@code result}'s outcome/timing/witness fields from the accumulated per-repeat data.
+	 * Pulled out of {@link #runOne} as a pure function (no session/model/solver access) specifically so
+	 * a test can exercise the finalization logic directly, the same reason
+	 * {@link SoilValidationRunner#applyParsedOutcome} was pulled out of its own caller. Package-private
+	 * for that reason.
+	 *
+	 * <p>Regression note: a witness digest represents "the" answer for this cell -- only report one
+	 * when the cell as a whole succeeded. If a later repeat failed after earlier repeats already
+	 * populated {@code digests}, {@link #runOne}'s catch block deliberately keeps that partial data
+	 * (see its own comment) rather than discarding it, but it must not be surfaced as
+	 * witnessDigest/allWitnessDigests: that would contradict this field's own "null on
+	 * UNSATISFIABLE/ERROR" contract (see {@link SolverResult#witnessDigest}) and the report template
+	 * renders the witness column with no ERROR guard, unlike every other per-repeat column.
+	 */
+	static void finalizeResult(SolverResult result, String lastOutcome, List<Double> wallMs,
+			List<Long> kodkodSolveMs, List<Long> kodkodTranslateMs, List<String> digests) {
 		if (result.outcome == null) {
-			result.outcome = outcome == null ? "ERROR" : outcome;
+			result.outcome = lastOutcome == null ? "ERROR" : lastOutcome;
 		}
 		result.medianWallMs = median(wallMs);
 		result.minWallMs = wallMs.stream().mapToDouble(Double::doubleValue).min().orElse(0);
 		result.maxWallMs = wallMs.stream().mapToDouble(Double::doubleValue).max().orElse(0);
 		result.medianKodkodSolvingMs = (long) medianLong(kodkodSolveMs);
 		result.medianKodkodTranslationMs = (long) medianLong(kodkodTranslateMs);
-		result.allWitnessDigests = digests;
-		result.witnessDigest = digests.isEmpty() ? null : digests.get(0);
-		return result;
+		if ("ERROR".equals(result.outcome)) {
+			result.allWitnessDigests = java.util.Collections.emptyList();
+			result.witnessDigest = null;
+		} else {
+			result.allWitnessDigests = digests;
+			result.witnessDigest = digests.isEmpty() ? null : digests.get(0);
+		}
 	}
 
 	/**

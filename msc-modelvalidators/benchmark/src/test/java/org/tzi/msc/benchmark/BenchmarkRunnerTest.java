@@ -1,7 +1,13 @@
 package org.tzi.msc.benchmark;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import org.junit.Test;
 
@@ -44,5 +50,56 @@ public class BenchmarkRunnerTest {
 	@Test
 	public void nullDoesNotCaptureWitness() {
 		assertFalse(BenchmarkRunner.isWitnessCapturingOutcome(null));
+	}
+
+	/**
+	 * Regression test for round 17's finding: a repeat that fails AFTER earlier repeats in the same
+	 * cell already succeeded and captured witness digests must not leak those digests into the final
+	 * ERROR result -- that would contradict SolverResult.witnessDigest's own "null on
+	 * UNSATISFIABLE/ERROR" contract and render misleadingly (an ERROR badge next to a real witness
+	 * count) since the report template has no ERROR guard on the witness column specifically.
+	 */
+	@Test
+	public void errorAfterPartialSuccessClearsWitnessDigests() {
+		SolverResult result = new SolverResult();
+		result.outcome = "ERROR"; // set by runOne()'s catch block before finalizeResult() is reached
+		List<Double> wallMs = Arrays.asList(120.0, 130.0); // 2 repeats succeeded before the 3rd threw
+		List<Long> kodkodSolveMs = Arrays.asList(80L, 85L);
+		List<Long> kodkodTranslateMs = Arrays.asList(10L, 12L);
+		List<String> digests = Arrays.asList("Foo#count=1;Foo.objects=[Foo{x=1}]");
+
+		BenchmarkRunner.finalizeResult(result, "SATISFIABLE", wallMs, kodkodSolveMs, kodkodTranslateMs, digests);
+
+		assertEquals("ERROR", result.outcome);
+		assertNull("witnessDigest must be null on ERROR, even with partial pre-failure data", result.witnessDigest);
+		assertTrue("allWitnessDigests must be empty on ERROR, even with partial pre-failure data",
+				result.allWitnessDigests.isEmpty());
+	}
+
+	@Test
+	public void satisfiableKeepsWitnessDigests() {
+		SolverResult result = new SolverResult();
+		List<Double> wallMs = Arrays.asList(120.0);
+		List<Long> kodkodSolveMs = Arrays.asList(80L);
+		List<Long> kodkodTranslateMs = Arrays.asList(10L);
+		List<String> digests = Arrays.asList("Foo#count=1;Foo.objects=[Foo{x=1}]");
+
+		BenchmarkRunner.finalizeResult(result, "SATISFIABLE", wallMs, kodkodSolveMs, kodkodTranslateMs, digests);
+
+		assertEquals("SATISFIABLE", result.outcome);
+		assertEquals("Foo#count=1;Foo.objects=[Foo{x=1}]", result.witnessDigest);
+		assertEquals(digests, result.allWitnessDigests);
+	}
+
+	@Test
+	public void errorWithNoPriorSuccessHasEmptyWitnessDigests() {
+		SolverResult result = new SolverResult();
+		result.outcome = "ERROR"; // first repeat threw before any wall time was even recorded
+		BenchmarkRunner.finalizeResult(result, null, Collections.emptyList(), Collections.emptyList(),
+				Collections.emptyList(), Collections.emptyList());
+
+		assertEquals("ERROR", result.outcome);
+		assertNull(result.witnessDigest);
+		assertTrue(result.allWitnessDigests.isEmpty());
 	}
 }

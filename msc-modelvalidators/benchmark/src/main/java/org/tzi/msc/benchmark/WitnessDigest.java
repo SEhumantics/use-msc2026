@@ -42,7 +42,13 @@ final class WitnessDigest {
 		List<String> parts = new ArrayList<>();
 		Map<MObject, String> signatures = new HashMap<>();
 
-		List<MClass> classes = new ArrayList<>(model.classes());
+		// getClassesIncludingImports()/getAssociationsIncludingImports(), not the plain classes()/
+		// associations() accessors: a model can pull in classes/associations from another .use file via
+		// USE's `import` statement (MModel keeps those in a separate importedModels list, never merged
+		// into its own fClasses/fAssociations), and an object/link touching one would otherwise be
+		// missing from `signatures` entirely and fall back to the "?" placeholder below -- silently
+		// collapsing witnesses that actually differ into the same digest.
+		List<MClass> classes = new ArrayList<>(model.getClassesIncludingImports());
 		classes.sort((a, b) -> a.name().compareTo(b.name()));
 		for (MClass cls : classes) {
 			List<MObject> objs = new ArrayList<>(state.objectsOfClass(cls));
@@ -62,7 +68,7 @@ final class WitnessDigest {
 			parts.add(cls.name() + ".objects=" + objSignatures);
 		}
 
-		List<MAssociation> associations = new ArrayList<>(model.associations());
+		List<MAssociation> associations = new ArrayList<>(model.getAssociationsIncludingImports());
 		associations.sort((a, b) -> a.name().compareTo(b.name()));
 		for (MAssociation assoc : associations) {
 			Set<MLink> links = state.linksOfAssociation(assoc).links();
