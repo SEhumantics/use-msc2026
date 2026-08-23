@@ -113,12 +113,13 @@ with zero syntax changes against USE 7.5.0.
   far too long — see the header comment in `CompanyER.properties` for exactly
   why). Confirmed: `SATISFIABLE`, `check -v` → all 29 invariants OK.
 - `invIndep.cmd` — `mv -invIndep CompanyER_invIndep.properties all`. Confirmed:
-  most of the 29 invariants come back `Independent`, but several — including
-  `Employee::dname_foreign_key_Department`, four other FK invariants, and four
+  most of the 29 invariants come back `Independent`, but 8 come back
+  `Not independent for given properties` — 3 FK invariants
+  (`Employee::dname_foreign_key_Department` and two others) and 5
   business-rule invariants (`salary_positive`, `budget_positive`,
-  `age_reasonable`, `cost_positive`) — come back `Not independent for given
-  properties`. A genuinely interesting, not-fully-explained finding worth a
-  closer look, not just a textbook "PK implies nothing" demo.
+  `age_reasonable`, `cost_positive`, and `ProjectBudget_greater_PartCost`).
+  A genuinely interesting, not-fully-explained finding worth a closer look,
+  not just a textbook "PK implies nothing" demo.
 - `query.cmd` — confirmed `Employee.allInstances()->size()` → `[[2]]`, an FK
   consistency check → `[[true]]`.
 - `invIndepSingle.cmd` — `mv -invIndep CompanyER_invIndep.properties
@@ -241,9 +242,11 @@ at any level anywhere in this plugin's history — not one example, not one
 unit test — before this.
 
 - `validate.cmd` — confirmed `SATISFIABLE`; `check -v` → all 5 invariants OK,
-  and `info state` confirms the *same* 2 objects are correctly counted both as
-  `Employment` class instances and as `Employment` association links
-  simultaneously.
+  and `info state` confirms an `Employment` object is correctly counted both
+  as an `Employment` class instance and as an `Employment` association link
+  simultaneously (`Employment_min` is 1, not 0, specifically so every SAT
+  witness demonstrates this rather than possibly landing on zero Employment
+  objects — see `CompanyEmployment.properties` for why that was a real gap).
 - `invIndep.cmd` — confirmed a genuinely different flavor of "not independent"
   than any prior example: `EmployeeAndEmployerAlwaysLinked` and
   `AtMostOneEmployer` come back `Dependent` — not because the solver searched
@@ -255,7 +258,7 @@ unit test — before this.
   the association declaration itself). `PositiveSalary`/`StartDateNotNegative`/
   `SalaryBelowEmployerBudget` (the three invariants with real, individually
   violable OCL semantics) all come back plain `Independent`.
-- `query.cmd` — confirmed `Employment.allInstances()->size()` → `[[2]]`, a
+- `query.cmd` — confirmed `Employment.allInstances()->size()` → `[[1]]`, a
   cross-attribute FK-style check (`e.salary < e.employer.budget`, reaching
   from the link's own attribute through to an endpoint's attribute) → `[[true]]`.
 
@@ -291,11 +294,16 @@ on each subclass, and polymorphic navigation over the superclass collection.
   declared on a *superclass* must be bounded in the `.properties` file under
   the declaring class's own name (`Vehicle_licensePlate`, `Vehicle_wheels`),
   never under a subclass's name. `Car_wheels`/`Truck_wheels` are silently
-  accepted but have no effect, leaving `Vehicle_wheels` completely unbounded
-  — which produces a hard `TRIVIALLY_UNSATISFIABLE` (with an explicit proof
-  node naming `Undefined in (univ . Vehicle_licensePlate)`) rather than a
-  slow or failed search. See the header comment in `Vehicle.properties` for
-  the side-by-side confirmation.
+  accepted but have no effect. The consequence is subtler than a clean
+  failure: a wrongly-scoped *Integer* attribute (`wheels`) silently falls
+  back to the type-wide `Integer_min`/`Integer_max` range instead of its
+  intended enumerated domain and can still come back `SATISFIABLE` — just
+  quietly under-tested, no error at all. A wrongly-scoped *String* attribute
+  with no type-wide fallback configured (`licensePlate`) does genuinely fail,
+  but with a plain `UNSATISFIABLE`, not a `TRIVIALLY_` one, and no proof-node
+  text of any kind (an earlier version of this note wrongly claimed both).
+  See the header comment in `Vehicle.properties` for the side-by-side
+  confirmation.
 
 ## AggregationComposition
 
@@ -683,12 +691,15 @@ all branches) ships exactly one worked example internally (`test2/t002.*`,
 the Library model used in `Library`) — there is no larger example corpus to
 port from the plugin's own history. Everything else here exists specifically
 to exercise commands and model features Library alone doesn't demonstrate:
-`-invIndep` (including a single targeted invariant, `03`), `-scrollingAll`,
-single-step `-scrolling` (`02`), the query mechanism, `-scrollingCT`/
-`-scrollingAllCT` classifying terms and partial-solution completion (`05`),
-derived associations (`03`), enum types and self-referential associations
-(`04`), recursive associations (`05`), association classes (`06`),
-inheritance/polymorphism (`07`), aggregation/composition cycle- and
-sharing-freeness (`08`), and Bag/Sequence translation limits (`09`) — plus,
+`-invIndep` (including a single targeted invariant, `CompanyERSchema`),
+`-scrollingAll`, single-step `-scrolling` (`EmployeeInvariants`), the query
+mechanism, `-scrollingCT`/`-scrollingAllCT` classifying terms and
+partial-solution completion (`Genealogy`), derived associations
+(`CompanyERSchema`), enum types and self-referential associations
+(`CivilStatus`), recursive associations (`Genealogy`), association classes
+(`AssociationClass`), inheritance/polymorphism (`Inheritance`),
+aggregation/composition cycle- and sharing-freeness
+(`AggregationComposition`), and Bag/Sequence translation limits
+(`CollectionSemantics`) — plus,
 across every domain, SOIL-based validation of hand-built instances as a
 check distinct from Kodkod-driven search.

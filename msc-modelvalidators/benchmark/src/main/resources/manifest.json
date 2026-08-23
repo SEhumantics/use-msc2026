@@ -771,8 +771,7 @@
         "prim.integer-arithmetic",
         "prim.integer-comparisons",
         "reconstruction.object-diagram",
-        "solve.trivial-sat-unsat-dispatch",
-        "solve.unsat-proof-reporting"
+        "solve.trivial-sat-unsat-dispatch"
       ],
       "question": "Can Kodkod/DefaultSAT4J actually solve a genuine (non-trivial) Sudoku puzzle -- a 6x6 board with 10 givens -- in the seconds-to-tens-of-seconds range, given that the original bundled 9x9 board turns out to be intractable here, and does the found solution really have all 6 digits, with no repeats, in every row, column, and 2x3 box?",
       "repeats": 2,
@@ -1101,7 +1100,7 @@
         "recursive-user-operations",
         "transform-time-recursion-rejection",
         "closure-based-acyclicity",
-        "single-root-from-bound-arithmetic",
+        "zero-root-from-bound-arithmetic",
         "paired-unsat-mutation"
       ]
     },

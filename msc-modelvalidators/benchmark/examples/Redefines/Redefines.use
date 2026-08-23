@@ -68,7 +68,10 @@ context b: B inv TagBNotEmpty: b.tagB <> ''
 --     meaningful under USE's own semantics.
 --   * The plugin's Kodkod translator has zero special-casing for `redefines`
 --     anywhere in its source (confirmed by grepping
---     org.tzi.kodkod for "redefin" -- no hits at all, unlike e.g. its
+--     org.tzi.kodkod for "redefines" -- no hits at all; a bare substring
+--     grep for "redefin" does turn up one incidental match, an unrelated
+--     docstring's use of "predefined" in IConfigurator.java, not any actual
+--     redefines-handling code -- unlike e.g. the plugin's
 --     explicit aggregationcyclefreeness/forbiddensharing handling). It
 --     translates "c.b" using AB's own independent Kodkod relation for role
 --     "b", which stays empty whenever a C-typed object participates ONLY in

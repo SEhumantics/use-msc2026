@@ -22,9 +22,8 @@ mv ? Region.allInstances()->size()
 -- correctly returns 40.
 ? Region.allInstances()->size()
 
--- `mv ?` itself is not simply broken for this population: ->notEmpty() /
--- ->isEmpty() (no counting involved) both evaluate correctly, and printing
--- the collection outright shows all 40 Regions.
+-- `mv ?` itself is not simply broken for this population: ->notEmpty() (no
+-- counting involved) evaluates correctly here too.
 mv ? Region.allInstances()->notEmpty()
 
 -- Narrowing it down further: `->size()` on a collection of primitive

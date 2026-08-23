@@ -1777,7 +1777,7 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "org/tzi/use/kodkod/transform/ocl/OperationExpressionVisitor.java:65-70 (OperationStack.INSTANCE.contains(...) → throw TransformationException(\"... is recursive and thereby cannot be transformed.\")); org/tzi/use/kodkod/transform/OperationStack.java",
-              "notes": "Confirmed in examples/RecursiveTree: AcyclicParentship (which calls self-recursive childPlus2→childPlusOnNodeSet) is detected and dropped from the search; the plugin continues with remaining invariants rather than aborting. closure()-based recursion (Genealogy) is unaffected since it's a built-in operator, not a user-defined recursive call.",
+              "notes": "Confirmed in examples/RecursiveTree: AcyclicParentshipRecursive (which calls self-recursive childPlus2→childPlusOnNodeSet) is detected and dropped from the search; the plugin continues with remaining invariants rather than aborting. closure()-based recursion (Genealogy) is unaffected since it's a built-in operator, not a user-defined recursive call.",
               "satScenarioIds": [
                 "RecursiveTree"
               ],
@@ -1950,13 +1950,11 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/kodkod/helper/ProofHelper.java: buildProofString()/minimize() (uses kodkod.engine.ucore.HybridStrategy); UseKodkodModelValidator.handleFailure() (lines 70-74) calls it when solution.proof() != null; requires solver.options().setLogTranslation(1), set in KodkodSolver.solve() line 51",
-              "notes": "Confirmed by examples/Sudoku (proof node for a contradictory association bound). Previously also cited examples/Inheritance for a mis-scoped-attribute-bound proof, but that bug was fixed (see Vehicle.properties' own header) -- Inheritance now runs cleanly SATISFIABLE with no proof output, so it was removed from this feature's citations in the 2026-08-23 audit.",
-              "satScenarioIds": [
-                "Sudoku"
-              ],
+              "notes": "Previously cited examples/Inheritance and examples/Sudoku, both for proof nodes from abandoned early drafts of their .properties files (a mis-scoped-attribute-bound bug for Inheritance, a BoardRows_min/max-omission bug for Sudoku) -- neither bug survives in either scenario as actually shipped: Inheritance now runs cleanly SATISFIABLE (no proof possible), and Sudoku's real sections are [puzzle] (SATISFIABLE, no proof possible) and [squareClash] (a genuine search-based UNSATISFIABLE via DefaultSAT4J, confirmed live at ~17s -- DefaultSAT4J doesn't populate solution.proof() the way a bounds-only TRIVIALLY_UNSATISFIABLE short-circuit does). Both citations removed (Inheritance in the 2026-08-23 audit, Sudoku in this follow-up pass); zero-coverage until a scenario genuinely reaches ProofHelper.buildProofString() as shipped.",
+              "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
-              "coverageNote": ""
+              "coverageNote": "zero coverage - no currently-shipped scenario triggers a proof-populated UNSATISFIABLE result (ProofHelper.buildProofString() requires solution.proof() != null, which needs a TRIVIALLY_UNSATISFIABLE bounds-only rejection, not a real search-based UNSAT). Status is based on source-code reading alone."
             }
           }
         },
@@ -2292,7 +2290,7 @@
           "support": {
             "kk-modelvalidator": {
               "status": "supported",
-              "evidence": "kk-modelvalidator/src/main/java/org/tzi/use/kodkod/plugin/KodkodValidateCmd.java (performCommand/handleArguments/extractConfigureAndValidate); registered as shellcmd=\"modelvalidator -validate\" alias=\"mv -validate\" in src/main/resources/resources/*.xml; drives org.tzi.use.kodkod.UseKodkodModelValidator.handleSolution()/createObjectDiagram()",
+              "evidence": "kk-modelvalidator/src/main/java/org/tzi/use/kodkod/plugin/KodkodValidateCmd.java (performCommand/handleArguments/extractConfigureAndValidate); registered as shellcmd=\"modelvalidator -validate\" alias=\"mv -validate\" in kk-modelvalidator/src/main/resources/useplugin.xml; drives org.tzi.use.kodkod.UseKodkodModelValidator.handleSolution()/createObjectDiagram()",
               "notes": "Loads/creates a properties config, transforms+enriches the model, runs KodkodSolver, and on SATISFIABLE reconstructs an object diagram via ObjectDiagramCreator, retrying (session.reset()+forbid tuples) if structural checks fail. Outcome also echoed directly to the shell (reportOutcomeDirectly) to work around a log4j classloader issue noted in-code.",
               "satScenarioIds": [
                 "Library",
