@@ -841,8 +841,7 @@
         "outcome": "UNSATISFIABLE"
       },
       "scenarioTags": [
-        "invariant-independence",
-        "single-step-scrolling",
+        "integer-domain-boundary-exhaustion",
         "paired-unsat-mutation"
       ]
     },
@@ -871,7 +870,6 @@
         "derived-associations",
         "primary-foreign-keys",
         "10-classes",
-        "targeted-invIndep",
         "paired-unsat-mutation"
       ]
     },
@@ -928,9 +926,6 @@
       },
       "scenarioTags": [
         "recursive-association",
-        "partial-solution-completion",
-        "classifying-terms",
-        "constraint-implication",
         "paired-unsat-mutation"
       ]
     },
@@ -957,7 +952,6 @@
       },
       "scenarioTags": [
         "association-class",
-        "trivially-unsatisfiable-invIndep",
         "paired-unsat-mutation"
       ]
     },
@@ -985,8 +979,6 @@
       "scenarioTags": [
         "single-inheritance",
         "abstract-superclass",
-        "polymorphic-navigation",
-        "oclIsTypeOf-oclAsType",
         "paired-unsat-mutation"
       ]
     },
@@ -1012,8 +1004,8 @@
         "outcome": "UNSATISFIABLE"
       },
       "scenarioTags": [
-        "bag-to-set-collapse",
-        "collect-operation",
+        "association-link-count-ceiling",
+        "structural-multiplicity-shortfall",
         "paired-unsat-mutation"
       ]
     },
@@ -1041,7 +1033,6 @@
       "scenarioTags": [
         "multiple-inheritance",
         "diamond-inheritance",
-        "cross-superclass-attribute-navigation",
         "paired-unsat-mutation"
       ]
     },
@@ -1071,7 +1062,6 @@
         "all-different-invariants",
         "dense-interlocking-constraints",
         "combinatorial-stress-test",
-        "unbound-relation-quirk",
         "paired-unsat-mutation"
       ]
     },
@@ -1097,8 +1087,6 @@
         "outcome": "UNSATISFIABLE"
       },
       "scenarioTags": [
-        "recursive-user-operations",
-        "transform-time-recursion-rejection",
         "closure-based-acyclicity",
         "zero-root-from-bound-arithmetic",
         "paired-unsat-mutation"
@@ -1130,8 +1118,6 @@
         "recursive-association",
         "flat-graph-construction",
         "combinatorial-stress-test",
-        "bitwidth-sensitivity-limitation",
-        "query-size-on-objects-limitation",
         "paired-unsat-mutation"
       ]
     },
@@ -1157,10 +1143,8 @@
         "outcome": "UNSATISFIABLE"
       },
       "scenarioTags": [
-        "association-end-redefinition",
-        "role-type-narrowing",
-        "inherited-role-substitution",
-        "kodkod-redefines-translation-gap",
+        "empty-attribute-value-domain",
+        "structural-bound-gap",
         "paired-unsat-mutation"
       ]
     },
@@ -1189,7 +1173,6 @@
         "combinatorial-stress-test",
         "all-different-invariants",
         "bijective-associations",
-        "integer-bound-sizing-pitfall",
         "paired-unsat-mutation"
       ]
     },
@@ -1215,11 +1198,8 @@
         "outcome": "UNSATISFIABLE"
       },
       "scenarioTags": [
-        "association-end-subsetting",
-        "derived-union-association",
-        "kodkod-subsets-translation-gap",
-        "dead-unionassociation-code",
-        "mv-query-vs-plain-ocl-divergence",
+        "association-bound-vs-population-ceiling",
+        "structural-cardinality-contradiction",
         "paired-unsat-mutation"
       ]
     },
@@ -1252,7 +1232,6 @@
         "coordinate-conditioned-invariants",
         "fixed-multiplicity-length-parsing-bug",
         "per-object-attribute-binding-bug",
-        "mv-query-vs-plain-ocl-divergence",
         "paired-unsat-mutation"
       ]
     }
