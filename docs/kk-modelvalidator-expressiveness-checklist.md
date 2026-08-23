@@ -115,6 +115,8 @@ strongest, not a JDK-hobbled stand-in.
 - [x] Full 17-example, 85-cell benchmark run (in-process, real solve/reconstruct, per-example
       repeat overrides for the 3 genuinely slow performance examples) — a new solver-choice
       extreme found: MiniSat 598ms vs DefaultSAT4J 11.4s on the same GraphColoring instance.
+      **Superseded**: later passes grew this to 33 scenarios / 165 cells (paired UNSAT mutations
+      added) — see `latest-results.json` for current numbers, not this 85-cell run.
 - [x] Final report published as an Artifact and sent to the user (feature/expressiveness matrix
       with click-through, per-example `(?)` tooltips carrying model/question/attribution
       metadata, finding-vs-validating mode labels, category filter, witness-agreement counts).

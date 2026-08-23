@@ -21,7 +21,7 @@ detects exactly this situation and logs a `WARN` -- but then proceeds to
 build the collect as a genuine Kodkod **Set** anyway
 (`org.tzi.kodkod.ocl.operation.SetOperationGroup.collect`, which registers
 `"collect"`/`"collectNested"` as set-returning operations and implements
-them as an ordinary relational join, lines 31-32 and 100-125 of
+them as an ordinary relational join, lines 31-32 and 100-127 of
 `kk-modelvalidator/src/main/java/org/tzi/kodkod/ocl/operation/SetOperationGroup.java`).
 So this is not merely a mislabeled type or a display quirk: the
 relation the solver actually builds and reasons over has already lost

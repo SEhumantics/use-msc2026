@@ -576,12 +576,13 @@ construction while staying hidden from the solver.
 
 - Confirmed `SATISFIABLE` at bitwidth 8+ (genuinely non-trivial solving,
   not a bounds-mismatch shortcut — but the exact time depends heavily on
-  which solver: from well under a second on the fastest backend to
-  roughly 10+ seconds on the slowest, a ~19x spread that's the largest
+  which solver: from well under a second on the fastest backend to over
+  ten seconds on the slowest, a 20x+ spread (varies somewhat run to run;
+  don't rely on a specific multiplier quoted here) that's the largest
   solver-choice difference seen anywhere in this suite — see
   `src/main/resources/latest-results.json` (or generate a fresh report
-  via `scripts/run-benchmark.sh`) for the full per-solver breakdown
-  rather than a single figure). The identical graph with only 2 colors available
+  via `scripts/run-benchmark.sh`) for the actual current per-solver
+  numbers). The identical graph with only 2 colors available
   comes back UNSATISFIABLE in ~77ms, confirming 3 is the tight chromatic
   number, not a loose bound.
 - **A real, previously-unknown plugin bug, confirmed and not worked

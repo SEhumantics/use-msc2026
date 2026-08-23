@@ -3,7 +3,10 @@
 **Location note:** this module now lives at `msc-modelvalidators/kk-modelvalidator/`, grouped
 alongside the `benchmark` module that measures it and the reserved `unc-modelvalidator` slot for the
 thesis's actual contribution (see "Seventh pass" below). Everything written before that regrouping
-below still describes real, unchanged history — only the path changed, not the content.
+below still describes real, unchanged history — only the path changed, not the content. One exception:
+earlier passes' `kk-modelvalidator/examples/` references describe where the examples lived *at the
+time*, not where they live now — a later restructuring moved them into the sibling `benchmark/`
+module entirely (`benchmark/examples/`), not just under a new prefix.
 
 **Status: builds cleanly, ships in the standard distribution, and its functionality is verified both
 by an automated end-to-end test and by manual inspection.** `mvn -B clean verify
@@ -728,6 +731,9 @@ fair comparison against Z3 later:
 Full findings, every confirmed number, and the exact reproduction commands are in each example's own
 `.use`/`.properties` header comments and `examples/README.md`. Floor gate and Track E's own gate both
 re-confirmed green after the restructuring and after the full 17-example, 85-cell benchmark run.
+**Superseded**: later passes added paired UNSAT mutations for 16 of the 17 examples, growing the
+current benchmark to 33 scenarios / 165 (scenario × solver) cells — see `latest-results.json` for the
+current run, not this 85-cell figure.
 
 ## Eighth pass: `msc-modelvalidators` rename, a redesigned benchmark dashboard, and a plugin-comparable feature model
 
