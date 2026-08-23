@@ -14,8 +14,8 @@ check -v
 -- nameUnique, acyclicParenthood, parentOlderChild -- report OK.
 --
 -- (Five of the six supplementary invariants also happen to report OK
--- here -- grandparentOlderGrandchild, the parent_0_2_* trio, and the
--- EQUIVALENCE check -- but that is incidental, not the point of this
+-- here -- grandparentOlderGrandchild and the parent_0_2_* family (four
+-- invariants, two of them the EQUIVALENCE checks) -- but that is incidental, not the point of this
 -- test. The supplementary `balancedBinaryTree' invariant, which demands a
 -- perfectly balanced binary tree, expectedly reports FAILED: Michael has
 -- exactly one child rather than 0 or 2, and Vito's two children have
