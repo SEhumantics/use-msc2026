@@ -700,9 +700,10 @@ fair comparison against Z3 later:
 
 - **`GraphColoring` — a real false-negative bug**: at bitwidth 4–6, a provably-3-colorable graph
   (constructed so a valid coloring exists by hidden construction) comes back UNSATISFIABLE in ~20ms; only
-  bitwidth≥8 gives the correct, genuinely-searched SATISFIABLE answer (~10–19s). Also the largest
+  bitwidth≥8 gives the correct, genuinely-searched SATISFIABLE answer. Also the largest
   solver-choice spread measured anywhere in this suite: MiniSat 598ms vs DefaultSAT4J 11.4s on the
-  identical instance — an 19x difference.
+  identical instance — a 19x difference (not a single "~10-19s" figure across solvers, an earlier
+  version of this bullet wrongly implied).
 - **`Redefines` — a real soundness gap**: an invariant written via a superclass-redefined association
   end is evaluated over an empty relation during Kodkod's search (the translator has no `redefines`
   special-casing at all) — silently vacuously true, so `-validate` reports SATISFIABLE on a state where

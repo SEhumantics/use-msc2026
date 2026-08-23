@@ -8,8 +8,9 @@
 mv -config satsolver := DefaultSAT4J; bitwidth := 4; automaticDiagramExtraction := off
 
 -- Find the (unique, up to house re-labeling by attribute values) solution
--- to the Zebra Puzzle: 5 Houses satisfying all 22 invariants (6
--- all-different + 15 named clues + Clue16, the derived corollary).
+-- to the Zebra Puzzle: 5 Houses satisfying all 22 invariants (1
+-- position-range + 6 all-different + 14 named clues + 1 derived Clue16
+-- corollary).
 mv -validate ZebraPuzzle.properties
 
 -- Independent re-check of every invariant against the reconstructed state

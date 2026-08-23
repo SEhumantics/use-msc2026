@@ -153,8 +153,11 @@ had none).
   `.use` file rather than deleted, per this repo's own discipline of not
   quietly removing things that don't work.
 - `invIndep.cmd` — confirmed `nameIsUnique`/`femaleHasNoWife`/`maleHasNoHusband`
-  all `Independent` of each other (a genuinely different story from
-  `EmployeeInvariants`, where one invariant *is* redundant).
+  all `Independent` of each other (a genuinely different story, among those
+  three, from `EmployeeInvariants`, where one invariant *is* redundant) —
+  but the fourth active invariant here, `attributesDefined`, *does* come
+  back `Not independent`, the same dependent-invariant pattern
+  `EmployeeInvariants` demonstrates.
 - `scrollingAll.cmd` — the default bounds (2-4 Persons, unrestricted
   civstat/gender/alive) do **not** finish enumerating in 60s (confirmed by
   actually running it); a separate, much smaller `[scrolling]` section (exactly
@@ -571,12 +574,15 @@ Culberson's DIMACS benchmarks use (partition into 3 hidden color classes,
 edges only *between* classes) so a 3-coloring provably exists by
 construction while staying hidden from the solver.
 
-- Confirmed `SATISFIABLE` at bitwidth 8+ (solving time genuinely 10–19s
-  across repeated runs, several solvers — see the benchmark results below
-  for the full solver-choice spread, which is the largest seen anywhere in
-  this suite). The identical graph with only 2 colors available comes back
-  UNSATISFIABLE in ~77ms, confirming 3 is the tight chromatic number, not a
-  loose bound.
+- Confirmed `SATISFIABLE` at bitwidth 8+ (genuinely non-trivial solving,
+  not a bounds-mismatch shortcut — but the exact time depends heavily on
+  which solver: from well under a second on the fastest backend to
+  roughly 10+ seconds on the slowest, a ~19x spread that's the largest
+  solver-choice difference seen anywhere in this suite — see the
+  benchmark results below for the full per-solver breakdown rather than
+  a single figure). The identical graph with only 2 colors available
+  comes back UNSATISFIABLE in ~77ms, confirming 3 is the tight chromatic
+  number, not a loose bound.
 - **A real, previously-unknown plugin bug, confirmed and not worked
   around by patching Kodkod**: at bitwidth 4/5/6, the solver reports
   UNSATISFIABLE for this *exact* instance in ~15–25ms — a false negative,

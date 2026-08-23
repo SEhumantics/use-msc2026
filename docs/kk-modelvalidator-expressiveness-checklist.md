@@ -18,9 +18,11 @@ regression-protected tests for anything past `Library`.
       audit (see `docs/kk-modelvalidator-port.md`'s "Eighth pass"). Use the
       matrix, not this bullet, for what's actually supported today.
 - [x] SOIL-based validation tests for every domain (existing 5 + new 3, i.e.
-      01 through 08): a `valid-instance.soil`/`.cmd` and an
-      `invalid-instance.soil`/`.cmd` violating exactly one named invariant,
-      for all 8 domains. All 16 pairs actually run and confirmed.
+      Library, EmployeeInvariants, CompanyERSchema, CivilStatus, Genealogy,
+      AssociationClass, Inheritance, AggregationComposition): a
+      `valid-instance.soil`/`.cmd` and an `invalid-instance.soil`/`.cmd`
+      violating exactly one named invariant, for all 8 domains. All 16 pairs
+      actually run and confirmed.
 - [x] Automated JUnit regression tests (`EndToEndValidationTest`-style, not
       just one-time manual `check -v`) for CompanyER, AssociationClass, and
       Inheritance. All 3 pass; floor gate `tests=3311 errors=0 failures=461
