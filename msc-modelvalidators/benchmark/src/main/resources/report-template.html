@@ -85,6 +85,14 @@
   .filterbar select { font-family: ui-monospace, monospace; font-size: var(--fs-tiny); padding: 0.3rem 0.6rem; border-radius: 99px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-secondary); max-width: 14rem; }
   .filterbar .sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 0.2rem; }
 
+  /* ---------- Page nav (two views: benchmark results / feature matrix) ---------- */
+  .page-nav { display: flex; gap: 1.6rem; margin-top: 0.3rem; }
+  .page-tab { font-size: var(--fs-small); font-weight: 600; color: var(--text-muted); text-decoration: none; padding-bottom: 0.55rem; border-bottom: 2px solid transparent; }
+  .page-tab:hover { color: var(--text-primary); }
+  .page-tab[aria-current="page"] { color: var(--text-primary); border-bottom-color: var(--accent); }
+  .page-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .page-tab .count { font-variant-numeric: tabular-nums; color: var(--text-muted); font-weight: 500; }
+
   section.block { margin-bottom: 2.5rem; }
   .panel { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 1.1rem 1.2rem; }
 
@@ -188,6 +196,22 @@
   svg.bw { display: block; overflow: visible; }
   svg.bw .bw-line { stroke: var(--border-strong); stroke-width: 2; }
   svg.bw .bw-med { fill: var(--text-primary); }
+
+  /* ---------- Per-scenario solver comparison chart ---------- */
+  /* Fixed pixel dimensions (viewBox units == CSS px, no width:100% stretch), matching svg.bw below --
+     an SVG scaled via CSS width without matching width/height attributes scales its internal "user
+     unit" font-size right along with it, so a 9px label can silently render at 2x on a wide panel. */
+  .detail-chart { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 0.7rem 0.9rem 0.5rem; overflow-x: auto; }
+  .detail-chart-title { font-size: var(--fs-tiny); color: var(--text-muted); margin-bottom: 0.5rem; }
+  svg.cmp-chart { display: block; overflow: visible; }
+  svg.cmp-chart .cmp-grid { stroke: var(--gridline); stroke-width: 1; }
+  svg.cmp-chart .cmp-axis-label { fill: var(--text-muted); font-size: 8.5px; font-family: ui-monospace, monospace; }
+  svg.cmp-chart .cmp-row-label { fill: var(--text-secondary); font-size: 9px; font-family: ui-monospace, monospace; }
+  svg.cmp-chart .cmp-bar-track { fill: var(--surface-3); }
+  svg.cmp-chart .cmp-range { stroke-width: 3; stroke-linecap: round; }
+  svg.cmp-chart .cmp-med { stroke: var(--surface-2); stroke-width: 1.5; }
+  svg.cmp-chart .cmp-med-text { fill: var(--text-primary); font-size: 9px; font-family: ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  svg.cmp-chart .cmp-error-text { fill: var(--status-critical); font-size: 9px; font-family: ui-monospace, monospace; }
   .detail-meta { font-size: var(--fs-tiny); color: var(--text-muted); line-height: 1.6; border-top: 1px dashed var(--border); padding-top: 0.7rem; }
   .detail-meta b { color: var(--text-secondary); font-weight: 600; }
   .soil-list { display: flex; flex-direction: column; gap: 0.25rem; font-size: var(--fs-tiny); }
@@ -276,8 +300,16 @@
         <span class="chip validating">validating</span> mode (a hand-built instance checked directly), or both.
         Click any scenario row to see the full per-solver breakdown.
       </p>
-      <div class="filterbar" id="filterbar"></div>
+      <nav class="page-nav" aria-label="Report sections">
+        <a href="#benchmark" class="page-tab" id="tabBenchmark">Benchmark results</a>
+        <a href="#matrix" class="page-tab" id="tabMatrix">Feature matrix <span class="count" id="tabMatrixCount"></span></a>
+      </nav>
     </header>
+
+    <div class="view view-benchmark">
+    <section class="block">
+      <div class="filterbar" id="filterbar"></div>
+    </section>
 
     <section class="block">
       <div class="verdict-row" id="verdictRow"></div>
@@ -299,6 +331,9 @@
       </div>
     </section>
 
+    </div>
+
+    <div class="view view-matrix">
     <section class="block" id="featureSupportSection">
       <div class="section-head">
         <h2>Plugin feature support <span class="h2-sub" id="featureSupportSub"></span></h2>
@@ -321,7 +356,9 @@
         <tbody id="featureBody"></tbody>
       </table></div>
     </section>
+    </div>
 
+    <div class="view view-benchmark">
     <section class="block" id="heatmapSection">
       <div class="section-head">
         <h2>Scenario &times; solver outcomes <span class="h2-sub">hardest scenarios first &mdash; click a cell to inspect</span></h2>
@@ -348,6 +385,7 @@
         <tbody id="scenarioBody"></tbody>
       </table></div>
     </section>
+    </div>
 
     <footer class="viz-foot" id="footNote"></footer>
   </div>
@@ -703,6 +741,12 @@
     if (ms == null) return '&mdash;';
     return ms >= 1000 ? (ms / 1000).toFixed(2) + '&thinsp;s' : ms.toFixed(2) + '&thinsp;ms';
   }
+  // fmtMs()'s HTML entities only decode through .innerHTML -- anywhere the result lands in
+  // .textContent, an SVG text node, or an attribute value (aria-label, title), use this instead so
+  // "82.88&thinsp;ms" doesn't render as literal entity text.
+  function fmtMsPlain(ms) {
+    return fmtMs(ms).replace(/&thinsp;/g, ' ').replace(/&mdash;/g, '—');
+  }
 
   function renderLeaderboard(vis) {
     const { rows, winnersByExample, findingVis } = computeLeaderboard(vis);
@@ -837,7 +881,7 @@
         btn.type = 'button';
         btn.className = 'hm-swatch ' + status;
         btn.title = r
-          ? `${ex.id} × ${solver}: ${status} (${r.outcome}, ${fmtMs(r.medianWallMs).replace(/&thinsp;/, ' ')})`
+          ? `${ex.id} × ${solver}: ${status} (${r.outcome}, ${fmtMsPlain(r.medianWallMs)})`
           : `${ex.id} × ${solver}: not run`;
         if (status === 'error') btn.textContent = '!';
         if (status === 'mismatch') btn.textContent = '✕';
@@ -876,6 +920,51 @@
     svg.appendChild(svgEl('line', { class: 'bw-line', x1: x(max), x2: x(max), y1: h / 2 - 4, y2: h / 2 + 4 }));
     const med2 = svgEl('circle', { class: 'bw-med', cx: x(med), cy: h / 2, r: 3.4, fill: color });
     svg.appendChild(med2);
+    return svg;
+  }
+
+  // All solvers' min-median-max on one shared time axis, so relative speed reads at a glance above
+  // the exact-numbers table below it (text and graph together, not a choice between them).
+  function comparisonChart(rows, domainMin, domainMax) {
+    const sorted = [...rows].sort((a, b) => a.solver.localeCompare(b.solver));
+    const rowH = 22, labelW = 92, chartW = 320, pad = 6, axisH = 16;
+    const w = labelW + chartW + 56;
+    const h = rowH * sorted.length + pad * 2 + axisH;
+    const span = Math.max(1e-9, domainMax - domainMin);
+    const x = v => labelW + pad + ((v - domainMin) / span) * (chartW - pad * 2);
+    const svg = svgEl('svg', {
+      class: 'cmp-chart', width: w, height: h, viewBox: `0 0 ${w} ${h}`, role: 'img',
+      'aria-label': `Wall-clock solve time comparison across ${sorted.length} solvers, ` +
+        sorted.map(r => `${r.solver} ${r.outcome === 'ERROR' ? 'errored' : 'median ' + fmtMsPlain(r.medianWallMs)}`).join(', '),
+    });
+    [domainMin, (domainMin + domainMax) / 2, domainMax].forEach(v => {
+      const gx = x(v);
+      svg.appendChild(svgEl('line', { class: 'cmp-grid', x1: gx, x2: gx, y1: 2, y2: h - axisH + 2 }));
+      const t = svgEl('text', { class: 'cmp-axis-label', x: gx, y: h - 4, 'text-anchor': 'middle' });
+      t.textContent = fmtMsPlain(v);
+      svg.appendChild(t);
+    });
+    sorted.forEach((r, i) => {
+      const cy = pad + i * rowH + rowH / 2;
+      const label = svgEl('text', { class: 'cmp-row-label', x: labelW - 8, y: cy + 3, 'text-anchor': 'end' });
+      label.textContent = r.solver;
+      svg.appendChild(label);
+      svg.appendChild(svgEl('rect', { class: 'cmp-bar-track', x: labelW, y: cy - 5, width: chartW, height: 10, rx: 3 }));
+      if (r.outcome === 'ERROR') {
+        const et = svgEl('text', { class: 'cmp-error-text', x: labelW + 8, y: cy + 3 });
+        et.textContent = 'error';
+        svg.appendChild(et);
+        return;
+      }
+      const color = cssVar(SERIES_VAR[r.solver]);
+      svg.appendChild(svgEl('line', {
+        class: 'cmp-range', x1: x(r.minWallMs), x2: x(r.maxWallMs), y1: cy, y2: cy, stroke: color,
+      }));
+      svg.appendChild(svgEl('circle', { class: 'cmp-med', cx: x(r.medianWallMs), cy: cy, r: 4.5, fill: color }));
+      const mt = svgEl('text', { class: 'cmp-med-text', x: labelW + chartW + 8, y: cy + 3 });
+      mt.textContent = fmtMsPlain(r.medianWallMs);
+      svg.appendChild(mt);
+    });
     return svg;
   }
 
@@ -1040,6 +1129,7 @@
   }
 
   function jumpToScenario(id) {
+    setView('benchmark');
     expandedIds.add(id);
     activeCategory = 'all'; activeFeature = 'all'; activeExpectedClass = 'all';
     [...filterbar.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b.textContent === 'All scenarios'));
@@ -1061,6 +1151,13 @@
     if (rows.length) {
       const allMs = rows.flatMap(r => [r.minWallMs, r.maxWallMs]);
       const domainMin = Math.min(...allMs), domainMax = Math.max(...allMs, domainMin + 1e-6);
+      if (rows.length > 1) {
+        const chartWrap = document.createElement('div');
+        chartWrap.className = 'detail-chart';
+        chartWrap.innerHTML = '<div class="detail-chart-title">Solve time by solver (min &ndash; median &ndash; max, wall clock)</div>';
+        chartWrap.appendChild(comparisonChart(rows, domainMin, domainMax));
+        wrap.appendChild(chartWrap);
+      }
       const table = document.createElement('table');
       table.className = 'detail-table';
       table.innerHTML = `<thead><tr>
@@ -1179,6 +1276,10 @@
     meta.className = 'detail-meta';
     const metaLines = [];
     if (ex.question) metaLines.push(`<b>Question:</b> ${escapeHtml(ex.question)}`);
+    const expectedTxt = (ex.expected && (ex.expected.outcome || ex.expected.classification)) || '—';
+    metaLines.push(`<b>Category:</b> ${escapeHtml(ex.category || '—')} &middot; ` +
+      `<b>Bitwidth:</b> ${ex.bitwidth != null ? ex.bitwidth : '—'} &middot; ` +
+      `<b>Expected:</b> ${escapeHtml(expectedTxt)}`);
     metaLines.push(`<b>Model:</b> ${escapeHtml(ex.directory)}/${escapeHtml(ex.useFile)}${ex.propertiesFile ? ' + ' + escapeHtml(ex.propertiesFile) : ''}`);
     metaLines.push(`<b>Source:</b> ${escapeHtml(provenanceLabel(ex))}${ex.provenanceDetail ? ' — ' + escapeHtml(ex.provenanceDetail) : ''}${ex.provenanceCitation ? ' (' + escapeHtml(ex.provenanceCitation) + ')' : ''}`);
     meta.innerHTML = metaLines.join('<br>');
@@ -1396,9 +1497,12 @@
     renderPluginSummary();
     renderAreaBreakdown();
     renderFeatureTable();
+    const tabCount = document.getElementById('tabMatrixCount');
+    if (tabCount) tabCount.textContent = `(${featureIndex.size})`;
   }
 
   function jumpToFeature(id) {
+    setView('matrix');
     activeFeatureArea = 'all';
     activeFeatureStatus = 'all';
     featureFilterbar.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.textContent === 'All statuses'));
@@ -1437,6 +1541,34 @@
     renderHeatmap(vis);
     renderScenarioTable(vis);
   }
+
+  // --------------------------------------------------------------- view routing
+  // Two views (benchmark results / feature matrix) share one file rather than being built as two
+  // separate HTML outputs, so the report stays a single portable file -- routed by URL hash instead
+  // (bookmarkable/shareable/back-button-friendly), each view a plain <div class="view view-*">.
+  const tabBenchmark = document.getElementById('tabBenchmark');
+  const tabMatrix = document.getElementById('tabMatrix');
+  function currentView() {
+    return location.hash === '#matrix' ? 'matrix' : 'benchmark';
+  }
+  function applyView(opts) {
+    const focusHeading = !(opts && opts.skipFocus);
+    const view = currentView();
+    document.querySelectorAll('.view-benchmark').forEach(el => el.classList.toggle('hidden', view !== 'benchmark'));
+    document.querySelectorAll('.view-matrix').forEach(el => el.classList.toggle('hidden', view !== 'matrix'));
+    if (view === 'benchmark') { tabBenchmark.setAttribute('aria-current', 'page'); tabMatrix.removeAttribute('aria-current'); }
+    else { tabMatrix.setAttribute('aria-current', 'page'); tabBenchmark.removeAttribute('aria-current'); }
+    if (focusHeading) {
+      const heading = document.querySelector(view === 'matrix' ? '#featureSupportSection h2' : '#leaderboardSection h2');
+      if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus({ preventScroll: false }); }
+    }
+  }
+  function setView(view) {
+    if (currentView() === view) { applyView({ skipFocus: true }); return; }
+    location.hash = view === 'matrix' ? '#matrix' : '#benchmark';
+  }
+  window.addEventListener('hashchange', () => applyView());
+  applyView({ skipFocus: true });
 
   renderAll();
 })();

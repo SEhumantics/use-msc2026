@@ -1,0 +1,93 @@
+-- Hand-built, deliberately VALID instance of NQueens.use (SOIL statements,
+-- no Kodkod search) -- 8 queens on an 8x8 board (matching NQueens.properties'
+-- [small] section), placed according to an independently-computed N=8
+-- solution.
+--
+-- "Independently-computed" here means: a plain Python backtracking search
+-- (self-written for this fixture, ~40 lines, ordinary depth-first placement
+-- with a diagonal/column safety check per candidate) run completely outside
+-- this repository's plugin -- no Kodkod, no USE, no `mv -validate`, and not
+-- the witness this suite's own solver run happens to find. That independence
+-- from the thing under test is the entire point of a validating fixture in
+-- this suite (see docs/kk-modelvalidator-port.md and the exact same pattern
+-- in GraphColoring/valid-instance.soil). The search enumerated all 92
+-- distinct N=8 solutions (a well-known count, reproduced here as a sanity
+-- check on the search itself) and the first one found by plain depth-first
+-- order was kept:
+--   row -> col:  0->0, 1->4, 2->7, 3->5, 4->2, 5->6, 6->1, 7->3
+-- i.e. as a permutation indexed by row: [0, 4, 7, 5, 2, 6, 1, 3]. Verified
+-- independently (same script) that no two of these 8 (row,col) pairs share
+-- a row, a column, or either diagonal.
+--
+-- Per NQueens.use's modeling approach, row/col are NOT attributes directly
+-- on Queen: each Queen is linked via the mandatory 1-1 QueenRow/QueenCol
+-- associations to its own Row and Col object, and row/col distinctness is
+-- structural (a total 1-1 association between two equal-size, fully
+-- populated classes is a bijection), not an extra OCL invariant. So this
+-- fixture creates 8 Row objects (idx 0..7, one each, matching the queen's
+-- row above), 8 Col objects (idx 0..7, one each), 8 Queen objects, and then
+-- links each queen to its own row and its own col per the permutation above.
+--
+-- Every invariant in NQueens.use (distinctRowIdx, distinctColIdx, noAttack)
+-- should report OK against this state -- see valid-instance.cmd.
+
+!create row0 : Row
+!set row0.idx := 0
+!create row1 : Row
+!set row1.idx := 1
+!create row2 : Row
+!set row2.idx := 2
+!create row3 : Row
+!set row3.idx := 3
+!create row4 : Row
+!set row4.idx := 4
+!create row5 : Row
+!set row5.idx := 5
+!create row6 : Row
+!set row6.idx := 6
+!create row7 : Row
+!set row7.idx := 7
+
+!create col0 : Col
+!set col0.idx := 0
+!create col1 : Col
+!set col1.idx := 1
+!create col2 : Col
+!set col2.idx := 2
+!create col3 : Col
+!set col3.idx := 3
+!create col4 : Col
+!set col4.idx := 4
+!create col5 : Col
+!set col5.idx := 5
+!create col6 : Col
+!set col6.idx := 6
+!create col7 : Col
+!set col7.idx := 7
+
+!create queen0 : Queen
+!create queen1 : Queen
+!create queen2 : Queen
+!create queen3 : Queen
+!create queen4 : Queen
+!create queen5 : Queen
+!create queen6 : Queen
+!create queen7 : Queen
+
+!insert (queen0, row0) into QueenRow
+!insert (queen1, row1) into QueenRow
+!insert (queen2, row2) into QueenRow
+!insert (queen3, row3) into QueenRow
+!insert (queen4, row4) into QueenRow
+!insert (queen5, row5) into QueenRow
+!insert (queen6, row6) into QueenRow
+!insert (queen7, row7) into QueenRow
+
+!insert (queen0, col0) into QueenCol
+!insert (queen1, col4) into QueenCol
+!insert (queen2, col7) into QueenCol
+!insert (queen3, col5) into QueenCol
+!insert (queen4, col2) into QueenCol
+!insert (queen5, col6) into QueenCol
+!insert (queen6, col1) into QueenCol
+!insert (queen7, col3) into QueenCol

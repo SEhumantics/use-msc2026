@@ -1,0 +1,322 @@
+-- Same 36-Field board as valid-instance.soil, EXCEPT Field6 (row.index=1,
+-- column.index=6 -- NOT one of the 10 given-clue cells) has value 7
+-- instead of 1.
+--
+-- Why an out-of-range value, not an in-range duplicate: the task template
+-- for this fixture (see GraphColoring's invalid-instance.soil) suggests
+-- "duplicate a value within one row/column/box" as the minimal violation.
+-- That does NOT work here, and trying it is itself a finding worth
+-- recording. In a fully-solved 6x6 Sudoku grid, every row, column, and
+-- 2x3 box is independently a permutation of 1..6 (isUnique over exactly 6
+-- Fields with allowedValue restricting to 6 possible values forces this).
+-- Changing any single Field to a DIFFERENT in-range value (1..6) is
+-- therefore never a single-invariant violation: by the pigeonhole
+-- principle, the other 5 cells of that field's row already cover the
+-- other 5 values, and likewise for its column and its 2x3 square, so the
+-- new value necessarily collides with the row AND the column AND the
+-- square simultaneously (three invariants at once), or a fourth
+-- (givenRxCy) as well if the chosen cell happens to be one of the 10
+-- given clues. This was confirmed directly: an earlier draft of this file
+-- set Field2 (row1,col2, not given) from 3 to 2 (matching Field4 in the
+-- same row) and running `check -v` against it reported 3 failures
+-- (uniqueValuesRow, uniqueValuesColumn, uniqueValuesSquare all at once),
+-- not 1 -- confirming the pigeonhole argument empirically, not just in
+-- theory.
+--
+-- The actual minimal single-invariant violation used below instead: set
+-- Field6.value to 7, outside the 1..6 range allowedValue requires. Since
+-- 7 does not already appear anywhere in Field6's row, column, or 2x3
+-- square (it's a value genuinely foreign to that whole 6x6 board, not one
+-- of the 6 values already in play there), isUnique still holds everywhere
+-- -- uniqueValuesRow/Column/Square, and every one of the 10 given-clue
+-- invariants, are all completely unaffected. Only allowedValue fails, and
+-- only for Field6. Confirmed by actually running this (see
+-- invalid-instance.cmd): `check -v` reports allowedValue violated for
+-- Field6 alone and every other invariant OK, finishing with "checked 18
+-- invariants ..., 1 failure." (USE checks a class invariant as one
+-- Field.allInstances->forAll statement, so this counts as ONE failure,
+-- not one per violating object -- consistent with how GraphColoring's own
+-- invalid-instance.cmd comment documents the same counting rule).
+
+!create Board1 : Board
+
+!create Row1 : Row
+!set Row1.index := 1
+!create Row2 : Row
+!set Row2.index := 2
+!create Row3 : Row
+!set Row3.index := 3
+!create Row4 : Row
+!set Row4.index := 4
+!create Row5 : Row
+!set Row5.index := 5
+!create Row6 : Row
+!set Row6.index := 6
+
+!create Column1 : Column
+!set Column1.index := 1
+!create Column2 : Column
+!set Column2.index := 2
+!create Column3 : Column
+!set Column3.index := 3
+!create Column4 : Column
+!set Column4.index := 4
+!create Column5 : Column
+!set Column5.index := 5
+!create Column6 : Column
+!set Column6.index := 6
+
+!create Square1 : Square
+!set Square1.index := 1
+!create Square2 : Square
+!set Square2.index := 2
+!create Square3 : Square
+!set Square3.index := 3
+!create Square4 : Square
+!set Square4.index := 4
+!create Square5 : Square
+!set Square5.index := 5
+!create Square6 : Square
+!set Square6.index := 6
+
+!create Field1 : Field
+!set Field1.value := 5
+!create Field2 : Field
+!set Field2.value := 3
+!create Field3 : Field
+!set Field3.value := 6
+!create Field4 : Field
+!set Field4.value := 2
+!create Field5 : Field
+!set Field5.value := 4
+!create Field6 : Field
+!set Field6.value := 7
+!create Field7 : Field
+!set Field7.value := 4
+!create Field8 : Field
+!set Field8.value := 1
+!create Field9 : Field
+!set Field9.value := 2
+!create Field10 : Field
+!set Field10.value := 6
+!create Field11 : Field
+!set Field11.value := 3
+!create Field12 : Field
+!set Field12.value := 5
+!create Field13 : Field
+!set Field13.value := 3
+!create Field14 : Field
+!set Field14.value := 2
+!create Field15 : Field
+!set Field15.value := 4
+!create Field16 : Field
+!set Field16.value := 1
+!create Field17 : Field
+!set Field17.value := 5
+!create Field18 : Field
+!set Field18.value := 6
+!create Field19 : Field
+!set Field19.value := 6
+!create Field20 : Field
+!set Field20.value := 5
+!create Field21 : Field
+!set Field21.value := 1
+!create Field22 : Field
+!set Field22.value := 3
+!create Field23 : Field
+!set Field23.value := 2
+!create Field24 : Field
+!set Field24.value := 4
+!create Field25 : Field
+!set Field25.value := 2
+!create Field26 : Field
+!set Field26.value := 6
+!create Field27 : Field
+!set Field27.value := 5
+!create Field28 : Field
+!set Field28.value := 4
+!create Field29 : Field
+!set Field29.value := 1
+!create Field30 : Field
+!set Field30.value := 3
+!create Field31 : Field
+!set Field31.value := 1
+!create Field32 : Field
+!set Field32.value := 4
+!create Field33 : Field
+!set Field33.value := 3
+!create Field34 : Field
+!set Field34.value := 5
+!create Field35 : Field
+!set Field35.value := 6
+!create Field36 : Field
+!set Field36.value := 2
+
+!insert (Board1, Row1) into BoardRows
+!insert (Board1, Row2) into BoardRows
+!insert (Board1, Row3) into BoardRows
+!insert (Board1, Row4) into BoardRows
+!insert (Board1, Row5) into BoardRows
+!insert (Board1, Row6) into BoardRows
+
+!insert (Board1, Column1) into BoardColumns
+!insert (Board1, Column2) into BoardColumns
+!insert (Board1, Column3) into BoardColumns
+!insert (Board1, Column4) into BoardColumns
+!insert (Board1, Column5) into BoardColumns
+!insert (Board1, Column6) into BoardColumns
+
+!insert (Board1, Square1) into BoardSquares
+!insert (Board1, Square2) into BoardSquares
+!insert (Board1, Square3) into BoardSquares
+!insert (Board1, Square4) into BoardSquares
+!insert (Board1, Square5) into BoardSquares
+!insert (Board1, Square6) into BoardSquares
+
+!insert (Board1, Field1) into BoardFields
+!insert (Board1, Field2) into BoardFields
+!insert (Board1, Field3) into BoardFields
+!insert (Board1, Field4) into BoardFields
+!insert (Board1, Field5) into BoardFields
+!insert (Board1, Field6) into BoardFields
+!insert (Board1, Field7) into BoardFields
+!insert (Board1, Field8) into BoardFields
+!insert (Board1, Field9) into BoardFields
+!insert (Board1, Field10) into BoardFields
+!insert (Board1, Field11) into BoardFields
+!insert (Board1, Field12) into BoardFields
+!insert (Board1, Field13) into BoardFields
+!insert (Board1, Field14) into BoardFields
+!insert (Board1, Field15) into BoardFields
+!insert (Board1, Field16) into BoardFields
+!insert (Board1, Field17) into BoardFields
+!insert (Board1, Field18) into BoardFields
+!insert (Board1, Field19) into BoardFields
+!insert (Board1, Field20) into BoardFields
+!insert (Board1, Field21) into BoardFields
+!insert (Board1, Field22) into BoardFields
+!insert (Board1, Field23) into BoardFields
+!insert (Board1, Field24) into BoardFields
+!insert (Board1, Field25) into BoardFields
+!insert (Board1, Field26) into BoardFields
+!insert (Board1, Field27) into BoardFields
+!insert (Board1, Field28) into BoardFields
+!insert (Board1, Field29) into BoardFields
+!insert (Board1, Field30) into BoardFields
+!insert (Board1, Field31) into BoardFields
+!insert (Board1, Field32) into BoardFields
+!insert (Board1, Field33) into BoardFields
+!insert (Board1, Field34) into BoardFields
+!insert (Board1, Field35) into BoardFields
+!insert (Board1, Field36) into BoardFields
+
+!insert (Row1, Field1) into RowFields
+!insert (Row1, Field2) into RowFields
+!insert (Row1, Field3) into RowFields
+!insert (Row1, Field4) into RowFields
+!insert (Row1, Field5) into RowFields
+!insert (Row1, Field6) into RowFields
+!insert (Row2, Field7) into RowFields
+!insert (Row2, Field8) into RowFields
+!insert (Row2, Field9) into RowFields
+!insert (Row2, Field10) into RowFields
+!insert (Row2, Field11) into RowFields
+!insert (Row2, Field12) into RowFields
+!insert (Row3, Field13) into RowFields
+!insert (Row3, Field14) into RowFields
+!insert (Row3, Field15) into RowFields
+!insert (Row3, Field16) into RowFields
+!insert (Row3, Field17) into RowFields
+!insert (Row3, Field18) into RowFields
+!insert (Row4, Field19) into RowFields
+!insert (Row4, Field20) into RowFields
+!insert (Row4, Field21) into RowFields
+!insert (Row4, Field22) into RowFields
+!insert (Row4, Field23) into RowFields
+!insert (Row4, Field24) into RowFields
+!insert (Row5, Field25) into RowFields
+!insert (Row5, Field26) into RowFields
+!insert (Row5, Field27) into RowFields
+!insert (Row5, Field28) into RowFields
+!insert (Row5, Field29) into RowFields
+!insert (Row5, Field30) into RowFields
+!insert (Row6, Field31) into RowFields
+!insert (Row6, Field32) into RowFields
+!insert (Row6, Field33) into RowFields
+!insert (Row6, Field34) into RowFields
+!insert (Row6, Field35) into RowFields
+!insert (Row6, Field36) into RowFields
+
+!insert (Column1, Field1) into ColumnFields
+!insert (Column1, Field7) into ColumnFields
+!insert (Column1, Field13) into ColumnFields
+!insert (Column1, Field19) into ColumnFields
+!insert (Column1, Field25) into ColumnFields
+!insert (Column1, Field31) into ColumnFields
+!insert (Column2, Field2) into ColumnFields
+!insert (Column2, Field8) into ColumnFields
+!insert (Column2, Field14) into ColumnFields
+!insert (Column2, Field20) into ColumnFields
+!insert (Column2, Field26) into ColumnFields
+!insert (Column2, Field32) into ColumnFields
+!insert (Column3, Field3) into ColumnFields
+!insert (Column3, Field9) into ColumnFields
+!insert (Column3, Field15) into ColumnFields
+!insert (Column3, Field21) into ColumnFields
+!insert (Column3, Field27) into ColumnFields
+!insert (Column3, Field33) into ColumnFields
+!insert (Column4, Field4) into ColumnFields
+!insert (Column4, Field10) into ColumnFields
+!insert (Column4, Field16) into ColumnFields
+!insert (Column4, Field22) into ColumnFields
+!insert (Column4, Field28) into ColumnFields
+!insert (Column4, Field34) into ColumnFields
+!insert (Column5, Field5) into ColumnFields
+!insert (Column5, Field11) into ColumnFields
+!insert (Column5, Field17) into ColumnFields
+!insert (Column5, Field23) into ColumnFields
+!insert (Column5, Field29) into ColumnFields
+!insert (Column5, Field35) into ColumnFields
+!insert (Column6, Field6) into ColumnFields
+!insert (Column6, Field12) into ColumnFields
+!insert (Column6, Field18) into ColumnFields
+!insert (Column6, Field24) into ColumnFields
+!insert (Column6, Field30) into ColumnFields
+!insert (Column6, Field36) into ColumnFields
+
+!insert (Square1, Field1) into SquareFields
+!insert (Square1, Field2) into SquareFields
+!insert (Square1, Field3) into SquareFields
+!insert (Square1, Field7) into SquareFields
+!insert (Square1, Field8) into SquareFields
+!insert (Square1, Field9) into SquareFields
+!insert (Square2, Field4) into SquareFields
+!insert (Square2, Field5) into SquareFields
+!insert (Square2, Field6) into SquareFields
+!insert (Square2, Field10) into SquareFields
+!insert (Square2, Field11) into SquareFields
+!insert (Square2, Field12) into SquareFields
+!insert (Square3, Field13) into SquareFields
+!insert (Square3, Field14) into SquareFields
+!insert (Square3, Field15) into SquareFields
+!insert (Square3, Field19) into SquareFields
+!insert (Square3, Field20) into SquareFields
+!insert (Square3, Field21) into SquareFields
+!insert (Square4, Field16) into SquareFields
+!insert (Square4, Field17) into SquareFields
+!insert (Square4, Field18) into SquareFields
+!insert (Square4, Field22) into SquareFields
+!insert (Square4, Field23) into SquareFields
+!insert (Square4, Field24) into SquareFields
+!insert (Square5, Field25) into SquareFields
+!insert (Square5, Field26) into SquareFields
+!insert (Square5, Field27) into SquareFields
+!insert (Square5, Field31) into SquareFields
+!insert (Square5, Field32) into SquareFields
+!insert (Square5, Field33) into SquareFields
+!insert (Square6, Field28) into SquareFields
+!insert (Square6, Field29) into SquareFields
+!insert (Square6, Field30) into SquareFields
+!insert (Square6, Field34) into SquareFields
+!insert (Square6, Field35) into SquareFields
+!insert (Square6, Field36) into SquareFields

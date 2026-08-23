@@ -1,0 +1,96 @@
+-- Same 8-queen instance as valid-instance.soil, EXCEPT queen2 and queen6's
+-- QueenCol links are swapped (queen2 -> col1 instead of col7, queen6 -> col7
+-- instead of col1). This is the smallest change the model's own structure
+-- allows: row/col distinctness is enforced structurally by the mandatory
+-- 1-1 QueenRow/QueenCol bijections (see NQueens.use's header), so a single
+-- queen cannot be moved to an already-occupied row or column without USE
+-- itself rejecting the !insert as a multiplicity violation at load time --
+-- the minimal edit that stays structurally legal is swapping which of two
+-- already-used columns two queens point to. This keeps every Row/Col idx
+-- value, and the fact that all 8 rows/cols are each still used by exactly
+-- one queen, completely untouched (distinctRowIdx and distinctColIdx both
+-- still hold), while (as an unavoidable side effect of which two queens
+-- were picked) reintroducing exactly one diagonal attack.
+--
+-- Which pair actually ends up attacking was determined empirically, not
+-- guessed: the same independent Python script used for valid-instance.soil
+-- exhaustively tried every row-pair column-swap against all 92 known N=8
+-- solutions and picked the first swap producing exactly one total
+-- attacking pair anywhere on the board. For this solution
+-- ([0,4,7,5,2,6,1,3]), swapping rows 2 and 6's columns gives
+-- [0,4,1,5,2,6,7,3] -- and the resulting single attacking pair is NOT
+-- (queen2,queen6) (the two queens whose links were actually changed) but
+-- (queen5,queen6): queen5 sits at (row 5, col 6) and queen6 now sits at
+-- (row 6, col 7), so row5-col6 = row6-col7 = -1, i.e. they share the
+-- row-idx-minus-col-idx diagonal. (No swap among any of the 92 solutions
+-- was found where the swapped pair attacks itself and nothing else --
+-- swapping two entries of a valid permutation always risks new collisions
+-- with a THIRD, untouched queen, and empirically it always did.) No other
+-- pair attacks; distinctRowIdx and distinctColIdx are both still fully
+-- satisfied.
+--
+-- USE checks a class invariant as a single Queen.allInstances->forAll
+-- statement, so this single bad diagonal pair is expected to surface as
+-- ONE failed invariant (noAttack) overall, not two -- see invalid-instance.cmd
+-- for the actual `check -v` output confirming this.
+
+!create row0 : Row
+!set row0.idx := 0
+!create row1 : Row
+!set row1.idx := 1
+!create row2 : Row
+!set row2.idx := 2
+!create row3 : Row
+!set row3.idx := 3
+!create row4 : Row
+!set row4.idx := 4
+!create row5 : Row
+!set row5.idx := 5
+!create row6 : Row
+!set row6.idx := 6
+!create row7 : Row
+!set row7.idx := 7
+
+!create col0 : Col
+!set col0.idx := 0
+!create col1 : Col
+!set col1.idx := 1
+!create col2 : Col
+!set col2.idx := 2
+!create col3 : Col
+!set col3.idx := 3
+!create col4 : Col
+!set col4.idx := 4
+!create col5 : Col
+!set col5.idx := 5
+!create col6 : Col
+!set col6.idx := 6
+!create col7 : Col
+!set col7.idx := 7
+
+!create queen0 : Queen
+!create queen1 : Queen
+!create queen2 : Queen
+!create queen3 : Queen
+!create queen4 : Queen
+!create queen5 : Queen
+!create queen6 : Queen
+!create queen7 : Queen
+
+!insert (queen0, row0) into QueenRow
+!insert (queen1, row1) into QueenRow
+!insert (queen2, row2) into QueenRow
+!insert (queen3, row3) into QueenRow
+!insert (queen4, row4) into QueenRow
+!insert (queen5, row5) into QueenRow
+!insert (queen6, row6) into QueenRow
+!insert (queen7, row7) into QueenRow
+
+!insert (queen0, col0) into QueenCol
+!insert (queen1, col4) into QueenCol
+!insert (queen2, col1) into QueenCol
+!insert (queen3, col5) into QueenCol
+!insert (queen4, col2) into QueenCol
+!insert (queen5, col6) into QueenCol
+!insert (queen6, col7) into QueenCol
+!insert (queen7, col3) into QueenCol

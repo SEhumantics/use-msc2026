@@ -1,0 +1,67 @@
+-- Same 5-House instance as valid-instance.soil, EXCEPT h1's drink is
+-- changed from #Water to #Tea (a duplicate of h2's drink) -- the smallest
+-- possible single-field change that violates exactly one invariant and
+-- nothing else.
+--
+-- WHY drink, and why h1 specifically: Drink is the one attribute in this
+-- model that never appears as the ANTECEDENT of an implication clue (it
+-- only ever appears as a CONSEQUENT: Clue04 self.color=Green-> drink=
+-- Coffee, Clue05 self.nationality=Ukrainian->drink=Tea, Clue09 self.
+-- position=3->drink=Milk, Clue13 self.smoke=LuckyStrike->drink=
+-- OrangeJuice). So changing a house's drink can only ever break
+-- DistinctDrink -- it can never, by itself, falsify one of those four
+-- clues UNLESS the house being edited is itself the antecedent-house for
+-- one of them. h1 (Yellow, Norwegian, Kools, position 1) is not Green, not
+-- Ukrainian, not at position 3, and does not smoke LuckyStrike, so none of
+-- Clue04/05/09/13's antecedents apply to h1 regardless of what its drink
+-- is -- this is in fact the same reason h1's drink (Water) was the one
+-- value left undetermined until the very last deduction step when solving
+-- the puzzle by hand (see valid-instance.soil's header, step 6): it is
+-- the puzzle's own "free" drink slot. Overwriting it with h2's Tea
+-- therefore isolates DistinctDrink alone.
+--
+-- Confirmed by actually running this: `check -v' reports DistinctDrink
+-- violated (h1 and h2 both now hold #Tea; USE checks a class invariant as
+-- one House.allInstances->forAll statement, so this pairwise clash counts
+-- as ONE failing invariant, not two) and all other 21 invariants OK,
+-- finishing with "checked 22 invariants ..., 1 failure.".
+
+!create h1 : House
+!set h1.position := 1
+!set h1.color := #Yellow
+!set h1.nationality := #Norwegian
+!set h1.drink := #Tea
+!set h1.smoke := #Kools
+!set h1.pet := #Fox
+
+!create h2 : House
+!set h2.position := 2
+!set h2.color := #Blue
+!set h2.nationality := #Ukrainian
+!set h2.drink := #Tea
+!set h2.smoke := #Chesterfields
+!set h2.pet := #Horse
+
+!create h3 : House
+!set h3.position := 3
+!set h3.color := #Red
+!set h3.nationality := #Englishman
+!set h3.drink := #Milk
+!set h3.smoke := #OldGold
+!set h3.pet := #Snails
+
+!create h4 : House
+!set h4.position := 4
+!set h4.color := #Ivory
+!set h4.nationality := #Spaniard
+!set h4.drink := #OrangeJuice
+!set h4.smoke := #LuckyStrike
+!set h4.pet := #Dog
+
+!create h5 : House
+!set h5.position := 5
+!set h5.color := #Green
+!set h5.nationality := #Japanese
+!set h5.drink := #Coffee
+!set h5.smoke := #Parliaments
+!set h5.pet := #Zebra

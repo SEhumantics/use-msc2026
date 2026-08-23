@@ -170,7 +170,7 @@
           "support": {
             "kk-modelvalidator": {
               "status": "degraded",
-              "evidence": "org/tzi/kodkod/model/impl/Class.java:267-318 forbiddingSharingDefinition() \u2014 quantifies over inheritanceOrRegularRelation() and forbids an object being part of two sibling compositions simultaneously",
+              "evidence": "org/tzi/kodkod/model/impl/Class.java:267-318 forbiddingSharingDefinition() — quantifies over inheritanceOrRegularRelation() and forbids an object being part of two sibling compositions simultaneously",
               "notes": "Class.forbiddingSharingDefinition() (Class.java:267-318) selects which associations feed the mutual-exclusion formula via exact class equality (assoc.associationEnds().get(1).associatedClass().equals(this)), NOT subtype-inclusive matching -- so if two DIFFERENT subclasses are each the exact part-end of separate compositions (the inheritance-widened case this feature's name promises), neither subclass's own check collects the other's association, and no constraint is generated at all: Kodkod permits the shared object. Confirmed live by AggregationComposition/FileSystem.use (Folder/File/MediaFile: FolderHasFile's part end is File, ArchiveHasMedia's part end is subclass MediaFile), whose header comment documents this exact gap. The forbiddensharing .properties toggle is also never read anywhere in Class.java -- the mechanism is unconditional. Works only for the narrow same-exact-class case; silently permits the broader cross-subclass case.",
               "satScenarioIds": [],
               "unsatScenarioIds": [
@@ -233,7 +233,7 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/kodkod/model/impl/DerivedAttribute.java (constraints() returns Formula.TRUE, no bound relation); org/tzi/kodkod/model/visitor/BoundsVisitor.java:50-55 skips bounding DerivedAttribute instances entirely; org/tzi/use/kodkod/transform/ocl/VariableOperationVisitor.java:81-121 handleDerivedAttribute() inlines attribute.derivedExpression() at every navigation site",
-              "notes": "Different mechanism than ordinary attributes: no Kodkod relation/bound is created at all (DerivedAttribute.constraints() is a no-op, literally Formula.TRUE with a 'TODO domain check?' comment); instead every OCL reference to self.derivedAttr is macro-expanded in place, mirroring how DerivedAssociationEnd is handled. Works, but only wherever the attribute is textually navigated \u2014 never has its own bounded domain.",
+              "notes": "Different mechanism than ordinary attributes: no Kodkod relation/bound is created at all (DerivedAttribute.constraints() is a no-op, literally Formula.TRUE with a 'TODO domain check?' comment); instead every OCL reference to self.derivedAttr is macro-expanded in place, mirroring how DerivedAssociationEnd is handled. Works, but only wherever the attribute is textually navigated — never has its own bounded domain.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -320,7 +320,7 @@
           "support": {
             "kk-modelvalidator": {
               "status": "supported",
-              "evidence": "org/tzi/use/kodkod/transform/ocl/OperationExpressionVisitor.java:80,109-147 getOverriddenOperations()/handleOveriddenOperation() \u2014 recursively collects every subclass's redefinition of the same-named operation and builds a nested if-self-in-subclassRelation-then-subclassBody-else... expression",
+              "evidence": "org/tzi/use/kodkod/transform/ocl/OperationExpressionVisitor.java:80,109-147 getOverriddenOperations()/handleOveriddenOperation() — recursively collects every subclass's redefinition of the same-named operation and builds a nested if-self-in-subclassRelation-then-subclassBody-else... expression",
               "notes": "A real, working polymorphism mechanism for query operations: at a call site, the exact-runtime-class body is selected via nested Kodkod if-then-else guarded by inheritance-relation membership tests, rather than always using the statically-declared class's body.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
@@ -336,7 +336,7 @@
             "kk-modelvalidator": {
               "status": "unsupported",
               "evidence": "org/tzi/use/kodkod/transform/InvariantTransformator.java (transform()/transformAndAdd() only ever iterate MClassInvariant, never MOperation or any pre/post structure); org/tzi/use/kodkod/transform/ModelTransformator.java:57-107 transform() never calls mModel.operations() or touches any pre/post-condition list; no MPrePostCondition/precondition/postcondition symbol appears anywhere under kk-modelvalidator/src/main",
-              "notes": "There is no transformation path for behavioral operation contracts at all \u2014 only class invariants and query-style (`= expr`) operations are ever handed to Kodkod. Confirmed empirically by examples/CivilStatus, whose Person class declares birth/marry/divorce operations each with several pre:/post: clauses (a textbook pre/post-condition example): none of the three operations is referenced anywhere in CivilStatus.properties, validate.cmd, or query.cmd \u2014 they are simply inert with respect to -validate, consistent with the transformer never looking at them.",
+              "notes": "There is no transformation path for behavioral operation contracts at all — only class invariants and query-style (`= expr`) operations are ever handed to Kodkod. Confirmed empirically by examples/CivilStatus, whose Person class declares birth/marry/divorce operations each with several pre:/post: clauses (a textbook pre/post-condition example): none of the three operations is referenced anywhere in CivilStatus.properties, validate.cmd, or query.cmd — they are simply inert with respect to -validate, consistent with the transformer never looking at them.",
               "satScenarioIds": [
                 "CivilStatus"
               ],
@@ -456,11 +456,11 @@
         },
         {
           "id": "assoc.composition.forbidden-sharing",
-          "name": "Composition forbidden-sharing (same exact part class, \u22652 compositions)",
+          "name": "Composition forbidden-sharing (same exact part class, ≥2 compositions)",
           "support": {
             "kk-modelvalidator": {
               "status": "known-defect",
-              "evidence": "Class.forbiddingSharingDefinition() (Class.java:267-318) is called unconditionally from Class.constraints() with no read of the forbiddensharing config value at all; it only fires when \u22652 binary, non-association-class compositions target the identical part class (assoc.associationEnds().get(1).associatedClass().equals(this)).",
+              "evidence": "Class.forbiddingSharingDefinition() (Class.java:267-318) is called unconditionally from Class.constraints() with no read of the forbiddensharing config value at all; it only fires when ≥2 binary, non-association-class compositions target the identical part class (assoc.associationEnds().get(1).associatedClass().equals(this)).",
               "notes": "AggregationComposition README: 'Sharing of the same object between two DIFFERENT composition associations that both declare the EXACT SAME class at their part end is likewise an unconditional Kodkod constraint, ignoring the forbiddensharing toggle.' The toggle only has effect once inheritance widens the part-class match (checked post-solve in ObjectDiagramCreator.hasDiagramErrors(), lines 81-96, which does read isForbiddensharing()).",
               "satScenarioIds": [],
               "unsatScenarioIds": [
@@ -831,7 +831,7 @@
             "kk-modelvalidator": {
               "status": "degraded",
               "evidence": "ocl/operation/BooleanOperationGroup.java and(Expression l, Expression r) = l.eq(booleanTrue).and(r.eq(booleanTrue)); or(...) similarly",
-              "notes": "OCL's and/or are meant to be non-strict for false/true (e.g. false and undefined = false, true and undefined = undefined). Because undefined is encoded as neither booleanTrue nor booleanFalse, both eq() comparisons simply evaluate false whenever an operand is undefined, so 'true and undefined' collapses to plain false (not undefined) and 'undefined or true' collapses to false-then-true only by luck of order \u2014 the Kleene truth table is not reproduced faithfully for undefined operands; only isDefined/isUndefined (AnyOperationGroup) are handled explicitly elsewhere.",
+              "notes": "OCL's and/or are meant to be non-strict for false/true (e.g. false and undefined = false, true and undefined = undefined). Because undefined is encoded as neither booleanTrue nor booleanFalse, both eq() comparisons simply evaluate false whenever an operand is undefined, so 'true and undefined' collapses to plain false (not undefined) and 'undefined or true' collapses to false-then-true only by luck of order — the Kleene truth table is not reproduced faithfully for undefined operands; only isDefined/isUndefined (AnyOperationGroup) are handled explicitly elsewhere.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -869,7 +869,7 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "ocl/operation/IntegerOperationGroup.java less/lessOrEqual/greater/greaterOrEqual (lines 44-58); symbolOperationMapping registers <,<=,>,>= to these methods (lines 25-28)",
-              "notes": "Each comparison is guarded with l.eq(undefined).not().and(r.eq(undefined).not()) so a comparison involving an undefined operand evaluates to Formula.FALSE rather than propagating OclUndefined (OCL spec says comparisons with undefined should themselves be undefined, but Kodkod formulas cannot represent an undefined boolean, so USE/plugin architecture forces false here) \u2014 acceptable/expected within this plugin's Formula-vs-Expression design, not flagged as a separate defect.",
+              "notes": "Each comparison is guarded with l.eq(undefined).not().and(r.eq(undefined).not()) so a comparison involving an undefined operand evaluates to Formula.FALSE rather than propagating OclUndefined (OCL spec says comparisons with undefined should themselves be undefined, but Kodkod formulas cannot represent an undefined boolean, so USE/plugin architecture forces false here) — acceptable/expected within this plugin's Formula-vs-Expression design, not flagged as a separate defect.",
               "satScenarioIds": [
                 "Sudoku",
                 "NQueens",
@@ -907,7 +907,7 @@
             "kk-modelvalidator": {
               "status": "degraded",
               "evidence": "transform/ocl/DefaultExpressionVisitor.java visitConstInteger(int) lines 423-434: LOG.error(...) is emitted when KodkodModelValidatorConfiguration.calculateRequiredBitwidth(value) > configured bitwidth, but the literal is still added and transformation proceeds",
-              "notes": "Overflowing constants only produce a log message, not a TransformationException \u2014 the resulting SAT encoding silently uses a wrapped/incorrect two's-complement value instead of failing fast.",
+              "notes": "Overflowing constants only produce a log message, not a TransformationException — the resulting SAT encoding silently uses a wrapped/incorrect two's-complement value instead of failing fast.",
               "satScenarioIds": [
                 "NQueens"
               ],
@@ -939,7 +939,7 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "model/type/RealType.java (exists as ConfigurableType with its own relation/atoms, used only for attribute bounds in PropertyConfigurationVisitor.java:174-248); transform/TypeConverter.java convert() maps OCL Real type to typeFactory.buildInType('Real') for oclAsType/oclIsKindOf targets, yet no code path ever calls RealType.addTypeLiteral for an expression-level constant",
-              "notes": "Because ExpConstReal is redirected into IntegerType (see prim.real-as-integer), the Real relation used as the target of oclIsKindOf(Real)/oclAsType(Real) in DefaultExpressionVisitor.visitTypeOperation is never populated with any constant atoms, so such type tests/casts against Real are structurally unable to succeed for any literal-derived value \u2014 an internal inconsistency between TypeConverter and DefaultExpressionVisitor, not documented in any example but directly traceable in source.",
+              "notes": "Because ExpConstReal is redirected into IntegerType (see prim.real-as-integer), the Real relation used as the target of oclIsKindOf(Real)/oclAsType(Real) in DefaultExpressionVisitor.visitTypeOperation is never populated with any constant atoms, so such type tests/casts against Real are structurally unable to succeed for any literal-derived value — an internal inconsistency between TypeConverter and DefaultExpressionVisitor, not documented in any example but directly traceable in source.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -974,7 +974,7 @@
           "support": {
             "kk-modelvalidator": {
               "status": "known-defect",
-              "evidence": "kk-modelvalidator/src/main/java/org/tzi/kodkod/ocl/operation/ (only AnyOperationGroup, BooleanOperationGroup, IntegerOperationGroup, SetOperationGroup, ClassOperationGroup, ConditionalOperationGroup, CollectionConstructorGroup, VariableOperationGroup exist \u2014 grep confirms no StringOperationGroup file or class); PluginModelFactory.java:83-90 registers exactly those 8 groups, none for String manipulation",
+              "evidence": "kk-modelvalidator/src/main/java/org/tzi/kodkod/ocl/operation/ (only AnyOperationGroup, BooleanOperationGroup, IntegerOperationGroup, SetOperationGroup, ClassOperationGroup, ConditionalOperationGroup, CollectionConstructorGroup, VariableOperationGroup exist — grep confirms no StringOperationGroup file or class); PluginModelFactory.java:83-90 registers exactly those 8 groups, none for String manipulation",
               "notes": "examples/CivilStatus/CivilStatus.properties and validate.cmd document this directly: the invariant nameCapitalThenSmallLetters uses String.substring/.size, which has no operation-group method; InvariantTransformator.transformAndAdd catches the resulting TransformationException ('OCL operation substring is not supported') per-invariant and silently drops it from the search rather than aborting the whole model load.",
               "satScenarioIds": [
                 "CivilStatus"
@@ -1014,7 +1014,7 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "examples/CivilStatus/query.cmd NOTES comment",
-              "notes": "Documented as directly observed: 'mv ? p.civstat = #married' can throw kodkod.engine.fol2sat.UnboundLeafException when that literal's atom was never allocated in the specific solution found, because the query mechanism only builds relations for values actually reachable in that run, not for every declared enum literal \u2014 a query-time gap distinct from the core transform (which does support enum equality inside invariants/searches).",
+              "notes": "Documented as directly observed: 'mv ? p.civstat = #married' can throw kodkod.engine.fol2sat.UnboundLeafException when that literal's atom was never allocated in the specific solution found, because the query mechanism only builds relations for values actually reachable in that run, not for every declared enum literal — a query-time gap distinct from the core transform (which does support enum equality inside invariants/searches).",
               "satScenarioIds": [
                 "CivilStatus"
               ],
@@ -1214,7 +1214,7 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "transform/ocl/VariableOperationVisitor.java handleDerivedAttribute() lines 100-122",
-              "notes": "Substitutes 'self' with the receiver object/collection and re-processes the derive-expression with this visitor; explicit '//TODO recursion detector' comment flags that self-referential derived attributes are not guarded against infinite recursion at transform time (mirrors the RecursiveTree known-defect for derived associations, but here for attributes specifically \u2014 noted but not separately example-confirmed).",
+              "notes": "Substitutes 'self' with the receiver object/collection and re-processes the derive-expression with this visitor; explicit '//TODO recursion detector' comment flags that self-referential derived attributes are not guarded against infinite recursion at transform time (mirrors the RecursiveTree known-defect for derived associations, but here for attributes specifically — noted but not separately example-confirmed).",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -1744,7 +1744,7 @@
       "features": [
         {
           "id": "invariant.transform-to-kodkod",
-          "name": "Class invariant \u2192 Kodkod formula transformation",
+          "name": "Class invariant → Kodkod formula transformation",
           "support": {
             "kk-modelvalidator": {
               "status": "supported",
@@ -1833,8 +1833,8 @@
           "support": {
             "kk-modelvalidator": {
               "status": "known-defect",
-              "evidence": "org/tzi/use/kodkod/transform/ocl/OperationExpressionVisitor.java:65-70 (OperationStack.INSTANCE.contains(...) \u2192 throw TransformationException(\"... is recursive and thereby cannot be transformed.\")); org/tzi/use/kodkod/transform/OperationStack.java",
-              "notes": "Confirmed in examples/RecursiveTree: AcyclicParentship (which calls self-recursive childPlus2\u2192childPlusOnNodeSet) is detected and dropped from the search; the plugin continues with remaining invariants rather than aborting. closure()-based recursion (Genealogy) is unaffected since it's a built-in operator, not a user-defined recursive call.",
+              "evidence": "org/tzi/use/kodkod/transform/ocl/OperationExpressionVisitor.java:65-70 (OperationStack.INSTANCE.contains(...) → throw TransformationException(\"... is recursive and thereby cannot be transformed.\")); org/tzi/use/kodkod/transform/OperationStack.java",
+              "notes": "Confirmed in examples/RecursiveTree: AcyclicParentship (which calls self-recursive childPlus2→childPlusOnNodeSet) is detected and dropped from the search; the plugin continues with remaining invariants rather than aborting. closure()-based recursion (Genealogy) is unaffected since it's a built-in operator, not a user-defined recursive call.",
               "satScenarioIds": [
                 "RecursiveTree"
               ],
@@ -1850,8 +1850,8 @@
           "support": {
             "kk-modelvalidator": {
               "status": "supported",
-              "evidence": "org/tzi/kodkod/InvariantIndepChecker.java: validate(IModel) (lines 72-89) \u2014 negates each invariant in turn and re-solves, restoring state afterward",
-              "notes": "Confirmed by examples/EmployeeInvariants, CompanyERSchema, CivilStatus, Genealogy, AssociationClass \u2014 each reports per-invariant Independent/Dependent/Not-independent results.",
+              "evidence": "org/tzi/kodkod/InvariantIndepChecker.java: validate(IModel) (lines 72-89) — negates each invariant in turn and re-solves, restoring state afterward",
+              "notes": "Confirmed by examples/EmployeeInvariants, CompanyERSchema, CivilStatus, Genealogy, AssociationClass — each reports per-invariant Independent/Dependent/Not-independent results.",
               "satScenarioIds": [
                 "EmployeeInvariants",
                 "CompanyERSchema",
@@ -1896,7 +1896,7 @@
           "support": {
             "kk-modelvalidator": {
               "status": "degraded",
-              "evidence": "InvariantIndepCmd.performCommand() (lines 37-52): 'if(arguments.length != 2 && arguments.length != 3){ ... error ...}' \u2014 there is no code path that runs validate(model) when the third argument is simply omitted without also omitting the property-file section argument in a way that still supplies an invariant token",
+              "evidence": "InvariantIndepCmd.performCommand() (lines 37-52): 'if(arguments.length != 2 && arguments.length != 3){ ... error ...}' — there is no code path that runs validate(model) when the third argument is simply omitted without also omitting the property-file section argument in a way that still supplies an invariant token",
               "notes": "examples/EmployeeInvariants explicitly documents that the upstream PDF guide describes the invariant-name argument as optional (defaulting to all); this build's actual InvariantIndepCmd rejects the command outright without it. Behavioral drift from the documented contract, reproduced against the unmodified plugin source.",
               "satScenarioIds": [
                 "EmployeeInvariants"
@@ -1942,7 +1942,7 @@
           "support": {
             "kk-modelvalidator": {
               "status": "supported",
-              "evidence": "InvariantIndepChecker.trivially_unsatisfiable() \u2192 'Dependent'; .unsatisfiable() \u2192 'Not independent for given properties' (lines 172-180)",
+              "evidence": "InvariantIndepChecker.trivially_unsatisfiable() → 'Dependent'; .unsatisfiable() → 'Not independent for given properties' (lines 172-180)",
               "notes": "Confirmed in examples/AssociationClass: EmployeeAndEmployerAlwaysLinked/AtMostOneEmployer come back 'Dependent' because their negation is rejected as trivially unsatisfiable by Kodkod's bound propagation before the SAT solver ever runs (they restate structural facts already enforced by the association-class/multiplicity declaration itself), a genuinely different code path from the searched 'Not independent for given properties' case.",
               "satScenarioIds": [
                 "AssociationClass"
@@ -2046,7 +2046,7 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/use/kodkod/plugin/KodkodCTScrollingValidateCmd.java (reads terms from file/-ct or interactively, compiles each with OCLCompiler + DefaultExpressionVisitor); org/tzi/use/kodkod/UseCTScrollingKodkodModelValidator.java: readSolutionTerms()/genClassifyingTermFormula()/evaluateKodkod() cross-checks the Kodkod-evaluated term value against USE's own OCL evaluator; registered as 'mv -scrollingCT' in useplugin.xml",
-              "notes": "Confirmed by examples/Genealogy's descLevels.ct + classifyingTermsCmd: pages through solutions with distinct term-value triples (4,2,0)\u2192(4,1,1)\u2192(3,3,0), independently re-run and confirmed.",
+              "notes": "Confirmed by examples/Genealogy's descLevels.ct + classifyingTermsCmd: pages through solutions with distinct term-value triples (4,2,0)→(4,1,1)→(3,3,0), independently re-run and confirmed.",
               "satScenarioIds": [
                 "Genealogy"
               ],
@@ -2173,7 +2173,7 @@
           "support": {
             "kk-modelvalidator": {
               "status": "known-defect",
-              "evidence": "AttributeConfigurator.lowerBound() (kk-modelvalidator/.../model/config/impl/AttributeConfigurator.java:63-92): 'object = specific[0]; ... lower.add(tupleFactory.tuple(object, ...))' uses the bare object name directly as the Kodkod atom, whereas ClassConfigurator.generateObjectsTuple() (ClassConfigurator.java:20-36) always names class atoms '<Class>_<object>' \u2014 no equivalent prefix/fallback exists here (unlike AssociationConfigurator.lowerBound(), which does have a universe.contains()-guarded fallback, lines 56-61)",
+              "evidence": "AttributeConfigurator.lowerBound() (kk-modelvalidator/.../model/config/impl/AttributeConfigurator.java:63-92): 'object = specific[0]; ... lower.add(tupleFactory.tuple(object, ...))' uses the bare object name directly as the Kodkod atom, whereas ClassConfigurator.generateObjectsTuple() (ClassConfigurator.java:20-36) always names class atoms '<Class>_<object>' — no equivalent prefix/fallback exists here (unlike AssociationConfigurator.lowerBound(), which does have a universe.contains()-guarded fallback, lines 56-61)",
               "notes": "Confirmed by examples/Sudoku (Sudoku.properties header + Sudoku.use header): 'Field1_value := 6' / 'Row1_index := 1' throws 'No such atom in the universe: Row1' from mv -validate, for any model, not just Sudoku. Worked around there by leaving such attributes solver-chosen and encoding givens as coordinate-conditioned invariants instead.",
               "satScenarioIds": [
                 "Sudoku"
@@ -2272,12 +2272,14 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "KodkodSolver.solve() passes bitwidth straight through with no semantic sufficiency check beyond PropertyConfigurationVisitor's literal-value-vs-bitwidth warnings, which only inspect configured domain/specific values, not values arising from derived expressions inside invariants",
-              "notes": "Confirmed by examples/GraphColoring: bitwidth 4/5/6 reports UNSATISFIABLE in ~15-25ms for an instance constructively proven 3-colorable (colors only ever need values 1..3); only bitwidth\u22658 gives the correct SATISFIABLE result. No warning fires because the failure comes from Kodkod's internal two's-complement overflow handling in constraint translation, which the plugin's own bitwidth-sufficiency check doesn't model.",
+              "notes": "Confirmed by examples/GraphColoring: bitwidth 4/5/6 reports UNSATISFIABLE in ~15-25ms for an instance constructively proven 3-colorable (colors only ever need values 1..3); only bitwidth≥8 gives the correct SATISFIABLE result. No warning fires because the failure comes from Kodkod's internal two's-complement overflow handling in constraint translation, which the plugin's own bitwidth-sufficiency check doesn't model. The 3-colorability claim itself is no longer just asserted from the construction method: examples/GraphColoring/valid-instance.soil hand-encodes an independently-computed (plain Python backtracking, not Kodkod) proper 3-coloring of this exact graph, and check -v confirms it satisfies properColoring -- so the false-negative really is the solver being wrong at low bitwidth, not the graph being miscategorized as 3-colorable.",
               "satScenarioIds": [
                 "GraphColoring"
               ],
               "unsatScenarioIds": [],
-              "validationOracleScenarioIds": [],
+              "validationOracleScenarioIds": [
+                "GraphColoring"
+              ],
               "coverageNote": ""
             }
           }
@@ -2288,7 +2290,7 @@
           "support": {
             "kk-modelvalidator": {
               "status": "known-defect",
-              "evidence": "org/tzi/use/kodkod/transform/MultiplicityTransformator.java: transform()/singleValue() \u2014 dispatches on 'part.length() == 1' to treat it as a single fixed value, else splits on '..' assuming a range",
+              "evidence": "org/tzi/use/kodkod/transform/MultiplicityTransformator.java: transform()/singleValue() — dispatches on 'part.length() == 1' to treat it as a single fixed value, else splits on '..' assuming a range",
               "notes": "Single-digit fixed multiplicities (Row[9], Field[6]) parse correctly and are used throughout the examples. Confirmed broken for any 2+-digit fixed (non-ranged) cardinality by examples/Sudoku: 'Field[81]'/'Field[36]'/'Field[12]' all throw ArrayIndexOutOfBoundsException at transform time, since singleValue()'s length-based dispatch wrongly routes a plain 2-digit number into the '..'-split range-parsing branch, which finds no separator. Worked around in the example by using 'Field[*]' plus explicit .properties bounds instead.",
               "satScenarioIds": [
                 "Sudoku"

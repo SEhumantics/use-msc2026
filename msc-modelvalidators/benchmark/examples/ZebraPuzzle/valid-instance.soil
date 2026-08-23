@@ -1,0 +1,102 @@
+-- Hand-built, deliberately VALID instance of ZebraPuzzle.use (plain SOIL
+-- statements -- !create/!set only, no association inserts since House has
+-- none -- no Kodkod search involved). This is the unique solution of the
+-- classic "Life International" Zebra Puzzle (first published in Life
+-- International magazine, 17 December 1962; the exact 15-clue version this
+-- .use file encodes, per ZebraPuzzle.use's own header), mapped one-to-one
+-- onto this model's House class.
+--
+-- INDEPENDENCE FROM THE SOLVER: this instance was NOT taken from any
+-- Kodkod/mv -validate run of this plugin. The Zebra Puzzle predates the
+-- KK-ModelValidator plugin (and this entire repository) by over 60 years
+-- and has exactly one well-known, independently-verifiable solution that
+-- is solvable by pure hand logic -- that is the whole point of the puzzle,
+-- and why it is a legitimate correctness oracle rather than a
+-- self-consistency check. See docs/kk-modelvalidator-port.md for why an
+-- independently-sourced fixture is required for the "validating" mode.
+--
+-- DERIVATION (re-worked by hand from the 14 clues, not merely copied from
+-- memory of the famous answer, then cross-checked against it):
+--   1) Clue10 -> house1 = Norwegian.
+--   2) Clue15 -> house2 = Blue (Norwegian's only neighbor is house2).
+--   3) Clue06 (Green = Ivory position + 1) combined with house2 already
+--      being Blue rules out (Ivory,Green) = (1,2) and (2,3), leaving
+--      (Ivory,Green) = (3,4) or (4,5).
+--   4) Testing (Ivory,Green) = (4,5): remaining colors {Red,Yellow} go to
+--      houses 1,3. If house1=Red, Clue02 (Englishman->Red) forces house1
+--      to be Englishman -- but house1 is already Norwegian (step 1),
+--      contradiction. So house1=Yellow, house3=Red, and Clue02 forces
+--      house3=Englishman.
+--   5) Clue08 (Yellow->Kools) -> house1 smokes Kools. Clue12 (Kools
+--      adjacent Horse) -> house1's only neighbor, house2, has the Horse.
+--   6) Clue09 -> house3 drinks Milk. Clue04 (Green->Coffee) -> house5
+--      drinks Coffee. Remaining drinks {Water,Tea,OrangeJuice} go to
+--      houses 1,2,4. Clue05 (Ukrainian->Tea): house5 already drinks
+--      Coffee so house5 isn't Ukrainian; testing Ukrainian=house2 (drinks
+--      Tea) leaves {Water,OrangeJuice} for houses 1,4. Clue13
+--      (LuckyStrike->OrangeJuice): house1 already smokes Kools (step 5),
+--      so house1 cannot be the LuckyStrike/OrangeJuice house -- forcing
+--      house4=OrangeJuice+LuckyStrike and house1=Water.
+--   7) Remaining nationalities {Spaniard,Japanese} go to houses 4,5.
+--      Testing house4=Spaniard (Clue03: Spaniard->Dog, consistent with
+--      house4 already fixed to LuckyStrike/OrangeJuice -- no clash),
+--      house5=Japanese, so Clue14 (Japanese->Parliaments) -> house5
+--      smokes Parliaments.
+--   8) Remaining smokes {OldGold,Chesterfields} go to houses 2,3. House2
+--      already has Horse (step 5) but Clue07 (OldGold->Snails) would
+--      force Snails onto whichever house smokes OldGold -- house2 can't
+--      be OldGold (already has Horse), so house3=OldGold (-> Snails, by
+--      Clue07) and house2=Chesterfields.
+--   9) Clue11 (Chesterfields adjacent Fox): house2's neighbors are
+--      houses 1 and 3; house3 already has Snails (step 8), so the Fox
+--      must be at house1.
+--  10) Only Zebra is left unassigned, for the only house left, house5.
+--
+-- This reproduces, independently, the puzzle's universally published
+-- answer: the Norwegian (house1) drinks Water, and the Japanese (house5)
+-- owns the Zebra.
+--
+-- Every one of ZebraPuzzle.use's 22 invariants (PositionRange, the 6
+-- DistinctXxx bijection invariants, the 14 original clues Clue02..Clue15,
+-- and the derived corollary Clue16) was then hand-checked against this
+-- exact assignment, one by one, and holds -- see valid-instance.cmd.
+
+!create h1 : House
+!set h1.position := 1
+!set h1.color := #Yellow
+!set h1.nationality := #Norwegian
+!set h1.drink := #Water
+!set h1.smoke := #Kools
+!set h1.pet := #Fox
+
+!create h2 : House
+!set h2.position := 2
+!set h2.color := #Blue
+!set h2.nationality := #Ukrainian
+!set h2.drink := #Tea
+!set h2.smoke := #Chesterfields
+!set h2.pet := #Horse
+
+!create h3 : House
+!set h3.position := 3
+!set h3.color := #Red
+!set h3.nationality := #Englishman
+!set h3.drink := #Milk
+!set h3.smoke := #OldGold
+!set h3.pet := #Snails
+
+!create h4 : House
+!set h4.position := 4
+!set h4.color := #Ivory
+!set h4.nationality := #Spaniard
+!set h4.drink := #OrangeJuice
+!set h4.smoke := #LuckyStrike
+!set h4.pet := #Dog
+
+!create h5 : House
+!set h5.position := 5
+!set h5.color := #Green
+!set h5.nationality := #Japanese
+!set h5.drink := #Coffee
+!set h5.smoke := #Parliaments
+!set h5.pet := #Zebra
