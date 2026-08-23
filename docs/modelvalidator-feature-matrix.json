@@ -455,11 +455,9 @@
               "evidence": "Class.forbiddingSharingDefinition() (Class.java:267-318) is called unconditionally from Class.constraints() with no read of the forbiddensharing config value at all; it only fires when ≥2 binary, non-association-class compositions target the identical part class (assoc.associationEnds().get(1).associatedClass().equals(this)).",
               "notes": "AggregationComposition README: 'Sharing of the same object between two DIFFERENT composition associations that both declare the EXACT SAME class at their part end is likewise an unconditional Kodkod constraint, ignoring the forbiddensharing toggle.' The toggle only has effect once inheritance widens the part-class match (checked post-solve in ObjectDiagramCreator.hasDiagramErrors(), lines 81-96, which does read isForbiddensharing()).",
               "satScenarioIds": [],
-              "unsatScenarioIds": [
-                "AggregationComposition"
-              ],
+              "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
-              "coverageNote": "AggregationComposition's 'sharing' section specifically builds the forbidden-sharing case this feature demonstrates -- the manifest's single scenario entry for this directory maps to the 'cycle' section's oracle, not 'sharing', so the unsatScenarioIds citation documents source-level behavior confirmed by the example, not the recorded expected-outcome oracle (mirrors inherit.composition-sharing-across-hierarchy's identical caveat)."
+              "coverageNote": "zero coverage - AggregationComposition's [cycle] section (the manifest's canonical scenario for this directory) demonstrates assoc.composition.cycle-freeness instead (a different mechanism, correctly cited there): PrimaryContains={(f1,f2)}/AltContains={(f2,f1)} is a two-association CYCLE, not one object shared as a part by two sibling compositions. The [sharing] section demonstrates inherit.composition-sharing-across-hierarchy's cross-subclass case instead (File vs. its subclass MediaFile -- an exact-class MISMATCH, correctly cited there). Neither of this suite's composition-UNSAT scenarios exercises the same-exact-part-class forbidden-sharing case this feature specifically names."
             }
           }
         },
@@ -749,7 +747,7 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "Association.typeDefinitions() and multiplicityDefinitions() (Association.java) use associatedClass().inheritanceOrRegularRelation() (Class.java:222-225) throughout, which folds in inheritanceRelation() (union of the class's own relation with all children's inheritanceOrRegularRelation()) whenever existsInheritance() is true.",
-              "notes": "Inheritance and MultipleInheritance confirm polymorphic navigation/typing works correctly, including diamond inheritance, though attribute/association bounds must be declared under the *declaring* superclass's own name in .properties (a documented, separate .properties-authoring gotcha, not an association-transform bug per se).",
+              "notes": "AggregationComposition (already cited below) exercises inheritanceOrRegularRelation() folding polymorphic multiplicity/typing into its UNSAT [cycle] search. Attribute/association bounds must be declared under the *declaring* superclass's own name in .properties (a documented, separate .properties-authoring gotcha, not an association-transform bug per se).",
               "satScenarioIds": [],
               "unsatScenarioIds": [
                 "AggregationComposition"
@@ -1327,11 +1325,15 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "DefaultExpressionVisitor.visitSetLiteral (transform/ocl/DefaultExpressionVisitor.java:355-358) -> CollectionConstructorGroup.setLiteral (kodkod/ocl/operation/CollectionConstructorGroup.java:42-56)",
-              "notes": "Elements are unioned into a Kodkod relation; the only literal with no semantic loss since the target representation IS a set.",
-              "satScenarioIds": [],
+              "notes": "Elements are unioned into a Kodkod relation; the only literal with no semantic loss since the target representation IS a set. CivilStatus's nameCapitalThenSmallLetters invariant builds two 26-element Set{'a'..'z'}/Set{'A'..'Z'} let-bindings successfully (confirmed live by instrumenting setLiteral()) before the invariant's own later name.substring(...) call aborts the transform -- the set-literal path itself is genuinely exercised and succeeds, independent of that later failure. Sudoku only uses Set(...) as a return TYPE, never a Set{...} literal, so it stays uncited.",
+              "satScenarioIds": [
+                "CivilStatus"
+              ],
               "unsatScenarioIds": [],
-              "validationOracleScenarioIds": [],
-              "coverageNote": "zero coverage - Sudoku/CivilStatus were previously cited. Sudoku only uses Set(...) as a return type, never a Set{...} literal; CivilStatus's Set{...} sits in an invariant clause an earlier unsupported-construct exception aborts before reaching. Removed in the 2026-08-23 audit; status is based on source-code reading alone."
+              "validationOracleScenarioIds": [
+                "CivilStatus"
+              ],
+              "coverageNote": ""
             }
           }
         },
@@ -1952,7 +1954,7 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "org/tzi/kodkod/helper/ProofHelper.java: buildProofString()/minimize() (uses kodkod.engine.ucore.HybridStrategy); UseKodkodModelValidator.handleFailure() (lines 70-74) calls it when solution.proof() != null; requires solver.options().setLogTranslation(1), set in KodkodSolver.solve() line 51",
-              "notes": "Confirmed by examples/Inheritance (an explicit proof node naming 'Undefined in (univ . Vehicle_licensePlate)' for a mis-scoped attribute bound) and examples/Sudoku (proof node for a contradictory association bound).",
+              "notes": "Confirmed by examples/Sudoku (proof node for a contradictory association bound). Previously also cited examples/Inheritance for a mis-scoped-attribute-bound proof, but that bug was fixed (see Vehicle.properties' own header) -- Inheritance now runs cleanly SATISFIABLE with no proof output, so it was removed from this feature's citations in the 2026-08-23 audit.",
               "satScenarioIds": [
                 "Sudoku"
               ],
@@ -2362,7 +2364,9 @@
                 "CollectionSemantics",
                 "Subsets",
                 "Redefines",
-                "Sudoku"
+                "Sudoku",
+                "RecursiveTree",
+                "GraphColoring"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
