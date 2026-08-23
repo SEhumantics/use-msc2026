@@ -204,7 +204,6 @@
                 "GraphColoring",
                 "Redefines",
                 "NQueens",
-                "Subsets",
                 "Sudoku"
               ],
               "unsatScenarioIds": [
@@ -363,7 +362,6 @@
                 "CivilStatus",
                 "Genealogy",
                 "AssociationClass",
-                "Inheritance",
                 "CollectionSemantics",
                 "RecursiveTree",
                 "GraphColoring",
@@ -381,7 +379,6 @@
                 "CivilStatus",
                 "Genealogy",
                 "AssociationClass",
-                "Inheritance",
                 "AggregationComposition",
                 "Redefines"
               ],
@@ -553,7 +550,6 @@
                 "CivilStatus",
                 "Genealogy",
                 "AssociationClass",
-                "Inheritance",
                 "Subsets",
                 "Sudoku"
               ],
@@ -565,7 +561,6 @@
                 "CivilStatus",
                 "Genealogy",
                 "AssociationClass",
-                "Inheritance",
                 "AggregationComposition"
               ],
               "coverageNote": "multi-range multiplicity syntax (e.g. '1,3..5') is untested by any scenario in the suite."
@@ -827,7 +822,6 @@
               "evidence": "ocl/operation/IntegerOperationGroup.java plus/minus/multiply/div/mod/abs/negation/min/max (lines 31-88); transform/ocl/StandardOperationVisitor.java handleMinus() folds constant unary minus",
               "notes": "All arithmetic ops propagate undefined via l.eq(undefined).or(r.eq(undefined)).thenElse(undefined, ...); div/mod additionally test for divide-by-zero and yield undefined.",
               "satScenarioIds": [
-                "Sudoku",
                 "NQueens",
                 "ZebraPuzzle",
                 "CompanyERSchema"
@@ -990,7 +984,8 @@
               "evidence": "examples/CivilStatus/query.cmd NOTES comment",
               "notes": "Documented as directly observed: 'mv ? p.civstat = #married' can throw kodkod.engine.fol2sat.UnboundLeafException when that literal's atom was never allocated in the specific solution found, because the query mechanism only builds relations for values actually reachable in that run, not for every declared enum literal — a query-time gap distinct from the core transform (which does support enum equality inside invariants/searches).",
               "satScenarioIds": [
-                "CivilStatus"
+                "CivilStatus",
+                "ZebraPuzzle"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
@@ -1201,15 +1196,13 @@
                 "Library",
                 "CivilStatus",
                 "AssociationClass",
-                "Inheritance",
                 "Sudoku"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [
                 "Library",
                 "CivilStatus",
-                "AssociationClass",
-                "Inheritance"
+                "AssociationClass"
               ],
               "coverageNote": ""
             }
@@ -1821,7 +1814,7 @@
             "kk-modelvalidator": {
               "status": "supported",
               "evidence": "InvariantIndepChecker.validate(IModel, String className, String invariantName) (lines 48-70); org/tzi/use/kodkod/plugin/InvariantIndepCmd.java:66-75 splits the 'Class::Inv' argument and dispatches to it",
-              "notes": "Confirmed by examples/CompanyERSchema's invIndepSingle.cmd: identical per-invariant result to the full sweep, at roughly half the wall-clock time.",
+              "notes": "Confirmed by examples/CompanyERSchema's invIndepSingle.cmd: identical per-invariant result to the full sweep (both report Employee::dname_foreign_key_Department as 'Not independent for given properties'), finishing noticeably faster wall-clock than the full 29-invariant sweep -- exact figure varies run to run and by machine, no specific fraction is measured or claimed.",
               "satScenarioIds": [
                 "CompanyERSchema"
               ],
@@ -2083,7 +2076,6 @@
                 "GraphColoring",
                 "Redefines",
                 "NQueens",
-                "Subsets",
                 "Sudoku"
               ],
               "unsatScenarioIds": [
@@ -2135,7 +2127,6 @@
                 "CivilStatus",
                 "Genealogy",
                 "AssociationClass",
-                "Inheritance",
                 "CollectionSemantics",
                 "RecursiveTree",
                 "GraphColoring",
@@ -2152,7 +2143,6 @@
                 "CivilStatus",
                 "Genealogy",
                 "AssociationClass",
-                "Inheritance",
                 "AggregationComposition",
                 "Redefines"
               ],
@@ -2167,7 +2157,7 @@
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "PropertyConfigurationVisitor.setAssociationConfigurator() (PropertyConfigurationVisitor.java:356-364) unconditionally calls configurator.setLimits(readSize(...,DefaultConfigurationValues.linksPerAssocMin=1,...), readSize(...,linksPerAssocMax=1,...)) a second time AFTER configurator.setSpecificValues(values) already derived limits from the literal's own tuple count; inside AssociationConfigurator.setLimits() (AssociationConfigurator.java:173-192), the 'max <= min' branch then overwrites the larger specific-value-derived max down to the smaller default, while min (already set higher by setSpecificValues) is left unchanged",
-              "notes": "Confirmed by examples/Sudoku's Sudoku.properties header: omitting 'BoardRows_min/_max' while still giving a 9-tuple Set{} literal produces the self-contradictory bound '#(BoardRows) >= 9 && #(BoardRows) <= 1' and an immediate TRIVIALLY_UNSATISFIABLE, root-caused to this exact source location by the example author. Every plain association therefore needs explicit _min/_max even when a Set{} literal is also given.",
+              "notes": "Confirmed by examples/Sudoku's Sudoku.properties header: omitting 'BoardRows_min/_max' while still giving a 6-tuple Set{} literal (this shipped 6x6 board's row count -- the header notes the figure was 9 only on an abandoned, non-shipped 9x9 draft) produces the self-contradictory bound '#(BoardRows) >= 6 && #(BoardRows) <= 1' and an immediate TRIVIALLY_UNSATISFIABLE, root-caused to this exact source location by the example author. Every plain association therefore needs explicit _min/_max even when a Set{} literal is also given.",
               "satScenarioIds": [
                 "Sudoku"
               ],
@@ -2217,12 +2207,12 @@
         },
         {
           "id": "config.fixed-multiplicity-parsing",
-          "name": "Fixed-cardinality association-end multiplicity (e.g. 'Row[9]') parsed from the USE model",
+          "name": "Fixed-cardinality association-end multiplicity (e.g. 'Row[6]') parsed from the USE model",
           "support": {
             "kk-modelvalidator": {
               "status": "known-defect",
               "evidence": "org/tzi/use/kodkod/transform/MultiplicityTransformator.java: transform()/singleValue() — dispatches on 'part.length() == 1' to treat it as a single fixed value, else splits on '..' assuming a range",
-              "notes": "Single-digit fixed multiplicities (Row[9], Field[6]) parse correctly and are used throughout the examples. Confirmed broken for any 2+-digit fixed (non-ranged) cardinality by examples/Sudoku: 'Field[81]'/'Field[36]'/'Field[12]' all throw ArrayIndexOutOfBoundsException at transform time, since singleValue()'s length-based dispatch wrongly routes a plain 2-digit number into the '..'-split range-parsing branch, which finds no separator. Worked around in the example by using 'Field[*]' plus explicit .properties bounds instead.",
+              "notes": "Single-digit fixed multiplicities (Row[6], Field[6]) parse correctly and are used throughout the examples (the shipped 6x6 Sudoku board -- an earlier 9x9 draft was never shipped). Confirmed broken for any 2+-digit fixed (non-ranged) cardinality by examples/Sudoku: 'Field[81]'/'Field[36]'/'Field[12]' all throw ArrayIndexOutOfBoundsException at transform time, since singleValue()'s length-based dispatch wrongly routes a plain 2-digit number into the '..'-split range-parsing branch, which finds no separator. Worked around in the example by using 'Field[*]' plus explicit .properties bounds instead.",
               "satScenarioIds": [
                 "Sudoku",
                 "NQueens"
@@ -2358,9 +2348,11 @@
                 "CollectionSemantics",
                 "Subsets",
                 "Redefines",
-                "Sudoku",
                 "RecursiveTree",
-                "GraphColoring"
+                "GraphColoring",
+                "ZebraPuzzle",
+                "EmployeeInvariants",
+                "CompanyERSchema"
               ],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [

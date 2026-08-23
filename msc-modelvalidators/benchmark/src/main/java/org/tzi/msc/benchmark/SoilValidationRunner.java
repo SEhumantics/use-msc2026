@@ -40,6 +40,12 @@ public class SoilValidationRunner {
 			.compile("checked (\\d+) invariants?(?: in [0-9.]+s)?, (\\d+) failures?\\.");
 	private static final Pattern INVARIANT_LINE = Pattern
 			.compile("checking invariant \\(\\d+\\) `([^']+)': (OK|FAILED)\\.");
+	// -nogui batch mode echoes every line of the driving .cmd/.soil script back to stdout, prefixed
+	// "<file>> " -- including comment lines. A .cmd file's own header comment documenting expected
+	// output (e.g. "-- checking invariant (4) `Book::yearPlausible': FAILED.") therefore re-matches
+	// INVARIANT_LINE/CHECK_SUMMARY a second time when scanned unfiltered, double-counting a failure
+	// that only happened once. Strip echoed input lines before matching either pattern.
+	private static final Pattern ECHOED_SCRIPT_LINE = Pattern.compile("^\\S+\\.(cmd|soil)>.*$", Pattern.MULTILINE);
 
 	public static void main(String[] args) throws Exception {
 		if (args.length < 3) {
@@ -166,8 +172,10 @@ public class SoilValidationRunner {
 	 */
 	static void applyParsedOutcome(SoilValidationResult result, String output, String kind,
 			List<String> knownOutOfScopeInvariants) {
+		String engineOutput = ECHOED_SCRIPT_LINE.matcher(output).replaceAll("");
+
 		List<String> failedInvariants = new ArrayList<>();
-		Matcher invM = INVARIANT_LINE.matcher(output);
+		Matcher invM = INVARIANT_LINE.matcher(engineOutput);
 		while (invM.find()) {
 			if ("FAILED".equals(invM.group(2))) {
 				failedInvariants.add(invM.group(1));
@@ -175,7 +183,7 @@ public class SoilValidationRunner {
 		}
 		result.failedInvariants = failedInvariants;
 
-		Matcher m = CHECK_SUMMARY.matcher(output);
+		Matcher m = CHECK_SUMMARY.matcher(engineOutput);
 		if (m.find()) {
 			result.numInvariantsChecked = Integer.parseInt(m.group(1));
 			result.numFailures = Integer.parseInt(m.group(2));

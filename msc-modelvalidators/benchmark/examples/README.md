@@ -589,8 +589,9 @@ construction while staying hidden from the solver.
   since the flat-graph construction is a constructive proof a 3-coloring
   exists, independent of integer bitwidth (colors only ever need values
   1..3). Only bitwidth≥8 gives the correct, genuinely-searched
-  SATISFIABLE result. `GraphColoring.properties` pins bitwidth 8+
-  explicitly and documents this.
+  SATISFIABLE result. `bitwidth := 8` is pinned via `mv -config` in
+  `validate.cmd`/`query.cmd` (bitwidth isn't a `.properties`-file field);
+  `GraphColoring.properties`'s own header comment documents why.
 - **A second finding**: `mv ? Region.allInstances()->size()` (the plugin's
   own query mechanism) returns `[]` empty instead of the correct count,
   specifically for object-typed collections — confirmed working correctly

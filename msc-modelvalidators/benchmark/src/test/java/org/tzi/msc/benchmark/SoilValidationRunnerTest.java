@@ -45,6 +45,34 @@ public class SoilValidationRunnerTest {
 			+ "checking invariant (9) `User::noDoubleBorrowings': OK.\n"
 			+ "checked 9 invariants in 0.022s, 1 failure.\n";
 
+	// Real, UNTRIMMED raw transcript tail from `java -jar use-gui.jar -nogui Library.use
+	// invalid-instance.cmd` -- unlike LIBRARY_INVALID above, this keeps -nogui's own echo of the
+	// driving .cmd file's lines (prefixed "invalid-instance.cmd> "), including its header comment
+	// that documents the expected check -v output for a human reader. That echoed comment line
+	// itself matches INVARIANT_LINE/CHECK_SUMMARY (even the summary form with no "in Xs" suffix,
+	// since that's optional) -- this is the exact shape that caused a real double-counting bug: a
+	// single genuine failure was reported twice in failedInvariants because the echoed comment line
+	// was scanned as if it were real engine output. See ECHOED_SCRIPT_LINE in SoilValidationRunner.
+	private static final String LIBRARY_INVALID_RAW_WITH_ECHOED_COMMENTS = "invalid-instance.cmd> -- Confirmed by actually running this: `check -v' reports\n"
+			+ "invalid-instance.cmd> -- \"checking invariant (4) `Book::yearPlausible': FAILED.\" with\n"
+			+ "invalid-instance.cmd> -- DBforDummies as the sole object in Book.allInstances->select(not\n"
+			+ "invalid-instance.cmd> -- yearPlausible) below, and finishes \"checked 9 invariants, 1 failure.\";\n"
+			+ "invalid-instance.cmd> -- every one of the other 8 invariants reports OK/true in the same run.\n"
+			+ "invalid-instance.cmd> check -v\n"
+			+ "checking structure...\n"
+			+ "checked structure in 1ms.\n"
+			+ "checking invariants...\n"
+			+ "checking invariant (1) `Book::authSeqFormatOk': OK.\n"
+			+ "checking invariant (2) `Book::titleFormatOk': OK.\n"
+			+ "checking invariant (3) `Book::titleIsKey': OK.\n"
+			+ "checking invariant (4) `Book::yearPlausible': FAILED.\n"
+			+ "checking invariant (5) `Copy::signatureFormatOk': OK.\n"
+			+ "checking invariant (6) `Copy::signatureIsKey': OK.\n"
+			+ "checking invariant (7) `User::nameAddressFormatOk': OK.\n"
+			+ "checking invariant (8) `User::nameIsKey': OK.\n"
+			+ "checking invariant (9) `User::noDoubleBorrowings': OK.\n"
+			+ "checked 9 invariants in 0.038s, 1 failure.\n";
+
 	// Real output tail from `java -jar use-gui.jar -nogui Genealogy.use valid-instance.cmd` -- the
 	// exact transcript that surfaced the documented-out-of-scope-invariant case this session.
 	private static final String GENEALOGY_VALID = "checking invariant (1) `Person::acyclicParenthood': OK.\n"
@@ -78,6 +106,20 @@ public class SoilValidationRunnerTest {
 		// "passes" here means the fixture did its job: it proved the plugin detects the deliberately
 		// broken invariant.
 		SoilValidationResult r = apply(LIBRARY_INVALID, "invalid", Collections.emptyList());
+		assertTrue(r.passed);
+		assertEquals(Integer.valueOf(1), r.numFailures);
+		assertEquals(List.of("Book::yearPlausible"), r.failedInvariants);
+	}
+
+	@Test
+	public void echoedHeaderCommentIsNotDoubleCountedAsAFailure() {
+		// Regression test for the real bug found in round 15's review: -nogui echoes the driving
+		// .cmd file's own comment lines back to stdout, and Library's invalid-instance.cmd's header
+		// comment documents the expected "checking invariant (4) `Book::yearPlausible': FAILED."
+		// line verbatim for a human reader -- so scanning the unfiltered transcript found that
+		// invariant name twice (once in the echoed comment, once in the real engine output) despite
+		// only one genuine failure having occurred.
+		SoilValidationResult r = apply(LIBRARY_INVALID_RAW_WITH_ECHOED_COMMENTS, "invalid", Collections.emptyList());
 		assertTrue(r.passed);
 		assertEquals(Integer.valueOf(1), r.numFailures);
 		assertEquals(List.of("Book::yearPlausible"), r.failedInvariants);

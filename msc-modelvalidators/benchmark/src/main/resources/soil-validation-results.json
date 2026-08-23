@@ -18,7 +18,6 @@
     "numInvariantsChecked": 9,
     "numFailures": 1,
     "failedInvariants": [
-      "Book::yearPlausible",
       "Book::yearPlausible"
     ],
     "exitCode": 0,
