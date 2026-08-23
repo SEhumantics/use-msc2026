@@ -57,7 +57,7 @@ strongest, not a JDK-hobbled stand-in.
       pristine original plugin on any modern JDK).
 - [x] Downloaded and vendored the original plugin's own native solver bundle
       (same URL `-downloadSolvers` uses, still reachable) into
-      `kk-modelvalidator/vendored-solvers/`.
+      `msc-modelvalidators/kk-modelvalidator/vendored-solvers/`.
 - [x] Fixed loading without touching any plugin/Kodkod code: `-Djava.library.path`
       set at JVM launch (`bin/use`, `start_use.bat`, `run-example.sh`) instead
       of the broken runtime mutation.

@@ -11,10 +11,8 @@ main USE examples under `examples/`.
 
 ## Running an example
 
-```
-lib/plugins/KK-ModelValidator-1.0.jar` must be present (it is, by default, in
+`lib/plugins/KK-ModelValidator-1.0.jar` must be present (it is, by default, in
 any build produced by `mvn clean verify`/`mvn package` from this reactor).
-```
 
 From a USE distribution root (`use-7.5.0/`, i.e. the directory containing `lib/`
 and `examples/`):
@@ -47,7 +45,7 @@ Every `.cmd` file here uses `mv`, confirmed working.
 generally faster) also work out of the box in this distribution — `bin/use` and this directory's
 `run-example.sh` both point `-Djava.library.path` at the vendored solvers in
 `lib/plugins/modelValidatorPlugin/x64` automatically, no extra flags needed. See
-`kk-modelvalidator/vendored-solvers/README.md` for exactly which solvers work and why (`Glucose`/
+`msc-modelvalidators/kk-modelvalidator/vendored-solvers/README.md` for exactly which solvers work and why (`Glucose`/
 `CryptoMiniSat` don't, for reasons unrelated to this port) and `docs/kk-modelvalidator-port.md`'s "Sixth
 pass" for the full story of why this was broken and how it was fixed without touching any plugin code.
 

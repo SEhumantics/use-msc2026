@@ -290,7 +290,7 @@ remains the fallback for anything beyond the top-level outcome.
 # Isolated module build/test (module path updated for the "Seventh pass" msc-modelvalidators/ move):
 cd use-msc2026 && mvn -pl msc-modelvalidators/kk-modelvalidator -am compile         # clean
 cd use-msc2026 && mvn -pl msc-modelvalidators/kk-modelvalidator -am test-compile    # clean
-cd use-msc2026 && mvn -pl msc-modelvalidators/kk-modelvalidator -am test            # 3308 distinct tests, 0 errors, 122 skipped, 461 failures (floor-pinned)
+cd use-msc2026 && mvn -pl msc-modelvalidators/kk-modelvalidator -am test            # 3311 distinct tests, 0 errors, 122 skipped, 461 failures (floor-pinned; was 3308 before the Fifth pass added 3 EndToEndValidationTest classes)
 cd use-msc2026 && mvn -pl msc-modelvalidators/kk-modelvalidator package -DskipTests # builds msc-modelvalidators/kk-modelvalidator/target/KK-ModelValidator-1.0.jar
 
 # The real acceptance commands, from the repository root:
