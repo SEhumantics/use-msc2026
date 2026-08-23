@@ -578,9 +578,10 @@ construction while staying hidden from the solver.
   not a bounds-mismatch shortcut — but the exact time depends heavily on
   which solver: from well under a second on the fastest backend to
   roughly 10+ seconds on the slowest, a ~19x spread that's the largest
-  solver-choice difference seen anywhere in this suite — see the
-  benchmark results below for the full per-solver breakdown rather than
-  a single figure). The identical graph with only 2 colors available
+  solver-choice difference seen anywhere in this suite — see
+  `src/main/resources/latest-results.json` (or generate a fresh report
+  via `scripts/run-benchmark.sh`) for the full per-solver breakdown
+  rather than a single figure). The identical graph with only 2 colors available
   comes back UNSATISFIABLE in ~77ms, confirming 3 is the tight chromatic
   number, not a loose bound.
 - **A real, previously-unknown plugin bug, confirmed and not worked
@@ -655,21 +656,24 @@ brute-force enumerator, which is exactly why it is worth having here.
   object diagram has no such limitation and is used for the actual
   correctness check instead.
 
-## SOIL-based validation tests (every domain, `01` through `08`)
+## SOIL-based validation tests (14 domains)
 
 Every example above tests model **finding** — does Kodkod's bounded search
 produce *some* satisfying instance? A separate, complementary question is
 model **validation**: given an instance nobody searched for, does the plugin
-correctly accept a valid one and correctly reject an invalid one? Every
-domain now has a `valid-instance.soil`/`.cmd` pair (hand-builds a small,
+correctly accept a valid one and correctly reject an invalid one? 14 of the
+17 domains now have a `valid-instance.soil`/`.cmd` pair (hand-builds a small,
 deliberately-valid instance via plain USE SOIL `!create`/`!set`/`!insert`
 statements — no Kodkod involved at all — then runs `check -v` and confirms
 every applicable invariant reports `OK`) and an `invalid-instance.soil`/`.cmd`
 pair (an otherwise-identical instance deliberately violating exactly **one**
 named invariant, confirmed via `check -v` reporting `FAILED` for that
 invariant alone and `OK` for every other one — a surgical, not incidental,
-violation). Every one of these 16 scripts was actually executed and its
-output compared against the intended result, not written by inspection.
+violation) — the original 8 (`Library` through `AggregationComposition`),
+plus `MultipleInheritance` and `Redefines`, and 4 puzzle scenarios added
+later (`ZebraPuzzle`, `GraphColoring`, `NQueens`, `Sudoku`). Every one of
+these 28 scripts was actually executed and its output compared against the
+intended result, not written by inspection.
 
 One finding specific to this approach: `CivilStatus`'s
 `nameCapitalThenSmallLetters` invariant — silently dropped from every Kodkod

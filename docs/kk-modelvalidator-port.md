@@ -88,8 +88,10 @@ sharing a name are supposed to conflict.
   the last version ever released), not the plugin's originally-bundled 2.0 build. Verified: manifest
   diff against the vendored 2.0 jar shows only a version-string bump (`Implementation-Version`/
   `Specification-Version` 2.0→2.1, build JDK 1.7→1.8), nothing else. Swapping it in and re-running the
-  full test suite reproduced **byte-identical pass/fail counts** (6031 tests, 461 failures, 122 errors,
-  both before and after) — empirically confirmed as a drop-in replacement, not just asserted.
+  full test suite reproduced **byte-identical pass/fail counts** (6031 tests, 461 failures, 122 skipped,
+  both before and after — using this doc's current terminology; see "Test results" below for why
+  "skipped" replaced an earlier "errors" classification) — empirically confirmed as a drop-in
+  replacement, not just asserted.
 
 Packaged as a shaded/uber jar (`maven-shade-plugin`) bundling Kodkod + SAT4J + the Commons/log4j
 dependencies, matching the original Ant build's `<zipfileset>` bundling — USE's plugin loader
@@ -99,9 +101,9 @@ dependencies, matching the original Ant build's `<zipfileset>` bundling — USE'
 
 ## Test results
 
-**`mvn test`: 3308 distinct tests (6032 counting surefire's rerun-on-failure attempts, which the
-console summary shows but the per-class XML reports collapse to one row each), 0 errors, 122 skipped,
-461 failures.** The two originally-conflated categories are now genuinely different JUnit outcomes, not
+**`mvn test`: 3308 distinct tests (6031 counting surefire's rerun-on-failure attempts, which the
+console summary shows but the per-class XML reports collapse to one row each — matches
+`scripts/floor-check.sh`'s own comment on the console total), 0 errors, 122 skipped, 461 failures.** The two originally-conflated categories are now genuinely different JUnit outcomes, not
 just a documentation distinction:
 
 1. **Skipped (was: 122 errors), via `Assume`.** Every sampled case (`Less_Test`, `Mod_Test`,
