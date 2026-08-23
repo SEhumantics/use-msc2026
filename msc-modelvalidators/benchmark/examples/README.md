@@ -123,9 +123,9 @@ with zero syntax changes against USE 7.5.0.
 - `invIndepSingle.cmd` — `mv -invIndep CompanyER_invIndep.properties
   Employee::dname_foreign_key_Department` (a single named invariant, not
   `all`). Confirmed identical per-invariant result to the full sweep above
-  (`Not independent for given properties`), at roughly half the wall-clock
-  time (~1.6s vs ~3.4s) — useful when only one invariant's independence is in
-  question.
+  (`Not independent for given properties`), and noticeably faster (exact
+  timing varies run to run) — useful when only one invariant's independence
+  is in question.
 - **Confirmed does *not* scale**: `-scrollingAll` was tried against `[small]`
   and killed after 60s without finishing — too many symmetric foreign-key
   reassignments to enumerate exhaustively at this class count. No

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedBy": "kk-feature-checklist workflow (7-agent: 6 capability-area source audits + 1 scenario-mapping pass), msc-4 session 2026-08-22; restructured to a plugin-keyed schema and deduped (2 true id-collisions merged) during the msc-4 feature-model rework session; independently re-verified against source by a 6-area + 14-scenario + 2-cross-check (22-agent) audit workflow, consolidating 15 further near-duplicate features (different ids, same underlying capability, found across areas) and correcting 1 support-status misclassification plus ~20 scenario-mapping errors",
+  "generatedBy": "kk-feature-checklist workflow (7-agent: 6 capability-area source audits + 1 scenario-mapping pass), msc-4 session 2026-08-22; restructured to a plugin-keyed schema and deduped (3 true id-collisions merged) during the msc-4 feature-model rework session; independently re-verified against source by a 6-area + 14-scenario + 2-cross-check (22-agent) audit workflow, consolidating 15 further near-duplicate features (different ids, same underlying capability, found across areas) and correcting 1 support-status misclassification plus ~20 scenario-mapping errors",
   "sourceAudited": "kk-modelvalidator/src/main (as of this session)",
   "scenarioManifest": "msc-modelvalidators/benchmark/src/main/resources/manifest.json (17 base scenarios + 16 paired UNSAT mutations)",
   "plugins": [

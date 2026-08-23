@@ -6,7 +6,7 @@
 mv -config satsolver := DefaultSAT4J; bitwidth := 12; automaticDiagramExtraction := off
 
 -- [small]: 8 queens on an 8x8 board. Confirmed SATISFIABLE, solver time
--- ~300-360ms (3 repeated runs).
+-- well under a second (varies run to run and by machine).
 mv -validate NQueens.properties small
 
 -- Re-checks all class invariants against the reconstructed state directly

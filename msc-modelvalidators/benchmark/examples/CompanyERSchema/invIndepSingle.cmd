@@ -18,9 +18,10 @@
 -- "Employee::dname_foreign_key_Department: Not independent for given
 -- properties"), confirming that checking one invariant by name gives the
 -- same per-invariant result as the full sweep. Wall-clock, this single
--- check finished in ~1.6s versus ~3.4s for invIndep.cmd's full 29-invariant
--- sweep on this machine (both figures include the same fixed JVM/model
--- load overhead, so the difference is entirely the 28 invariants skipped).
+-- check finishes noticeably faster than invIndep.cmd's full 29-invariant
+-- sweep (both include the same fixed JVM/model load overhead, so the
+-- difference is entirely the 28 invariants skipped) -- exact seconds vary
+-- run to run and by machine, don't rely on a specific figure here.
 mv -invIndep CompanyER_invIndep.properties Employee::dname_foreign_key_Department
 
 quit
