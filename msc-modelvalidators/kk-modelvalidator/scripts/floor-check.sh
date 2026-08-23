@@ -17,7 +17,7 @@
 # failures=".." skipped=".."> attributes. The 5 JUnit3-style *TestSuite.xml wrapper reports
 # (aggregating child test classes) report 0/0/0/0 at their own root element -- verified empirically,
 # 2026-08-21 -- so summing across every *.xml file does not double-count. This total (currently 3311)
-# is intentionally not the same number `mvn test`'s console summary prints (currently 6031): the
+# is intentionally not the same number `mvn test`'s console summary prints (currently 6035): the
 # console tally additionally counts rerun attempts for failing tests, which the XML reports collapse
 # to one row each. That distinction doesn't matter here -- this script only needs to be
 # self-consistent across runs, not to match the console number.

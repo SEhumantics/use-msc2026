@@ -104,10 +104,12 @@ dependencies, matching the original Ant build's `<zipfileset>` bundling — USE'
 
 ## Test results
 
-**`mvn test`: 3308 distinct tests (6031 counting surefire's rerun-on-failure attempts, which the
+**`mvn test`: 3311 distinct tests (6035 counting surefire's rerun-on-failure attempts, which the
 console summary shows but the per-class XML reports collapse to one row each — matches
-`scripts/floor-check.sh`'s own comment on the console total), 0 errors, 122 skipped, 461 failures.** The two originally-conflated categories are now genuinely different JUnit outcomes, not
-just a documentation distinction:
+`scripts/floor-check.sh`'s own comment on the console total; was 3308/6031 before the Fifth pass
+added 3 `EndToEndValidationTest` classes), 0 errors, 122 skipped, 461 failures.** The two
+originally-conflated categories are now genuinely different JUnit outcomes, not just a
+documentation distinction:
 
 1. **Skipped (was: 122 errors), via `Assume`.** Every sampled case (`Less_Test`, `Mod_Test`,
    `Round_Test`, `Negation_Test`, and others) is an OCL snippet applying an operator directly to the
@@ -164,10 +166,12 @@ further things were done once this was caught:
 `kk-modelvalidator/scripts/floor-check.sh`, wired via `exec-maven-plugin` at the `verify` phase (the
 exact "THE GATE IS A SCRIPT" discipline `scripts/upstream-oracle-gate.sh` already established
 elsewhere in this reactor), sums `tests`/`errors`/`failures` across every per-class surefire XML report
-and fails the build if failures/errors exceed a pinned floor (currently 461/0) or if total tests drop
-below a pinned minimum (currently 3308 — guards against a discovery regression, e.g. a test class
-silently no longer being collected, which is worse than a failing test and wouldn't otherwise show up
-as red). `maven-surefire-plugin` is configured with `testFailureIgnore=true` so it doesn't fail the
+and fails the build if failures/errors exceed a pinned floor (461/0 as of this pass) or if total tests
+drop below a pinned minimum (3308 as of this pass — guards against a discovery regression, e.g. a test
+class silently no longer being collected, which is worse than a failing test and wouldn't otherwise
+show up as red). **Superseded**: the Fifth pass raised the minimum to 3311 after adding 3
+`EndToEndValidationTest` classes; see "Test results" above and "Acceptance evidence" below for the
+current figure. `maven-surefire-plugin` is configured with `testFailureIgnore=true` so it doesn't fail the
 build before the floor script gets to run — that flag does not mean "ignored", the floor script is the
 actual gate. Fixing one of the characterized failures for real should come with lowering the floor in
 the same commit.
@@ -545,10 +549,13 @@ Prompted directly by review: "the 5 examples aren't enough to cover the plugin's
 correctness." An audit (grepping every `.cmd` file's commands, and the plugin's own test tree) confirmed
 the criticism: no association class, no inheritance, no aggregation/composition toggle, no partial-solution
 completion, no classifying terms, no single-step scrolling, no targeted `-invIndep`, and — the sharpest
-finding — **every one of the plugin's 3308 unit tests lives under `transform/ocl/*`**: 100% OCL-expression
-translation, zero coverage of any model-*structural* feature, at any level, ever, in this plugin's history.
-Correctness for `CompanyERSchema`/`CivilStatus`/`Genealogy` also rested on a one-time manual
-`check -v` pass, not an automated, regression-protected test the way `Library` has.
+finding — **all but one of the plugin's 3308 unit tests live under `transform/ocl/*`**: 100%
+OCL-expression translation, with the lone exception being the Second pass's `EndToEndValidationTest`,
+which covers only the original `Library` domain — none of the newly-added `AssociationClass`/
+`Inheritance`/`CompanyERSchema` domains had any automated, solve-and-reconstruct regression coverage at
+all, at any level, before this pass. Correctness for `CompanyERSchema`/`CivilStatus`/`Genealogy` also
+rested on a one-time manual `check -v` pass, not an automated, regression-protected test the way
+`Library` has.
 
 Closed via a 14-agent workflow (checklist: `docs/kk-modelvalidator-expressiveness-checklist.md`), run
 against a pre-built distribution jar so agents needed no `mvn` access at all (avoiding the concurrent-build
@@ -706,9 +713,10 @@ fair comparison against Z3 later:
 - **`GraphColoring` — a real false-negative bug**: at bitwidth 4–6, a provably-3-colorable graph
   (constructed so a valid coloring exists by hidden construction) comes back UNSATISFIABLE in ~20ms; only
   bitwidth≥8 gives the correct, genuinely-searched SATISFIABLE answer. Also the largest
-  solver-choice spread measured anywhere in this suite: MiniSat 598ms vs DefaultSAT4J 11.4s on the
-  identical instance — a 19x difference (not a single "~10-19s" figure across solvers, an earlier
-  version of this bullet wrongly implied).
+  solver-choice spread measured anywhere in this suite — MiniSat consistently finishes well under a
+  second while DefaultSAT4J takes several seconds to over ten on the identical instance, an
+  order-of-magnitude-plus difference (exact figures vary run to run and by machine; see
+  `latest-results.json` for the current measured numbers, not a fixed figure here).
 - **`Redefines` — a real soundness gap**: an invariant written via a superclass-redefined association
   end is evaluated over an empty relation during Kodkod's search (the translator has no `redefines`
   special-casing at all) — silently vacuously true, so `-validate` reports SATISFIABLE on a state where
