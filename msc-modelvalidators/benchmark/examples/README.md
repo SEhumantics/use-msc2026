@@ -612,7 +612,8 @@ brute-force enumerator, which is exactly why it is worth having here.
 
 - `validate.cmd` — `DefaultSAT4J`, bitwidth 4 (position and its `+/-1`
   neighbors only ever need to represent 0..6). Confirmed: `SATISFIABLE`,
-  `check -v` → all 21 invariants (6 all-different + 15 named clues) OK.
+  `check -v` → all 22 invariants (1 position-range + 6 all-different + 14
+  named clues + 1 derived Clue16 corollary) OK.
   Actual measured solver time (DefaultSAT4J, this machine, averaged over
   several runs): USE→Kodkod translation ~90–200ms, Kodkod→SAT translation
   ~120–350ms, **SAT solving time itself ~65–120ms** — i.e. despite the
