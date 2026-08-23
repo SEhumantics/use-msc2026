@@ -2,7 +2,9 @@
 
 These are the exact files the original plugin's own `modelvalidator -downloadSolvers`
 command fetches at runtime from `http://www.db.informatik.uni-bremen.de/kodkod-solvers/1/linux_x86_64.zip`
-(redirects to https; still reachable, last-modified 2012-12-22). Vendored here instead
+(redirects to https; still reachable, last-modified 2016-12-22 per the server's own
+Last-Modified header -- confirmed live, not the 2012 date an earlier version of this
+line claimed). Vendored here instead
 of downloaded live, for the same reproducibility reason `kodkod-2.1.jar` is vendored
 under `local-repo/` rather than fetched from Maven Central at build time.
 
@@ -20,7 +22,8 @@ confirmed via `NoSuchFieldException`, and this is unrelated to porting (the help
 unmodified original source; the same break would hit the pristine original plugin on
 any JDK past 8). Fixed here without touching plugin code at all: `java.library.path`
 is set at JVM *launch* (the standard, supported mechanism) instead of mutated at
-runtime — see `bin/use`/`bin/use.bat` and `examples/run-example.sh`, both of which now
+runtime — see `bin/use`/`bin/use.bat` and `benchmark/examples/run-example.sh` (lands at
+`examples/KK-ModelValidator/run-example.sh` in a built distribution), both of which now
 point it at this directory automatically.
 
 Confirmed via `mv -config satsolver := <Name>` against `CompanyERSchema`, actually run:
