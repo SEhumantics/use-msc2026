@@ -28,9 +28,12 @@
 -- cannot be transformed."). All four operations below are recursive in
 -- exactly this sense (childPlus1 calls itself inside collect(); childPlus2
 -- delegates to childPlusOnNodeSet, which calls itself; childPlus3 avoids
--- operation-level recursion by using `iterate` instead, but its use of
--- `iterate` over TreeNode.allInstances() is untested by this example and
--- not relied upon below). So the ORIGINAL upstream invariant --
+-- operation-level recursion by using `iterate` instead, and its use of
+-- `iterate` over TreeNode.allInstances() is never transformed to Kodkod by
+-- any constraint below -- but it IS exercised, just via a different path:
+-- query.cmd calls it through plain USE `?` (the OCL interpreter against a
+-- reconstructed instance, not the Kodkod transform), where it correctly
+-- returns 7. So the ORIGINAL upstream invariant --
 --   context TreeNode inv AcyclicParentship:
 --     not(self.childPlus2()->includes(self))
 -- -- can never be handed to Kodkod as-is by this plugin build. It is kept

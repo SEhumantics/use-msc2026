@@ -1,4 +1,4 @@
--- The [small] section (2 Person, 2 Company, 0..2 Employment links) is the
+-- The [small] section (2 Person, 2 Company, 1..2 Employment links) is the
 -- default -- resolves to the first section in CompanyEmployment.properties,
 -- no name needed.
 mv -config satsolver := DefaultSAT4J; bitwidth := 12; automaticDiagramExtraction := off

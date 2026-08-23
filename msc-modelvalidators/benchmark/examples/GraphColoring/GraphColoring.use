@@ -9,12 +9,16 @@
 -- itself is pinned exactly, both directions per edge, in
 -- GraphColoring.properties via an explicit `Adjacent = Set{...}` literal --
 -- Kodkod is not asked to invent the graph, only to find a legal coloring of
--- it), one Integer `color` attribute bounded to exactly k values, and one
--- invariant: adjacent Regions must have different colors. That is the
--- entire k-COLORING decision problem, one of Karp's original 21 NP-complete
--- problems -- deliberately nothing else is layered on top, so that any
--- solving difficulty observed comes from the coloring search itself, not
--- from unrelated model complexity.
+-- it), one Integer `color` attribute bounded to exactly k values, and two
+-- invariants: adjacent Regions must have different colors (properColoring,
+-- the substantive one), and a Region is never its own neighbor (noSelfLoop,
+-- a stated sanity check rather than added search complexity -- the fixed
+-- edge list never contains a self-loop, so this never actually constrains
+-- anything). properColoring alone is the entire k-COLORING decision
+-- problem, one of Karp's original 21 NP-complete problems -- deliberately
+-- nothing else is layered on top, so that any solving difficulty observed
+-- comes from the coloring search itself, not from unrelated model
+-- complexity.
 --
 -- THE GRAPH ITSELF (67 edges over 40 Regions, avg degree 3.35) is built
 -- with the same "flat graph" methodology used by Culberson's classic

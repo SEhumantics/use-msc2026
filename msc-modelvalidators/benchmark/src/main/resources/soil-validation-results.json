@@ -220,6 +220,54 @@
     "note": "as expected"
   },
   {
+    "exampleId": "ZebraPuzzle",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 22,
+    "numFailures": 0,
+    "failedInvariants": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "ZebraPuzzle",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 22,
+    "numFailures": 1,
+    "failedInvariants": [
+      "House::DistinctDrink"
+    ],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "GraphColoring",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 2,
+    "numFailures": 0,
+    "failedInvariants": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "GraphColoring",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 2,
+    "numFailures": 1,
+    "failedInvariants": [
+      "Region::properColoring"
+    ],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
     "exampleId": "Redefines",
     "cmdFile": "valid-instance.cmd",
     "kind": "valid",
@@ -239,6 +287,54 @@
     "numFailures": 1,
     "failedInvariants": [
       "A::TagANotEmpty"
+    ],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "NQueens",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 3,
+    "numFailures": 0,
+    "failedInvariants": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "NQueens",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 3,
+    "numFailures": 1,
+    "failedInvariants": [
+      "Queen::noAttack"
+    ],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "Sudoku",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 18,
+    "numFailures": 0,
+    "failedInvariants": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "Sudoku",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 18,
+    "numFailures": 1,
+    "failedInvariants": [
+      "Field::allowedValue"
     ],
     "exitCode": 0,
     "note": "as expected"
