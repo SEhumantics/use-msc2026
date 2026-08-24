@@ -7,6 +7,8 @@ import static org.junit.Assert.assertTrue;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.Test;
 
@@ -195,5 +197,30 @@ public class SoilValidationRunnerTest {
 		assertTrue("timeout should not wait for the child sleep, elapsed=" + elapsedMillis + "ms",
 				elapsedMillis < 1800);
 		assertFalse(process.isAlive());
+	}
+
+	@Test
+	public void interruptionReapsTheChildProcess() throws Exception {
+		Process process = new ProcessBuilder("sh", "-c", "exec sleep 10").start();
+		AtomicBoolean sawInterrupt = new AtomicBoolean();
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		Thread waiter = new Thread(() -> {
+			try {
+				SoilValidationRunner.waitForProcessAndCollectOutput(process, new StringBuilder(), 30);
+			} catch (InterruptedException expected) {
+				sawInterrupt.set(true);
+			} catch (Throwable unexpected) {
+				failure.set(unexpected);
+			}
+		});
+		waiter.start();
+		Thread.sleep(100);
+		waiter.interrupt();
+		waiter.join(2_000);
+
+		assertFalse("interrupted waiter must finish", waiter.isAlive());
+		assertTrue(sawInterrupt.get());
+		assertEquals(null, failure.get());
+		assertFalse("interrupted run must not leave use-gui alive", process.isAlive());
 	}
 }

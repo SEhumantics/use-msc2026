@@ -182,16 +182,55 @@ public class SoilValidationRunner {
 		}, "soil-validation-output-reader");
 		outputReader.start();
 
-		boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-		if (!finished) {
-			process.destroyForcibly();
-			process.waitFor();
+		boolean finished;
+		try {
+			finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+			if (!finished) {
+				destroyAndReap(process);
+			}
+			outputReader.join();
+		} catch (InterruptedException interrupted) {
+			// An interrupted benchmark run must not strand a use-gui child (nor its non-daemon
+			// output reader). Reap both before preserving the caller's interrupt semantics.
+			destroyAndReap(process);
+			joinUninterruptibly(outputReader);
+			throw interrupted;
 		}
-		outputReader.join();
 		if (readFailure[0] != null) {
 			throw readFailure[0];
 		}
 		return finished;
+	}
+
+	private static void destroyAndReap(Process process) {
+		process.destroyForcibly();
+		boolean interrupted = false;
+		while (true) {
+			try {
+				process.waitFor();
+				break;
+			} catch (InterruptedException ignored) {
+				interrupted = true;
+			}
+		}
+		if (interrupted) {
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	private static void joinUninterruptibly(Thread thread) {
+		boolean interrupted = false;
+		while (true) {
+			try {
+				thread.join();
+				break;
+			} catch (InterruptedException ignored) {
+				interrupted = true;
+			}
+		}
+		if (interrupted) {
+			Thread.currentThread().interrupt();
+		}
 	}
 
 	/**
