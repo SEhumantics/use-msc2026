@@ -10,17 +10,37 @@
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>unc-modelvalidator</artifactId>
-    <packaging>pom</packaging>
-    <name>Unc-ModelValidator (reserved)</name>
+    <packaging>jar</packaging>
+    <name>Unc-ModelValidator</name>
     <description>
-        Reserved slot for this thesis's actual contribution: an uncertainty-aware bounded model
-        finder/validator, supporting the four U-types (UReal/UInteger/UBoolean/UString) alongside
-        crisp OCL, evaluated in part against kk-modelvalidator on the crisp fragment both can
-        express. Named "unc" (uncertain) rather than "z3" deliberately: Z3 is the pinned first
-        backend (proposal Sec.6, z3-4.16.0), but the module name should not preclude a different
-        or additional SMT backend later without another rename. Not started -- see
-        output/milestone1_fastpath_prompt.md and output/PROGRAM_ROADMAP.md Phase 1 for the actual
-        Track R work graph. Left as packaging=pom with no source until that work begins; switches
-        to a real jar module then.
+        SMT-based bounded model finder for USE/OCL. A functional superset of kk-modelvalidator:
+        same .properties configuration format and same reconstructed object diagrams, but an SMT
+        core instead of Kodkod/SAT, which additionally admits real-valued and uncertainty-typed
+        attributes. Named "unc" rather than "z3" because the solver is deliberately swappable:
+        all solver interaction is portable SMT-LIB text over a subprocess.
     </description>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.tzi.use</groupId>
+            <artifactId>use-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-configuration2</artifactId>
+            <version>2.11.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.vintage</groupId>
+            <artifactId>junit-vintage-engine</artifactId>
+            <version>5.7.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>
