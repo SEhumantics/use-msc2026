@@ -17,6 +17,7 @@ public class SolverBinaryTest {
     @Test
     public void resolvesTheVendoredBinaryFromAnyWorkingDirectory() {
         SolverBinary binary = SolverBinary.resolve();
+        System.out.println("Resolved solver: " + binary.path());
         assertTrue("solver path must exist: " + binary.path(), Files.isExecutable(binary.path()));
         assertTrue("must resolve the vendored copy, not one from PATH: " + binary.path(),
                 binary.path().toString().replace('\\', '/').contains("tools/z3/bin/z3"));
