@@ -115,11 +115,15 @@ def scan_associations(text):
 
 
 def strip_comments(text):
-    """Drop `-- ...` line comments (USE/SOIL's only comment syntax) so
-    prose in header comments -- which routinely quotes real OCL/USE syntax
-    to explain a model, exactly the kind of text this scanner is looking
-    for -- doesn't produce false positives."""
-    return "\n".join(line.split("--", 1)[0] for line in text.split("\n"))
+    """Drop USE's line and block comments without moving source lines.
+
+    Models in the bundled corpus use both ``-- ...`` and ``/* ... */``.
+    Keeping a newline for every removed block-comment newline means reported
+    candidates still point at their original source line.
+    """
+    without_blocks = re.sub(r"/\\*.*?\\*/", lambda match: "\n" * match.group(0).count("\n"),
+                            text, flags=re.S)
+    return "\n".join(line.split("--", 1)[0] for line in without_blocks.split("\n"))
 
 
 def scan_file(path):
