@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.Test;
 
@@ -162,5 +163,22 @@ public class SoilValidationRunnerTest {
 				Collections.emptyList());
 		assertFalse(r.passed);
 		assertTrue(r.note.contains("could not find"));
+	}
+
+	@Test
+	public void timeoutStartsBeforeAQuietChildClosesStdout() throws Exception {
+		// A quiet, sleeping child leaves its stdout pipe open. Before the concurrent-drain fix,
+		// SoilValidationRunner read that pipe to EOF *before* starting waitFor(timeout), so this
+		// returned only after the full sleep instead of respecting the supplied deadline.
+		Process process = new ProcessBuilder("sh", "-c", "exec sleep 2").start();
+		StringBuilder output = new StringBuilder();
+		long started = System.nanoTime();
+		boolean finished = SoilValidationRunner.waitForProcessAndCollectOutput(process, output, 1);
+		long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+
+		assertFalse(finished);
+		assertTrue("timeout should not wait for the child sleep, elapsed=" + elapsedMillis + "ms",
+				elapsedMillis < 1800);
+		assertFalse(process.isAlive());
 	}
 }

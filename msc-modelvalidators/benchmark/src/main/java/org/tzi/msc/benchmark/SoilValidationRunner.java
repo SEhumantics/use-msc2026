@@ -145,16 +145,8 @@ public class SoilValidationRunner {
 		Process process = pb.start();
 
 		StringBuilder output = new StringBuilder();
-		try (BufferedReader reader = new BufferedReader(
-				new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-			String line;
-			while ((line = reader.readLine()) != null) {
-				output.append(line).append('\n');
-			}
-		}
-		boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+		boolean finished = waitForProcessAndCollectOutput(process, output, timeoutSeconds);
 		if (!finished) {
-			process.destroyForcibly();
 			result.exitCode = -1;
 			result.note = "timed out after " + timeoutSeconds + "s";
 			return result;
@@ -162,6 +154,44 @@ public class SoilValidationRunner {
 		result.exitCode = process.exitValue();
 		applyParsedOutcome(result, output.toString(), kind, knownOutOfScopeInvariants);
 		return result;
+	}
+
+	/**
+	 * Drains merged child output concurrently while the caller's timeout is running. Reading a
+	 * process stream synchronously before {@link Process#waitFor(long, TimeUnit)} makes the timeout
+	 * ineffective: a child that hangs without closing stdout leaves {@code readLine()} blocked forever.
+	 * Conversely, waiting before draining can deadlock a chatty child once its stdout pipe fills. A
+	 * dedicated reader thread avoids both failure modes.
+	 *
+	 * <p>The process is forcibly terminated and reaped before joining the reader on timeout, which
+	 * guarantees that the stream reaches EOF and the reader cannot keep this method blocked.
+	 */
+	static boolean waitForProcessAndCollectOutput(Process process, StringBuilder output, int timeoutSeconds)
+			throws IOException, InterruptedException {
+		IOException[] readFailure = new IOException[1];
+		Thread outputReader = new Thread(() -> {
+			try (BufferedReader reader = new BufferedReader(
+					new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+				String line;
+				while ((line = reader.readLine()) != null) {
+					output.append(line).append('\n');
+				}
+			} catch (IOException e) {
+				readFailure[0] = e;
+			}
+		}, "soil-validation-output-reader");
+		outputReader.start();
+
+		boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+		if (!finished) {
+			process.destroyForcibly();
+			process.waitFor();
+		}
+		outputReader.join();
+		if (readFailure[0] != null) {
+			throw readFailure[0];
+		}
+		return finished;
 	}
 
 	/**
