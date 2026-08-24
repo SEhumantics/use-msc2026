@@ -147,6 +147,21 @@ public class SoilValidationRunnerTest {
 	}
 
 	@Test
+	public void validFixtureWithAnUnattributedSummaryFailureFails() {
+		// A failed-invariant line is the evidence that lets the runner apply the narrowly scoped
+		// documented-exception allowlist. If USE reports a failure in its summary but the detailed
+		// line is absent or has a changed format, treating the empty parsed list as a clean run would
+		// hide a real regression.
+		String summaryOnlyFailure = "checking invariants...\n"
+				+ "checked 1 invariant in 0.01s, 1 failure.\n";
+		SoilValidationResult r = apply(summaryOnlyFailure, "valid", Collections.emptyList());
+		assertFalse(r.passed);
+		assertEquals(Integer.valueOf(1), r.numFailures);
+		assertTrue(r.failedInvariants.isEmpty());
+		assertTrue(r.note.contains("only 0 failed invariant detail"));
+	}
+
+	@Test
 	public void validFixtureWithDocumentedOutOfScopeFailurePasses() {
 		// Same transcript as above, but now with the documented allowlist applied (matching
 		// manifest.json's Genealogy.soilKnownOutOfScopeInvariants) -- must pass.

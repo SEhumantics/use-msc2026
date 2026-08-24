@@ -228,14 +228,22 @@ public class SoilValidationRunner {
 			} else {
 				// "valid" kind: a documented, deliberately out-of-scope invariant (see
 				// ExampleEntry.soilKnownOutOfScopeInvariants) is subtracted before judging -- it is
-				// still recorded in failedInvariants either way, just not treated as a regression.
+				// still recorded in failedInvariants either way, just not treated as a regression. Do
+				// not accept a summary failure whose corresponding detail line was not parsed: without
+				// its invariant name we cannot establish that it is one of the documented exclusions.
 				List<String> unexpected = new ArrayList<>(failedInvariants);
 				unexpected.removeAll(knownOutOfScopeInvariants);
-				result.passed = unexpected.isEmpty();
-				result.note = result.passed
-						? (knownOutOfScopeInvariants.isEmpty() ? "as expected"
-								: "as expected (excluding documented out-of-scope " + knownOutOfScopeInvariants + ")")
-						: "unexpected failure(s) beyond the documented out-of-scope set: " + unexpected;
+				if (result.numFailures != failedInvariants.size()) {
+					result.passed = false;
+					result.note = "USE summary reported " + result.numFailures + " failure(s), but only "
+							+ failedInvariants.size() + " failed invariant detail line(s) could be parsed";
+				} else {
+					result.passed = unexpected.isEmpty();
+					result.note = result.passed
+							? (knownOutOfScopeInvariants.isEmpty() ? "as expected"
+									: "as expected (excluding documented out-of-scope " + knownOutOfScopeInvariants + ")")
+							: "unexpected failure(s) beyond the documented out-of-scope set: " + unexpected;
+				}
 			}
 		} else {
 			result.passed = false;
