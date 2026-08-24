@@ -133,13 +133,19 @@ public class EndToEndValidationTest {
 		// state and require it to be defined-true, exactly the same standard the thesis proposal
 		// holds the eventual Z3-ModelValidator to (output/robust_utype_model_finding_proposal.md
 		// §7, "Query-witness soundness"). A solved-but-uninvariant-checked witness is not evidence.
+		// The final count assertion guards against classInvariants(true) silently returning fewer
+		// invariants than the model actually declares (e.g. a filtering regression) -- without it,
+		// an empty/undersized iteration would still pass this loop with zero assertions run.
+		int checked = 0;
 		for (MClassInvariant inv : mModel.classInvariants(true)) {
 			EvalContext ctx = new EvalContext(state, state, mSystem.varBindings(), null, "");
 			Value result = inv.expandedExpression().eval(ctx);
 			assertTrue(inv.qualifiedName() + " must evaluate to a defined Boolean", result instanceof BooleanValue);
 			assertTrue(inv.qualifiedName() + " must hold in the reconstructed solution",
 					((BooleanValue) result).isTrue());
+			checked++;
 		}
+		assertEquals("expected all 9 Library invariants to be checked", 9, checked);
 	}
 
 	private static Set<String> attributeValues(MSystemState state, org.tzi.use.uml.mm.MClass cls, String attrName) {

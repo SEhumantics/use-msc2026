@@ -121,7 +121,7 @@ def strip_comments(text):
     Keeping a newline for every removed block-comment newline means reported
     candidates still point at their original source line.
     """
-    without_blocks = re.sub(r"/\\*.*?\\*/", lambda match: "\n" * match.group(0).count("\n"),
+    without_blocks = re.sub(r"/\*.*?\*/", lambda match: "\n" * match.group(0).count("\n"),
                             text, flags=re.S)
     return "\n".join(line.split("--", 1)[0] for line in without_blocks.split("\n"))
 
