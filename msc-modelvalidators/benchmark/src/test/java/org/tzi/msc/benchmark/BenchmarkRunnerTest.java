@@ -102,4 +102,20 @@ public class BenchmarkRunnerTest {
 		assertNull(result.witnessDigest);
 		assertTrue(result.allWitnessDigests.isEmpty());
 	}
+
+	@Test
+	public void positiveRepeatsAndNonNegativeWarmupsAreAccepted() {
+		BenchmarkRunner.validateIterationCounts(1, 0, "test");
+		BenchmarkRunner.validateIterationCounts(3, 2, "test");
+	}
+
+	@Test(expected = IllegalArgumentException.class)
+	public void zeroRepeatsAreRejectedInsteadOfProducingEmptyErrorRows() {
+		BenchmarkRunner.validateIterationCounts(0, 0, "test");
+	}
+
+	@Test(expected = IllegalArgumentException.class)
+	public void negativeWarmupsAreRejected() {
+		BenchmarkRunner.validateIterationCounts(1, -1, "test");
+	}
 }

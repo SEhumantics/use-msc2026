@@ -88,6 +88,7 @@ public class BenchmarkRunner {
 		int repeats = args.length >= 3 ? Integer.parseInt(args[2]) : 5;
 		int warmups = args.length >= 4 ? Integer.parseInt(args[3]) : 0; // opt-in: unchanged behavior by default
 		boolean watchdogEnabled = args.length >= 5 ? Boolean.parseBoolean(args[4]) : true;
+		validateIterationCounts(repeats, warmups, "command line");
 
 		Options.setCheckWarningsUnrelatedTypes(WarningType.IGNORE);
 		Options.doPLUGIN = false;
@@ -128,6 +129,7 @@ public class BenchmarkRunner {
 			}
 			int effectiveRepeats = ex.repeats != null ? ex.repeats : repeats;
 			int effectiveWarmups = ex.warmups != null ? ex.warmups : warmups;
+			validateIterationCounts(effectiveRepeats, effectiveWarmups, "manifest entry " + ex.id);
 
 			for (String solver : SOLVERS) {
 				SolverResult result;
@@ -152,6 +154,20 @@ public class BenchmarkRunner {
 
 		writeResults(allResults, outputJson);
 		System.err.println("Wrote " + allResults.size() + " results to " + outputJson);
+	}
+
+	/**
+	 * A zero/negative repeat count would skip the solve loop and become a fabricated ERROR row with
+	 * zero timings; a negative warmup count is equally nonsensical. Fail at the configuration boundary
+	 * with the responsible source instead of silently emitting data that looks like a solver failure.
+	 */
+	static void validateIterationCounts(int repeats, int warmups, String source) {
+		if (repeats < 1) {
+			throw new IllegalArgumentException(source + ": repeats must be at least 1, got " + repeats);
+		}
+		if (warmups < 0) {
+			throw new IllegalArgumentException(source + ": warmups must be non-negative, got " + warmups);
+		}
 	}
 
 	/**
