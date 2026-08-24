@@ -27,6 +27,9 @@ public class ReportBuilderTest {
 		File tmpDir = Files.createTempDirectory("report-builder-test").toFile();
 		File manifestFile = new File(tmpDir, "manifest.json");
 		File resultsFile = new File(tmpDir, "results.json");
+		File soilResultsFile = new File(tmpDir, "soil-results.json");
+		File runMetadataFile = new File(tmpDir, "run-metadata.json");
+		File featureMatrixFile = new File(tmpDir, "feature-matrix.json");
 		File outputFile = new File(tmpDir, "report.html");
 
 		// A citation/question field deliberately containing characters that are dangerous for a naive
@@ -39,10 +42,20 @@ public class ReportBuilderTest {
 			w.write(adversarialManifest);
 		}
 		try (FileWriter w = new FileWriter(resultsFile, StandardCharsets.UTF_8)) {
-			w.write("[]");
+			w.write("[{\"exampleId\":\"X\",\"solver\":\"test\",\"outcome\":\"SATISFIABLE\"}]");
+		}
+		try (FileWriter w = new FileWriter(soilResultsFile, StandardCharsets.UTF_8)) {
+			w.write("[{\"exampleId\":\"X\",\"note\":\"</script><script>alert(2)</script>\"}]");
+		}
+		try (FileWriter w = new FileWriter(runMetadataFile, StandardCharsets.UTF_8)) {
+			w.write("{\"host\":\"test\\\\host\"}");
+		}
+		try (FileWriter w = new FileWriter(featureMatrixFile, StandardCharsets.UTF_8)) {
+			w.write("{\"plugins\":[{\"id\":\"test\",\"evidence\":\"</script><script>alert(3)</script>\"}]}");
 		}
 
-		ReportBuilder.main(new String[] { manifestFile.getPath(), resultsFile.getPath(), outputFile.getPath() });
+		ReportBuilder.main(new String[] { manifestFile.getPath(), resultsFile.getPath(), outputFile.getPath(),
+				soilResultsFile.getPath(), runMetadataFile.getPath(), featureMatrixFile.getPath() });
 
 		String html = Files.readString(outputFile.toPath(), StandardCharsets.UTF_8);
 
@@ -50,6 +63,7 @@ public class ReportBuilderTest {
 		assertFalse("leftover results placeholder", html.contains("__RESULTS_JSON_PLACEHOLDER__"));
 		assertFalse("leftover soil-results placeholder", html.contains("__SOIL_RESULTS_JSON_PLACEHOLDER__"));
 		assertFalse("leftover run-metadata placeholder", html.contains("__RUN_METADATA_JSON_PLACEHOLDER__"));
+		assertFalse("leftover feature-matrix placeholder", html.contains("__FEATURE_MATRIX_JSON_PLACEHOLDER__"));
 
 		// The adversarial payload's literal, unescaped "</script>" must not survive into the rendered
 		// output at all -- checked against the FULL html, not a substring already cut at the first
@@ -57,13 +71,22 @@ public class ReportBuilderTest {
 		// this check even if escaping had failed, since the malicious close tag would just become the
 		// regex's own stopping point instead of being flagged).
 		assertFalse("the exact unescaped malicious payload must not appear in the rendered output",
-				html.contains("<script>alert(1)</script>"));
+				html.contains("<script>alert(1)</script>") || html.contains("<script>alert(2)</script>")
+						|| html.contains("<script>alert(3)</script>"));
 
-		// And the data block, once extracted, must still be valid, parseable JSON (a Gson round-trip
-		// is a reasonable proxy for "a browser's JSON.parse would accept this").
+		// Every data block must remain valid JSON after its independent deserialization/re-serialization
+		// path. Gson parsing is a reasonable proxy for the browser's JSON.parse calls in the template.
 		String manifestBlock = extractScriptBlock(html, "manifest-json");
-		com.google.gson.JsonElement parsed = com.google.gson.JsonParser.parseString(manifestBlock);
-		assertTrue("manifest data block must parse back to a JSON array", parsed.isJsonArray());
+		assertTrue("manifest data block must parse back to a JSON array",
+				com.google.gson.JsonParser.parseString(manifestBlock).isJsonArray());
+		assertTrue("results data block must parse back to a JSON array",
+				com.google.gson.JsonParser.parseString(extractScriptBlock(html, "results-json")).isJsonArray());
+		assertTrue("SOIL results data block must parse back to a JSON array",
+				com.google.gson.JsonParser.parseString(extractScriptBlock(html, "soil-results-json")).isJsonArray());
+		assertTrue("run metadata data block must parse back to a JSON object",
+				com.google.gson.JsonParser.parseString(extractScriptBlock(html, "run-metadata-json")).isJsonObject());
+		assertTrue("feature matrix data block must parse back to a JSON object",
+				com.google.gson.JsonParser.parseString(extractScriptBlock(html, "feature-matrix-json")).isJsonObject());
 	}
 
 	private static String extractScriptBlock(String html, String id) {
