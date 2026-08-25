@@ -131,3 +131,8 @@ fabric.properties
 
 # Python bytecode caches produced by benchmark scripts.
 __pycache__/
+
+# Local JavaFX SDK vendored under use-gui/lib for the assembly build (see
+# use-assembly/src/assembly/assembly.xml); large and platform-specific, never committed.
+# use-gui/lib/plugins/KK-ModelValidator-1.0.jar is deliberately tracked and is NOT covered here.
+/use-gui/lib/javafx-sdk-*/
