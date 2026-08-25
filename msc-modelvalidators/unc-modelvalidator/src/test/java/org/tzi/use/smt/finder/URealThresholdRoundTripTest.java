@@ -51,9 +51,46 @@ public class URealThresholdRoundTripTest {
     URealValue speed = reconstructedSpeed(model, unchecked);
     assertEquals(0.31, speed.value(), 0.0);
     assertEquals(0.02, speed.uncertainty(), 0.0);
+    assertTrue("crisp nominal erasure would accept 0.31 > 0.30", speed.value() > 0.30);
 
     ModelFinderResult enforced = SmtModelFinder.find(model, configuration(model, "belowActive"));
     assertFalse(enforced.satisfiable());
+  }
+
+  @Test
+  public void belowAtAndAboveEvaluatorBoundaryHaveTheExpectedOutcomes() throws Exception {
+    MModel model = compile(resourcePath("ReliablyFast.use"));
+
+    ModelFinderResult belowUnchecked =
+        SmtModelFinder.find(model, configuration(model, "boundaryBelowInactive"));
+    assertTrue(belowUnchecked.satisfiable());
+    assertEquals(
+        new InvariantVerdict("UnidentifiedObject::ReliablyFast", false),
+        belowUnchecked.verdicts().get(0));
+    URealValue below = reconstructedSpeed(model, belowUnchecked);
+    assertEquals(0.3328970695, below.value(), 0.0);
+    assertEquals(0.02, below.uncertainty(), 0.0);
+
+    ModelFinderResult belowEnforced =
+        SmtModelFinder.find(model, configuration(model, "boundaryBelowActive"));
+    assertFalse(belowEnforced.satisfiable());
+
+    ModelFinderResult at = SmtModelFinder.find(model, configuration(model, "boundaryAtActive"));
+    assertTrue(at.satisfiable());
+    assertEquals(
+        new InvariantVerdict("UnidentifiedObject::ReliablyFast", true), at.verdicts().get(0));
+    URealValue atSpeed = reconstructedSpeed(model, at);
+    assertEquals(0.3328970696, atSpeed.value(), 0.0);
+    assertEquals(0.02, atSpeed.uncertainty(), 0.0);
+
+    ModelFinderResult above =
+        SmtModelFinder.find(model, configuration(model, "boundaryAboveActive"));
+    assertTrue(above.satisfiable());
+    assertEquals(
+        new InvariantVerdict("UnidentifiedObject::ReliablyFast", true), above.verdicts().get(0));
+    URealValue aboveSpeed = reconstructedSpeed(model, above);
+    assertEquals(0.3328970697, aboveSpeed.value(), 0.0);
+    assertEquals(0.02, aboveSpeed.uncertainty(), 0.0);
   }
 
   private static URealValue reconstructedSpeed(MModel model, ModelFinderResult result) {
