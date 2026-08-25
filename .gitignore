@@ -128,3 +128,6 @@ fabric.properties
 
 # Reactor-root build output
 /target
+
+# Python bytecode caches produced by benchmark scripts.
+__pycache__/
