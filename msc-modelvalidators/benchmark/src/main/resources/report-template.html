@@ -296,7 +296,7 @@
       </div>
       <h1>Expressiveness &amp; solver benchmark</h1>
       <p class="lede">
-        Each scenario runs in <span class="chip finding">finding</span> mode (Kodkod search),
+        Each scenario runs in <span class="chip finding">finding</span> mode (bounded model-finder search),
         <span class="chip validating">validating</span> mode (a hand-built instance checked directly), or both.
         Click any scenario row to see the full per-solver breakdown.
       </p>
@@ -1166,8 +1166,8 @@
       const table = document.createElement('table');
       table.className = 'detail-table';
       table.innerHTML = `<thead><tr>
-        <th scope="col">Solver</th><th scope="col">Time (min &ndash; median &ndash; max)</th><th scope="col">Kodkod solve</th>
-        <th scope="col">Kodkod translate</th><th scope="col">Outcome</th><th scope="col">Match</th><th scope="col">Witness</th>
+        <th scope="col">Solver</th><th scope="col">Time (min &ndash; median &ndash; max)</th><th scope="col">Solve (backend-reported)</th>
+        <th scope="col">Translate (backend-reported)</th><th scope="col">Outcome</th><th scope="col">Match</th><th scope="col">Witness</th>
       </tr></thead>`;
       const tbody = document.createElement('tbody');
       [...rows].sort((a, b) => a.solver.localeCompare(b.solver)).forEach(r => {
@@ -1189,8 +1189,8 @@
           bwTd.innerHTML = '<span style="color:var(--status-critical)">n/a</span>';
         }
         tr.appendChild(bwTd);
-        const solveTd = document.createElement('td'); solveTd.className = 'tabular'; solveTd.textContent = r.outcome === 'ERROR' ? '—' : r.medianKodkodSolvingMs + ' ms'; tr.appendChild(solveTd);
-        const transTd = document.createElement('td'); transTd.className = 'tabular'; transTd.textContent = r.outcome === 'ERROR' ? '—' : r.medianKodkodTranslationMs + ' ms'; tr.appendChild(transTd);
+        const solveTd = document.createElement('td'); solveTd.className = 'tabular'; solveTd.textContent = r.outcome === 'ERROR' || r.solver === 'SMT-Z3' ? '—' : r.medianKodkodSolvingMs + ' ms'; tr.appendChild(solveTd);
+        const transTd = document.createElement('td'); transTd.className = 'tabular'; transTd.textContent = r.outcome === 'ERROR' || r.solver === 'SMT-Z3' ? '—' : r.medianKodkodTranslationMs + ' ms'; tr.appendChild(transTd);
         const outTd = document.createElement('td');
         const ocls = r.outcome === 'ERROR' ? 'error' : (outcomeFamily(r.outcome) === 'unsat' ? 'unsat' : 'sat');
         outTd.innerHTML = r.outcome === 'ERROR'
@@ -1534,8 +1534,9 @@
   }
   document.getElementById('footNote').innerHTML =
     `${MANIFEST.length} scenarios, ${RESULTS.length} (scenario, solver) benchmark cells, ${SOLVERS.length} solver backends. ` +
-    `"Time" is this benchmark's own wall-clock measurement around the whole validate() call; "Kodkod solve/translate" ` +
-    `is Kodkod's own internal Statistics, millisecond resolution, last-attempt only.` +
+    `"Time" is this benchmark's own wall-clock measurement around the backend's complete model-finder call; ` +
+    `"Solve/translate (backend-reported)" is shown only when a backend exposes that internal timing breakdown ` +
+    `(currently Kodkod, millisecond resolution, last-attempt only).` +
     (metaParts.length ? `<br>${metaParts.join(' &middot; ')}` : '');
 
   function renderAll() {

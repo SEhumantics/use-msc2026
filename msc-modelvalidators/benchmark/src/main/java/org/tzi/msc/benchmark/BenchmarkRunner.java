@@ -23,6 +23,12 @@ import org.tzi.use.kodkod.UseKodkodModelValidator;
 import org.tzi.use.kodkod.plugin.PluginModelFactory;
 import org.tzi.use.main.Session;
 import org.tzi.use.parser.use.USECompiler;
+import org.tzi.use.smt.config.AnalysisConfiguration;
+import org.tzi.use.smt.config.ConfigurationReader;
+import org.tzi.use.smt.config.ConfigurationVocabulary;
+import org.tzi.use.smt.config.RawConfiguration;
+import org.tzi.use.smt.finder.ModelFinderResult;
+import org.tzi.use.smt.finder.SmtModelFinder;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
 import org.tzi.use.uml.sys.MSystem;
@@ -77,6 +83,14 @@ import com.google.gson.GsonBuilder;
 public class BenchmarkRunner {
 
 	static final String[] SOLVERS = { "DefaultSAT4J", "LightSAT4J", "MiniSat", "MiniSatProver", "Lingeling" };
+	static final String SMT_SOLVER_NAME = "SMT-Z3";
+
+	/** {@link #SOLVERS} plus the SMT backend, for the compile-error fallback path only. */
+	private static List<String> allSolverNames() {
+		List<String> names = new ArrayList<>(Arrays.asList(SOLVERS));
+		names.add(SMT_SOLVER_NAME);
+		return names;
+	}
 
 	public static void main(String[] args) throws Exception {
 		if (args.length < 2) {
@@ -115,7 +129,7 @@ public class BenchmarkRunner {
 				// ERROR cell per solver for this example (so it's still visible in the report) and
 				// move on, instead of letting the exception propagate out of main().
 				System.err.println("  COMPILE ERROR for " + ex.id + ": " + e);
-				for (String solver : SOLVERS) {
+				for (String solver : allSolverNames()) {
 					SolverResult result = new SolverResult();
 					result.exampleId = ex.id;
 					result.solver = solver;
@@ -150,6 +164,23 @@ public class BenchmarkRunner {
 				System.err.printf("  %-15s outcome=%-14s wall(median/min/max)=%.2f/%.2f/%.2fms%n",
 						solver, result.outcome, result.medianWallMs, result.minWallMs, result.maxWallMs);
 			}
+
+			SolverResult smtResult;
+			try {
+				smtResult = runOneSmt(mModel, exDir, ex, effectiveRepeats, effectiveWarmups);
+			} catch (Exception e) {
+				System.err.println("  UNCAUGHT ERROR for " + ex.id + "/" + SMT_SOLVER_NAME + ": " + e);
+				smtResult = new SolverResult();
+				smtResult.exampleId = ex.id;
+				smtResult.solver = SMT_SOLVER_NAME;
+				smtResult.outcome = "ERROR";
+				smtResult.error = e.getClass().getSimpleName() + ": " + e.getMessage();
+			}
+			allResults.add(smtResult);
+			writeResults(allResults, outputJson);
+			System.err.printf("  %-15s outcome=%-14s wall(median/min/max)=%.2f/%.2f/%.2fms%n",
+					SMT_SOLVER_NAME, smtResult.outcome, smtResult.medianWallMs, smtResult.minWallMs,
+					smtResult.maxWallMs);
 		}
 
 		writeResults(allResults, outputJson);
@@ -181,6 +212,62 @@ public class BenchmarkRunner {
 		try (PrintWriter w = new PrintWriter(new FileWriter(outputJson, StandardCharsets.UTF_8))) {
 			w.write(outGson.toJson(allResults));
 		}
+	}
+
+	/**
+	 * SMT-backend counterpart to {@link #runOne}, structured the same way (repeat loop, warmups
+	 * discarded, one ERROR cell per failing repeat rather than aborting the run) but driving
+	 * {@link SmtModelFinder} instead of Kodkod -- an entirely separate configuration/solve pipeline
+	 * (see {@code KodkodSmtDifferentialTest}, which already proves both read the same {@code
+	 * .properties} file), not a plug-in point on {@link #runOne}. Most non-Library examples are
+	 * expected to report ERROR here: Phase 3's OCL translation coverage is real but partial (leaf
+	 * expressions, forAll/allInstances, single navigation/exists -- see the master plan), and {@code
+	 * ConfigurationReader.requireSupported()}/{@code FragmentChecker} fail closed rather than
+	 * silently approximating anything outside that. That is the honest, intended result of running
+	 * this against the full manifest, not a bug to hide.
+	 */
+	private static SolverResult runOneSmt(MModel mModel, File exDir, ExampleEntry ex, int repeats,
+			int warmups) {
+		SolverResult result = new SolverResult();
+		result.exampleId = ex.id;
+		result.solver = SMT_SOLVER_NAME;
+		result.repeats = repeats;
+		result.warmups = warmups;
+		result.numSearches = 1;
+		List<Double> wallMs = new ArrayList<>();
+		List<String> digests = new ArrayList<>();
+		String outcome = null;
+
+		for (int i = 0; i < warmups + repeats; i++) {
+			boolean isWarmup = i < warmups;
+			try {
+				ConfigurationVocabulary vocabulary = ConfigurationVocabulary.fromModel(mModel);
+				RawConfiguration raw = ConfigurationReader
+						.read(new File(exDir, ex.propertiesFile).toPath(), ex.section);
+				AnalysisConfiguration config = ConfigurationReader.normalize(raw, vocabulary).requireSupported();
+
+				long t0 = System.nanoTime();
+				ModelFinderResult finderResult = SmtModelFinder.find(mModel, config);
+				long t1 = System.nanoTime();
+				if (!isWarmup) {
+					wallMs.add((t1 - t0) / 1_000_000.0);
+				}
+
+				boolean sat = finderResult.allActiveInvariantsHold();
+				outcome = sat ? "SATISFIABLE" : "UNSATISFIABLE";
+				if (!isWarmup && sat) {
+					digests.add(WitnessDigest.digest(mModel, finderResult.system().state()));
+				}
+			} catch (Exception e) {
+				System.err.println("  " + (isWarmup ? "warmup " : "repeat ") + i + " failed: " + e);
+				result.outcome = "ERROR";
+				result.error = e.getClass().getSimpleName() + ": " + e.getMessage();
+				break;
+			}
+		}
+
+		finalizeResult(result, outcome, wallMs, List.of(), List.of(), digests);
+		return result;
 	}
 
 	private static MModel compile(File useFile) throws Exception {
