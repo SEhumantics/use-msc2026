@@ -24,25 +24,45 @@ import org.tzi.use.uml.sys.MSystem;
  * Rebuilds a real, live {@link MSystem} from a solved SMT assignment, going through the same
  * SOIL-backed {@link UseSystemApi} path {@code org.tzi.use.kodkod.solution.ObjectDiagramCreator}
  * uses for Kodkod -- so the state is built through USE's own supported, event-firing mutation API
- * (undo history, GUI redraw) rather than reaching into {@code MSystemState} directly, and a future
- * plugin action can reuse this unchanged.
+ * (undo history, GUI redraw) rather than reaching into {@code MSystemState} directly.
  */
 public final class SystemStateReconstructor {
   private SystemStateReconstructor() {}
 
+  /**
+   * Headless convenience: builds a throwaway {@link Session}/{@link MSystem} and reconstructs into
+   * it. Every unc-modelvalidator test uses this form.
+   */
   public static MSystem reconstruct(
       MModel model, TranslationContext context, Map<String, SmtValue> modelValues)
       throws UseApiException {
     Session session = new Session();
-    MSystem system = new MSystem(model);
-    session.setSystem(system);
+    session.setSystem(new MSystem(model));
+    return reconstruct(session, model, context, modelValues);
+  }
+
+  /**
+   * Reconstructs into the given {@link Session}'s own system instead of a throwaway one -- the form
+   * a live GUI plugin action must use, so the result becomes "the current session" the rest of USE
+   * (object diagram views, the class browser, undo history) already observes, rather than a system
+   * nothing is looking at. Mirrors {@code UseKodkodModelValidator.createObjectDiagram}: {@link
+   * Session#reset()} first (same {@link MSystem} instance, cleared to an empty state, firing the
+   * {@code ChangeEvent} that redraws already-open views), then repopulate via {@link
+   * UseSystemApi#create(Session)}. The session must already have a system attached whose model is
+   * {@code model} (i.e. {@link Session#hasSystem()} is true) -- a plugin action always has one,
+   * since USE cannot be driving invariants without a loaded specification.
+   */
+  public static MSystem reconstruct(
+      Session session, MModel model, TranslationContext context, Map<String, SmtValue> modelValues)
+      throws UseApiException {
+    session.reset();
     UseSystemApi api = UseSystemApi.create(session);
 
     Map<String, MObject> objectsBySlot = new LinkedHashMap<>();
     createObjects(api, model, context, modelValues, objectsBySlot);
     assignAttributes(api, model, context, modelValues, objectsBySlot);
     createLinks(api, model, context, modelValues, objectsBySlot);
-    return system;
+    return session.system();
   }
 
   private static void createObjects(

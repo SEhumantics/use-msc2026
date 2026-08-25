@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?use version="7.5.0"?>
+<plugin name="Unc-ModelValidatorPlugin" version="1.0.0" publisher="msc-4">
+	<actions>
+		<action label="SMT Validation"
+			icon="resources/smt.png"
+			class="org.tzi.use.smt.plugin.SmtValidatePropertyAction"
+			tooltip="Choose a properties file and validate the current model with the SMT (Z3) model finder."
+			menu="Model Validator"
+			menuitem="SMT Validation"
+			toolbaritem="plugins"
+			id="org.tzi.use.smt.plugin.SmtValidatePropertyAction">
+		</action>
+	</actions>
+</plugin>

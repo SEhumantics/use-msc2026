@@ -2,6 +2,7 @@ package org.tzi.use.smt.reconstruct;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
@@ -11,6 +12,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.Test;
+import org.tzi.use.api.UseSystemApi;
+import org.tzi.use.main.Session;
 import org.tzi.use.parser.use.USECompiler;
 import org.tzi.use.smt.config.AssociationScope;
 import org.tzi.use.smt.config.AttributeDomain;
@@ -24,6 +27,63 @@ import org.tzi.use.uml.sys.MSystem;
 import org.tzi.use.uml.sys.MSystemState;
 
 public class SystemStateReconstructorTest {
+
+  /**
+   * The overload a live GUI plugin action must use: proves both halves of that contract -- the
+   * session's pre-existing state (a stale object created before this call) is gone afterward, and
+   * the returned {@link MSystem} is the session's own instance, not a new one.
+   */
+  @Test
+  public void reconstructingIntoAnExistingSessionResetsItAndReusesTheSameSystemNotANewOne()
+      throws Exception {
+    MModel model = compileLibrary();
+
+    Session session = new Session();
+    MSystem originalSystem = new MSystem(model);
+    session.setSystem(originalSystem);
+    UseSystemApi.create(session).createObjectEx(model.getClass("User"), "StaleUser");
+    assertEquals(1, originalSystem.state().objectsOfClass(model.getClass("User")).size());
+
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots users =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("User", 1, 1))).get("User");
+    AttributeDomain nameDomain =
+        new AttributeDomain("User", "name", null, List.of("Ada"), null, null);
+    AttributeValues nameValues =
+        AttributeEncoder.encode(script, users, "name", AttributeType.STRING, nameDomain);
+    script.assertThat(Smt.sym("User_0_exists"));
+    script.assertThat(
+        Smt.eq(Smt.sym(nameValues.valueNames().get(0)), Smt.intLit(java.math.BigInteger.ZERO)));
+
+    SolverResult result =
+        new SolverProcess(SolverBinary.resolve(), Duration.ofSeconds(30)).run(script.toSmtLib());
+    assertEquals(SolverOutcome.SAT, result.outcome());
+    Map<String, SmtValue> modelValues = SmtModelParser.parse(result.modelText());
+
+    TranslationContext context =
+        new TranslationContext(
+            Map.of(),
+            Map.of("User.name", nameValues),
+            Map.of("User.name", nameDomain),
+            Map.of("User", users),
+            Map.of());
+
+    MSystem returned = SystemStateReconstructor.reconstruct(session, model, context, modelValues);
+
+    assertSame(
+        "must reuse the session's own MSystem instance, not construct a new one",
+        originalSystem,
+        returned);
+    MSystemState state = returned.state();
+    assertNull(
+        "the stale pre-existing object must be gone after reset", state.objectByName("StaleUser"));
+    assertEquals(1, state.objectsOfClass(model.getClass("User")).size());
+    assertEquals(
+        "Ada",
+        ((org.tzi.use.uml.ocl.value.StringValue)
+                state.objectByName("User0").state(state).attributeValue("name"))
+            .value());
+  }
 
   @Test
   public void aSolvedLibraryAssignmentReconstructsIntoARealLiveSystemState() throws Exception {

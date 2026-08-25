@@ -2,6 +2,8 @@ package org.tzi.use.smt.finder;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
@@ -11,6 +13,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import org.junit.Test;
+import org.tzi.use.api.UseSystemApi;
+import org.tzi.use.main.Session;
 import org.tzi.use.parser.use.USECompiler;
 import org.tzi.use.smt.config.AnalysisConfiguration;
 import org.tzi.use.smt.config.AssociationScope;
@@ -21,6 +25,7 @@ import org.tzi.use.smt.config.QueryExpr;
 import org.tzi.use.smt.config.RawConfiguration;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
+import org.tzi.use.uml.sys.MSystem;
 import org.tzi.use.uml.sys.MSystemState;
 
 /**
@@ -32,6 +37,34 @@ import org.tzi.use.uml.sys.MSystemState;
  * candidates against Book_min=Book_max=3, forcing a pigeonhole violation of Book_titleIsKey).
  */
 public class SmtModelFinderTest {
+
+  /**
+   * The overload a live GUI plugin action must use: proves the whole pipeline (encode, solve,
+   * reconstruct, re-evaluate) ends up targeting the caller's own session, not a throwaway one.
+   */
+  @Test
+  public void findingIntoAnExistingSessionReusesItsSystemInsteadOfAThrowawayOne() throws Exception {
+    MModel model = compileLibrary();
+    AnalysisConfiguration config = readConfig(model, null);
+
+    Session session = new Session();
+    MSystem originalSystem = new MSystem(model);
+    session.setSystem(originalSystem);
+    UseSystemApi.create(session).createObjectEx(model.getClass("User"), "StaleUser");
+
+    ModelFinderResult result = SmtModelFinder.find(session, model, config);
+
+    assertTrue("expected SAT", result.satisfiable());
+    assertSame(
+        "must reuse the session's own MSystem instance, not construct a new one",
+        originalSystem,
+        result.system());
+    MSystemState state = result.system().state();
+    assertNull(
+        "the stale pre-existing object must be gone after reconstruction",
+        state.objectByName("StaleUser"));
+    assertEquals(3, state.objectsOfClass(model.getClass("User")).size());
+  }
 
   @Test
   public void theRealLibraryPropertiesDefaultSectionIsSatisfiableWithAllInvariantsHolding()

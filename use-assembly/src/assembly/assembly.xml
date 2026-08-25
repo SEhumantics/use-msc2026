@@ -87,6 +87,13 @@
             </includes>
         </fileSet>
         <fileSet>
+            <directory>${project.basedir}/../msc-modelvalidators/unc-modelvalidator/target</directory>
+            <outputDirectory>lib/plugins</outputDirectory>
+            <includes>
+                <include>unc-modelvalidator-7.5.0-plugin.jar</include>
+            </includes>
+        </fileSet>
+        <fileSet>
             <!-- Runnable, verified KK-ModelValidator examples (see
                  benchmark/examples/README.md), covering plugin commands the
                  main USE examples above never exercise: mv -validate, -invIndep,

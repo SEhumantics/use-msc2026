@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.tzi.use.api.UseApiException;
+import org.tzi.use.main.Session;
 import org.tzi.use.smt.config.AnalysisConfiguration;
 import org.tzi.use.smt.config.AssociationScope;
 import org.tzi.use.smt.config.AttributeDomain;
@@ -14,6 +15,7 @@ import org.tzi.use.smt.encode.AttributeEncoder;
 import org.tzi.use.smt.encode.AttributeType;
 import org.tzi.use.smt.encode.AttributeValues;
 import org.tzi.use.smt.encode.FragmentChecker;
+import org.tzi.use.smt.encode.FragmentCoverageLedger;
 import org.tzi.use.smt.encode.Multiplicity;
 import org.tzi.use.smt.encode.ObjectSlotEncoder;
 import org.tzi.use.smt.encode.ObjectSlots;
@@ -51,8 +53,51 @@ import org.tzi.use.uml.sys.MSystem;
 public final class SmtModelFinder {
   private SmtModelFinder() {}
 
+  /** Solving is session-independent; only reconstruction (on SAT) needs a target session. */
+  private record Solved(
+      boolean satisfiable,
+      FragmentCoverageLedger ledger,
+      TranslationContext context,
+      Map<String, SmtValue> modelValues) {}
+
+  /**
+   * Headless convenience: reconstructs (on SAT) into a throwaway {@link Session}/system. Every
+   * unc-modelvalidator test and Task 3.8b's differential test use this form.
+   */
   public static ModelFinderResult find(MModel model, AnalysisConfiguration config)
       throws UseApiException {
+    Solved solved = solve(model, config);
+    if (!solved.satisfiable()) {
+      return new ModelFinderResult(false, solved.ledger(), List.of(), null);
+    }
+    MSystem system =
+        SystemStateReconstructor.reconstruct(model, solved.context(), solved.modelValues());
+    return finish(model, solved, system);
+  }
+
+  /**
+   * Reconstructs (on SAT) into the given {@link Session}'s own system instead of a throwaway one --
+   * the form a live GUI plugin action must use, so the result becomes visible as "the current
+   * session" rather than a system nothing is looking at.
+   */
+  public static ModelFinderResult find(Session session, MModel model, AnalysisConfiguration config)
+      throws UseApiException {
+    Solved solved = solve(model, config);
+    if (!solved.satisfiable()) {
+      return new ModelFinderResult(false, solved.ledger(), List.of(), null);
+    }
+    MSystem system =
+        SystemStateReconstructor.reconstruct(
+            session, model, solved.context(), solved.modelValues());
+    return finish(model, solved, system);
+  }
+
+  private static ModelFinderResult finish(MModel model, Solved solved, MSystem system) {
+    List<InvariantVerdict> verdicts = InvariantReEvaluator.reevaluate(model, system);
+    return new ModelFinderResult(true, solved.ledger(), verdicts, system);
+  }
+
+  private static Solved solve(MModel model, AnalysisConfiguration config) {
     SmtScript script = new SmtScript("QF_LIA");
 
     Map<String, ObjectSlots> slotsByClass = ObjectSlotEncoder.encode(script, config.classScopes());
@@ -133,13 +178,11 @@ public final class SmtModelFinder {
     SolverResult result =
         new SolverProcess(SolverBinary.resolve(), config.timeout()).run(script.toSmtLib());
     if (result.outcome() != SolverOutcome.SAT) {
-      return new ModelFinderResult(false, checked.ledger(), List.of(), null);
+      return new Solved(false, checked.ledger(), null, null);
     }
 
     Map<String, SmtValue> modelValues = SmtModelParser.parse(result.modelText());
-    MSystem system = SystemStateReconstructor.reconstruct(model, context, modelValues);
-    List<InvariantVerdict> verdicts = InvariantReEvaluator.reevaluate(model, system);
-    return new ModelFinderResult(true, checked.ledger(), verdicts, system);
+    return new Solved(true, checked.ledger(), context, modelValues);
   }
 
   private static AttributeType attributeTypeOf(Type type) {
