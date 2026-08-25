@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 import org.junit.Test;
@@ -11,12 +12,42 @@ import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.ClassScope;
 import org.tzi.use.smt.solver.Smt;
 import org.tzi.use.smt.solver.SmtScript;
+import org.tzi.use.smt.solver.SmtTerm;
 import org.tzi.use.smt.solver.SolverBinary;
 import org.tzi.use.smt.solver.SolverOutcome;
 import org.tzi.use.smt.solver.SolverProcess;
 import org.tzi.use.smt.solver.SolverResult;
 
 public class AttributeEncoderTest {
+  @Test
+  public void uRealValuesAndUncertaintiesAreIndependentlyConstrained() {
+    SmtScript s = new SmtScript("QF_LIRA");
+    ObjectSlots reading =
+        ObjectSlotEncoder.encode(s, List.of(new ClassScope("Reading", 1, 1))).get("Reading");
+    AttributeDomain valueDomain =
+        new AttributeDomain("Reading", "measurement", "value", List.of("0.31"), null, null);
+    AttributeDomain uncertaintyDomain =
+        new AttributeDomain("Reading", "measurement", "uncertainty", List.of("0.02"), null, null);
+
+    AttributeValues values =
+        AttributeEncoder.encodeUReal(s, reading, "measurement", valueDomain, uncertaintyDomain);
+
+    assertEquals(List.of("Reading_0_measurement_value"), values.valueNames());
+    assertEquals(List.of("Reading_0_measurement_uncertainty"), values.uncertaintyNames());
+    s.assertThat(Smt.sym("Reading_0_exists"));
+    SmtTerm wrongValue =
+        Smt.not(
+            Smt.eq(Smt.sym(values.valueNames().getFirst()), Smt.realLit(new BigDecimal("0.31"))));
+    SmtTerm wrongUncertainty =
+        Smt.not(
+            Smt.eq(
+                Smt.sym(values.uncertaintyNames().getFirst()),
+                Smt.realLit(new BigDecimal("0.02"))));
+    s.assertThat(Smt.or(List.of(wrongValue, wrongUncertainty)));
+
+    assertEquals(SolverOutcome.UNSAT, solve(s).outcome());
+  }
+
   @Test
   public void declaresOneValueConstantPerCandidateSlot() {
     SmtScript s = new SmtScript("QF_LIA");

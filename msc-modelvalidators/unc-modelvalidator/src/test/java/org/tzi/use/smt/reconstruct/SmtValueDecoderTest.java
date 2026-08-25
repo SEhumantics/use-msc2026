@@ -13,11 +13,23 @@ import org.tzi.use.uml.ocl.value.BooleanValue;
 import org.tzi.use.uml.ocl.value.IntegerValue;
 import org.tzi.use.uml.ocl.value.RealValue;
 import org.tzi.use.uml.ocl.value.StringValue;
+import org.tzi.use.uml.ocl.value.URealValue;
 
 public class SmtValueDecoderTest {
 
   private static final AttributeDomain NO_DOMAIN =
       new AttributeDomain("C", "a", null, List.of(), null, null);
+
+  @Test
+  public void aURealAttributeDecodesItsValueAndUncertaintyPair() {
+    URealValue decoded =
+        SmtValueDecoder.decodeUReal(
+            new SmtValue.Rational(BigInteger.valueOf(31), BigInteger.valueOf(100)),
+            new SmtValue.Rational(BigInteger.ONE, BigInteger.valueOf(50)));
+
+    assertEquals(0.31, decoded.value(), 0.0);
+    assertEquals(0.02, decoded.uncertainty(), 0.0);
+  }
 
   @Test
   public void aStringAttributeDecodesTheIntAsAnIndexIntoTheDomain() {

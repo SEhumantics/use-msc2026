@@ -1,0 +1,6 @@
+model URealRoundTrip
+
+class Reading
+attributes
+  measurement : UReal
+end
