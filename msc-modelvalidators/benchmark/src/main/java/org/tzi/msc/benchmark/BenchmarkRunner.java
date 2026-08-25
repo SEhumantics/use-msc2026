@@ -7,6 +7,7 @@ import java.io.FileWriter;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -29,6 +30,8 @@ import org.tzi.use.smt.config.ConfigurationVocabulary;
 import org.tzi.use.smt.config.RawConfiguration;
 import org.tzi.use.smt.finder.ModelFinderResult;
 import org.tzi.use.smt.finder.SmtModelFinder;
+import org.tzi.use.smt.solver.SolverBinary;
+import org.tzi.use.smt.solver.SolverProcess;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
 import org.tzi.use.uml.sys.MSystem;
@@ -115,7 +118,14 @@ public class BenchmarkRunner {
 		}
 
 		List<SolverResult> allResults = new ArrayList<>();
-		for (ExampleEntry ex : manifest.examples) {
+		// One persistent Z3 process, reused across every SMT-Z3 solve in this whole run instead of
+		// spawning a fresh OS process per call (see SolverProcess's own class javadoc for why: a
+		// fresh-process-per-call floor of ~13-20ms otherwise dominates every solve on small
+		// scenarios). Kodkod's own five backends are unaffected -- runOne's own solver calls are
+		// untouched.
+		try (SolverProcess smtSolverProcess =
+				SolverProcess.persistent(SolverBinary.resolve(), Duration.ofSeconds(30))) {
+			for (ExampleEntry ex : manifest.examples) {
 			if (ex.propertiesFile == null || !ex.mode.contains("finding")) {
 				continue; // validating-only examples don't touch a SAT solver at all
 			}
@@ -167,7 +177,7 @@ public class BenchmarkRunner {
 
 			SolverResult smtResult;
 			try {
-				smtResult = runOneSmt(mModel, exDir, ex, effectiveRepeats, effectiveWarmups);
+				smtResult = runOneSmt(mModel, exDir, ex, effectiveRepeats, effectiveWarmups, smtSolverProcess);
 			} catch (Exception e) {
 				System.err.println("  UNCAUGHT ERROR for " + ex.id + "/" + SMT_SOLVER_NAME + ": " + e);
 				smtResult = new SolverResult();
@@ -181,6 +191,7 @@ public class BenchmarkRunner {
 			System.err.printf("  %-15s outcome=%-14s wall(median/min/max)=%.2f/%.2f/%.2fms%n",
 					SMT_SOLVER_NAME, smtResult.outcome, smtResult.medianWallMs, smtResult.minWallMs,
 					smtResult.maxWallMs);
+			}
 		}
 
 		writeResults(allResults, outputJson);
@@ -227,7 +238,7 @@ public class BenchmarkRunner {
 	 * this against the full manifest, not a bug to hide.
 	 */
 	private static SolverResult runOneSmt(MModel mModel, File exDir, ExampleEntry ex, int repeats,
-			int warmups) {
+			int warmups, SolverProcess smtSolverProcess) {
 		SolverResult result = new SolverResult();
 		result.exampleId = ex.id;
 		result.solver = SMT_SOLVER_NAME;
@@ -247,7 +258,7 @@ public class BenchmarkRunner {
 				AnalysisConfiguration config = ConfigurationReader.normalize(raw, vocabulary).requireSupported();
 
 				long t0 = System.nanoTime();
-				ModelFinderResult finderResult = SmtModelFinder.find(mModel, config);
+				ModelFinderResult finderResult = SmtModelFinder.find(mModel, config, smtSolverProcess);
 				long t1 = System.nanoTime();
 				if (!isWarmup) {
 					wallMs.add((t1 - t0) / 1_000_000.0);

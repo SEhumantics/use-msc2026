@@ -23,6 +23,8 @@ import org.tzi.use.smt.config.ConfigurationReader;
 import org.tzi.use.smt.config.ConfigurationVocabulary;
 import org.tzi.use.smt.config.QueryExpr;
 import org.tzi.use.smt.config.RawConfiguration;
+import org.tzi.use.smt.solver.SolverBinary;
+import org.tzi.use.smt.solver.SolverProcess;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
 import org.tzi.use.uml.sys.MSystem;
@@ -98,6 +100,32 @@ public class SmtModelFinderTest {
 
     assertFalse("expected UNSAT", result.satisfiable());
     assertTrue("no witness to reconstruct on UNSAT", result.verdicts().isEmpty());
+  }
+
+  /**
+   * Proves the {@link SolverProcess}-accepting overload genuinely threads the caller's own instance
+   * through to the solve -- both the SAT default section and the UNSAT {@code titleCollision}
+   * section, back to back on the SAME persistent instance, must still reach the exact same real
+   * verdicts as the two tests above (which each use a fresh one-shot process internally). If this
+   * overload silently ignored the given process and constructed its own instead, this test would
+   * still pass by coincidence; {@code SolverProcessTest}'s own {@code
+   * reusingTheSameConstNameAcrossCallsIsIsolatedByReset} is what actually proves reuse-with-reset
+   * is safe at the SolverProcess layer -- this test is about the wiring above it.
+   */
+  @Test
+  public void findWithAnExternalSolverProcessReusesItAcrossSatAndUnsat() throws Exception {
+    MModel model = compileLibrary();
+    try (SolverProcess shared =
+        SolverProcess.persistent(SolverBinary.resolve(), Duration.ofSeconds(30))) {
+      AnalysisConfiguration satConfig = readConfig(model, null);
+      ModelFinderResult satResult = SmtModelFinder.find(model, satConfig, shared);
+      assertTrue("expected SAT", satResult.satisfiable());
+      assertTrue("expected every enforced invariant to hold", satResult.allActiveInvariantsHold());
+
+      AnalysisConfiguration unsatConfig = readConfig(model, "titleCollision");
+      ModelFinderResult unsatResult = SmtModelFinder.find(model, unsatConfig, shared);
+      assertFalse("expected UNSAT", unsatResult.satisfiable());
+    }
   }
 
   /**

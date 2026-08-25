@@ -69,7 +69,27 @@ public final class SmtModelFinder {
    */
   public static ModelFinderResult find(MModel model, AnalysisConfiguration config)
       throws UseApiException {
-    Solved solved = solve(model, config);
+    Solved solved = solve(model, config, null);
+    if (!solved.satisfiable()) {
+      return new ModelFinderResult(false, solved.ledger(), List.of(), null);
+    }
+    MSystem system =
+        SystemStateReconstructor.reconstruct(model, solved.context(), solved.modelValues());
+    return finish(model, solved, system);
+  }
+
+  /**
+   * Headless, reusing an externally-managed {@link SolverProcess} across many calls instead of
+   * spawning a fresh solver process per call -- the form a caller doing many solves in one run
+   * (like {@code BenchmarkRunner}) should use; see {@link SolverProcess#persistent} for why. The
+   * caller owns the given {@code SolverProcess}'s lifecycle (construct it once via {@link
+   * SolverProcess#persistent}, {@link SolverProcess#close} it when the whole run is done); this
+   * method neither constructs nor closes one itself.
+   */
+  public static ModelFinderResult find(
+      MModel model, AnalysisConfiguration config, SolverProcess solverProcess)
+      throws UseApiException {
+    Solved solved = solve(model, config, solverProcess);
     if (!solved.satisfiable()) {
       return new ModelFinderResult(false, solved.ledger(), List.of(), null);
     }
@@ -85,7 +105,7 @@ public final class SmtModelFinder {
    */
   public static ModelFinderResult find(Session session, MModel model, AnalysisConfiguration config)
       throws UseApiException {
-    Solved solved = solve(model, config);
+    Solved solved = solve(model, config, null);
     if (!solved.satisfiable()) {
       return new ModelFinderResult(false, solved.ledger(), List.of(), null);
     }
@@ -100,7 +120,8 @@ public final class SmtModelFinder {
     return new ModelFinderResult(true, solved.ledger(), verdicts, system);
   }
 
-  private static Solved solve(MModel model, AnalysisConfiguration config) {
+  private static Solved solve(
+      MModel model, AnalysisConfiguration config, SolverProcess externalSolverProcess) {
     SmtScript script = new SmtScript("QF_LIA");
 
     Map<String, ObjectSlots> slotsByClass = ObjectSlotEncoder.encode(script, config.classScopes());
@@ -208,8 +229,11 @@ public final class SmtModelFinder {
       script.assertThat(term);
     }
 
-    SolverResult result =
-        new SolverProcess(SolverBinary.resolve(), config.timeout()).run(script.toSmtLib());
+    SolverProcess solverProcess =
+        externalSolverProcess != null
+            ? externalSolverProcess
+            : new SolverProcess(SolverBinary.resolve(), config.timeout());
+    SolverResult result = solverProcess.run(script.toSmtLib());
     if (result.outcome() != SolverOutcome.SAT) {
       return new Solved(false, checked.ledger(), null, null);
     }

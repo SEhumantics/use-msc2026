@@ -1,24 +1,103 @@
 package org.tzi.use.smt.solver;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
-/** Runs SMT-LIB text through the pinned solver as a subprocess. */
-public final class SolverProcess {
+/**
+ * Runs SMT-LIB text through the pinned solver. Two modes, chosen at construction:
+ *
+ * <p><b>One-shot</b> (the public constructor, unchanged since Phase 1): a fresh OS process per
+ * {@link #run}, exactly as before -- correct in isolation, but a real fixed cost per call (process
+ * spawn plus two temp files) that dominates every solve on small scenarios, confirmed by direct
+ * measurement (see the persistent-mode task's own design rationale in the master plan).
+ *
+ * <p><b>Persistent</b> ({@link #persistent}): one {@code z3 -in} process kept alive and reused
+ * across every {@link #run} call on this instance, for a caller doing many solves in one run (see
+ * {@code BenchmarkRunner}). Every call sends {@code (reset)} first, so reusing a slot name like
+ * "Car_0" across two unrelated scripts is exactly as safe as two separate one-shot processes would
+ * be -- verified directly against this repository's own pinned Z3 binary before this was written,
+ * not assumed: {@code (reset)} genuinely clears all prior declarations and assertions, an {@code
+ * (echo "&lt;sentinel&gt;")} sentinel reliably delimits one call's output from the next even across
+ * a multi-line {@code (get-model)}, and Z3's own {@code (set-option :timeout ...)} genuinely aborts
+ * an individual {@code (check-sat)} (returning {@code unknown}) without killing the process, so
+ * later calls on the same instance still work. No Java-side per-call read timeout is layered on top
+ * of that: this repository already rejected same-JVM thread-interrupt-based timeouts as unsafe for
+ * exactly this reason (see {@code BenchmarkRunner}'s own class javadoc) and already relies on an
+ * outer OS-level {@code timeout} wrapper (see {@code scripts/run-benchmark.sh}) as the backstop for
+ * a solver that hangs despite its own configured budget -- persistent mode relies on that same
+ * existing backstop rather than inventing a second, riskier one. The one caveat that follows: every
+ * call sharing one persistent instance is bounded by that instance's own single, construction-time
+ * {@code timeout} value (no per-call override) -- not a real limitation on this project's own
+ * corpus today (no example configures a non-default {@code timeout}), recorded here rather than
+ * silently assumed.
+ *
+ * <p><b>Precondition: {@code smtLib} must be well-formed (balanced parentheses).</b> Z3's own
+ * {@code :timeout} option only bounds the SEARCH phase, not parsing -- reproduced directly, once,
+ * deliberately: feeding {@code -in} mode a script with an unclosed paren hangs the process
+ * indefinitely, since the parser is still waiting for more tokens to complete the expression and
+ * never reaches {@code (check-sat)} at all. {@code SmtScript#toSmtLib()} always emits balanced text
+ * by construction, so this is not reachable from any real caller in this codebase today; it is not
+ * handled defensively here because doing so would mean the same Java-side blocking-read timeout
+ * already rejected as unsafe elsewhere in this project (see above). A caller feeding this class
+ * raw, untrusted SMT-LIB text would need to validate it is well-formed first.
+ */
+public final class SolverProcess implements AutoCloseable {
 
   private final SolverBinary binary;
   private final Duration timeout;
+  private final boolean persistentMode;
+  private final AtomicLong sentinelCounter = new AtomicLong();
+  private Process persistentProcess;
+  private Writer persistentStdin;
+  private BufferedReader persistentStdout;
 
   public SolverProcess(SolverBinary binary, Duration timeout) {
+    this(binary, timeout, false);
+  }
+
+  private SolverProcess(SolverBinary binary, Duration timeout, boolean persistentMode) {
     this.binary = binary;
     this.timeout = timeout;
+    this.persistentMode = persistentMode;
+  }
+
+  public static SolverProcess persistent(SolverBinary binary, Duration timeout) {
+    return new SolverProcess(binary, timeout, true);
   }
 
   public SolverResult run(String smtLib) {
+    return persistentMode ? runPersistent(smtLib) : runOneShot(smtLib);
+  }
+
+  /** Releases the persistent process, if one was ever started. A no-op in one-shot mode. */
+  @Override
+  public void close() {
+    if (persistentProcess == null) {
+      return;
+    }
+    try {
+      persistentStdin.write("(exit)\n");
+      persistentStdin.flush();
+      persistentProcess.waitFor(2, TimeUnit.SECONDS);
+    } catch (IOException ignored) {
+      // Best-effort: the process is about to be force-killed below regardless.
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    } finally {
+      killPersistentProcess();
+    }
+  }
+
+  private SolverResult runOneShot(String smtLib) {
     Path scriptFile = null;
     Path outputFile = null;
     long started = System.nanoTime();
@@ -49,6 +128,69 @@ public final class SolverProcess {
       deleteQuietly(scriptFile);
       deleteQuietly(outputFile);
     }
+  }
+
+  private SolverResult runPersistent(String smtLib) {
+    long started = System.nanoTime();
+    try {
+      ensurePersistentProcessAlive();
+      String sentinel = "msc-smt-done-" + sentinelCounter.incrementAndGet();
+      persistentStdin.write("(reset)\n");
+      persistentStdin.write("(set-option :timeout " + timeout.toMillis() + ")\n");
+      persistentStdin.write(smtLib);
+      persistentStdin.write('\n');
+      persistentStdin.write("(echo \"" + sentinel + "\")\n");
+      persistentStdin.flush();
+
+      StringBuilder output = new StringBuilder();
+      String line;
+      while ((line = persistentStdout.readLine()) != null) {
+        if (line.strip().equals(sentinel)) {
+          long millis = (System.nanoTime() - started) / 1_000_000L;
+          return classify(output.toString(), millis);
+        }
+        output.append(line).append('\n');
+      }
+      // EOF before the sentinel: the process died mid-response. The next call transparently
+      // starts a fresh one (see ensurePersistentProcessAlive); this call reports what little
+      // output there was.
+      killPersistentProcess();
+      long millis = (System.nanoTime() - started) / 1_000_000L;
+      return new SolverResult(SolverOutcome.MALFORMED, output.toString(), "", millis);
+    } catch (IOException e) {
+      killPersistentProcess();
+      throw new SolverConfigurationException(
+          "Failed to run " + binary.path() + " (persistent mode)", e);
+    }
+  }
+
+  private void ensurePersistentProcessAlive() throws IOException {
+    if (persistentProcess != null && persistentProcess.isAlive()) {
+      return;
+    }
+    // stderr is routed straight to this JVM's own stderr (not merged into stdout, and not left as
+    // an unread pipe either) -- merging would risk a stray warning line landing between a
+    // response and its sentinel and corrupting the parse; leaving it as a separate, undrained pipe
+    // risks a classic subprocess deadlock if Z3 ever writes enough to fill that pipe's buffer.
+    persistentProcess =
+        new ProcessBuilder(binary.path().toString(), "-in")
+            .redirectError(ProcessBuilder.Redirect.INHERIT)
+            .start();
+    persistentStdin =
+        new OutputStreamWriter(persistentProcess.getOutputStream(), StandardCharsets.UTF_8);
+    persistentStdout =
+        new BufferedReader(
+            new InputStreamReader(persistentProcess.getInputStream(), StandardCharsets.UTF_8));
+  }
+
+  private void killPersistentProcess() {
+    if (persistentProcess == null) {
+      return;
+    }
+    persistentProcess.destroyForcibly();
+    persistentProcess = null;
+    persistentStdin = null;
+    persistentStdout = null;
   }
 
   private static SolverResult classify(String output, long millis) {
