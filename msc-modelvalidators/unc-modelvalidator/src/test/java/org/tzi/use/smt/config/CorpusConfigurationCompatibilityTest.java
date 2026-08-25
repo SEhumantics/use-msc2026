@@ -14,7 +14,7 @@ import org.junit.Test;
 public class CorpusConfigurationCompatibilityTest {
 
   @Test
-  public void allThirtyThreeManifestConfigurationsLoad() throws Exception {
+  public void allThirtySevenManifestConfigurationsLoad() throws Exception {
     Path repository = repositoryRoot();
     Path manifest =
         repository.resolve("msc-modelvalidators/benchmark/src/main/resources/manifest.json");
@@ -38,7 +38,7 @@ public class CorpusConfigurationCompatibilityTest {
       loaded++;
     }
 
-    assertEquals("manifest corpus size", 33, loaded);
+    assertEquals("manifest corpus size", 37, loaded);
   }
 
   private static Path repositoryRoot() {
