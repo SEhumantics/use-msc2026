@@ -8,7 +8,8 @@ public record TranslationContext(
     Map<String, VariableBinding> variables,
     Map<String, AttributeValues> attributes,
     Map<String, AttributeDomain> domains,
-    Map<String, ObjectSlots> slotsByClass) {
+    Map<String, ObjectSlots> slotsByClass,
+    Map<String, AssociationLinks> linksByAssociation) {
   public AttributeValues attributeValues(String className, String attributeName) {
     return require(attributes, className, attributeName, "attribute values");
   }
@@ -33,11 +34,19 @@ public record TranslationContext(
     return slots;
   }
 
+  public AssociationLinks linksFor(String associationName) {
+    AssociationLinks links = linksByAssociation.get(associationName);
+    if (links == null) {
+      throw new SmtTranslationException("no association links registered for " + associationName);
+    }
+    return links;
+  }
+
   /** Returns a new context with one additional (or replaced) variable binding. */
   public TranslationContext withBinding(String variableName, VariableBinding binding) {
     Map<String, VariableBinding> extended = new LinkedHashMap<>(variables);
     extended.put(variableName, binding);
-    return new TranslationContext(extended, attributes, domains, slotsByClass);
+    return new TranslationContext(extended, attributes, domains, slotsByClass, linksByAssociation);
   }
 
   private static <T> T require(

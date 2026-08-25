@@ -34,6 +34,7 @@ public class ExpressionTranslatorTest {
                 Map.of("b", new VariableBinding("Book", 0)),
                 Map.of("Book.year", v),
                 Map.of("Book.year", d),
+                Map.of(),
                 Map.of()));
     s.assertThat(Smt.sym("Book_0_exists"));
     s.assertThat(t);
@@ -60,6 +61,7 @@ public class ExpressionTranslatorTest {
                 Map.of("u", new VariableBinding("User", 0)),
                 Map.of("User.name", nv, "User.address", av),
                 Map.of("User.name", nd, "User.address", ad),
+                Map.of(),
                 Map.of()));
     s.assertThat(Smt.sym("User_0_exists"));
     s.assertThat(Smt.not(t));
@@ -82,6 +84,7 @@ public class ExpressionTranslatorTest {
                 Map.of("b", new VariableBinding("Book", 0)),
                 Map.of("Book.title", v),
                 Map.of("Book.title", d),
+                Map.of(),
                 Map.of()));
     s.assertThat(Smt.sym("Book_0_exists"));
     s.assertThat(t);
@@ -104,6 +107,7 @@ public class ExpressionTranslatorTest {
                 Map.of("c", new VariableBinding("Copy", 0)),
                 Map.of("Copy.signature", v),
                 Map.of("Copy.signature", d),
+                Map.of(),
                 Map.of()));
     s.assertThat(Smt.sym("Copy_0_exists"));
     s.assertThat(t);
@@ -125,6 +129,7 @@ public class ExpressionTranslatorTest {
                 Map.of("b", new VariableBinding("Book", 0)),
                 Map.of("Book.auth", v),
                 Map.of("Book.auth", d),
+                Map.of(),
                 Map.of()));
     s.assertThat(Smt.sym("Book_0_exists"));
     s.assertThat(t);
@@ -139,7 +144,7 @@ public class ExpressionTranslatorTest {
         () ->
             ExpressionTranslator.translate(
                 inv.bodyExpression(),
-                new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of())));
+                new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of(), Map.of())));
   }
 
   private static MModel compileLibrary() throws Exception {

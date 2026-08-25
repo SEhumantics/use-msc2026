@@ -84,7 +84,46 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       return Smt.bool(context.binding(lv.getVarname()).equals(context.binding(rv.getVarname())));
     if (l instanceof ExpConstString s) return Smt.eq(resolve(s, r), arg(r));
     if (r instanceof ExpConstString s) return Smt.eq(arg(l), resolve(s, l));
+    if (l instanceof ExpNavigation ln
+        && r instanceof ExpNavigation rn
+        && !ln.getDestination().isCollection()
+        && !rn.getDestination().isCollection()) return navigationEquals(ln, rn);
     return Smt.eq(arg(l), arg(r));
+  }
+
+  /**
+   * Single-valued navigation has no standalone SmtTerm (it names a linked object, not a value), so
+   * equality between two of them ("c1.book = c2.book") is resolved as its own shape: there exists a
+   * target slot both sides link to. The target association's own multiplicity (e.g. BelongsTo's
+   * Book end [1]) already guarantees at most one such slot per source, via Task 3.2's degree
+   * constraint -- this only needs to find it, not enforce uniqueness itself.
+   */
+  private SmtTerm navigationEquals(ExpNavigation left, ExpNavigation right) {
+    String destClass = left.getDestination().cls().name();
+    AssociationLinks links = context.linksFor(left.getDestination().association().name());
+    ObjectSlots destSlots = context.slotsFor(destClass);
+    VariableBinding leftSource = context.binding(variableNameOf(left.getObjectExpression()));
+    VariableBinding rightSource = context.binding(variableNameOf(right.getObjectExpression()));
+    List<SmtTerm> sharedTarget = new ArrayList<>();
+    for (int k = 0; k < destSlots.capacity(); k++) {
+      sharedTarget.add(
+          Smt.and(List.of(linkTerm(links, leftSource, k), linkTerm(links, rightSource, k))));
+    }
+    return Smt.or(sharedTarget);
+  }
+
+  /**
+   * Resolves which side of {@code links} a source binding is on, and returns the SMT term for its
+   * link to candidate slot {@code otherIndex}. Fails closed if the source's class matches neither
+   * end (a reflexive association, which Library does not have and this slice does not support).
+   */
+  private SmtTerm linkTerm(AssociationLinks links, VariableBinding source, int otherIndex) {
+    if (links.aEnd().className().equals(source.className()))
+      return Smt.sym(links.linkNames()[source.slotIndex()][otherIndex]);
+    if (links.bEnd().className().equals(source.className()))
+      return Smt.sym(links.linkNames()[otherIndex][source.slotIndex()]);
+    throw unsupported(
+        "association " + links.associationName() + " does not connect class " + source.className());
   }
 
   private SmtTerm resolve(ExpConstString literal, Expression other) {
@@ -180,9 +219,44 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     throw unsupported("empty collection");
   }
 
+  /**
+   * Only "source.role->exists(v1, v2 | body)" with exactly two loop variables ranging over the SAME
+   * collection-valued navigation is supported -- the shape noDoubleBorrowings needs. Unlike
+   * ForAll's per-slot existence guard, this needs a full cross product: OCL's exists ranges over
+   * ALL pairs, including v1==v2 (the body's own "&lt;&gt;" check, where present, excludes that case
+   * -- it is not excluded here). Link membership is an SMT term, not a Java boolean, so every
+   * candidate pair contributes one disjunct guarded by both link memberships, not a compile-time
+   * skip.
+   */
   @Override
   public void visitExists(ExpExists e) {
-    throw unsupported("exists");
+    if (e.getVariableDeclarations().size() != 2)
+      throw unsupported("exists with a variable count other than two");
+    if (!(e.getRangeExpression() instanceof ExpNavigation range))
+      throw unsupported("exists over a range other than a collection-valued navigation");
+    if (!range.getDestination().isCollection())
+      throw unsupported("exists over a single-valued navigation");
+    VariableBinding source = context.binding(variableNameOf(range.getObjectExpression()));
+    String destClass = range.getDestination().cls().name();
+    AssociationLinks links = context.linksFor(range.getDestination().association().name());
+    ObjectSlots destSlots = context.slotsFor(destClass);
+    String var1 = e.getVariableDeclarations().varDecl(0).name();
+    String var2 = e.getVariableDeclarations().varDecl(1).name();
+
+    List<SmtTerm> disjuncts = new ArrayList<>();
+    for (int i = 0; i < destSlots.capacity(); i++) {
+      SmtTerm link1 = linkTerm(links, source, i);
+      for (int j = 0; j < destSlots.capacity(); j++) {
+        SmtTerm link2 = linkTerm(links, source, j);
+        TranslationContext extended =
+            context
+                .withBinding(var1, new VariableBinding(destClass, i))
+                .withBinding(var2, new VariableBinding(destClass, j));
+        SmtTerm body = translate(e.getQueryExpression(), extended);
+        disjuncts.add(Smt.and(List.of(link1, link2, body)));
+      }
+    }
+    result = Smt.or(disjuncts);
   }
 
   @Override

@@ -38,7 +38,8 @@ public class ForAllTranslationTest {
             Map.of("b1", new VariableBinding("Book", 0)),
             Map.of("Book.title", titleValues),
             Map.of("Book.title", titleDomain),
-            Map.of("Book", books));
+            Map.of("Book", books),
+            Map.of());
     var translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx);
 
     script.assertThat(Smt.sym("Book_0_exists"));
@@ -69,7 +70,8 @@ public class ForAllTranslationTest {
             Map.of("b1", new VariableBinding("Book", 0)),
             Map.of("Book.title", titleValues),
             Map.of("Book.title", titleDomain),
-            Map.of("Book", books));
+            Map.of("Book", books),
+            Map.of());
     var translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx);
 
     script.assertThat(Smt.sym("Book_0_exists"));
@@ -99,7 +101,8 @@ public class ForAllTranslationTest {
             Map.of("b1", new VariableBinding("Book", 0)),
             Map.of("Book.title", titleValues),
             Map.of("Book.title", titleDomain),
-            Map.of("Book", books));
+            Map.of("Book", books),
+            Map.of());
     var translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx);
 
     script.assertThat(Smt.sym("Book_0_exists"));
@@ -130,7 +133,8 @@ public class ForAllTranslationTest {
             Map.of("u1", new VariableBinding("User", 0)),
             Map.of("User.name", nameValues),
             Map.of("User.name", nameDomain),
-            Map.of("User", users));
+            Map.of("User", users),
+            Map.of());
     var translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx);
 
     script.assertThat(Smt.sym("User_0_exists"));
@@ -162,7 +166,8 @@ public class ForAllTranslationTest {
             Map.of("c1", new VariableBinding("Copy", 0)),
             Map.of("Copy.signature", sigValues),
             Map.of("Copy.signature", sigDomain),
-            Map.of("Copy", copies));
+            Map.of("Copy", copies),
+            Map.of());
     var translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx);
 
     script.assertThat(Smt.sym("Copy_0_exists"));
