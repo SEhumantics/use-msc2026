@@ -1230,6 +1230,106 @@
         "per-object-attribute-binding-bug",
         "paired-unsat-mutation"
       ]
+    },
+    {
+      "id": "URealThreshold-Below",
+      "directory": "URealThreshold",
+      "useFile": "ReliablyFast.use",
+      "propertiesFile": "ReliablyFast.properties",
+      "section": "below",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "SOICT S4 boundary case authored from the real USE UReal evaluator transition. The representative is the lower endpoint of the recorded evaluator-derived enclosure and therefore must fail the 0.95 confidence threshold.",
+      "provenanceCitation": null,
+      "features": [],
+      "question": "Does the uncertainty-aware model finder reject the representative immediately below the evaluator-derived 95% threshold for speed=UReal(mu,0.02)?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "scenarioTags": [
+        "ureal-threshold",
+        "evaluator-boundary",
+        "below-boundary"
+      ]
+    },
+    {
+      "id": "URealThreshold-At",
+      "directory": "URealThreshold",
+      "useFile": "ReliablyFast.use",
+      "propertiesFile": "ReliablyFast.properties",
+      "section": "at",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "SOICT S4 boundary case authored from the real USE UReal evaluator transition. The representative is the conservative upper endpoint used by the positive-polarity SMT translation.",
+      "provenanceCitation": null,
+      "features": [],
+      "question": "Does the uncertainty-aware model finder accept the conservative at-boundary representative for speed=UReal(mu,0.02), with USE independently confirming the reconstructed witness?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "scenarioTags": [
+        "ureal-threshold",
+        "evaluator-boundary",
+        "at-boundary"
+      ]
+    },
+    {
+      "id": "URealThreshold-Above",
+      "directory": "URealThreshold",
+      "useFile": "ReliablyFast.use",
+      "propertiesFile": "ReliablyFast.properties",
+      "section": "above",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "SOICT S4 boundary case immediately above the real USE UReal evaluator transition.",
+      "provenanceCitation": null,
+      "features": [],
+      "question": "Does the uncertainty-aware model finder accept a representative immediately above the evaluator-derived 95% threshold for speed=UReal(mu,0.02)?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "scenarioTags": [
+        "ureal-threshold",
+        "evaluator-boundary",
+        "above-boundary"
+      ]
+    },
+    {
+      "id": "URealThreshold-NominalErasure",
+      "directory": "URealThreshold",
+      "useFile": "ReliablyFast.use",
+      "propertiesFile": "ReliablyFast.properties",
+      "section": "nominalErasure",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "SOICT S4 discrepancy witness: nominal erasure accepts 0.31 > 0.30, while USE's UReal evaluator assigns only about 0.69146 probability and rejects the required 0.95 confidence.",
+      "provenanceCitation": null,
+      "features": [],
+      "question": "Does uncertainty-aware evaluation reject speed=UReal(0.31,0.02) even though erasing uncertainty would make the crisp comparison 0.31 > 0.30 true?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "scenarioTags": [
+        "ureal-threshold",
+        "nominal-erasure-discrepancy",
+        "fragile-witness"
+      ]
     }
   ]
 }
