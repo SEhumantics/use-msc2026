@@ -111,34 +111,76 @@ def render(matrix, scenario_count):
             lines.append(f"- **{esc(p['name'])}**: {evaluated}/{total_features} evaluated -- {parts}.")
     lines.append("")
 
+    # The main per-area table renders one plugin in full (status/SAT/UNSAT/oracle/evidence) --
+    # the first plugin registered, by convention. Every OTHER plugin gets a compact extra status
+    # column in that same table (so a side-by-side comparison is visible at a glance) plus its own
+    # full evidence in a per-area <details> block (so nothing is lost, without making the main
+    # table unreadably wide with N plugins x 5 columns each).
     primary_plugin = plugins[0]["id"] if plugins else None
+    secondary_plugins = plugins[1:]
     for area in areas:
         lines.append(f"## {esc(area['name'])}")
         lines.append("")
-        lines.append("| Feature ID | Name | Status | SAT | UNSAT | Oracle | Evidence |")
-        lines.append("|---|---|---|---|---|---|---|")
+        header = ["Feature ID", "Name", "Status", "SAT", "UNSAT", "Oracle", "Evidence"]
+        for p in secondary_plugins:
+            header.append(f"{esc(p['name'])} status")
+        lines.append("| " + " | ".join(header) + " |")
+        lines.append("|" + "---|" * len(header))
         zero_coverage = []
+        secondary_evidence = {p["id"]: [] for p in secondary_plugins}
         for f in area["features"]:
             sup = f["support"].get(primary_plugin) if primary_plugin else None
+            row_prefix = f"| `{f['id']}` | {esc(f['name'])} | "
             if not sup:
-                lines.append(f"| `{f['id']}` | {esc(f['name'])} | Unverified | \u2014 | \u2014 | \u2014 | \u2014 |")
-                continue
-            sat = sup.get("satScenarioIds") or []
-            unsat = sup.get("unsatScenarioIds") or []
-            val = sup.get("validationOracleScenarioIds") or []
-            if not (sat or unsat or val):
-                zero_coverage.append((f["id"], sup.get("coverageNote", "") or "zero coverage"))
-            lines.append(
-                f"| `{f['id']}` | {esc(f['name'])} | {STATUS_LABEL.get(sup['status'], esc(sup['status']))} | "
-                f"{esc(join_ids(sat))} | {esc(join_ids(unsat))} | {esc(join_ids(val))} | "
-                f"{esc(truncate(sup.get('evidence', '')))} |"
-            )
+                row = row_prefix + "Unverified | \u2014 | \u2014 | \u2014 | \u2014 |"
+            else:
+                sat = sup.get("satScenarioIds") or []
+                unsat = sup.get("unsatScenarioIds") or []
+                val = sup.get("validationOracleScenarioIds") or []
+                if not (sat or unsat or val):
+                    zero_coverage.append((f["id"], sup.get("coverageNote", "") or "zero coverage"))
+                row = (
+                    row_prefix
+                    + f"{STATUS_LABEL.get(sup['status'], esc(sup['status']))} | "
+                    f"{esc(join_ids(sat))} | {esc(join_ids(unsat))} | {esc(join_ids(val))} | "
+                    f"{esc(truncate(sup.get('evidence', '')))} |"
+                )
+            for p in secondary_plugins:
+                sec = f["support"].get(p["id"])
+                if sec:
+                    row += f" {STATUS_LABEL.get(sec['status'], esc(sec['status']))} |"
+                    secondary_evidence[p["id"]].append((f["id"], f["name"], sec))
+                else:
+                    row += " Unverified |"
+            lines.append(row)
         lines.append("")
         if zero_coverage:
             lines.append(f"<details><summary>Zero-coverage features in this area ({len(zero_coverage)})</summary>")
             lines.append("")
             for fid, note in zero_coverage:
                 lines.append(f"- `{fid}` \u2014 {esc(note)}")
+            lines.append("")
+            lines.append("</details>")
+            lines.append("")
+        for p in secondary_plugins:
+            entries = secondary_evidence[p["id"]]
+            if not entries:
+                continue
+            lines.append(
+                f"<details><summary>{esc(p['name'])} evidence for this area ({len(entries)})</summary>"
+            )
+            lines.append("")
+            lines.append("| Feature ID | Name | Status | SAT | UNSAT | Oracle | Evidence |")
+            lines.append("|---|---|---|---|---|---|---|")
+            for fid, fname, sec in entries:
+                sat = sec.get("satScenarioIds") or []
+                unsat = sec.get("unsatScenarioIds") or []
+                val = sec.get("validationOracleScenarioIds") or []
+                lines.append(
+                    f"| `{fid}` | {esc(fname)} | {STATUS_LABEL.get(sec['status'], esc(sec['status']))} | "
+                    f"{esc(join_ids(sat))} | {esc(join_ids(unsat))} | {esc(join_ids(val))} | "
+                    f"{esc(truncate(sec.get('evidence', '')))} |"
+                )
             lines.append("")
             lines.append("</details>")
             lines.append("")
