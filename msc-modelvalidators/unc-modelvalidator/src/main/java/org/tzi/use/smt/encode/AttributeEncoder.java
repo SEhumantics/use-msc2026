@@ -32,17 +32,63 @@ public final class AttributeEncoder {
         case STRING -> guardString(script, exists, value, domain, owner.className(), attributeName);
         case INTEGER ->
             guardInteger(script, exists, value, domain, owner.className(), attributeName);
-        case REAL -> guardRange(script, exists, value, domain, false);
+        case REAL -> guardReal(script, exists, value, domain, owner.className(), attributeName);
+        case UREAL ->
+            throw new IllegalArgumentException(
+                "UReal attribute '"
+                    + owner.className()
+                    + "."
+                    + attributeName
+                    + "' requires paired value/uncertainty domains");
         case BOOLEAN -> {}
       }
     }
-    return new AttributeValues(owner.className(), attributeName, names);
+    return new AttributeValues(owner.className(), attributeName, type, names, List.of());
+  }
+
+  /** Encodes the nominal and uncertainty components of one UReal as a same-slot SMT pair. */
+  public static AttributeValues encodeUReal(
+      SmtScript script,
+      ObjectSlots owner,
+      String attributeName,
+      AttributeDomain valueDomain,
+      AttributeDomain uncertaintyDomain) {
+    requireComponent(valueDomain, owner.className(), attributeName, "value");
+    requireComponent(uncertaintyDomain, owner.className(), attributeName, "uncertainty");
+    List<String> valueNames = new ArrayList<>();
+    List<String> uncertaintyNames = new ArrayList<>();
+    for (int i = 0; i < owner.capacity(); i++) {
+      String stem = owner.className() + "_" + i + "_" + attributeName;
+      String valueName = stem + "_value";
+      String uncertaintyName = stem + "_uncertainty";
+      script.declareConst(valueName, SmtSort.REAL);
+      script.declareConst(uncertaintyName, SmtSort.REAL);
+      valueNames.add(valueName);
+      uncertaintyNames.add(uncertaintyName);
+      SmtTerm exists = Smt.sym(owner.existsNames().get(i));
+      guardReal(
+          script,
+          exists,
+          Smt.sym(valueName),
+          valueDomain,
+          owner.className(),
+          attributeName + ".value");
+      guardReal(
+          script,
+          exists,
+          Smt.sym(uncertaintyName),
+          uncertaintyDomain,
+          owner.className(),
+          attributeName + ".uncertainty");
+    }
+    return new AttributeValues(
+        owner.className(), attributeName, AttributeType.UREAL, valueNames, uncertaintyNames);
   }
 
   private static SmtSort sort(AttributeType type) {
     return switch (type) {
       case STRING, INTEGER -> SmtSort.INT;
-      case REAL -> SmtSort.REAL;
+      case REAL, UREAL -> SmtSort.REAL;
       case BOOLEAN -> SmtSort.BOOL;
     };
   }
@@ -70,6 +116,18 @@ public final class AttributeEncoder {
     guardRange(s, exists, value, d, true);
   }
 
+  private static void guardReal(
+      SmtScript s, SmtTerm exists, SmtTerm value, AttributeDomain d, String cls, String attr) {
+    if (!d.enumeratedValues().isEmpty()) {
+      List<SmtTerm> options = new ArrayList<>();
+      for (String candidate : d.enumeratedValues()) {
+        options.add(Smt.eq(value, Smt.realLit(parseDecimal(candidate, cls, attr))));
+      }
+      s.assertThat(Smt.app("=>", exists, Smt.or(options)));
+    }
+    guardRange(s, exists, value, d, false);
+  }
+
   private static void guardRange(
       SmtScript s, SmtTerm exists, SmtTerm value, AttributeDomain d, boolean integer) {
     List<SmtTerm> bounds = new ArrayList<>();
@@ -89,6 +147,23 @@ public final class AttributeEncoder {
       throw new IllegalArgumentException(
           "invalid integer candidate '" + candidate + "' for attribute '" + cls + "." + attr + "'",
           e);
+    }
+  }
+
+  private static BigDecimal parseDecimal(String candidate, String cls, String attr) {
+    try {
+      return new BigDecimal(candidate);
+    } catch (NumberFormatException e) {
+      throw new IllegalArgumentException(
+          "invalid real candidate '" + candidate + "' for attribute '" + cls + "." + attr + "'", e);
+    }
+  }
+
+  private static void requireComponent(
+      AttributeDomain domain, String className, String attributeName, String component) {
+    if (!attributeName.equals(domain.attributeName()) || !component.equals(domain.component())) {
+      throw new IllegalArgumentException(
+          "expected " + className + "." + attributeName + "_" + component + " domain");
     }
   }
 }

@@ -4,5 +4,6 @@ public enum AttributeType {
   STRING,
   INTEGER,
   REAL,
+  UREAL,
   BOOLEAN
 }

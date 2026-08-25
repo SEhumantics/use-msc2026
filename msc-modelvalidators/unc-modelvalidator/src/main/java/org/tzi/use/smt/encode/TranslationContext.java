@@ -18,6 +18,15 @@ public record TranslationContext(
     return require(domains, className, attributeName, "attribute domain");
   }
 
+  public AttributeDomain attributeDomain(String className, String attributeName, String component) {
+    AttributeDomain domain = domains.get(className + "." + attributeName + "." + component);
+    if (domain == null) {
+      throw new SmtTranslationException(
+          "no " + component + " domain registered for " + className + "." + attributeName);
+    }
+    return domain;
+  }
+
   public VariableBinding binding(String variableName) {
     VariableBinding binding = variables.get(variableName);
     if (binding == null) {

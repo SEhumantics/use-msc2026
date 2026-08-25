@@ -57,6 +57,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   public void visitAttrOp(ExpAttrOp e) {
     VariableBinding b = context.binding(variableNameOf(e.objExp()));
     AttributeValues v = context.attributeValues(b.className(), e.attr().name());
+    if (v.type() == AttributeType.UREAL) {
+      throw unsupported("bare UReal attribute access outside a supported threshold comparison");
+    }
     result = Smt.sym(v.valueNames().get(b.slotIndex()));
   }
 

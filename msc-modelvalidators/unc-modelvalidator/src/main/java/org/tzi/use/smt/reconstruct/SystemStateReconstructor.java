@@ -8,6 +8,7 @@ import org.tzi.use.api.UseSystemApi;
 import org.tzi.use.main.Session;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.encode.AssociationLinks;
+import org.tzi.use.smt.encode.AttributeType;
 import org.tzi.use.smt.encode.AttributeValues;
 import org.tzi.use.smt.encode.ObjectSlots;
 import org.tzi.use.smt.encode.TranslationContext;
@@ -104,8 +105,14 @@ public final class SystemStateReconstructor {
           continue;
         }
         SmtValue raw = modelValues.get(values.valueNames().get(i));
-        api.setAttributeValueEx(
-            object, attribute, SmtValueDecoder.decode(raw, attribute.type(), domain));
+        if (values.type() == AttributeType.UREAL) {
+          SmtValue rawUncertainty = modelValues.get(values.uncertaintyNames().get(i));
+          api.setAttributeValueEx(
+              object, attribute, SmtValueDecoder.decodeUReal(raw, rawUncertainty));
+        } else {
+          api.setAttributeValueEx(
+              object, attribute, SmtValueDecoder.decode(raw, attribute.type(), domain));
+        }
       }
     }
   }

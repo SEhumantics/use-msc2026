@@ -122,14 +122,24 @@ public final class SmtModelFinder {
 
   private static Solved solve(
       MModel model, AnalysisConfiguration config, SolverProcess externalSolverProcess) {
-    SmtScript script = new SmtScript("QF_LIA");
+    SmtScript script = new SmtScript("QF_LIRA");
 
     Map<String, ObjectSlots> slotsByClass = ObjectSlotEncoder.encode(script, config.classScopes());
 
     Set<String> explicitlyDeclaredAttributes = new HashSet<>();
     for (AttributeDomain domain : config.attributeDomains()) {
-      if (domain.component() == null && !domain.className().isEmpty()) {
+      if (!domain.className().isEmpty()) {
         explicitlyDeclaredAttributes.add(domain.className() + "." + domain.attributeName());
+      }
+    }
+
+    Map<String, Map<String, AttributeDomain>> componentDomainsByAttribute = new LinkedHashMap<>();
+    for (AttributeDomain domain : config.attributeDomains()) {
+      if (domain.component() != null && !domain.className().isEmpty()) {
+        String key = domain.className() + "." + domain.attributeName();
+        componentDomainsByAttribute
+            .computeIfAbsent(key, ignored -> new LinkedHashMap<>())
+            .put(domain.component(), domain);
       }
     }
 
@@ -137,7 +147,7 @@ public final class SmtModelFinder {
     Map<String, AttributeDomain> attributeDomainByKey = new LinkedHashMap<>();
     for (AttributeDomain domain : config.attributeDomains()) {
       if (domain.component() != null || domain.className().isEmpty()) {
-        // U-type components (Phase 5) and primitive-type-wide fallback domains: out of scope.
+        // UReal components are grouped below; primitive-wide fallback domains remain out of scope.
         continue;
       }
       ObjectSlots owner = slotsByClass.get(domain.className());
@@ -179,6 +189,72 @@ public final class SmtModelFinder {
             AttributeEncoder.encode(script, descendantOwner, domain.attributeName(), type, domain);
         attributeValuesByKey.put(descendantKey, descendantValues);
         attributeDomainByKey.put(descendantKey, domain);
+      }
+    }
+
+    for (Map.Entry<String, Map<String, AttributeDomain>> entry :
+        componentDomainsByAttribute.entrySet()) {
+      Map<String, AttributeDomain> components = entry.getValue();
+      AttributeDomain representative = components.values().iterator().next();
+      String className = representative.className();
+      String attributeName = representative.attributeName();
+      MClass cls = model.getClass(className);
+      MAttribute attribute = cls.attribute(attributeName, true);
+      if (!attribute.type().isTypeOfUReal()) {
+        throw new IllegalArgumentException(
+            "component domains are only supported for UReal attributes, got "
+                + className
+                + "."
+                + attributeName
+                + " : "
+                + attribute.type());
+      }
+      if (!components.keySet().equals(Set.of("value", "uncertainty"))) {
+        throw new IllegalArgumentException(
+            "UReal attribute '"
+                + className
+                + "."
+                + attributeName
+                + "' requires exactly value and uncertainty component domains, got "
+                + components.keySet());
+      }
+      AttributeDomain valueDomain = components.get("value");
+      AttributeDomain uncertaintyDomain = components.get("uncertainty");
+      ObjectSlots owner = slotsByClass.get(className);
+      if (owner == null) {
+        throw new IllegalArgumentException(
+            "attribute domain '"
+                + className
+                + "."
+                + attributeName
+                + "' names a class with no configured scope");
+      }
+      registerURealAttribute(
+          script,
+          owner,
+          attributeName,
+          valueDomain,
+          uncertaintyDomain,
+          attributeValuesByKey,
+          attributeDomainByKey);
+
+      for (MClassifier descendant : cls.allChildren()) {
+        String descendantKey = descendant.name() + "." + attributeName;
+        if (explicitlyDeclaredAttributes.contains(descendantKey)) {
+          continue;
+        }
+        ObjectSlots descendantOwner = slotsByClass.get(descendant.name());
+        if (descendantOwner == null) {
+          continue;
+        }
+        registerURealAttribute(
+            script,
+            descendantOwner,
+            attributeName,
+            valueDomain,
+            uncertaintyDomain,
+            attributeValuesByKey,
+            attributeDomainByKey);
       }
     }
 
@@ -249,6 +325,9 @@ public final class SmtModelFinder {
     if (type.isTypeOfInteger()) {
       return AttributeType.INTEGER;
     }
+    if (type.isTypeOfUReal()) {
+      return AttributeType.UREAL;
+    }
     if (type.isTypeOfReal()) {
       return AttributeType.REAL;
     }
@@ -256,6 +335,23 @@ public final class SmtModelFinder {
       return AttributeType.BOOLEAN;
     }
     throw new IllegalArgumentException("unsupported attribute type for encoding: " + type);
+  }
+
+  private static void registerURealAttribute(
+      SmtScript script,
+      ObjectSlots owner,
+      String attributeName,
+      AttributeDomain valueDomain,
+      AttributeDomain uncertaintyDomain,
+      Map<String, AttributeValues> attributeValuesByKey,
+      Map<String, AttributeDomain> attributeDomainByKey) {
+    AttributeValues values =
+        AttributeEncoder.encodeUReal(script, owner, attributeName, valueDomain, uncertaintyDomain);
+    String key = owner.className() + "." + attributeName;
+    attributeValuesByKey.put(key, values);
+    attributeDomainByKey.put(key, valueDomain);
+    attributeDomainByKey.put(key + ".value", valueDomain);
+    attributeDomainByKey.put(key + ".uncertainty", uncertaintyDomain);
   }
 
   private static Multiplicity toMultiplicity(MMultiplicity multiplicity) {

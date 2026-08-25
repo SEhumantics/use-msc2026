@@ -8,6 +8,7 @@ import org.tzi.use.uml.ocl.value.BooleanValue;
 import org.tzi.use.uml.ocl.value.IntegerValue;
 import org.tzi.use.uml.ocl.value.RealValue;
 import org.tzi.use.uml.ocl.value.StringValue;
+import org.tzi.use.uml.ocl.value.URealValue;
 import org.tzi.use.uml.ocl.value.Value;
 
 /**
@@ -34,6 +35,13 @@ public final class SmtValueDecoder {
       return BooleanValue.get(boolValue(raw));
     }
     throw new IllegalArgumentException("unsupported attribute type for decoding: " + attributeType);
+  }
+
+  /** Decodes the two SMT Real terms that jointly represent one UReal attribute value. */
+  public static URealValue decodeUReal(SmtValue rawValue, SmtValue rawUncertainty) {
+    double value = rationalValue(rawValue).asBigDecimal(10).doubleValue();
+    double uncertainty = rationalValue(rawUncertainty).asBigDecimal(10).doubleValue();
+    return new URealValue(value, uncertainty);
   }
 
   private static BigInteger intValue(SmtValue raw) {
