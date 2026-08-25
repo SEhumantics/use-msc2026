@@ -8,8 +8,9 @@ import org.tzi.use.uml.mm.MClassInvariant;
 
 /**
  * Assembles one class invariant's full SATISFY contribution: its own context variable is an
- * implicit universal quantifier over every EXISTING instance of its context class, exactly like
- * Task 3.4b's ForAll -- existence-guarded per-slot conjunction, not a single fixed binding. Every
+ * implicit universal quantifier over every EXISTING instance of its context class -- including
+ * every subclass's instances, exactly like {@code X.allInstances()} itself (see {@link
+ * PolymorphicRange}) -- existence-guarded per-slot conjunction, not a single fixed binding. Every
  * translation test through Task 3.4c deliberately bound the context variable to one fixed slot to
  * isolate the construct under test; this is the first place that changes.
  */
@@ -24,15 +25,11 @@ public final class InvariantAssembler {
               + "' has no named context variable (implicit self) - not yet supported");
     }
     String contextVar = invariant.var();
-    String contextClass = invariant.cls().name();
-    ObjectSlots slots = baseContext.slotsFor(contextClass);
-
     List<SmtTerm> conjuncts = new ArrayList<>();
-    for (int i = 0; i < slots.capacity(); i++) {
-      TranslationContext extended =
-          baseContext.withBinding(contextVar, new VariableBinding(contextClass, i));
+    for (PolymorphicRange.Slot slot : PolymorphicRange.slotsOf(invariant.cls(), baseContext)) {
+      TranslationContext extended = baseContext.withBinding(contextVar, slot.binding());
       SmtTerm body = ExpressionTranslator.translate(invariant.bodyExpression(), extended);
-      conjuncts.add(Smt.app("=>", Smt.sym(slots.existsNames().get(i)), body));
+      conjuncts.add(Smt.app("=>", Smt.sym(slot.existsName()), body));
     }
     return Smt.and(conjuncts);
   }

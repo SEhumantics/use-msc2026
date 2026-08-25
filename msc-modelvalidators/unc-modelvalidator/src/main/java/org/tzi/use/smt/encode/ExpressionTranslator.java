@@ -265,15 +265,12 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       throw unsupported("forAll with more than one loop variable");
     if (!(e.getRangeExpression() instanceof ExpAllInstances all))
       throw unsupported("forAll over a range other than X.allInstances");
-    String className = all.getSourceType().name();
     String loopVariable = e.getVariableDeclarations().varDecl(0).name();
-    ObjectSlots slots = context.slotsFor(className);
     List<SmtTerm> conjuncts = new ArrayList<>();
-    for (int i = 0; i < slots.capacity(); i++) {
-      TranslationContext extended =
-          context.withBinding(loopVariable, new VariableBinding(className, i));
+    for (PolymorphicRange.Slot slot : PolymorphicRange.slotsOf(all.getSourceType(), context)) {
+      TranslationContext extended = context.withBinding(loopVariable, slot.binding());
       SmtTerm body = translate(e.getQueryExpression(), extended);
-      conjuncts.add(Smt.app("=>", Smt.sym(slots.existsNames().get(i)), body));
+      conjuncts.add(Smt.app("=>", Smt.sym(slot.existsName()), body));
     }
     result = Smt.and(conjuncts);
   }

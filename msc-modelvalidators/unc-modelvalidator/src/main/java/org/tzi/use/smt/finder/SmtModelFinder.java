@@ -1,9 +1,11 @@
 package org.tzi.use.smt.finder;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.tzi.use.api.UseApiException;
 import org.tzi.use.main.Session;
 import org.tzi.use.smt.config.AnalysisConfiguration;
@@ -36,6 +38,7 @@ import org.tzi.use.uml.mm.MAssociationEnd;
 import org.tzi.use.uml.mm.MAttribute;
 import org.tzi.use.uml.mm.MClass;
 import org.tzi.use.uml.mm.MClassInvariant;
+import org.tzi.use.uml.mm.MClassifier;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.MMultiplicity;
 import org.tzi.use.uml.ocl.type.Type;
@@ -102,6 +105,13 @@ public final class SmtModelFinder {
 
     Map<String, ObjectSlots> slotsByClass = ObjectSlotEncoder.encode(script, config.classScopes());
 
+    Set<String> explicitlyDeclaredAttributes = new HashSet<>();
+    for (AttributeDomain domain : config.attributeDomains()) {
+      if (domain.component() == null && !domain.className().isEmpty()) {
+        explicitlyDeclaredAttributes.add(domain.className() + "." + domain.attributeName());
+      }
+    }
+
     Map<String, AttributeValues> attributeValuesByKey = new LinkedHashMap<>();
     Map<String, AttributeDomain> attributeDomainByKey = new LinkedHashMap<>();
     for (AttributeDomain domain : config.attributeDomains()) {
@@ -126,6 +136,29 @@ public final class SmtModelFinder {
       String key = domain.className() + "." + domain.attributeName();
       attributeValuesByKey.put(key, values);
       attributeDomainByKey.put(key, domain);
+
+      // An attribute declared on a superclass is also accessible -- with this SAME domain -- on
+      // every subclass's own instances (Vehicle.wheels is reachable as both v.wheels for a direct
+      // Vehicle and c.wheels for a Car), so each subclass with a configured scope of its own gets
+      // its own independently-encoded values here too, keyed by its own concrete class name (see
+      // PolymorphicRange, which is what later binds a loop/context variable to those slots). A
+      // subclass that redeclares the same attribute name itself (a redefinition) keeps its own
+      // explicit domain instead -- not yet a real scenario in this translation slice, but cheap to
+      // not silently clobber.
+      for (MClassifier descendant : cls.allChildren()) {
+        String descendantKey = descendant.name() + "." + domain.attributeName();
+        if (explicitlyDeclaredAttributes.contains(descendantKey)) {
+          continue;
+        }
+        ObjectSlots descendantOwner = slotsByClass.get(descendant.name());
+        if (descendantOwner == null) {
+          continue;
+        }
+        AttributeValues descendantValues =
+            AttributeEncoder.encode(script, descendantOwner, domain.attributeName(), type, domain);
+        attributeValuesByKey.put(descendantKey, descendantValues);
+        attributeDomainByKey.put(descendantKey, domain);
+      }
     }
 
     Map<String, AssociationLinks> linksByAssociation = new LinkedHashMap<>();
