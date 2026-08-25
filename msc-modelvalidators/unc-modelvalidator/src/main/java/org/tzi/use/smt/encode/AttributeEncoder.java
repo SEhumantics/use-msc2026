@@ -80,6 +80,9 @@ public final class AttributeEncoder {
           uncertaintyDomain,
           owner.className(),
           attributeName + ".uncertainty");
+      script.assertThat(
+          Smt.app(
+              "=>", exists, Smt.app(">=", Smt.sym(uncertaintyName), Smt.realLit(BigDecimal.ZERO))));
     }
     return new AttributeValues(
         owner.className(), attributeName, AttributeType.UREAL, valueNames, uncertaintyNames);

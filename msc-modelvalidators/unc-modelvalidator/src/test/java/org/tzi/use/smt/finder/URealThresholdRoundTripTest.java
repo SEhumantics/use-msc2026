@@ -31,7 +31,8 @@ public class URealThresholdRoundTripTest {
 
     assertTrue(result.satisfiable());
     assertEquals(1, result.verdicts().size());
-    assertEquals(new InvariantVerdict("UnidentifiedObject::ReliablyFast", true), result.verdicts().get(0));
+    assertEquals(
+        new InvariantVerdict("UnidentifiedObject::ReliablyFast", true), result.verdicts().get(0));
     URealValue speed = reconstructedSpeed(model, result);
     assertEquals(0.34, speed.value(), 0.0);
     assertEquals(0.02, speed.uncertainty(), 0.0);
@@ -41,8 +42,7 @@ public class URealThresholdRoundTripTest {
   public void belowBoundaryIsFalseToUseAndBecomesUnsatWhenEnforced() throws Exception {
     MModel model = compile(resourcePath("ReliablyFast.use"));
 
-    ModelFinderResult unchecked =
-        SmtModelFinder.find(model, configuration(model, "belowInactive"));
+    ModelFinderResult unchecked = SmtModelFinder.find(model, configuration(model, "belowInactive"));
     assertTrue(unchecked.satisfiable());
     assertEquals(1, unchecked.verdicts().size());
     assertEquals(
@@ -52,8 +52,7 @@ public class URealThresholdRoundTripTest {
     assertEquals(0.31, speed.value(), 0.0);
     assertEquals(0.02, speed.uncertainty(), 0.0);
 
-    ModelFinderResult enforced =
-        SmtModelFinder.find(model, configuration(model, "belowActive"));
+    ModelFinderResult enforced = SmtModelFinder.find(model, configuration(model, "belowActive"));
     assertFalse(enforced.satisfiable());
   }
 
