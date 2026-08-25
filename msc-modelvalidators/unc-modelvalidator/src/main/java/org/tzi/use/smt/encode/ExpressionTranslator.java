@@ -10,23 +10,362 @@ import org.tzi.use.uml.ocl.expr.*;
 
 /** Translates the verified leaf-level Library OCL fragment and fails closed on everything else. */
 public final class ExpressionTranslator implements ExpressionVisitor {
- private static final BigInteger UNDEFINED_STRING_SENTINEL=BigInteger.valueOf(-1); private final TranslationContext context; private SmtTerm result;
- private ExpressionTranslator(TranslationContext c){context=c;} public static SmtTerm translate(Expression e,TranslationContext c){ExpressionTranslator t=new ExpressionTranslator(c);e.processWithVisitor(t);return t.result;}
- @Override public void visitConstInteger(ExpConstInteger e){result=Smt.intLit(BigInteger.valueOf(e.value()));}
- @Override public void visitConstString(ExpConstString e){throw unsupported("free-standing string literal ('"+e.value()+"') outside an attribute comparison");}
- @Override public void visitConstBoolean(ExpConstBoolean e){throw unsupported("Boolean literal");}
- @Override public void visitUndefined(ExpUndefined e){if(!e.type().isTypeOfString())throw unsupported("oclUndefined of a non-String type ("+e.type()+")");result=Smt.intLit(UNDEFINED_STRING_SENTINEL);}
- @Override public void visitVariable(ExpVariable e){throw unsupported("bare variable reference '"+e.getVarname()+"' outside an attribute access");}
- @Override public void visitAttrOp(ExpAttrOp e){VariableBinding b=context.binding(variableNameOf(e.objExp()));AttributeValues v=context.attributeValues(b.className(),e.attr().name());result=Smt.sym(v.valueNames().get(b.slotIndex()));}
- @Override public void visitStdOp(ExpStdOp e){Expression[]a=e.args();result=switch(e.opname()){case"and"->Smt.and(List.of(arg(a[0]),arg(a[1])));case"or"->Smt.or(List.of(arg(a[0]),arg(a[1])));case"not"->Smt.not(arg(a[0]));case"implies"->Smt.app("=>",arg(a[0]),arg(a[1]));case"="->comparison(a[0],a[1]);case"<>"->Smt.not(comparison(a[0],a[1]));case">="->Smt.app(">=",arg(a[0]),arg(a[1]));case"<="->Smt.app("<=",arg(a[0]),arg(a[1]));case">"->Smt.app(">",arg(a[0]),arg(a[1]));case"<"->Smt.app("<",arg(a[0]),arg(a[1]));default->throw unsupported("operator '"+e.opname()+"'");};}
- private SmtTerm comparison(Expression l,Expression r){if(l instanceof ExpVariable lv&&r instanceof ExpVariable rv)return Smt.bool(context.binding(lv.getVarname()).equals(context.binding(rv.getVarname())));if(l instanceof ExpConstString s)return Smt.eq(resolve(s,r),arg(r));if(r instanceof ExpConstString s)return Smt.eq(arg(l),resolve(s,l));return Smt.eq(arg(l),arg(r));}
- private SmtTerm resolve(ExpConstString literal,Expression other){if(!(other instanceof ExpAttrOp a))throw unsupported("string literal compared against a non-attribute expression");VariableBinding b=context.binding(variableNameOf(a.objExp()));AttributeDomain d=context.attributeDomain(b.className(),a.attr().name());int i=d.enumeratedValues().indexOf(literal.value());return Smt.intLit(i>=0?BigInteger.valueOf(i):UNDEFINED_STRING_SENTINEL);}
- private SmtTerm arg(Expression e){return translate(e,context);} private static String variableNameOf(Expression e){if(e instanceof ExpVariable v)return v.getVarname();throw new SmtTranslationException("attribute access on a non-variable receiver is not yet supported");} private static SmtTranslationException unsupported(String c){return new SmtTranslationException("unsupported OCL construct in this translation slice: "+c);}
- @Override public void visitAllInstances(ExpAllInstances e){throw unsupported("allInstances outside a forAll range is not yet supported");}@Override public void visitAny(ExpAny e){throw unsupported("any");}@Override public void visitAsType(ExpAsType e){throw unsupported("asType");}@Override public void visitBagLiteral(ExpBagLiteral e){throw unsupported("Bag literal");}@Override public void visitCollect(ExpCollect e){throw unsupported("collect");}@Override public void visitCollectNested(ExpCollectNested e){throw unsupported("collectNested");}@Override public void visitConstEnum(ExpConstEnum e){throw unsupported("enum literal");}@Override public void visitConstReal(ExpConstReal e){throw unsupported("Real literal");}
- @Override public void visitConstUBoolean(ExpConstUBoolean e){throw unsupported("UBoolean literal");}@Override public void visitConstSBoolean(ExpConstSBoolean e){throw unsupported("SBoolean literal");}@Override public void visitConstUInteger(ExpConstUInteger e){throw unsupported("UInteger literal");}@Override public void visitConstUReal(ExpConstUReal e){throw unsupported("UReal literal");}@Override public void visitConstUString(ExpConstUString e){throw unsupported("UString literal");}@Override public void visitEmptyCollection(ExpEmptyCollection e){throw unsupported("empty collection");}@Override public void visitExists(ExpExists e){throw unsupported("exists");}
- @Override public void visitForAll(ExpForAll e){if(e.getVariableDeclarations().size()!=1)throw unsupported("forAll with more than one loop variable");if(!(e.getRangeExpression() instanceof ExpAllInstances all))throw unsupported("forAll over a range other than X.allInstances");String className=all.getSourceType().name();String loopVariable=e.getVariableDeclarations().varDecl(0).name();ObjectSlots slots=context.slotsFor(className);List<SmtTerm> conjuncts=new ArrayList<>();for(int i=0;i<slots.capacity();i++){TranslationContext extended=context.withBinding(loopVariable,new VariableBinding(className,i));SmtTerm body=translate(e.getQueryExpression(),extended);conjuncts.add(Smt.app("=>",Smt.sym(slots.existsNames().get(i)),body));}result=Smt.and(conjuncts);}@Override public void visitIf(ExpIf e){throw unsupported("if");}
- @Override public void visitIsKindOf(ExpIsKindOf e){throw unsupported("isKindOf");}@Override public void visitIsTypeOf(ExpIsTypeOf e){throw unsupported("isTypeOf");}@Override public void visitIsUnique(ExpIsUnique e){throw unsupported("isUnique");}@Override public void visitIterate(ExpIterate e){throw unsupported("iterate");}@Override public void visitLet(ExpLet e){throw unsupported("let");}@Override public void visitNavigation(ExpNavigation e){throw unsupported("navigation");}@Override public void visitObjAsSet(ExpObjAsSet e){throw unsupported("objAsSet");}@Override public void visitInstanceOp(ExpInstanceOp e){throw unsupported("instance operation");}@Override public void visitObjRef(ExpObjRef e){throw unsupported("object reference");}@Override public void visitOne(ExpOne e){throw unsupported("one");}
- @Override public void visitOrderedSetLiteral(ExpOrderedSetLiteral e){throw unsupported("OrderedSet literal");}@Override public void visitQuery(ExpQuery e){throw unsupported("query");}@Override public void visitReject(ExpReject e){throw unsupported("reject");}@Override public void visitWithValue(ExpressionWithValue e){throw unsupported("withValue");}@Override public void visitSelect(ExpSelect e){throw unsupported("select");}@Override public void visitSequenceLiteral(ExpSequenceLiteral e){throw unsupported("Sequence literal");}@Override public void visitSetLiteral(ExpSetLiteral e){throw unsupported("Set literal");}@Override public void visitSortedBy(ExpSortedBy e){throw unsupported("sortedBy");}@Override public void visitTupleLiteral(ExpTupleLiteral e){throw unsupported("Tuple literal");}
- @Override public void visitTupleSelectOp(ExpTupleSelectOp e){throw unsupported("tuple select");}@Override public void visitClosure(ExpClosure e){throw unsupported("closure");}@Override public void visitOclInState(ExpOclInState e){throw unsupported("oclInState");}@Override public void visitVarDeclList(VarDeclList e){throw unsupported("VarDeclList");}@Override public void visitVarDecl(VarDecl e){throw unsupported("VarDecl");}@Override public void visitObjectByUseId(ExpObjectByUseId e){throw unsupported("objectByUseId");}@Override public void visitConstUnlimitedNatural(ExpConstUnlimitedNatural e){throw unsupported("UnlimitedNatural literal");}@Override public void visitSelectByKind(ExpSelectByKind e){throw unsupported("selectByKind");}@Override public void visitExpSelectByType(ExpSelectByType e){throw unsupported("selectByType");}
- @Override public void visitRange(ExpRange e){throw unsupported("range");}@Override public void visitNavigationClassifierSource(ExpNavigationClassifierSource e){throw unsupported("navigationClassifierSource");}@Override public void visitUSelectC(ExpUSelectC e){throw unsupported("USelectC");}@Override public void visitUSelect(ExpUSelect e){throw unsupported("USelect");}
+  private static final BigInteger UNDEFINED_STRING_SENTINEL = BigInteger.valueOf(-1);
+  private final TranslationContext context;
+  private SmtTerm result;
+
+  private ExpressionTranslator(TranslationContext c) {
+    context = c;
+  }
+
+  public static SmtTerm translate(Expression e, TranslationContext c) {
+    ExpressionTranslator t = new ExpressionTranslator(c);
+    e.processWithVisitor(t);
+    return t.result;
+  }
+
+  @Override
+  public void visitConstInteger(ExpConstInteger e) {
+    result = Smt.intLit(BigInteger.valueOf(e.value()));
+  }
+
+  @Override
+  public void visitConstString(ExpConstString e) {
+    throw unsupported(
+        "free-standing string literal ('" + e.value() + "') outside an attribute comparison");
+  }
+
+  @Override
+  public void visitConstBoolean(ExpConstBoolean e) {
+    throw unsupported("Boolean literal");
+  }
+
+  @Override
+  public void visitUndefined(ExpUndefined e) {
+    if (!e.type().isTypeOfString())
+      throw unsupported("oclUndefined of a non-String type (" + e.type() + ")");
+    result = Smt.intLit(UNDEFINED_STRING_SENTINEL);
+  }
+
+  @Override
+  public void visitVariable(ExpVariable e) {
+    throw unsupported(
+        "bare variable reference '" + e.getVarname() + "' outside an attribute access");
+  }
+
+  @Override
+  public void visitAttrOp(ExpAttrOp e) {
+    VariableBinding b = context.binding(variableNameOf(e.objExp()));
+    AttributeValues v = context.attributeValues(b.className(), e.attr().name());
+    result = Smt.sym(v.valueNames().get(b.slotIndex()));
+  }
+
+  @Override
+  public void visitStdOp(ExpStdOp e) {
+    Expression[] a = e.args();
+    result =
+        switch (e.opname()) {
+          case "and" -> Smt.and(List.of(arg(a[0]), arg(a[1])));
+          case "or" -> Smt.or(List.of(arg(a[0]), arg(a[1])));
+          case "not" -> Smt.not(arg(a[0]));
+          case "implies" -> Smt.app("=>", arg(a[0]), arg(a[1]));
+          case "=" -> comparison(a[0], a[1]);
+          case "<>" -> Smt.not(comparison(a[0], a[1]));
+          case ">=" -> Smt.app(">=", arg(a[0]), arg(a[1]));
+          case "<=" -> Smt.app("<=", arg(a[0]), arg(a[1]));
+          case ">" -> Smt.app(">", arg(a[0]), arg(a[1]));
+          case "<" -> Smt.app("<", arg(a[0]), arg(a[1]));
+          default -> throw unsupported("operator '" + e.opname() + "'");
+        };
+  }
+
+  private SmtTerm comparison(Expression l, Expression r) {
+    if (l instanceof ExpVariable lv && r instanceof ExpVariable rv)
+      return Smt.bool(context.binding(lv.getVarname()).equals(context.binding(rv.getVarname())));
+    if (l instanceof ExpConstString s) return Smt.eq(resolve(s, r), arg(r));
+    if (r instanceof ExpConstString s) return Smt.eq(arg(l), resolve(s, l));
+    return Smt.eq(arg(l), arg(r));
+  }
+
+  private SmtTerm resolve(ExpConstString literal, Expression other) {
+    if (!(other instanceof ExpAttrOp a))
+      throw unsupported("string literal compared against a non-attribute expression");
+    VariableBinding b = context.binding(variableNameOf(a.objExp()));
+    AttributeDomain d = context.attributeDomain(b.className(), a.attr().name());
+    int i = d.enumeratedValues().indexOf(literal.value());
+    return Smt.intLit(i >= 0 ? BigInteger.valueOf(i) : UNDEFINED_STRING_SENTINEL);
+  }
+
+  private SmtTerm arg(Expression e) {
+    return translate(e, context);
+  }
+
+  private static String variableNameOf(Expression e) {
+    if (e instanceof ExpVariable v) return v.getVarname();
+    throw new SmtTranslationException(
+        "attribute access on a non-variable receiver is not yet supported");
+  }
+
+  private static SmtTranslationException unsupported(String c) {
+    return new SmtTranslationException("unsupported OCL construct in this translation slice: " + c);
+  }
+
+  @Override
+  public void visitAllInstances(ExpAllInstances e) {
+    throw unsupported("allInstances outside a forAll range is not yet supported");
+  }
+
+  @Override
+  public void visitAny(ExpAny e) {
+    throw unsupported("any");
+  }
+
+  @Override
+  public void visitAsType(ExpAsType e) {
+    throw unsupported("asType");
+  }
+
+  @Override
+  public void visitBagLiteral(ExpBagLiteral e) {
+    throw unsupported("Bag literal");
+  }
+
+  @Override
+  public void visitCollect(ExpCollect e) {
+    throw unsupported("collect");
+  }
+
+  @Override
+  public void visitCollectNested(ExpCollectNested e) {
+    throw unsupported("collectNested");
+  }
+
+  @Override
+  public void visitConstEnum(ExpConstEnum e) {
+    throw unsupported("enum literal");
+  }
+
+  @Override
+  public void visitConstReal(ExpConstReal e) {
+    throw unsupported("Real literal");
+  }
+
+  @Override
+  public void visitConstUBoolean(ExpConstUBoolean e) {
+    throw unsupported("UBoolean literal");
+  }
+
+  @Override
+  public void visitConstSBoolean(ExpConstSBoolean e) {
+    throw unsupported("SBoolean literal");
+  }
+
+  @Override
+  public void visitConstUInteger(ExpConstUInteger e) {
+    throw unsupported("UInteger literal");
+  }
+
+  @Override
+  public void visitConstUReal(ExpConstUReal e) {
+    throw unsupported("UReal literal");
+  }
+
+  @Override
+  public void visitConstUString(ExpConstUString e) {
+    throw unsupported("UString literal");
+  }
+
+  @Override
+  public void visitEmptyCollection(ExpEmptyCollection e) {
+    throw unsupported("empty collection");
+  }
+
+  @Override
+  public void visitExists(ExpExists e) {
+    throw unsupported("exists");
+  }
+
+  @Override
+  public void visitForAll(ExpForAll e) {
+    if (e.getVariableDeclarations().size() != 1)
+      throw unsupported("forAll with more than one loop variable");
+    if (!(e.getRangeExpression() instanceof ExpAllInstances all))
+      throw unsupported("forAll over a range other than X.allInstances");
+    String className = all.getSourceType().name();
+    String loopVariable = e.getVariableDeclarations().varDecl(0).name();
+    ObjectSlots slots = context.slotsFor(className);
+    List<SmtTerm> conjuncts = new ArrayList<>();
+    for (int i = 0; i < slots.capacity(); i++) {
+      TranslationContext extended =
+          context.withBinding(loopVariable, new VariableBinding(className, i));
+      SmtTerm body = translate(e.getQueryExpression(), extended);
+      conjuncts.add(Smt.app("=>", Smt.sym(slots.existsNames().get(i)), body));
+    }
+    result = Smt.and(conjuncts);
+  }
+
+  @Override
+  public void visitIf(ExpIf e) {
+    throw unsupported("if");
+  }
+
+  @Override
+  public void visitIsKindOf(ExpIsKindOf e) {
+    throw unsupported("isKindOf");
+  }
+
+  @Override
+  public void visitIsTypeOf(ExpIsTypeOf e) {
+    throw unsupported("isTypeOf");
+  }
+
+  @Override
+  public void visitIsUnique(ExpIsUnique e) {
+    throw unsupported("isUnique");
+  }
+
+  @Override
+  public void visitIterate(ExpIterate e) {
+    throw unsupported("iterate");
+  }
+
+  @Override
+  public void visitLet(ExpLet e) {
+    throw unsupported("let");
+  }
+
+  @Override
+  public void visitNavigation(ExpNavigation e) {
+    throw unsupported("navigation");
+  }
+
+  @Override
+  public void visitObjAsSet(ExpObjAsSet e) {
+    throw unsupported("objAsSet");
+  }
+
+  @Override
+  public void visitInstanceOp(ExpInstanceOp e) {
+    throw unsupported("instance operation");
+  }
+
+  @Override
+  public void visitObjRef(ExpObjRef e) {
+    throw unsupported("object reference");
+  }
+
+  @Override
+  public void visitOne(ExpOne e) {
+    throw unsupported("one");
+  }
+
+  @Override
+  public void visitOrderedSetLiteral(ExpOrderedSetLiteral e) {
+    throw unsupported("OrderedSet literal");
+  }
+
+  @Override
+  public void visitQuery(ExpQuery e) {
+    throw unsupported("query");
+  }
+
+  @Override
+  public void visitReject(ExpReject e) {
+    throw unsupported("reject");
+  }
+
+  @Override
+  public void visitWithValue(ExpressionWithValue e) {
+    throw unsupported("withValue");
+  }
+
+  @Override
+  public void visitSelect(ExpSelect e) {
+    throw unsupported("select");
+  }
+
+  @Override
+  public void visitSequenceLiteral(ExpSequenceLiteral e) {
+    throw unsupported("Sequence literal");
+  }
+
+  @Override
+  public void visitSetLiteral(ExpSetLiteral e) {
+    throw unsupported("Set literal");
+  }
+
+  @Override
+  public void visitSortedBy(ExpSortedBy e) {
+    throw unsupported("sortedBy");
+  }
+
+  @Override
+  public void visitTupleLiteral(ExpTupleLiteral e) {
+    throw unsupported("Tuple literal");
+  }
+
+  @Override
+  public void visitTupleSelectOp(ExpTupleSelectOp e) {
+    throw unsupported("tuple select");
+  }
+
+  @Override
+  public void visitClosure(ExpClosure e) {
+    throw unsupported("closure");
+  }
+
+  @Override
+  public void visitOclInState(ExpOclInState e) {
+    throw unsupported("oclInState");
+  }
+
+  @Override
+  public void visitVarDeclList(VarDeclList e) {
+    throw unsupported("VarDeclList");
+  }
+
+  @Override
+  public void visitVarDecl(VarDecl e) {
+    throw unsupported("VarDecl");
+  }
+
+  @Override
+  public void visitObjectByUseId(ExpObjectByUseId e) {
+    throw unsupported("objectByUseId");
+  }
+
+  @Override
+  public void visitConstUnlimitedNatural(ExpConstUnlimitedNatural e) {
+    throw unsupported("UnlimitedNatural literal");
+  }
+
+  @Override
+  public void visitSelectByKind(ExpSelectByKind e) {
+    throw unsupported("selectByKind");
+  }
+
+  @Override
+  public void visitExpSelectByType(ExpSelectByType e) {
+    throw unsupported("selectByType");
+  }
+
+  @Override
+  public void visitRange(ExpRange e) {
+    throw unsupported("range");
+  }
+
+  @Override
+  public void visitNavigationClassifierSource(ExpNavigationClassifierSource e) {
+    throw unsupported("navigationClassifierSource");
+  }
+
+  @Override
+  public void visitUSelectC(ExpUSelectC e) {
+    throw unsupported("USelectC");
+  }
+
+  @Override
+  public void visitUSelect(ExpUSelect e) {
+    throw unsupported("USelect");
+  }
 }
