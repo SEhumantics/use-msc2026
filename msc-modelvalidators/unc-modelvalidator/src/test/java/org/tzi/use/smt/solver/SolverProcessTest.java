@@ -98,4 +98,22 @@ public class SolverProcessTest {
         assertTrue(result.rawOutput().contains("sat"));
         assertTrue(result.millis() >= 0);
     }
+
+    @Test
+    public void solvedValuesDecodeIntoUsableNumbers() {
+        SmtScript script = new SmtScript("QF_LIRA");
+        script.declareConst("x", SmtSort.REAL);
+        script.assertThat(Smt.app(">", Smt.sym("x"), Smt.realLit(new BigDecimal("0.30"))));
+        script.assertThat(Smt.app("<", Smt.sym("x"), Smt.realLit(new BigDecimal("0.40"))));
+
+        SolverResult result = solver.run(script.toSmtLib());
+        assertEquals(SolverOutcome.SAT, result.outcome());
+
+        SmtValue.Rational x =
+                (SmtValue.Rational) SmtModelParser.parse(result.modelText()).get("x");
+        BigDecimal decoded = x.asBigDecimal(6);
+        assertTrue(decoded.toPlainString(),
+                decoded.compareTo(new BigDecimal("0.30")) > 0
+                        && decoded.compareTo(new BigDecimal("0.40")) < 0);
+    }
 }
