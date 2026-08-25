@@ -5,7 +5,11 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.security.MessageDigest;
+import java.time.Duration;
+import java.util.EnumSet;
 import java.util.HexFormat;
 import org.junit.Test;
 
@@ -65,6 +69,36 @@ public class SolverBinaryTest {
         } catch (SolverConfigurationException expected) {
             assertTrue(expected.getMessage().contains("definitely-not-a-real-solver-binary"));
             assertTrue(expected.getMessage().contains("solver.properties"));
+        }
+    }
+
+    /**
+     * Regression guard for the blocking-read bug fixed 2026-08-24 (master plan Appendix B):
+     * {@code probeVersion} used to call {@code readAllBytes()} on the child's stdout before
+     * {@code waitFor(timeout)}, which blocks until the child exits and makes the timeout
+     * unreachable. A hung solver would hang solver resolution forever instead of failing after
+     * the configured timeout.
+     *
+     * <p>Points {@code resolveFrom} at a script that ignores its arguments and sleeps, so
+     * {@code binary --version} never returns. Uses the package-visible timeout overload with a
+     * short duration so the test is fast and deterministic rather than waiting out the real
+     * 30-second production timeout.
+     */
+    @Test(timeout = 15_000)
+    public void aHangingBinaryIsReportedAsTimedOutRatherThanHangingForever() throws Exception {
+        Path script = Files.createTempFile("msc-hanging-solver-", ".sh");
+        Files.writeString(script, "#!/bin/sh\nsleep 999\n");
+        Files.setPosixFilePermissions(script, EnumSet.of(
+                PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE,
+                PosixFilePermission.OWNER_EXECUTE));
+
+        try {
+            SolverBinary.resolveFrom(script.toString(), "5.1.0", Duration.ofMillis(200));
+            fail("expected SolverConfigurationException");
+        } catch (SolverConfigurationException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("Timed out"));
+        } finally {
+            Files.deleteIfExists(script);
         }
     }
 }

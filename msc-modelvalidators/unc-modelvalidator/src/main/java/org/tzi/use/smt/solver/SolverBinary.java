@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -55,7 +56,18 @@ public final class SolverBinary {
         return resolveFrom(configured, expected);
     }
 
+    private static final Duration DEFAULT_PROBE_TIMEOUT = Duration.ofSeconds(30);
+
     public static SolverBinary resolveFrom(String pathOrName, String expectedVersion) {
+        return resolveFrom(pathOrName, expectedVersion, DEFAULT_PROBE_TIMEOUT);
+    }
+
+    /**
+     * Package-visible overload taking an explicit probe timeout, so tests can force the TIMEOUT
+     * branch of {@link #probeVersion} deterministically and fast instead of waiting out the real
+     * 30-second production timeout.
+     */
+    static SolverBinary resolveFrom(String pathOrName, String expectedVersion, Duration probeTimeout) {
         Path resolved = locate(pathOrName);
         if (resolved == null) {
             throw new SolverConfigurationException(
@@ -63,7 +75,7 @@ public final class SolverBinary {
                             + " file. Install it, or override the location with -Dmsc.solver.path=..."
                             + " or MSC_SOLVER_PATH, or correct solver.properties.");
         }
-        String reported = probeVersion(resolved);
+        String reported = probeVersion(resolved, probeTimeout);
         if (!expectedVersion.equals(reported)) {
             throw new SolverConfigurationException(
                     "SMT solver version mismatch: solver.properties pins " + expectedVersion
@@ -105,20 +117,24 @@ public final class SolverBinary {
         return null;
     }
 
-    private static String probeVersion(Path binary) {
+    private static String probeVersion(Path binary, Duration timeout) {
+        Path captured = null;
         try {
+            // Output is redirected to a file and the process is waited on BEFORE anything is read.
+            // Reading the pipe first (readAllBytes) blocks until EOF, so waitFor(timeout) would never
+            // be reached and destroyForcibly would be dead code: a hung solver would hang the build
+            // with no timeout at all. See Appendix B of the master plan.
+            captured = Files.createTempFile("msc-solver-version-", ".txt");
             Process process = new ProcessBuilder(binary.toString(), "--version")
                     .redirectErrorStream(true)
+                    .redirectOutput(captured.toFile())
                     .start();
-            String output;
-            try (InputStream in = process.getInputStream()) {
-                output = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-            }
-            if (!process.waitFor(30, TimeUnit.SECONDS)) {
+            if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
                 process.destroyForcibly();
                 throw new SolverConfigurationException(
                         "Timed out probing the version of " + binary);
             }
+            String output = Files.readString(captured, StandardCharsets.UTF_8);
             Matcher matcher = VERSION.matcher(output);
             if (!matcher.find()) {
                 throw new SolverConfigurationException(
@@ -130,6 +146,14 @@ public final class SolverBinary {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new SolverConfigurationException("Interrupted probing " + binary, e);
+        } finally {
+            if (captured != null) {
+                try {
+                    Files.deleteIfExists(captured);
+                } catch (IOException ignored) {
+                    // A leaked temp file is not worth failing solver resolution over.
+                }
+            }
         }
     }
 
