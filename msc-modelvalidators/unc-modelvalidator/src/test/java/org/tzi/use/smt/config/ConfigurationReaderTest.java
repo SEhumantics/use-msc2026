@@ -90,7 +90,8 @@ public class ConfigurationReaderTest {
             () -> ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY));
 
     assertTrue(exception.getMessage(), exception.getMessage().contains("query at position 11"));
-    assertTrue(exception.getMessage(), exception.getMessage().contains("unknown invariant 'Missing'"));
+    assertTrue(
+        exception.getMessage(), exception.getMessage().contains("unknown invariant 'Missing'"));
   }
 
   @Test

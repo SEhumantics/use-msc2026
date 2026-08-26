@@ -97,22 +97,22 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       result = uRealThreshold(e);
       return;
     }
-    result = switch (e.opname()) {
-      case "and" -> booleanAnd(argResult(a[0]), argResult(a[1]));
-      case "or" -> booleanOr(argResult(a[0]), argResult(a[1]));
-      case "not" -> {
-        TranslatedExpression operand = argResult(a[0], !positivePolarity);
-        yield new TranslatedExpression(operand.defined(), Smt.not(operand.value()));
-      }
-      case "implies" ->
-          booleanOr(
-              negate(argResult(a[0], !positivePolarity)),
-              argResult(a[1], positivePolarity));
-      case "=" -> comparison(a[0], a[1]);
-      case "<>" -> negate(comparison(a[0], a[1]));
-      case ">=", "<=", ">", "<" -> orderedComparison(e.opname(), a[0], a[1]);
-      default -> throw unsupported("operator '" + e.opname() + "'");
-    };
+    result =
+        switch (e.opname()) {
+          case "and" -> booleanAnd(argResult(a[0]), argResult(a[1]));
+          case "or" -> booleanOr(argResult(a[0]), argResult(a[1]));
+          case "not" -> {
+            TranslatedExpression operand = argResult(a[0], !positivePolarity);
+            yield new TranslatedExpression(operand.defined(), Smt.not(operand.value()));
+          }
+          case "implies" ->
+              booleanOr(
+                  negate(argResult(a[0], !positivePolarity)), argResult(a[1], positivePolarity));
+          case "=" -> comparison(a[0], a[1]);
+          case "<>" -> negate(comparison(a[0], a[1]));
+          case ">=", "<=", ">", "<" -> orderedComparison(e.opname(), a[0], a[1]);
+          default -> throw unsupported("operator '" + e.opname() + "'");
+        };
   }
 
   private static TranslatedExpression booleanAnd(
@@ -139,7 +139,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     return new TranslatedExpression(expression.defined(), Smt.not(expression.value()));
   }
 
-  private TranslatedExpression orderedComparison(String operator, Expression left, Expression right) {
+  private TranslatedExpression orderedComparison(
+      String operator, Expression left, Expression right) {
     TranslatedExpression l = argResult(left);
     TranslatedExpression r = argResult(right);
     return new TranslatedExpression(
@@ -236,8 +237,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     TranslatedExpression left = argResult(l);
     TranslatedExpression right = argResult(r);
     return new TranslatedExpression(
-        Smt.and(List.of(left.defined(), right.defined())),
-        Smt.eq(left.value(), right.value()));
+        Smt.and(List.of(left.defined(), right.defined())), Smt.eq(left.value(), right.value()));
   }
 
   /**
@@ -421,8 +421,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     SmtTerm anyTrue = Smt.or(trueCandidates);
     result =
-        new TranslatedExpression(
-            Smt.or(List.of(anyTrue, Smt.and(definedCandidates))), anyTrue);
+        new TranslatedExpression(Smt.or(List.of(anyTrue, Smt.and(definedCandidates))), anyTrue);
   }
 
   @Override
@@ -442,8 +441,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           translate(e.getQueryExpression(), extended, mode, positivePolarity);
       valueConjuncts.add(Smt.app("=>", exists, body.value()));
       definedConjuncts.add(Smt.app("=>", exists, body.defined()));
-      falseCandidates.add(
-          Smt.and(List.of(exists, body.defined(), Smt.not(body.value()))));
+      falseCandidates.add(Smt.and(List.of(exists, body.defined(), Smt.not(body.value()))));
     }
     result =
         new TranslatedExpression(

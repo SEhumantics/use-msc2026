@@ -19,9 +19,7 @@ public final class QueryRequirements {
   }
 
   private static void collect(
-      QueryExpr query,
-      Set<String> activeInvariants,
-      Map<String, Set<TranslationMode>> result) {
+      QueryExpr query, Set<String> activeInvariants, Map<String, Set<TranslationMode>> result) {
     switch (query) {
       case QueryExpr.Profiled profiled -> collect(profiled.expression(), activeInvariants, result);
       case QueryExpr.Classification atom -> add(result, atom.invariantName(), atom.mode());
@@ -35,8 +33,7 @@ public final class QueryRequirements {
         collect(or.right(), activeInvariants, result);
       }
       case QueryExpr.Not not -> collect(not.operand(), activeInvariants, result);
-      case QueryExpr.Satisfy ignored ->
-          addAll(result, activeInvariants, TranslationMode.UNCERTAIN);
+      case QueryExpr.Satisfy ignored -> addAll(result, activeInvariants, TranslationMode.UNCERTAIN);
       case QueryExpr.Counterexample counterexample -> {
         addAll(result, activeInvariants, TranslationMode.UNCERTAIN);
         add(result, counterexample.invariantName(), TranslationMode.UNCERTAIN);
@@ -51,9 +48,7 @@ public final class QueryRequirements {
   }
 
   private static void addAll(
-      Map<String, Set<TranslationMode>> result,
-      Set<String> invariantNames,
-      TranslationMode mode) {
+      Map<String, Set<TranslationMode>> result, Set<String> invariantNames, TranslationMode mode) {
     invariantNames.forEach(name -> add(result, name, mode));
   }
 

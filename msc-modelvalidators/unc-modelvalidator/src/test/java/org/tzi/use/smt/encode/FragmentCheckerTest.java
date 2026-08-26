@@ -9,8 +9,8 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.Test;
@@ -224,8 +224,7 @@ public class FragmentCheckerTest {
     ObjectSlots slots =
         ObjectSlotEncoder.encode(script, List.of(new ClassScope("Sample", 1, 1))).get("Sample");
     TranslationContext context =
-        new TranslationContext(
-            Map.of(), Map.of(), Map.of(), Map.of("Sample", slots), Map.of());
+        new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of("Sample", slots), Map.of());
 
     FragmentChecker.ReifiedResult result =
         FragmentChecker.checkAndReify(

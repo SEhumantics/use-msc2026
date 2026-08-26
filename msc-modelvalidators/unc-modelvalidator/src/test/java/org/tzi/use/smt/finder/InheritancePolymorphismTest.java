@@ -62,8 +62,7 @@ public class InheritancePolymorphismTest {
   @Test
   public void vehicleNonPositiveWheelsSectionIsGenuinelyUnsatisfiable() throws Exception {
     MModel model = compile("Inheritance", "Vehicle");
-    AnalysisConfiguration config =
-        readConfig(model, "Inheritance", "Vehicle", "nonpositivewheels");
+    AnalysisConfiguration config = readConfig(model, "Inheritance", "Vehicle", "nonpositivewheels");
 
     ModelFinderResult result = SmtModelFinder.find(model, config);
 
@@ -99,9 +98,9 @@ public class InheritancePolymorphismTest {
     ModelFinderResult result = SmtModelFinder.find(model, config);
 
     assertFalse(
-        "B_levelB and C_levelC are both collapsed to the identical singleton {5}, so D::LevelsDiffer"
-            + " (d.levelB <> d.levelC) is structurally unsatisfiable -- Kodkod's own five backends"
-            + " agree",
+        "B_levelB and C_levelC are both collapsed to the identical singleton {5}, so"
+            + " D::LevelsDiffer (d.levelB <> d.levelC) is structurally unsatisfiable -- Kodkod's"
+            + " own five backends agree",
         result.allActiveInvariantsHold());
   }
 

@@ -49,8 +49,7 @@ public class InvariantClassificationTest {
       ObjectSlots slots =
           ObjectSlotEncoder.encode(script, List.of(new ClassScope("Sample", 1, 1))).get("Sample");
       TranslationContext context =
-          new TranslationContext(
-              Map.of(), Map.of(), Map.of(), Map.of("Sample", slots), Map.of());
+          new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of("Sample", slots), Map.of());
       InvariantClassification falseClassification =
           InvariantAssembler.reify(script, invariant(model, "FalseInv"), context, mode);
       InvariantClassification undefinedClassification =
@@ -78,12 +77,10 @@ public class InvariantClassificationTest {
     MClassInvariant invariant = invariant(model, "ReliablyFast");
     SmtScript script = new SmtScript("QF_LIRA");
     ObjectSlots slots =
-        ObjectSlotEncoder.encode(
-                script, List.of(new ClassScope("UnidentifiedObject", 1, 1)))
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("UnidentifiedObject", 1, 1)))
             .get("UnidentifiedObject");
     AttributeDomain valueDomain =
-        new AttributeDomain(
-            "UnidentifiedObject", "speed", "value", List.of("0.31"), null, null);
+        new AttributeDomain("UnidentifiedObject", "speed", "value", List.of("0.31"), null, null);
     AttributeDomain uncertaintyDomain =
         new AttributeDomain(
             "UnidentifiedObject", "speed", "uncertainty", List.of("0.02"), null, null);
@@ -138,12 +135,10 @@ public class InvariantClassificationTest {
       ObjectSlots slots =
           ObjectSlotEncoder.encode(script, List.of(new ClassScope("Sample", 1, 1))).get("Sample");
       TranslationContext context =
-          new TranslationContext(
-              Map.of(), Map.of(), Map.of(), Map.of("Sample", slots), Map.of());
+          new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of("Sample", slots), Map.of());
       script.assertThat(Smt.sym("Sample_0_exists"));
       script.assertThat(
-          InvariantAssembler.reify(
-                  script, invariant(model, "FalseDominatesAnd"), context, mode)
+          InvariantAssembler.reify(script, invariant(model, "FalseDominatesAnd"), context, mode)
               .falseTerm());
       script.assertThat(
           InvariantAssembler.reify(script, invariant(model, "AndUndefined"), context, mode)
@@ -155,8 +150,7 @@ public class InvariantClassificationTest {
           InvariantAssembler.reify(script, invariant(model, "OrUndefined"), context, mode)
               .undefinedTerm());
       script.assertThat(
-          InvariantAssembler.reify(
-                  script, invariant(model, "TrueDominatesImplies"), context, mode)
+          InvariantAssembler.reify(script, invariant(model, "TrueDominatesImplies"), context, mode)
               .trueTerm());
       script.assertThat(
           InvariantAssembler.reify(script, invariant(model, "ImpliesUndefined"), context, mode)
@@ -170,9 +164,7 @@ public class InvariantClassificationTest {
       InvariantClassification classification) {
     List<org.tzi.use.smt.solver.SmtTerm> outcomes =
         List.of(
-            classification.trueTerm(),
-            classification.falseTerm(),
-            classification.undefinedTerm());
+            classification.trueTerm(), classification.falseTerm(), classification.undefinedTerm());
     for (int first = 0; first < outcomes.size(); first++) {
       for (int second = first + 1; second < outcomes.size(); second++) {
         SmtScript script = new SmtScript("QF_LIA");

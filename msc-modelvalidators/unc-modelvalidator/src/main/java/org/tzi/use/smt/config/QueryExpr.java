@@ -25,8 +25,8 @@ public sealed interface QueryExpr
     }
   }
 
-  record Classification(
-      TranslationMode mode, String invariantName, InvariantOutcome outcome) implements QueryExpr {}
+  record Classification(TranslationMode mode, String invariantName, InvariantOutcome outcome)
+      implements QueryExpr {}
 
   enum AggregateScope {
     ALL,

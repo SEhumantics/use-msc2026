@@ -139,12 +139,10 @@ public class URealThresholdRoundTripTest {
         verdict(unchecked, "UnidentifiedObject::ThresholdInOr"));
 
     assertFalse(
-        SmtModelFinder.find(
-                model, configuration(model, "ThresholdInAndOr.properties", "andActive"))
+        SmtModelFinder.find(model, configuration(model, "ThresholdInAndOr.properties", "andActive"))
             .satisfiable());
     assertFalse(
-        SmtModelFinder.find(
-                model, configuration(model, "ThresholdInAndOr.properties", "orActive"))
+        SmtModelFinder.find(model, configuration(model, "ThresholdInAndOr.properties", "orActive"))
             .satisfiable());
   }
 
@@ -202,7 +200,8 @@ public class URealThresholdRoundTripTest {
     MModel model = compile(resourcePath(modelResource));
 
     ModelFinderResult below =
-        SmtModelFinder.find(model, configuration(model, configurationResource, "boundaryBelowActive"));
+        SmtModelFinder.find(
+            model, configuration(model, configurationResource, "boundaryBelowActive"));
     assertTrue(below.satisfiable());
     assertEquals(new InvariantVerdict(invariantName, true), below.verdicts().get(0));
     URealValue belowSpeed = reconstructedSpeed(model, below);
@@ -227,7 +226,8 @@ public class URealThresholdRoundTripTest {
     assertEquals(0.02, aboveSpeed.uncertainty(), 0.0);
 
     ModelFinderResult aboveEnforced =
-        SmtModelFinder.find(model, configuration(model, configurationResource, "boundaryAboveActive"));
+        SmtModelFinder.find(
+            model, configuration(model, configurationResource, "boundaryAboveActive"));
     assertFalse(aboveEnforced.satisfiable());
   }
 
@@ -247,8 +247,8 @@ public class URealThresholdRoundTripTest {
     return configuration(model, "ReliablyFast.properties", section);
   }
 
-  private static AnalysisConfiguration configuration(
-      MModel model, String resource, String section) throws URISyntaxException {
+  private static AnalysisConfiguration configuration(MModel model, String resource, String section)
+      throws URISyntaxException {
     return ConfigurationReader.normalize(
             ConfigurationReader.read(resourcePath(resource), section),
             ConfigurationVocabulary.fromModel(model))

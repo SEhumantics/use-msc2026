@@ -46,9 +46,7 @@ public class QueryParserTest {
         new QueryExpr.Profiled(
             ScenarioProfile.EXISTS,
             new QueryExpr.Classification(
-                TranslationMode.UNCERTAIN,
-                "Reading::ReliablyFast",
-                InvariantOutcome.UNDEFINED)),
+                TranslationMode.UNCERTAIN, "Reading::ReliablyFast", InvariantOutcome.UNDEFINED)),
         QueryParser.parse("undef(uncertain, ReliablyFast)", VOCABULARY));
     assertEquals(
         new QueryExpr.Profiled(
@@ -98,8 +96,7 @@ public class QueryParserTest {
 
   private static void assertFailure(String query, String position, String message) {
     ConfigurationReadException exception =
-        assertThrows(
-            ConfigurationReadException.class, () -> QueryParser.parse(query, VOCABULARY));
+        assertThrows(ConfigurationReadException.class, () -> QueryParser.parse(query, VOCABULARY));
     assertTrue(exception.getMessage(), exception.getMessage().contains(position));
     assertTrue(exception.getMessage(), exception.getMessage().contains(message));
   }

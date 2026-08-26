@@ -43,11 +43,9 @@ public final class InvariantAssembler {
       SmtTerm exists = Smt.sym(slot.existsName());
       valueConjuncts.add(Smt.app("=>", exists, body.value()));
       definedConjuncts.add(Smt.app("=>", exists, body.defined()));
-      falseCandidates.add(
-          Smt.and(List.of(exists, body.defined(), Smt.not(body.value()))));
+      falseCandidates.add(Smt.and(List.of(exists, body.defined(), Smt.not(body.value()))));
     }
-    SmtTerm defined =
-        Smt.or(List.of(Smt.or(falseCandidates), Smt.and(definedConjuncts)));
+    SmtTerm defined = Smt.or(List.of(Smt.or(falseCandidates), Smt.and(definedConjuncts)));
     return new TranslatedExpression(defined, Smt.and(valueConjuncts));
   }
 

@@ -41,8 +41,7 @@ public final class QueryParser {
     }
     if (explicitProfile && expression instanceof QueryExpr.InvariantIndependence) {
       throw error(
-          expressionPosition,
-          "invariant-independence cannot be combined with a scenario profile");
+          expressionPosition, "invariant-independence cannot be combined with a scenario profile");
     }
     QueryExpr profiled = new QueryExpr.Profiled(profile, expression);
     return profiled.equals(new QueryExpr.Profiled(ScenarioProfile.EXISTS, new QueryExpr.Satisfy()))
@@ -163,7 +162,8 @@ public final class QueryParser {
         matches.add(qualified);
       }
     }
-    if (matches.isEmpty()) throw error(token.position(), "unknown invariant '" + token.text() + "'");
+    if (matches.isEmpty())
+      throw error(token.position(), "unknown invariant '" + token.text() + "'");
     if (matches.size() > 1) {
       throw error(
           token.position(), "ambiguous invariant '" + token.text() + "'; use Class::Invariant");
@@ -230,7 +230,10 @@ public final class QueryParser {
         int start = offset;
         while (offset < source.length()) {
           char current = source.charAt(offset);
-          if (Character.isWhitespace(current) || current == '(' || current == ')' || current == ',') {
+          if (Character.isWhitespace(current)
+              || current == '('
+              || current == ')'
+              || current == ',') {
             break;
           }
           offset++;
