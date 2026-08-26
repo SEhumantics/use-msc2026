@@ -212,32 +212,108 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     throw unsupported(role + " is not a crisp numeric literal");
   }
 
+  /**
+   * USE's own {@code =} is TOTAL, not strict. {@code Op_equal} declares {@code kind() == SPECIAL},
+   * so {@link ExpStdOp#eval} hands it undefined arguments instead of short-circuiting to undefined
+   * the way it does for an {@code OPERATION}, and {@code Op_equal.evalBooleanResult} then returns
+   * {@code BooleanValue.get(args[1].isUndefined())} when the left operand is undefined and an
+   * ordinary {@code equals} otherwise. The result is therefore always DEFINED, and true exactly
+   * when both operands are undefined or both are defined and equal.
+   *
+   * <p>Confirmed by executing the real evaluator, not inferred from the source: over one {@code A}
+   * with {@code s}/{@code n} unset and no {@code b} link, {@code x.s = oclUndefined(String)} and
+   * {@code x.n = oclUndefined(Integer)} both evaluate to a DEFINED {@code true}, {@code x.b <>
+   * oclUndefined(B)} to a DEFINED {@code false}, and {@code oclUndefined(Integer) =
+   * oclUndefined(String)} to {@code true} -- while {@code x.n > 0} stays undefined, because the
+   * ordered comparators really are strict ({@link #orderedComparison}).
+   *
+   * <p>This replaces a short-circuit that returned a CONSTANT for any {@code oclUndefined} operand
+   * without ever translating the other side. That erased the other operand's definedness (an
+   * unlinked navigation's genuine, USE-confirmed violation was reported as unsatisfiable) and
+   * bypassed the fail-closed refusal an untranslatable operand must produce.
+   */
   private TranslatedExpression comparison(Expression l, Expression r) {
-    // USE equality is deliberately non-strict for the explicit oclUndefined literal: it is how
-    // legacy invariants state that an attribute must be present. Invalid navigation remains a
-    // different case below and propagates undefinedness.
     if (l instanceof ExpUndefined || r instanceof ExpUndefined) {
-      return defined(Smt.bool(l instanceof ExpUndefined && r instanceof ExpUndefined));
+      if (l instanceof ExpUndefined && r instanceof ExpUndefined) {
+        return defined(Smt.bool(true));
+      }
+      return defined(Smt.not(definednessOf(l instanceof ExpUndefined ? r : l)));
     }
     if (l instanceof ExpVariable lv && r instanceof ExpVariable rv)
       return defined(
           Smt.bool(context.binding(lv.getVarname()).equals(context.binding(rv.getVarname()))));
     if (l instanceof ExpConstString s) {
       TranslatedExpression other = argResult(r);
-      return new TranslatedExpression(other.defined(), Smt.eq(resolve(s, r), other.value()));
+      return useEquality(defined(resolve(s, r)), other);
     }
     if (r instanceof ExpConstString s) {
       TranslatedExpression other = argResult(l);
-      return new TranslatedExpression(other.defined(), Smt.eq(other.value(), resolve(s, l)));
+      return useEquality(other, defined(resolve(s, l)));
     }
     if (l instanceof ExpNavigation ln
         && r instanceof ExpNavigation rn
         && !ln.getDestination().isCollection()
         && !rn.getDestination().isCollection()) return navigationEquals(ln, rn);
-    TranslatedExpression left = argResult(l);
-    TranslatedExpression right = argResult(r);
-    return new TranslatedExpression(
-        Smt.and(List.of(left.defined(), right.defined())), Smt.eq(left.value(), right.value()));
+    return useEquality(argResult(l), argResult(r));
+  }
+
+  /**
+   * USE's total equality rule over two already-translated operands: always defined, true when both
+   * are undefined or both are defined and equal. The all-defined case -- every comparison in the
+   * crisp Library fragment, where an attribute always carries a value from its configured domain --
+   * is emitted in its simplified form so the SMT text is unchanged for it.
+   */
+  private static TranslatedExpression useEquality(
+      TranslatedExpression left, TranslatedExpression right) {
+    return useEquality(left, right, Smt.eq(left.value(), right.value()));
+  }
+
+  /**
+   * The same rule where "the values are equal" is not a term-level {@code =} over two standalone
+   * SMT values -- single-valued navigation equality, which is a shared-target disjunction.
+   */
+  private static TranslatedExpression useEquality(
+      TranslatedExpression left, TranslatedExpression right, SmtTerm valuesEqual) {
+    if (isTrue(left.defined()) && isTrue(right.defined())) {
+      return defined(valuesEqual);
+    }
+    return defined(
+        Smt.or(
+            List.of(
+                Smt.and(List.of(Smt.not(left.defined()), Smt.not(right.defined()))),
+                Smt.and(List.of(left.defined(), right.defined(), valuesEqual)))));
+  }
+
+  private static boolean isTrue(SmtTerm term) {
+    return term instanceof SmtTerm.Atom atom && "true".equals(atom.symbol());
+  }
+
+  /**
+   * The definedness of one operand of an equality, without requiring it to have a standalone SMT
+   * value. Single-valued navigation is exactly that case: it names a linked object rather than a
+   * value, so {@link #visitNavigation} cannot translate it at all -- but "is there a link?" is
+   * precisely what an {@code oclUndefined} comparison asks, and the link grid already answers it (a
+   * link implies both endpoints exist; see {@code AssociationLinkEncoder}). Every other shape goes
+   * through the ordinary translator, so an operand outside the supported fragment still fails
+   * closed with its own located reason.
+   */
+  private SmtTerm definednessOf(Expression e) {
+    if (e instanceof ExpNavigation navigation && !navigation.getDestination().isCollection()) {
+      return singleValuedNavigationDefined(navigation);
+    }
+    return argResult(e).defined();
+  }
+
+  /** True exactly when the source slot links to some target slot of the navigated association. */
+  private SmtTerm singleValuedNavigationDefined(ExpNavigation navigation) {
+    AssociationLinks links = context.linksFor(navigation.getDestination().association().name());
+    ObjectSlots destinationSlots = context.slotsFor(navigation.getDestination().cls().name());
+    VariableBinding source = context.binding(variableNameOf(navigation.getObjectExpression()));
+    List<SmtTerm> targets = new ArrayList<>();
+    for (int k = 0; k < destinationSlots.capacity(); k++) {
+      targets.add(linkTerm(links, source, k));
+    }
+    return Smt.or(targets);
   }
 
   /**
@@ -263,8 +339,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       rightTargets.add(rightLink);
       sharedTarget.add(Smt.and(List.of(leftLink, rightLink)));
     }
-    return new TranslatedExpression(
-        Smt.and(List.of(Smt.or(leftTargets), Smt.or(rightTargets))), Smt.or(sharedTarget));
+    return useEquality(
+        new TranslatedExpression(Smt.or(leftTargets), Smt.bool(true)),
+        new TranslatedExpression(Smt.or(rightTargets), Smt.bool(true)),
+        Smt.or(sharedTarget));
   }
 
   /**

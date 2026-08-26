@@ -10,12 +10,19 @@ import org.tzi.use.smt.solver.SmtTerm;
 import org.tzi.use.uml.mm.MClassInvariant;
 
 /**
- * Assembles one class invariant's full SATISFY contribution: its own context variable is an
- * implicit universal quantifier over every EXISTING instance of its context class -- including
- * every subclass's instances, exactly like {@code X.allInstances()} itself (see {@link
- * PolymorphicRange}) -- existence-guarded per-slot conjunction, not a single fixed binding. Every
+ * Assembles one class invariant's full SATISFY contribution. Its context variable is an implicit
+ * quantifier over every EXISTING instance of its context class -- including every subclass's
+ * instances, exactly like {@code X.allInstances()} itself (see {@link PolymorphicRange}) -- so the
+ * result is an existence-guarded per-slot combination, not a single fixed binding. Every
  * translation test through Task 3.4c deliberately bound the context variable to one fixed slot to
  * isolate the construct under test; this is the first place that changes.
+ *
+ * <p>That quantifier is UNIVERSAL for an ordinary {@code inv} and EXISTENTIAL for USE's own {@code
+ * existential inv} -- real USE syntax (USEBase.gpart:436), parsed by {@code
+ * ASTExistentialInvariantClause} into an {@link MClassInvariant} whose {@link
+ * MClassInvariant#isExistential()} is true, and expanded by USE itself as {@code
+ * C.allInstances()->exists(...)} rather than {@code forAll}. Encoding one as the other is a silent
+ * mistranslation, not a missing feature, so it is encoded rather than guessed at.
  */
 public final class InvariantAssembler {
   private InvariantAssembler() {}
@@ -26,27 +33,60 @@ public final class InvariantAssembler {
 
   public static TranslatedExpression classify(
       MClassInvariant invariant, TranslationContext baseContext, TranslationMode mode) {
-    if (!invariant.hasVar()) {
-      throw new SmtTranslationException(
-          "invariant '"
-              + invariant.name()
-              + "' has no named context variable (implicit self) - not yet supported");
-    }
-    String contextVar = invariant.var();
+    String contextVar = contextVariableOf(invariant);
     List<SmtTerm> valueConjuncts = new ArrayList<>();
     List<SmtTerm> definedConjuncts = new ArrayList<>();
-    List<SmtTerm> falseCandidates = new ArrayList<>();
+    List<SmtTerm> witnessCandidates = new ArrayList<>();
+    boolean existential = invariant.isExistential();
     for (PolymorphicRange.Slot slot : PolymorphicRange.slotsOf(invariant.cls(), baseContext)) {
       TranslationContext extended = baseContext.withBinding(contextVar, slot.binding());
       TranslatedExpression body =
           ExpressionTranslator.translate(invariant.bodyExpression(), extended, mode);
       SmtTerm exists = Smt.sym(slot.existsName());
-      valueConjuncts.add(Smt.app("=>", exists, body.value()));
       definedConjuncts.add(Smt.app("=>", exists, body.defined()));
-      falseCandidates.add(Smt.and(List.of(exists, body.defined(), Smt.not(body.value()))));
+      if (existential) {
+        // One EXISTING instance with a defined-true body is enough, and is what makes the whole
+        // invariant defined -- the exact dual of the universal case below, and the same rule
+        // ExpressionTranslator.visitExists already encodes for an inner exists.
+        witnessCandidates.add(Smt.and(List.of(exists, body.defined(), body.value())));
+      } else {
+        valueConjuncts.add(Smt.app("=>", exists, body.value()));
+        witnessCandidates.add(Smt.and(List.of(exists, body.defined(), Smt.not(body.value()))));
+      }
     }
-    SmtTerm defined = Smt.or(List.of(Smt.or(falseCandidates), Smt.and(definedConjuncts)));
-    return new TranslatedExpression(defined, Smt.and(valueConjuncts));
+    SmtTerm decisive = Smt.or(witnessCandidates);
+    SmtTerm defined = Smt.or(List.of(decisive, Smt.and(definedConjuncts)));
+    // OCL's exists over an empty range is FALSE (no witness), while forAll over an empty range is
+    // vacuously TRUE -- which is exactly what the empty disjunction and the empty conjunction
+    // already give, so the two branches need no separate empty-population special case.
+    return new TranslatedExpression(defined, existential ? decisive : Smt.and(valueConjuncts));
+  }
+
+  /**
+   * The invariant's single context variable.
+   *
+   * <p>{@code hasVar()} is always true for an invariant parsed from a {@code .use} file -- {@code
+   * ASTInvariantClause.gen} supplies the pseudo-variable {@code "self"} whenever no context
+   * variable is written -- so the implicit-self case is not an unsupported shape at all, only a
+   * differently-spelled one, and it is handled rather than refused. A multi-variable context is a
+   * genuinely different quantifier structure this translation slice does not encode, and fails
+   * closed by name instead of by accident.
+   */
+  private static String contextVariableOf(MClassInvariant invariant) {
+    if (!invariant.hasVar()) {
+      return "self";
+    }
+    if (invariant.vars().size() != 1) {
+      throw new SmtTranslationException(
+          "invariant '"
+              + invariant.qualifiedName()
+              + "' has "
+              + invariant.vars().size()
+              + " context variables ("
+              + invariant.var()
+              + "); only a single context variable is supported in this translation slice");
+    }
+    return invariant.var();
   }
 
   /** Declares and binds the named classification pair exactly once for query reuse. */
