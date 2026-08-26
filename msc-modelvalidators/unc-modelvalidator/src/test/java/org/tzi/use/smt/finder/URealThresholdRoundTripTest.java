@@ -93,6 +93,54 @@ public class URealThresholdRoundTripTest {
     assertEquals(0.02, aboveSpeed.uncertainty(), 0.0);
   }
 
+  @Test
+  public void lessThanBelowAtAndAboveBoundaryMatchTheUseEvaluator() throws Exception {
+    assertLessDirectionBoundary(
+        "ReliablySlow.use", "ReliablySlow.properties", "UnidentifiedObject::ReliablySlow");
+  }
+
+  @Test
+  public void lessThanOrEqualBelowAtAndAboveBoundaryMatchTheUseEvaluator() throws Exception {
+    assertLessDirectionBoundary(
+        "ReliablySlowOrEqual.use",
+        "ReliablySlowOrEqual.properties",
+        "UnidentifiedObject::ReliablySlowOrEqual");
+  }
+
+  private static void assertLessDirectionBoundary(
+      String modelResource, String configurationResource, String invariantName) throws Exception {
+    MModel model = compile(resourcePath(modelResource));
+
+    ModelFinderResult below =
+        SmtModelFinder.find(model, configuration(model, configurationResource, "boundaryBelowActive"));
+    assertTrue(below.satisfiable());
+    assertEquals(new InvariantVerdict(invariantName, true), below.verdicts().get(0));
+    URealValue belowSpeed = reconstructedSpeed(model, below);
+    assertEquals(0.2671029303, belowSpeed.value(), 0.0);
+    assertEquals(0.02, belowSpeed.uncertainty(), 0.0);
+
+    ModelFinderResult at =
+        SmtModelFinder.find(model, configuration(model, configurationResource, "boundaryAtActive"));
+    assertTrue(at.satisfiable());
+    assertEquals(new InvariantVerdict(invariantName, true), at.verdicts().get(0));
+    URealValue atSpeed = reconstructedSpeed(model, at);
+    assertEquals(0.2671029304, atSpeed.value(), 0.0);
+    assertEquals(0.02, atSpeed.uncertainty(), 0.0);
+
+    ModelFinderResult aboveUnchecked =
+        SmtModelFinder.find(
+            model, configuration(model, configurationResource, "boundaryAboveInactive"));
+    assertTrue(aboveUnchecked.satisfiable());
+    assertEquals(new InvariantVerdict(invariantName, false), aboveUnchecked.verdicts().get(0));
+    URealValue aboveSpeed = reconstructedSpeed(model, aboveUnchecked);
+    assertEquals(0.2671029305, aboveSpeed.value(), 0.0);
+    assertEquals(0.02, aboveSpeed.uncertainty(), 0.0);
+
+    ModelFinderResult aboveEnforced =
+        SmtModelFinder.find(model, configuration(model, configurationResource, "boundaryAboveActive"));
+    assertFalse(aboveEnforced.satisfiable());
+  }
+
   private static URealValue reconstructedSpeed(MModel model, ModelFinderResult result) {
     MObject object =
         result
@@ -106,8 +154,13 @@ public class URealThresholdRoundTripTest {
 
   private static AnalysisConfiguration configuration(MModel model, String section)
       throws URISyntaxException {
+    return configuration(model, "ReliablyFast.properties", section);
+  }
+
+  private static AnalysisConfiguration configuration(
+      MModel model, String resource, String section) throws URISyntaxException {
     return ConfigurationReader.normalize(
-            ConfigurationReader.read(resourcePath("ReliablyFast.properties"), section),
+            ConfigurationReader.read(resourcePath(resource), section),
             ConfigurationVocabulary.fromModel(model))
         .requireSupported();
   }
