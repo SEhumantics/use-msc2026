@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
-  "generatedBy": "kk-feature-checklist workflow (7-agent: 6 capability-area source audits + 1 scenario-mapping pass), msc-4 session 2026-08-22; restructured to a plugin-keyed schema and deduped (3 true id-collisions merged) during the msc-4 feature-model rework session; independently re-verified against source by a 6-area + 14-scenario + 2-cross-check (22-agent) audit workflow, consolidating 15 further near-duplicate features (different ids, same underlying capability, found across areas) and correcting 1 support-status misclassification plus ~20 scenario-mapping errors; unc-modelvalidator support entries populated for the first time (0/126 -> 126/126) by a 6-area parallel evidence-gathering workflow, msc-4 session 2026-08-25, cross-referencing the real benchmark manifest/results.json and direct source citations, not guessed",
+  "generatedBy": "kk-feature-checklist workflow (7-agent: 6 capability-area source audits + 1 scenario-mapping pass), msc-4 session 2026-08-22; restructured to a plugin-keyed schema and deduped (3 true id-collisions merged) during the msc-4 feature-model rework session; independently re-verified against source by a 6-area + 14-scenario + 2-cross-check (22-agent) audit workflow, consolidating 15 further near-duplicate features (different ids, same underlying capability, found across areas) and correcting 1 support-status misclassification plus ~20 scenario-mapping errors; unc-modelvalidator support entries populated for the first time (0/126 -> 126/126) by a 6-area parallel evidence-gathering workflow, msc-4 session 2026-08-25, cross-referencing the real benchmark manifest/results.json and direct source citations, not guessed; Phase 5 UReal feature-matrix sync (Task D), msc-4 session 2026-08-26",
   "sourceAudited": "kk-modelvalidator/src/main (as of this session)",
-  "scenarioManifest": "msc-modelvalidators/benchmark/src/main/resources/manifest.json (17 base scenarios + 16 paired UNSAT mutations)",
+  "scenarioManifest": "msc-modelvalidators/benchmark/src/main/resources/manifest.json (21 base scenarios + 16 paired UNSAT mutations)",
   "plugins": [
     {
       "id": "kk-modelvalidator",
@@ -13,7 +13,7 @@
     {
       "id": "unc-modelvalidator",
       "name": "Unc-ModelValidator",
-      "description": "SMT/Z3-based bounded model finder for USE (this thesis's own contribution, a functional superset of kk-modelvalidator by design). Crisp OCL model-finding is implemented and verified against real Kodkod parity on a growing subset of scenarios (see per-feature status below); U-type (uncertainty-typed attribute) support is not yet started.",
+      "description": "SMT/Z3-based bounded model finder for USE (this thesis's own contribution, a functional superset of kk-modelvalidator by design). Crisp OCL model-finding is implemented and verified against real Kodkod parity on a growing subset of scenarios (see per-feature status below); the first bounded UReal vertical slice is implemented for paired nominal/uncertainty attribute encoding, reconstruction, and direct attribute-vs-crisp-literal confidence thresholds, while broader U-type expressions remain unsupported.",
       "status": "in-progress"
     }
   ],
@@ -1383,6 +1383,87 @@
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
               "coverageNote": "zero coverage -- no scenario's active invariants use an OCL Real literal; verdict is source-only (unconditional throw, unambiguous)."
+            }
+          }
+        },
+        {
+          "id": "utype.ureal-attribute-roundtrip",
+          "name": "UReal attribute encoding/reconstruction (representative + uncertainty)",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/ocl/SimpleExpressionVisitor.java:329-350 rejects the UReal literal/type family explicitly; the Kodkod backend has no paired representative/uncertainty attribute encoding or reconstruction path.",
+              "notes": "KK-ModelValidator has no UReal value representation to encode or reconstruct.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No KK scenario evidence; the UReal benchmark scenarios exercise only unc-modelvalidator."
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/AttributeEncoder.java:50-88 encodes paired Real representative/uncertainty terms; SmtModelFinder.java:195-259,321-355 discovers and registers paired UReal component domains; SystemStateReconstructor.java:108-112 and SmtValueDecoder.java:40-45 reconstruct both components as a USE URealValue; URealAttributeRoundTripTest.java:26-45 verifies the real round trip.",
+              "notes": "Each bounded UReal attribute is represented by two SMT Real terms and reconstructed with both the representative value and non-negative uncertainty intact.",
+              "satScenarioIds": [
+                "URealThreshold-At",
+                "URealThreshold-Above"
+              ],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "The manifest scenarios have validation disabled, so the oracle list is empty; URealAttributeRoundTripTest independently checks the reconstructed USE value."
+            }
+          }
+        },
+        {
+          "id": "utype.ureal-confidence-threshold",
+          "name": "(UReal attribute op crisp literal).toBooleanC(constant confidence) for >, >=, <, <=",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/ocl/SimpleExpressionVisitor.java:329-350 rejects UReal constructs, so no UReal confidence-threshold expression reaches Kodkod translation.",
+              "notes": "The crisp Kodkod backend has no UReal confidence-threshold semantics.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No KK scenario evidence; the four UReal threshold scenarios are unc-modelvalidator-only."
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/ExpressionTranslator.java:63-155 recognizes direct UReal-attribute comparisons with crisp numeric literals for >, >=, <, <= and constant confidence; URealThresholdRoundTripTest.java:26-231 exercises boundaries and confirms each reconstructed result with USE's evaluator. ReliablySlow.use and ReliablySlowOrEqual.use provide the real inverted-comparison fixtures.",
+              "notes": "Support is deliberately limited to `(UReal attribute op crisp literal).toBooleanC(constant confidence)`; the polarity and strict/non-strict boundary determine the representative/uncertainty SMT constraint.",
+              "satScenarioIds": [
+                "URealThreshold-At",
+                "URealThreshold-Above"
+              ],
+              "unsatScenarioIds": [
+                "URealThreshold-Below",
+                "URealThreshold-NominalErasure"
+              ],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "All four manifest scenario verdicts exercise the `>` slice; evaluator-backed JUnit boundary tests additionally cover >=, <, and <=. ReliablySlow fixtures are test evidence, not manifest scenarios."
+            }
+          }
+        },
+        {
+          "id": "utype.ureal-other-expressions",
+          "name": "Other UReal expression shapes (UReal literals, arithmetic, uncertain-vs-uncertain comparisons)",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/ocl/SimpleExpressionVisitor.java:329-350 explicitly throws for UReal literals and the surrounding uncertainty-type family.",
+              "notes": "UReal literals, arithmetic, and uncertain-vs-uncertain comparisons are not translated by KK-ModelValidator.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "Source-only unsupported boundary; no manifest scenario covers these broader shapes."
+            },
+            "unc-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/ExpressionTranslator.java:63-69 rejects bare UReal attribute access outside the direct threshold shape; lines 104-155 require a UReal attribute compared with a crisp Real/Integer literal and constant crisp confidence; lines 288-290 reject ExpConstUReal.",
+              "notes": "The implemented boundary excludes UReal literals, UReal arithmetic, uncertain-vs-uncertain comparisons, non-attribute UReal operands, and non-constant or uncertain thresholds/confidences.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "Source-only fail-closed boundary; no manifest scenario claims broader UReal expression support."
             }
           }
         },
