@@ -171,8 +171,39 @@ public final class SmtModelFinder {
 
   private static ModelFinderResult finish(MModel model, Solved solved, MSystem system) {
     List<InvariantVerdict> verdicts = InvariantReEvaluator.reevaluate(model, system);
-    QueryWitnessChecker.requireExpectedOutcomes(solved.obligation().expectedOutcomes(), verdicts);
+    // InvariantReEvaluator drives the real USE evaluator over the reconstructed state, which is the
+    // U-AWARE reading -- that is what makes these UNCERTAIN-mode verdicts and nothing else. A query
+    // atom in another mode finds no verdict here and is refused rather than assumed; see
+    // requireIndependentOracleAvailable, which stops that case before a solver is ever started.
+    QueryWitnessChecker.requireQuerySatisfied(
+        solved.obligation().core(), Map.of(TranslationMode.UNCERTAIN, verdicts));
     return new ModelFinderResult(true, solved.ledger(), verdicts, system);
+  }
+
+  /**
+   * Refuses, BEFORE solving, any query whose oracle contract this build cannot discharge.
+   *
+   * <p>Milestone 4.2 reifies {@code def}/{@code val} in both modes and Milestone 4.4 compiles atoms
+   * in both modes, but the independent oracle side is still uncertain-only: {@link
+   * InvariantReEvaluator} evaluates the reconstructed snapshot with USE's own U-aware evaluator,
+   * and the nominal-erasure oracle over that same snapshot is Milestone 4.5's deliverable.
+   * Delivering a SAT witness whose nominal classifications nothing independently checked would
+   * break §8's obligation 6 exactly where it matters most, so the query fails closed by that
+   * milestone's name instead. §5.2's two nominal diagnostic queries land here, and will start
+   * working when 4.5 adds the oracle -- not by weakening this check.
+   */
+  private static void requireIndependentOracleAvailable(
+      QueryExpr core, Set<String> activeInvariants) {
+    boolean needsNominal =
+        QueryRequirements.requiredClassifications(core, activeInvariants).values().stream()
+            .anyMatch(modes -> modes.contains(TranslationMode.NOMINAL));
+    if (needsNominal) {
+      throw new IllegalArgumentException(
+          "this query classifies invariants in NOMINAL mode, but the only independent oracle over a"
+              + " reconstructed witness is USE's U-aware evaluation; the nominal-erasure oracle"
+              + " starts at Milestone 4.5. Refusing rather than delivering a witness nothing"
+              + " checked in that mode.");
+    }
   }
 
   private static Solved solve(
@@ -370,6 +401,7 @@ public final class SmtModelFinder {
     checked.ledger().requireAllSupported();
     QueryCompiler.Obligation obligation =
         QueryCompiler.compile(config.query(), config.activeInvariants(), checked.classifications());
+    requireIndependentOracleAvailable(obligation.core(), config.activeInvariants());
     script.assertThat(obligation.constraint());
 
     SolverProcess solverProcess =

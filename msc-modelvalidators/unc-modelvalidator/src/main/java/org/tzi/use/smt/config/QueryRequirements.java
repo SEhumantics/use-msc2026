@@ -22,6 +22,9 @@ public final class QueryRequirements {
       QueryExpr query, Set<String> activeInvariants, Map<String, Set<TranslationMode>> result) {
     switch (query) {
       case QueryExpr.Profiled profiled -> collect(profiled.expression(), activeInvariants, result);
+      case QueryExpr.Constant ignored -> {
+        // A constant mentions no invariant, so it requires no translation.
+      }
       case QueryExpr.Classification atom -> add(result, atom.invariantName(), atom.mode());
       case QueryExpr.Aggregate aggregate -> addAll(result, activeInvariants, aggregate.mode());
       case QueryExpr.And and -> {

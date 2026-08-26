@@ -3,6 +3,7 @@ package org.tzi.use.smt.config;
 /** Typed syntax tree for the recursive witness-query language. */
 public sealed interface QueryExpr
     permits QueryExpr.Profiled,
+        QueryExpr.Constant,
         QueryExpr.Classification,
         QueryExpr.Aggregate,
         QueryExpr.And,
@@ -24,6 +25,14 @@ public sealed interface QueryExpr
       }
     }
   }
+
+  /**
+   * A constant, deliberately NOT part of §5.2's surface grammar: {@link QueryParser} never produces
+   * one. Desugaring an aggregate over an empty invariant set has to denote something, and the empty
+   * conjunction is {@code true} exactly as {@code Smt.and} of no conjuncts already is -- writing
+   * that down beats silently dropping the aggregate.
+   */
+  record Constant(boolean value) implements QueryExpr {}
 
   record Classification(TranslationMode mode, String invariantName, InvariantOutcome outcome)
       implements QueryExpr {}

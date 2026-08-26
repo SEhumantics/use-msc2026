@@ -234,7 +234,16 @@ public class CounterexampleQueryTest {
     assertEquals(InvariantOutcome.FALSE, outcomes(result).get("Sample::MarkerIsOne"));
   }
 
-  /** Milestones 4.4-4.6 stay closed: no query shape is silently degraded to a weaker one. */
+  /**
+   * Milestones 4.5-4.6 stay closed: no query shape is silently degraded to a weaker one.
+   *
+   * <p>{@code uncertain Book::titleIsKey is false} and {@code not satisfy} used to be listed here
+   * too. Milestone 4.4 implemented them -- explicit atoms and Boolean connectives, checked against
+   * the independent USE oracle by evaluating the compiled query over its verdicts -- so they moved
+   * to {@code BooleanQueryAlgebraTest} as working queries rather than refusals. What has NOT moved
+   * is a nominal-mode atom: Milestone 4.2 reifies it and 4.4 compiles it, but no nominal-erasure
+   * oracle over a reconstructed witness exists before 4.5, so the end-to-end path still refuses it.
+   */
   @Test
   public void unsupportedQueryShapesStillFailClosed() throws Exception {
     MModel model = compileLibrary();
@@ -243,8 +252,7 @@ public class CounterexampleQueryTest {
           "fragile(Book::titleIsKey)",
           "cover satisfy",
           "uniform satisfy",
-          "uncertain Book::titleIsKey is false",
-          "not satisfy"
+          "nominal Book::titleIsKey is true"
         }) {
       AnalysisConfiguration config = withQuery(model, readConfig(model, null), query);
       IllegalArgumentException exception =
