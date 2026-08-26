@@ -93,8 +93,11 @@ public final class ConfigurationReader {
 
     List<AttributeDomain> domains = new ArrayList<>();
     for (String attribute : vocabulary.attributeNames().stream().sorted().toList()) {
+      boolean stringTyped = vocabulary.isStringAttribute(attribute);
       List<String> values =
-          entries.containsKey(attribute) ? setValues(attribute, entries.get(attribute)) : List.of();
+          entries.containsKey(attribute)
+              ? setValues(attribute, entries.get(attribute), stringTyped)
+              : List.of();
       BigDecimal min = decimal(entries, attribute + "_min");
       BigDecimal max = decimal(entries, attribute + "_max");
       if (min != null || max != null || !values.isEmpty()) {
@@ -110,7 +113,7 @@ public final class ConfigurationReader {
                   ownerAndName[0],
                   ownerAndName[1],
                   component,
-                  setValues(componentKey, entries.get(componentKey)),
+                  setValues(componentKey, entries.get(componentKey), stringTyped),
                   null,
                   null));
         }
@@ -309,7 +312,7 @@ public final class ConfigurationReader {
     }
   }
 
-  private static List<String> setValues(String key, List<String> values) {
+  private static List<String> setValues(String key, List<String> values, boolean stringTyped) {
     String value = String.join(",", values).trim();
     if (!value.startsWith("Set{") || !value.endsWith("}")) {
       throw new ConfigurationReadException(
@@ -318,7 +321,44 @@ public final class ConfigurationReader {
     String body = value.substring(4, value.length() - 1).trim();
     return body.isEmpty()
         ? List.of()
-        : List.of(body.split(",", -1)).stream().map(String::trim).toList();
+        : List.of(body.split(",", -1)).stream()
+            .map(element -> adjustElement(element, stringTyped))
+            .toList();
+  }
+
+  /**
+   * The incumbent's {@code PropertyConfigurationVisitor.adjustElement}, which defines the semantics
+   * of the shared {@code .properties} format and is therefore reproduced rather than reinvented:
+   * trim, then -- if and only if the attribute's (element) type is String -- remove ALL {@code '}
+   * characters, keeping the result even when it is empty.
+   *
+   * <p>Three details are deliberate, not accidental.
+   *
+   * <p>String only. Quotes are meaningful text in a numeric domain, where a quoted element is a
+   * malformed configuration that must still be rejected loudly by {@code AttributeEncoder}'s number
+   * parsing, not silently repaired into a number.
+   *
+   * <p>ALL quotes, not just surrounding ones. {@code replaceAll("'", "")} is what the incumbent
+   * does, so {@code a'b} and {@code 'a'b'} denote the same candidate {@code ab} in both tools.
+   * Narrowing this to a surrounding-quotes-only strip would be an improvement that breaks parity on
+   * the one file format both validators read.
+   *
+   * <p>Empty results are kept. {@code Set&#123;''&#125;} is a ONE-element domain whose only
+   * candidate is the empty string -- {@code benchmark/examples/Redefines/Redefines.properties}
+   * depends on exactly that to make its invariant unsatisfiable, and {@code
+   * AttributeEncoder.guardString} rejects an empty String domain outright, so dropping the element
+   * would turn a documented UNSAT into a spurious error. The incumbent's OTHER quote-stripping
+   * site, {@code readTypeValues}, does skip empty elements; that is the type-wide path, not the
+   * attribute-domain path, and its behaviour is not copied here.
+   *
+   * <p>Not reproduced: {@code adjustElement} returns the {@code Undefined}/{@code Undefined_Set}
+   * sentinel tokens before stripping. Those tokens carry no quote characters, so the branch is a
+   * no-op for String attributes; this reader has no notion of them, and inventing one here would be
+   * new behaviour rather than a defect fix.
+   */
+  private static String adjustElement(String element, boolean stringTyped) {
+    String trimmed = element.trim();
+    return stringTyped ? trimmed.replaceAll("'", "") : trimmed;
   }
 
   private static String[] splitAttribute(String attribute) {

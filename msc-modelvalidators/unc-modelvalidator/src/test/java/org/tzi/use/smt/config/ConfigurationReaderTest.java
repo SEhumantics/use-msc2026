@@ -15,8 +15,11 @@ public class ConfigurationReaderTest {
 
   private static final ConfigurationVocabulary LIBRARY =
       ConfigurationVocabulary.of(
-          Set.of("User", "Copy", "Book"), Set.of("Borrows", "BelongsTo"),
-          Set.of("User_name", "Book_title"), Set.of("User_nameIsKey", "Book_titleIsKey"));
+          Set.of("User", "Copy", "Book"),
+          Set.of("Borrows", "BelongsTo"),
+          Set.of("User_name", "Book_title"),
+          Set.of("User_name", "Book_title"),
+          Set.of("User_nameIsKey", "Book_titleIsKey"));
 
   @Test
   public void readsDefaultSectionAndNormalizesKnownLegacyKeys() throws Exception {
@@ -51,7 +54,7 @@ public class ConfigurationReaderTest {
                 domain ->
                     domain.className().equals("User")
                         && domain.attributeName().equals("name")
-                        && domain.enumeratedValues().equals(java.util.List.of("'Ada'", "'Bob'"))));
+                        && domain.enumeratedValues().equals(java.util.List.of("Ada", "Bob"))));
     assertEquals(Set.of("User::nameIsKey"), configuration.activeInvariants());
     assertEquals(Duration.ofSeconds(12), configuration.timeout());
     assertEquals(4, configuration.modelLimit());
@@ -128,7 +131,8 @@ public class ConfigurationReaderTest {
   @Test
   public void readsUncertaintyComponentsAsSeparateAttributeDomains() throws Exception {
     ConfigurationVocabulary vocabulary =
-        ConfigurationVocabulary.of(Set.of("Sensor"), Set.of(), Set.of("Sensor_speed"), Set.of());
+        ConfigurationVocabulary.of(
+            Set.of("Sensor"), Set.of(), Set.of("Sensor_speed"), Set.of(), Set.of());
     Path file =
         temporaryConfiguration(
             """

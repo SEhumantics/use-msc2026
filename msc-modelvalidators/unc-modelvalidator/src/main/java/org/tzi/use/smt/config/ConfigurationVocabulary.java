@@ -6,22 +6,37 @@ import org.tzi.use.uml.mm.MAttribute;
 import org.tzi.use.uml.mm.MClass;
 import org.tzi.use.uml.mm.MClassInvariant;
 import org.tzi.use.uml.mm.MModel;
+import org.tzi.use.uml.ocl.type.CollectionType;
+import org.tzi.use.uml.ocl.type.Type;
 
-/** Names from the loaded USE model used to disambiguate the flat legacy key vocabulary. */
+/**
+ * Names from the loaded USE model used to disambiguate the flat legacy key vocabulary.
+ *
+ * <p>{@code stringAttributeNames} is the subset of {@code attributeNames} whose declared type is
+ * String -- or a collection whose element type is String. It exists because the legacy {@code
+ * .properties} format is untyped text and the reader has to know which enumerated domains are
+ * String-typed to interpret their quoting: the incumbent's {@code
+ * PropertyConfigurationVisitor.adjustElement} strips quote characters for String attributes ONLY,
+ * and the same file cannot be read correctly without that distinction. It is a required component,
+ * not an optional one, so a hand-built vocabulary cannot silently default to "no attribute is a
+ * String" and re-open the defect this closed.
+ */
 public record ConfigurationVocabulary(
     Set<String> classNames,
     Set<String> associationNames,
     Set<String> attributeNames,
+    Set<String> stringAttributeNames,
     Set<String> invariantNames) {
   public ConfigurationVocabulary {
     classNames = Set.copyOf(classNames);
     associationNames = Set.copyOf(associationNames);
     attributeNames = Set.copyOf(attributeNames);
+    stringAttributeNames = Set.copyOf(stringAttributeNames);
     invariantNames = Set.copyOf(invariantNames);
   }
 
   public static ConfigurationVocabulary empty() {
-    return new ConfigurationVocabulary(Set.of(), Set.of(), Set.of(), Set.of());
+    return new ConfigurationVocabulary(Set.of(), Set.of(), Set.of(), Set.of(), Set.of());
   }
 
   /** Attribute names use the incumbent's {@code Class_attribute} spelling. */
@@ -29,9 +44,15 @@ public record ConfigurationVocabulary(
       Set<String> classNames,
       Set<String> associationNames,
       Set<String> attributeNames,
+      Set<String> stringAttributeNames,
       Set<String> invariantNames) {
     return new ConfigurationVocabulary(
-        classNames, associationNames, attributeNames, invariantNames);
+        classNames, associationNames, attributeNames, stringAttributeNames, invariantNames);
+  }
+
+  /** True for an attribute whose declared (element) type is String, in {@code Class_attribute}. */
+  public boolean isStringAttribute(String attributeName) {
+    return stringAttributeNames.contains(attributeName);
   }
 
   /**
@@ -42,10 +63,15 @@ public record ConfigurationVocabulary(
   public static ConfigurationVocabulary fromModel(MModel model) {
     Set<String> classNames = new LinkedHashSet<>();
     Set<String> attributeNames = new LinkedHashSet<>();
+    Set<String> stringAttributeNames = new LinkedHashSet<>();
     for (MClass cls : model.classes()) {
       classNames.add(cls.name());
       for (MAttribute attribute : cls.attributes()) {
-        attributeNames.add(cls.name() + "_" + attribute.name());
+        String key = cls.name() + "_" + attribute.name();
+        attributeNames.add(key);
+        if (isStringTyped(attribute.type())) {
+          stringAttributeNames.add(key);
+        }
       }
     }
     Set<String> associationNames = new LinkedHashSet<>();
@@ -54,6 +80,15 @@ public record ConfigurationVocabulary(
     for (MClassInvariant invariant : model.classInvariants()) {
       invariantNames.add(invariant.cls().name() + "_" + invariant.name());
     }
-    return of(classNames, associationNames, attributeNames, invariantNames);
+    return of(classNames, associationNames, attributeNames, stringAttributeNames, invariantNames);
+  }
+
+  /**
+   * Mirrors the incumbent's collection unwrap in {@code adjustElement}: a {@code Set(String)}
+   * attribute's configured elements are Strings and are quoted the same way.
+   */
+  private static boolean isStringTyped(Type type) {
+    Type element = type instanceof CollectionType collection ? collection.elemType() : type;
+    return element.isTypeOfString();
   }
 }

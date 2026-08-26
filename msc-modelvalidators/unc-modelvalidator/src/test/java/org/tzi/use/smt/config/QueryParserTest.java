@@ -13,6 +13,7 @@ public class QueryParserTest {
           Set.of("Reading"),
           Set.of(),
           Set.of(),
+          Set.of(),
           Set.of("Reading_ReliablyFast", "Reading_WellFormed"));
 
   @Test
