@@ -16,7 +16,6 @@ import org.tzi.use.smt.config.ConfigurationVocabulary;
 import org.tzi.use.smt.config.RawConfiguration;
 import org.tzi.use.smt.finder.ModelFinderResult;
 import org.tzi.use.smt.finder.SmtModelFinder;
-import org.tzi.use.smt.verify.InvariantVerdict;
 import org.tzi.use.uml.mm.MModel;
 
 /**
@@ -90,13 +89,14 @@ public class SmtValidatePropertyAction implements IPluginActionDelegate {
       String failingNames =
           result.verdicts().stream()
               .filter(v -> !v.holds())
-              .map(InvariantVerdict::invariantName)
+              .map(v -> v.invariantName() + " [" + v.outcome() + "]")
               .collect(Collectors.joining(", "));
       message =
           failing
               + " of "
               + result.verdicts().size()
-              + " active invariant(s) do not hold in the found instance: "
+              + " active invariant(s) do not hold in the found instance"
+              + " (FALSE and UNDEFINED are not interchangeable): "
               + failingNames;
     }
     JOptionPane.showMessageDialog(

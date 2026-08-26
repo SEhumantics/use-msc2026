@@ -1,6 +1,7 @@
 package org.tzi.use.smt.verify;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
@@ -12,10 +13,13 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.Test;
+import org.tzi.use.api.UseSystemApi;
+import org.tzi.use.main.Session;
 import org.tzi.use.parser.use.USECompiler;
 import org.tzi.use.smt.config.AssociationScope;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.ClassScope;
+import org.tzi.use.smt.config.InvariantOutcome;
 import org.tzi.use.smt.encode.*;
 import org.tzi.use.smt.reconstruct.SystemStateReconstructor;
 import org.tzi.use.smt.solver.*;
@@ -241,6 +245,71 @@ public class InvariantReEvaluatorTest {
             Map.of("Borrows", borrows, "BelongsTo", belongsTo));
 
     return SystemStateReconstructor.reconstruct(model, context, modelValues);
+  }
+
+  /**
+   * The oracle must distinguish USE's own three outcomes, not two. USE's {@code forAll}
+   * deliberately collapses an undefined body element to {@code false} ({@code
+   * ExpQuery.evalForAll0}), so evaluating {@code expandedExpression()} alone cannot tell a genuine
+   * defined-false invariant from an undefined one -- and Phase 4's whole classification algebra
+   * (THESIS_SMT_MODEL_FINDER_PLAN s5.1) rests on that distinction being preserved. This drives the
+   * oracle down to the per-instance body, where USE still reports undefinedness, and recombines it
+   * three-valued exactly like {@link org.tzi.use.smt.encode.InvariantAssembler#classify}.
+   */
+  @Test
+  public void undefinedIsReportedAsItsOwnOutcomeAndNotCollapsedIntoFalse() throws Exception {
+    MModel model =
+        compileSource(
+            """
+            model Outcomes
+            class Sample
+            attributes
+              marker : Integer
+            end
+            constraints
+            context s : Sample inv HoldsInv: s.marker = 1
+            context s : Sample inv DefinedFalseInv: s.marker = 2
+            context s : Sample inv UndefinedInv: oclUndefined(Boolean)
+            """,
+            "Outcomes");
+
+    Session session = new Session();
+    session.setSystem(new MSystem(model));
+    UseSystemApi api = UseSystemApi.create(session);
+    api.createObjectEx(model.getClass("Sample"), "s1");
+    api.setAttributeValue("s1", "marker", "1");
+
+    List<InvariantVerdict> verdicts = InvariantReEvaluator.reevaluate(model, session.system());
+
+    assertEquals(InvariantOutcome.TRUE, outcomeOf(verdicts, "Sample::HoldsInv"));
+    assertEquals(InvariantOutcome.FALSE, outcomeOf(verdicts, "Sample::DefinedFalseInv"));
+    assertEquals(
+        "an undefined invariant must not masquerade as a defined violation",
+        InvariantOutcome.UNDEFINED,
+        outcomeOf(verdicts, "Sample::UndefinedInv"));
+    assertFalse(
+        "undefined never counts as holding",
+        verdicts.stream()
+            .filter(v -> v.invariantName().equals("Sample::UndefinedInv"))
+            .findFirst()
+            .orElseThrow()
+            .holds());
+  }
+
+  private static InvariantOutcome outcomeOf(List<InvariantVerdict> verdicts, String name) {
+    return verdicts.stream()
+        .filter(v -> v.invariantName().equals(name))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("no verdict for " + name))
+        .outcome();
+  }
+
+  private static MModel compileSource(String source, String name) {
+    ModelFactory factory = new ModelFactory();
+    PrintWriter err = new PrintWriter(System.err);
+    MModel model = USECompiler.compileSpecification(source, name, err, factory);
+    err.flush();
+    return model;
   }
 
   private static MModel compileLibrary() throws Exception {
