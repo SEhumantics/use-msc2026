@@ -55,7 +55,42 @@ public class ConfigurationReaderTest {
     assertEquals(Set.of("User::nameIsKey"), configuration.activeInvariants());
     assertEquals(Duration.ofSeconds(12), configuration.timeout());
     assertEquals(4, configuration.modelLimit());
+    assertEquals(QueryExpr.SATISFY, configuration.query());
     assertEquals("aggregationcyclefreeness", normalized.diagnostics().getFirst().key());
+  }
+
+  @Test
+  public void parsesAQueryAndRemovesTheDeferredDiagnosticOnlyWhenSuccessful() throws Exception {
+    Path file =
+        temporaryConfiguration(
+            "User_min = 1\nquery = uncertain nameIsKey is false and uncertain others are true\n");
+
+    ConfigurationReader.NormalizedConfiguration normalized =
+        ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY);
+
+    assertTrue(normalized.diagnostics().isEmpty());
+    assertEquals(
+        new QueryExpr.Profiled(
+            ScenarioProfile.EXISTS,
+            new QueryExpr.And(
+                new QueryExpr.Classification(
+                    TranslationMode.UNCERTAIN, "User::nameIsKey", InvariantOutcome.FALSE),
+                new QueryExpr.Aggregate(
+                    TranslationMode.UNCERTAIN, QueryExpr.AggregateScope.OTHERS))),
+        normalized.requireSupported().query());
+  }
+
+  @Test
+  public void malformedQueryFailsClosedInsteadOfBecomingADeferredDiagnostic() throws Exception {
+    Path file = temporaryConfiguration("User_min = 1\nquery = uncertain Missing is true\n");
+
+    ConfigurationReadException exception =
+        assertThrows(
+            ConfigurationReadException.class,
+            () -> ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY));
+
+    assertTrue(exception.getMessage(), exception.getMessage().contains("query at position 11"));
+    assertTrue(exception.getMessage(), exception.getMessage().contains("unknown invariant 'Missing'"));
   }
 
   @Test

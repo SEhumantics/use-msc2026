@@ -1,14 +1,52 @@
 package org.tzi.use.smt.config;
 
-/**
- * Query intent carried by an analysis configuration.
- *
- * <p>The recursive query language is introduced in Phase 4. Until then every configuration has the
- * explicit {@link #SATISFY} intent rather than a null placeholder.
- */
-public sealed interface QueryExpr permits QueryExpr.Satisfy {
-  QueryExpr SATISFY = new Satisfy();
+/** Typed syntax tree for the recursive witness-query language. */
+public sealed interface QueryExpr
+    permits QueryExpr.Profiled,
+        QueryExpr.Classification,
+        QueryExpr.Aggregate,
+        QueryExpr.And,
+        QueryExpr.Or,
+        QueryExpr.Not,
+        QueryExpr.Satisfy,
+        QueryExpr.Counterexample,
+        QueryExpr.InvariantIndependence,
+        QueryExpr.Fragile {
+  QueryExpr SATISFY = new Profiled(ScenarioProfile.EXISTS, new Satisfy());
 
-  /** Search for a witness satisfying all active invariants. */
+  record Profiled(ScenarioProfile profile, QueryExpr expression) implements QueryExpr {
+    public Profiled {
+      if (profile == null || expression == null) {
+        throw new IllegalArgumentException("query profile and expression are required");
+      }
+      if (expression instanceof Profiled) {
+        throw new IllegalArgumentException("a query can have only one scenario profile");
+      }
+    }
+  }
+
+  record Classification(
+      TranslationMode mode, String invariantName, InvariantOutcome outcome) implements QueryExpr {}
+
+  enum AggregateScope {
+    ALL,
+    OTHERS
+  }
+
+  record Aggregate(TranslationMode mode, AggregateScope scope) implements QueryExpr {}
+
+  record And(QueryExpr left, QueryExpr right) implements QueryExpr {}
+
+  record Or(QueryExpr left, QueryExpr right) implements QueryExpr {}
+
+  record Not(QueryExpr operand) implements QueryExpr {}
+
+  /** Incumbent-compatible macro for uncertain/all/true. */
   record Satisfy() implements QueryExpr {}
+
+  record Counterexample(String invariantName) implements QueryExpr {}
+
+  record InvariantIndependence() implements QueryExpr {}
+
+  record Fragile(String invariantName) implements QueryExpr {}
 }

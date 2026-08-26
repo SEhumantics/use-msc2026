@@ -1,7 +1,9 @@
 package org.tzi.use.smt.config;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 
 import com.google.gson.Gson;
 import java.io.Reader;
@@ -39,6 +41,41 @@ public class CorpusConfigurationCompatibilityTest {
     }
 
     assertEquals("manifest corpus size", 37, loaded);
+  }
+
+  @Test
+  public void everyLegacyCorpusScenarioNormalizesToTheExactSatisfyExistsSingleton()
+      throws Exception {
+    Path repository = repositoryRoot();
+    Path manifest =
+        repository.resolve("msc-modelvalidators/benchmark/src/main/resources/manifest.json");
+    Manifest parsed;
+    try (Reader reader = Files.newBufferedReader(manifest)) {
+      parsed = new Gson().fromJson(reader, Manifest.class);
+    }
+
+    int checked = 0;
+    for (Example example : parsed.examples) {
+      if (!example.mode.contains("finding")) continue;
+      Path configuration =
+          repository
+              .resolve("msc-modelvalidators/benchmark/examples")
+              .resolve(example.directory)
+              .resolve(example.propertiesFile);
+      RawConfiguration raw = ConfigurationReader.read(configuration, example.section);
+      assertFalse(
+          example.id + ": legacy fixture unexpectedly has query",
+          raw.entries().containsKey("query"));
+      assertSame(
+          example.id + ": missing query must preserve the exact default object",
+          QueryExpr.SATISFY,
+          ConfigurationReader.normalize(raw, ConfigurationVocabulary.empty())
+              .configuration()
+              .query());
+      checked++;
+    }
+
+    assertEquals("manifest corpus size", 37, checked);
   }
 
   private static Path repositoryRoot() {

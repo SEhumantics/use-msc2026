@@ -151,7 +151,6 @@ public final class ConfigurationReader {
                     new ConfigurationDiagnostic(
                         key, "not yet understood; retained without weakening the configuration"))
             .toList());
-    deferredKeyDiagnostic(entries, diagnostics, "query", "query parsing is scheduled for Phase 4");
     deferredKeyDiagnostic(
         entries,
         diagnostics,
@@ -206,7 +205,7 @@ public final class ConfigurationReader {
             associations,
             domains,
             active,
-            QueryExpr.SATISFY,
+            query(entries, vocabulary),
             duration(entries),
             modelLimit(entries));
     return new NormalizedConfiguration(configuration, diagnostics);
@@ -345,6 +344,16 @@ public final class ConfigurationReader {
 
   private static int modelLimit(Map<String, List<String>> entries) {
     return bound(entries, "modelLimit", DEFAULT_MODEL_LIMIT);
+  }
+
+  private static QueryExpr query(
+      Map<String, List<String>> entries, ConfigurationVocabulary vocabulary) {
+    List<String> values = entries.get("query");
+    if (values == null) {
+      return QueryExpr.SATISFY;
+    }
+    // The legacy comma delimiter also splits functional query atoms; restore their source text.
+    return QueryParser.parse(String.join(",", values).trim(), vocabulary);
   }
 
   private static String one(Map<String, List<String>> entries, String key) {

@@ -11,6 +11,7 @@ import org.tzi.use.main.Session;
 import org.tzi.use.smt.config.AnalysisConfiguration;
 import org.tzi.use.smt.config.AssociationScope;
 import org.tzi.use.smt.config.AttributeDomain;
+import org.tzi.use.smt.config.QueryExpr;
 import org.tzi.use.smt.encode.AssociationLinkEncoder;
 import org.tzi.use.smt.encode.AssociationLinks;
 import org.tzi.use.smt.encode.AttributeEncoder;
@@ -122,6 +123,11 @@ public final class SmtModelFinder {
 
   private static Solved solve(
       MModel model, AnalysisConfiguration config, SolverProcess externalSolverProcess) {
+    if (!QueryExpr.SATISFY.equals(config.query())) {
+      throw new IllegalArgumentException(
+          "query execution beyond SATISFY/EXISTS starts at Milestone 4.3; refusing to run a"
+              + " different query as SATISFY");
+    }
     SmtScript script = new SmtScript("QF_LIRA");
 
     Map<String, ObjectSlots> slotsByClass = ObjectSlotEncoder.encode(script, config.classScopes());

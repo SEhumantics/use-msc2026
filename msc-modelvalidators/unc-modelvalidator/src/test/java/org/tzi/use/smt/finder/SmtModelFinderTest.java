@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
@@ -22,6 +23,7 @@ import org.tzi.use.smt.config.ClassScope;
 import org.tzi.use.smt.config.ConfigurationReader;
 import org.tzi.use.smt.config.ConfigurationVocabulary;
 import org.tzi.use.smt.config.QueryExpr;
+import org.tzi.use.smt.config.ScenarioProfile;
 import org.tzi.use.smt.config.RawConfiguration;
 import org.tzi.use.smt.solver.SolverBinary;
 import org.tzi.use.smt.solver.SolverProcess;
@@ -158,6 +160,27 @@ public class SmtModelFinderTest {
         "one Copy cannot legally have two Users (User[0..1] per Copy); two forced Borrows links"
             + " into a single Copy must be UNSAT",
         result.satisfiable());
+  }
+
+  @Test
+  public void parsedFutureQueryFailsClosedInsteadOfSilentlyRunningSatisfy() throws Exception {
+    MModel model = compileLibrary();
+    AnalysisConfiguration legacy = readConfig(model, null);
+    AnalysisConfiguration future =
+        new AnalysisConfiguration(
+            legacy.classScopes(),
+            legacy.associationScopes(),
+            legacy.attributeDomains(),
+            legacy.activeInvariants(),
+            new QueryExpr.Profiled(
+                ScenarioProfile.EXISTS, new QueryExpr.Counterexample("Book::titleIsKey")),
+            legacy.timeout(),
+            legacy.modelLimit());
+
+    IllegalArgumentException exception =
+        assertThrows(IllegalArgumentException.class, () -> SmtModelFinder.find(model, future));
+
+    assertTrue(exception.getMessage().contains("refusing to run a different query as SATISFY"));
   }
 
   private static AnalysisConfiguration readConfig(MModel model, String section) throws Exception {
