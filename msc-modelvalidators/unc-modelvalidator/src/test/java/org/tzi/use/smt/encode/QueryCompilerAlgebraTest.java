@@ -139,6 +139,21 @@ public class QueryCompilerAlgebraTest {
         compiled("uncertain Sample::PIsOne is false and uncertain others are true"));
   }
 
+  /**
+   * Milestone 4.5's macro, held to the proposal's {@code W_FRAGILE(j)} character for character. The
+   * two modes are not interchangeable and the "others are true" conjunct is part of the predicate,
+   * so swapping {@code nominal}/{@code uncertain} or dropping the aggregate changes the emitted
+   * term and this equality stops holding.
+   */
+  @Test
+  public void fragileCompilesToExactlyItsSpelledOutForm() throws Exception {
+    assertEquals(
+        compiled("fragile(Sample::PIsOne)"),
+        compiled(
+            "nominal Sample::PIsOne is true and uncertain Sample::PIsOne is false and uncertain"
+                + " others are true"));
+  }
+
   /** {@code others} without exactly one target has no meaning and must fail closed. */
   @Test
   public void othersWithoutExactlyOneTargetFailsClosed() throws Exception {
@@ -158,10 +173,6 @@ public class QueryCompilerAlgebraTest {
   /** Everything Milestone 4.4 does not own keeps failing closed by the milestone that does. */
   @Test
   public void shapesOutsideThisMilestoneStillFailClosedByName() throws Exception {
-    IllegalArgumentException fragile =
-        assertThrows(IllegalArgumentException.class, () -> compiled("fragile(Sample::PIsOne)"));
-    assertTrue(fragile.getMessage().contains("4.5"));
-
     IllegalArgumentException independence =
         assertThrows(IllegalArgumentException.class, () -> compiled("invariant-independence"));
     assertTrue(independence.getMessage().contains("independenceSweep"));

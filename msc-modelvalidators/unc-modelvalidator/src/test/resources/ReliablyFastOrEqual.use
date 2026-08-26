@@ -1,0 +1,10 @@
+model ReliablyFastOrEqual
+
+class UnidentifiedObject
+attributes
+  speed : UReal
+end
+
+constraints
+context self : UnidentifiedObject inv ReliablyFastOrEqual:
+  (self.speed >= 0.30).toBooleanC(0.95)

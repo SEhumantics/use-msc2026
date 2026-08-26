@@ -1,0 +1,14 @@
+model FragileWithCompanion
+
+class UnidentifiedObject
+attributes
+  speed : UReal
+  label : String
+end
+
+constraints
+context self : UnidentifiedObject inv ReliablyFast:
+  (self.speed > 0.30).toBooleanC(0.95)
+
+context self : UnidentifiedObject inv LabelOk:
+  self.label = 'ok'

@@ -1,0 +1,10 @@
+model OverConservative
+
+class UnidentifiedObject
+attributes
+  speed : UReal
+end
+
+constraints
+context self : UnidentifiedObject inv OverConservative:
+  (self.speed > 0.30).toBooleanC(0.05)
