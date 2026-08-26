@@ -12,3 +12,9 @@ context self : UnidentifiedObject inv ThresholdInAnd:
 
 context self : UnidentifiedObject inv ThresholdInOr:
   ((self.speed > 0.30).toBooleanC(0.95)) or (self.marker = 0)
+
+context self : UnidentifiedObject inv ThresholdInAndRight:
+  (self.marker = 1) and ((self.speed > 0.30).toBooleanC(0.95))
+
+context self : UnidentifiedObject inv ThresholdInOrRight:
+  (self.marker = 0) or ((self.speed > 0.30).toBooleanC(0.95))

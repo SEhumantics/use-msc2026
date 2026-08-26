@@ -148,6 +148,31 @@ public class URealThresholdRoundTripTest {
             .satisfiable());
   }
 
+  @Test
+  public void andAndOrRightOperandsKeepTheirParentsPolarity() throws Exception {
+    MModel model = compile(resourcePath("ThresholdInAndOr.use"));
+
+    ModelFinderResult unchecked =
+        SmtModelFinder.find(
+            model, configuration(model, "ThresholdInAndOr.properties", "bothInactive"));
+    assertTrue(unchecked.satisfiable());
+    assertEquals(
+        new InvariantVerdict("UnidentifiedObject::ThresholdInAndRight", false),
+        verdict(unchecked, "UnidentifiedObject::ThresholdInAndRight"));
+    assertEquals(
+        new InvariantVerdict("UnidentifiedObject::ThresholdInOrRight", false),
+        verdict(unchecked, "UnidentifiedObject::ThresholdInOrRight"));
+
+    assertFalse(
+        SmtModelFinder.find(
+                model, configuration(model, "ThresholdInAndOr.properties", "andRightActive"))
+            .satisfiable());
+    assertFalse(
+        SmtModelFinder.find(
+                model, configuration(model, "ThresholdInAndOr.properties", "orRightActive"))
+            .satisfiable());
+  }
+
   private static void assertEvaluatorFalseThenUnsatWhenEnforced(
       String modelResource, String configurationResource, String invariantName) throws Exception {
     MModel model = compile(resourcePath(modelResource));
