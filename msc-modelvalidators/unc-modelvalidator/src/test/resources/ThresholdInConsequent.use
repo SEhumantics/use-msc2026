@@ -1,0 +1,11 @@
+model ThresholdInConsequent
+
+class UnidentifiedObject
+attributes
+  speed : UReal
+  marker : Integer
+end
+
+constraints
+context self : UnidentifiedObject inv ThresholdInConsequent:
+  (self.marker = 1) implies ((self.speed > 0.30).toBooleanC(0.95))

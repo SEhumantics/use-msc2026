@@ -107,6 +107,71 @@ public class URealThresholdRoundTripTest {
         "UnidentifiedObject::ReliablySlowOrEqual");
   }
 
+  @Test
+  public void implicationConsequentKeepsItsParentsPositivePolarity() throws Exception {
+    assertEvaluatorFalseThenUnsatWhenEnforced(
+        "ThresholdInConsequent.use",
+        "ThresholdInConsequent.properties",
+        "UnidentifiedObject::ThresholdInConsequent");
+  }
+
+  @Test
+  public void doubleNegationRestoresPositivePolarity() throws Exception {
+    assertEvaluatorFalseThenUnsatWhenEnforced(
+        "DoubleNegatedThreshold.use",
+        "DoubleNegatedThreshold.properties",
+        "UnidentifiedObject::DoubleNegatedThreshold");
+  }
+
+  @Test
+  public void andAndOrOperandsKeepTheirParentsPolarity() throws Exception {
+    MModel model = compile(resourcePath("ThresholdInAndOr.use"));
+
+    ModelFinderResult unchecked =
+        SmtModelFinder.find(
+            model, configuration(model, "ThresholdInAndOr.properties", "bothInactive"));
+    assertTrue(unchecked.satisfiable());
+    assertEquals(
+        new InvariantVerdict("UnidentifiedObject::ThresholdInAnd", false),
+        verdict(unchecked, "UnidentifiedObject::ThresholdInAnd"));
+    assertEquals(
+        new InvariantVerdict("UnidentifiedObject::ThresholdInOr", false),
+        verdict(unchecked, "UnidentifiedObject::ThresholdInOr"));
+
+    assertFalse(
+        SmtModelFinder.find(
+                model, configuration(model, "ThresholdInAndOr.properties", "andActive"))
+            .satisfiable());
+    assertFalse(
+        SmtModelFinder.find(
+                model, configuration(model, "ThresholdInAndOr.properties", "orActive"))
+            .satisfiable());
+  }
+
+  private static void assertEvaluatorFalseThenUnsatWhenEnforced(
+      String modelResource, String configurationResource, String invariantName) throws Exception {
+    MModel model = compile(resourcePath(modelResource));
+
+    ModelFinderResult unchecked =
+        SmtModelFinder.find(model, configuration(model, configurationResource, "inactive"));
+    assertTrue(unchecked.satisfiable());
+    assertEquals(new InvariantVerdict(invariantName, false), verdict(unchecked, invariantName));
+    URealValue speed = reconstructedSpeed(model, unchecked);
+    assertEquals(0.3328970695, speed.value(), 0.0);
+    assertEquals(0.02, speed.uncertainty(), 0.0);
+
+    assertFalse(
+        SmtModelFinder.find(model, configuration(model, configurationResource, "active"))
+            .satisfiable());
+  }
+
+  private static InvariantVerdict verdict(ModelFinderResult result, String invariantName) {
+    return result.verdicts().stream()
+        .filter(candidate -> candidate.invariantName().equals(invariantName))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("missing evaluator verdict for " + invariantName));
+  }
+
   private static void assertLessDirectionBoundary(
       String modelResource, String configurationResource, String invariantName) throws Exception {
     MModel model = compile(resourcePath(modelResource));

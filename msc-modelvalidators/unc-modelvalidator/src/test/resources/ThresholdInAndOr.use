@@ -1,0 +1,14 @@
+model ThresholdInAndOr
+
+class UnidentifiedObject
+attributes
+  speed : UReal
+  marker : Integer
+end
+
+constraints
+context self : UnidentifiedObject inv ThresholdInAnd:
+  ((self.speed > 0.30).toBooleanC(0.95)) and (self.marker = 1)
+
+context self : UnidentifiedObject inv ThresholdInOr:
+  ((self.speed > 0.30).toBooleanC(0.95)) or (self.marker = 0)
