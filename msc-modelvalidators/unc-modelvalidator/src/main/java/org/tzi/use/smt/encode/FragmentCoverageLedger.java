@@ -16,7 +16,7 @@ public record FragmentCoverageLedger(List<InvariantCoverage> entries) {
     List<String> unsupported =
         entries.stream()
             .filter(e -> !e.supported())
-            .map(e -> e.invariantName() + " (" + e.reason() + ")")
+            .map(e -> e.invariantName() + " [" + e.mode() + "] (" + e.reason() + ")")
             .toList();
     if (!unsupported.isEmpty()) {
       throw new SmtTranslationException(

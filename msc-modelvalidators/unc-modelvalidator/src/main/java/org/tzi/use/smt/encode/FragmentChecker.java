@@ -4,6 +4,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import org.tzi.use.smt.config.TranslationMode;
+import org.tzi.use.smt.solver.SmtScript;
 import org.tzi.use.smt.solver.SmtTerm;
 import org.tzi.use.uml.mm.MClassInvariant;
 
@@ -16,6 +19,12 @@ public final class FragmentChecker {
   private FragmentChecker() {}
 
   public record Result(FragmentCoverageLedger ledger, Map<String, SmtTerm> assembled) {}
+
+  public record ClassificationKey(String invariantName, TranslationMode mode) {}
+
+  public record ReifiedResult(
+      FragmentCoverageLedger ledger,
+      Map<ClassificationKey, InvariantClassification> classifications) {}
 
   public static Result check(List<MClassInvariant> invariants, TranslationContext baseContext) {
     List<InvariantCoverage> coverage = new ArrayList<>();
@@ -30,5 +39,30 @@ public final class FragmentChecker {
       }
     }
     return new Result(new FragmentCoverageLedger(coverage), assembled);
+  }
+
+  /** Checks and reifies the exact invariant/mode pairs requested by a query. */
+  public static ReifiedResult checkAndReify(
+      List<MClassInvariant> invariants,
+      Map<String, Set<TranslationMode>> requirements,
+      TranslationContext baseContext,
+      SmtScript script) {
+    List<InvariantCoverage> coverage = new ArrayList<>();
+    Map<ClassificationKey, InvariantClassification> classifications = new LinkedHashMap<>();
+    for (MClassInvariant invariant : invariants) {
+      for (TranslationMode mode : requirements.getOrDefault(invariant.qualifiedName(), Set.of())) {
+        try {
+          InvariantClassification classification =
+              InvariantAssembler.reify(script, invariant, baseContext, mode);
+          classifications.put(
+              new ClassificationKey(invariant.qualifiedName(), mode), classification);
+          coverage.add(new InvariantCoverage(invariant.qualifiedName(), mode, true, null));
+        } catch (SmtTranslationException e) {
+          coverage.add(
+              new InvariantCoverage(invariant.qualifiedName(), mode, false, e.getMessage()));
+        }
+      }
+    }
+    return new ReifiedResult(new FragmentCoverageLedger(coverage), Map.copyOf(classifications));
   }
 }

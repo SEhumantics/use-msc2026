@@ -5,6 +5,7 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import org.tzi.use.smt.config.AttributeDomain;
+import org.tzi.use.smt.config.TranslationMode;
 import org.tzi.use.smt.solver.Smt;
 import org.tzi.use.smt.solver.SmtTerm;
 import org.tzi.use.uml.ocl.expr.*;
@@ -13,27 +14,40 @@ import org.tzi.use.uml.ocl.expr.*;
 public final class ExpressionTranslator implements ExpressionVisitor {
   private static final BigInteger UNDEFINED_STRING_SENTINEL = BigInteger.valueOf(-1);
   private final TranslationContext context;
+  private final TranslationMode mode;
   private final boolean positivePolarity;
-  private SmtTerm result;
+  private TranslatedExpression result;
 
-  private ExpressionTranslator(TranslationContext c, boolean positivePolarity) {
+  private ExpressionTranslator(
+      TranslationContext c, TranslationMode mode, boolean positivePolarity) {
     context = c;
+    this.mode = mode;
     this.positivePolarity = positivePolarity;
   }
 
   public static SmtTerm translate(Expression e, TranslationContext c) {
-    return translate(e, c, true);
+    return translate(e, c, TranslationMode.UNCERTAIN).value();
   }
 
-  private static SmtTerm translate(Expression e, TranslationContext c, boolean positivePolarity) {
-    ExpressionTranslator t = new ExpressionTranslator(c, positivePolarity);
+  public static TranslatedExpression translate(
+      Expression e, TranslationContext c, TranslationMode mode) {
+    return translate(e, c, mode, true);
+  }
+
+  private static TranslatedExpression translate(
+      Expression e, TranslationContext c, TranslationMode mode, boolean positivePolarity) {
+    ExpressionTranslator t = new ExpressionTranslator(c, mode, positivePolarity);
     e.processWithVisitor(t);
     return t.result;
   }
 
+  private static TranslatedExpression defined(SmtTerm value) {
+    return new TranslatedExpression(Smt.bool(true), value);
+  }
+
   @Override
   public void visitConstInteger(ExpConstInteger e) {
-    result = Smt.intLit(BigInteger.valueOf(e.value()));
+    result = defined(Smt.intLit(BigInteger.valueOf(e.value())));
   }
 
   @Override
@@ -44,14 +58,20 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
   @Override
   public void visitConstBoolean(ExpConstBoolean e) {
-    throw unsupported("Boolean literal");
+    result = defined(Smt.bool(e.value()));
   }
 
   @Override
   public void visitUndefined(ExpUndefined e) {
-    if (!e.type().isTypeOfString())
-      throw unsupported("oclUndefined of a non-String type (" + e.type() + ")");
-    result = Smt.intLit(UNDEFINED_STRING_SENTINEL);
+    SmtTerm placeholder =
+        e.type().isTypeOfString()
+            ? Smt.intLit(UNDEFINED_STRING_SENTINEL)
+            : e.type().isTypeOfReal() || e.type().isTypeOfUReal()
+                ? Smt.realLit(BigDecimal.ZERO)
+                : e.type().isTypeOfBoolean() || e.type().isTypeOfUBoolean()
+                    ? Smt.bool(false)
+                    : Smt.intLit(BigInteger.ZERO);
+    result = new TranslatedExpression(Smt.bool(false), placeholder);
   }
 
   @Override
@@ -67,7 +87,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (v.type() == AttributeType.UREAL) {
       throw unsupported("bare UReal attribute access outside a supported threshold comparison");
     }
-    result = Smt.sym(v.valueNames().get(b.slotIndex()));
+    result = defined(Smt.sym(v.valueNames().get(b.slotIndex())));
   }
 
   @Override
@@ -77,21 +97,53 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       result = uRealThreshold(e);
       return;
     }
-    result =
-        switch (e.opname()) {
-          case "and" -> Smt.and(List.of(arg(a[0]), arg(a[1])));
-          case "or" -> Smt.or(List.of(arg(a[0]), arg(a[1])));
-          case "not" -> Smt.not(arg(a[0], !positivePolarity));
-          case "implies" ->
-              Smt.app("=>", arg(a[0], !positivePolarity), arg(a[1], positivePolarity));
-          case "=" -> comparison(a[0], a[1]);
-          case "<>" -> Smt.not(comparison(a[0], a[1]));
-          case ">=" -> Smt.app(">=", arg(a[0]), arg(a[1]));
-          case "<=" -> Smt.app("<=", arg(a[0]), arg(a[1]));
-          case ">" -> Smt.app(">", arg(a[0]), arg(a[1]));
-          case "<" -> Smt.app("<", arg(a[0]), arg(a[1]));
-          default -> throw unsupported("operator '" + e.opname() + "'");
-        };
+    result = switch (e.opname()) {
+      case "and" -> booleanAnd(argResult(a[0]), argResult(a[1]));
+      case "or" -> booleanOr(argResult(a[0]), argResult(a[1]));
+      case "not" -> {
+        TranslatedExpression operand = argResult(a[0], !positivePolarity);
+        yield new TranslatedExpression(operand.defined(), Smt.not(operand.value()));
+      }
+      case "implies" ->
+          booleanOr(
+              negate(argResult(a[0], !positivePolarity)),
+              argResult(a[1], positivePolarity));
+      case "=" -> comparison(a[0], a[1]);
+      case "<>" -> negate(comparison(a[0], a[1]));
+      case ">=", "<=", ">", "<" -> orderedComparison(e.opname(), a[0], a[1]);
+      default -> throw unsupported("operator '" + e.opname() + "'");
+    };
+  }
+
+  private static TranslatedExpression booleanAnd(
+      TranslatedExpression left, TranslatedExpression right) {
+    SmtTerm leftFalse = Smt.and(List.of(left.defined(), Smt.not(left.value())));
+    SmtTerm rightFalse = Smt.and(List.of(right.defined(), Smt.not(right.value())));
+    SmtTerm bothDefined = Smt.and(List.of(left.defined(), right.defined()));
+    return new TranslatedExpression(
+        Smt.or(List.of(bothDefined, leftFalse, rightFalse)),
+        Smt.and(List.of(left.value(), right.value())));
+  }
+
+  private static TranslatedExpression booleanOr(
+      TranslatedExpression left, TranslatedExpression right) {
+    SmtTerm leftTrue = Smt.and(List.of(left.defined(), left.value()));
+    SmtTerm rightTrue = Smt.and(List.of(right.defined(), right.value()));
+    SmtTerm bothDefined = Smt.and(List.of(left.defined(), right.defined()));
+    return new TranslatedExpression(
+        Smt.or(List.of(bothDefined, leftTrue, rightTrue)),
+        Smt.or(List.of(left.value(), right.value())));
+  }
+
+  private static TranslatedExpression negate(TranslatedExpression expression) {
+    return new TranslatedExpression(expression.defined(), Smt.not(expression.value()));
+  }
+
+  private TranslatedExpression orderedComparison(String operator, Expression left, Expression right) {
+    TranslatedExpression l = argResult(left);
+    TranslatedExpression r = argResult(right);
+    return new TranslatedExpression(
+        Smt.and(List.of(l.defined(), r.defined())), Smt.app(operator, l.value(), r.value()));
   }
 
   /**
@@ -101,7 +153,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * terms. Zero uncertainty follows USE's ordinary strict/non-strict comparator instead. General
    * uncertain comparisons and nonconstant confidence remain deliberately unsupported.
    */
-  private SmtTerm uRealThreshold(ExpStdOp projection) {
+  private TranslatedExpression uRealThreshold(ExpStdOp projection) {
     Expression[] projectionArgs = projection.args();
     if (projectionArgs.length != 2 || !(projectionArgs[0] instanceof ExpStdOp comparison)) {
       throw unsupported("toBooleanC outside a direct comparison");
@@ -119,8 +171,6 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
     BigDecimal literal = decimalLiteral(comparisonArgs[1], "comparison threshold");
     BigDecimal confidence = decimalLiteral(projectionArgs[1], "confidence threshold");
-    URealThresholdBoundary.Enclosure enclosure = URealThresholdBoundary.enclose(confidence);
-    BigDecimal standardizedBoundary = positivePolarity ? enclosure.upper() : enclosure.lower();
 
     VariableBinding binding = context.binding(variableNameOf(attribute.objExp()));
     AttributeValues values = context.attributeValues(binding.className(), attribute.attr().name());
@@ -131,6 +181,11 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     SmtTerm uncertainty = Smt.sym(values.uncertaintyNames().get(binding.slotIndex()));
     SmtTerm zero = Smt.realLit(BigDecimal.ZERO);
     SmtTerm exact = Smt.app(comparison.opname(), representative, Smt.realLit(literal));
+    if (mode == TranslationMode.NOMINAL) {
+      return defined(exact);
+    }
+    URealThresholdBoundary.Enclosure enclosure = URealThresholdBoundary.enclose(confidence);
+    BigDecimal standardizedBoundary = positivePolarity ? enclosure.upper() : enclosure.lower();
     SmtTerm offset = Smt.app("*", uncertainty, Smt.realLit(standardizedBoundary));
     SmtTerm uncertainBoundary =
         comparison.opname().startsWith(">")
@@ -139,10 +194,11 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     SmtTerm uncertain =
         Smt.app(
             comparison.opname().startsWith(">") ? ">=" : "<=", representative, uncertainBoundary);
-    return Smt.or(
-        List.of(
-            Smt.and(List.of(Smt.eq(uncertainty, zero), exact)),
-            Smt.and(List.of(Smt.app(">", uncertainty, zero), uncertain))));
+    return defined(
+        Smt.or(
+            List.of(
+                Smt.and(List.of(Smt.eq(uncertainty, zero), exact)),
+                Smt.and(List.of(Smt.app(">", uncertainty, zero), uncertain)))));
   }
 
   private static BigDecimal decimalLiteral(Expression expression, String role) {
@@ -155,16 +211,33 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     throw unsupported(role + " is not a crisp numeric literal");
   }
 
-  private SmtTerm comparison(Expression l, Expression r) {
+  private TranslatedExpression comparison(Expression l, Expression r) {
+    // USE equality is deliberately non-strict for the explicit oclUndefined literal: it is how
+    // legacy invariants state that an attribute must be present. Invalid navigation remains a
+    // different case below and propagates undefinedness.
+    if (l instanceof ExpUndefined || r instanceof ExpUndefined) {
+      return defined(Smt.bool(l instanceof ExpUndefined && r instanceof ExpUndefined));
+    }
     if (l instanceof ExpVariable lv && r instanceof ExpVariable rv)
-      return Smt.bool(context.binding(lv.getVarname()).equals(context.binding(rv.getVarname())));
-    if (l instanceof ExpConstString s) return Smt.eq(resolve(s, r), arg(r));
-    if (r instanceof ExpConstString s) return Smt.eq(arg(l), resolve(s, l));
+      return defined(
+          Smt.bool(context.binding(lv.getVarname()).equals(context.binding(rv.getVarname()))));
+    if (l instanceof ExpConstString s) {
+      TranslatedExpression other = argResult(r);
+      return new TranslatedExpression(other.defined(), Smt.eq(resolve(s, r), other.value()));
+    }
+    if (r instanceof ExpConstString s) {
+      TranslatedExpression other = argResult(l);
+      return new TranslatedExpression(other.defined(), Smt.eq(other.value(), resolve(s, l)));
+    }
     if (l instanceof ExpNavigation ln
         && r instanceof ExpNavigation rn
         && !ln.getDestination().isCollection()
         && !rn.getDestination().isCollection()) return navigationEquals(ln, rn);
-    return Smt.eq(arg(l), arg(r));
+    TranslatedExpression left = argResult(l);
+    TranslatedExpression right = argResult(r);
+    return new TranslatedExpression(
+        Smt.and(List.of(left.defined(), right.defined())),
+        Smt.eq(left.value(), right.value()));
   }
 
   /**
@@ -174,18 +247,24 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * Book end [1]) already guarantees at most one such slot per source, via Task 3.2's degree
    * constraint -- this only needs to find it, not enforce uniqueness itself.
    */
-  private SmtTerm navigationEquals(ExpNavigation left, ExpNavigation right) {
+  private TranslatedExpression navigationEquals(ExpNavigation left, ExpNavigation right) {
     String destClass = left.getDestination().cls().name();
     AssociationLinks links = context.linksFor(left.getDestination().association().name());
     ObjectSlots destSlots = context.slotsFor(destClass);
     VariableBinding leftSource = context.binding(variableNameOf(left.getObjectExpression()));
     VariableBinding rightSource = context.binding(variableNameOf(right.getObjectExpression()));
     List<SmtTerm> sharedTarget = new ArrayList<>();
+    List<SmtTerm> leftTargets = new ArrayList<>();
+    List<SmtTerm> rightTargets = new ArrayList<>();
     for (int k = 0; k < destSlots.capacity(); k++) {
-      sharedTarget.add(
-          Smt.and(List.of(linkTerm(links, leftSource, k), linkTerm(links, rightSource, k))));
+      SmtTerm leftLink = linkTerm(links, leftSource, k);
+      SmtTerm rightLink = linkTerm(links, rightSource, k);
+      leftTargets.add(leftLink);
+      rightTargets.add(rightLink);
+      sharedTarget.add(Smt.and(List.of(leftLink, rightLink)));
     }
-    return Smt.or(sharedTarget);
+    return new TranslatedExpression(
+        Smt.and(List.of(Smt.or(leftTargets), Smt.or(rightTargets))), Smt.or(sharedTarget));
   }
 
   /**
@@ -211,12 +290,12 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     return Smt.intLit(i >= 0 ? BigInteger.valueOf(i) : UNDEFINED_STRING_SENTINEL);
   }
 
-  private SmtTerm arg(Expression e) {
-    return arg(e, positivePolarity);
+  private TranslatedExpression argResult(Expression e) {
+    return argResult(e, positivePolarity);
   }
 
-  private SmtTerm arg(Expression e, boolean polarity) {
-    return translate(e, context, polarity);
+  private TranslatedExpression argResult(Expression e, boolean polarity) {
+    return translate(e, context, mode, polarity);
   }
 
   private static String variableNameOf(Expression e) {
@@ -323,7 +402,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     String var1 = e.getVariableDeclarations().varDecl(0).name();
     String var2 = e.getVariableDeclarations().varDecl(1).name();
 
-    List<SmtTerm> disjuncts = new ArrayList<>();
+    List<SmtTerm> trueCandidates = new ArrayList<>();
+    List<SmtTerm> definedCandidates = new ArrayList<>();
     for (int i = 0; i < destSlots.capacity(); i++) {
       SmtTerm link1 = linkTerm(links, source, i);
       for (int j = 0; j < destSlots.capacity(); j++) {
@@ -332,11 +412,17 @@ public final class ExpressionTranslator implements ExpressionVisitor {
             context
                 .withBinding(var1, new VariableBinding(destClass, i))
                 .withBinding(var2, new VariableBinding(destClass, j));
-        SmtTerm body = translate(e.getQueryExpression(), extended, positivePolarity);
-        disjuncts.add(Smt.and(List.of(link1, link2, body)));
+        SmtTerm member = Smt.and(List.of(link1, link2));
+        TranslatedExpression body =
+            translate(e.getQueryExpression(), extended, mode, positivePolarity);
+        trueCandidates.add(Smt.and(List.of(member, body.defined(), body.value())));
+        definedCandidates.add(Smt.app("=>", member, body.defined()));
       }
     }
-    result = Smt.or(disjuncts);
+    SmtTerm anyTrue = Smt.or(trueCandidates);
+    result =
+        new TranslatedExpression(
+            Smt.or(List.of(anyTrue, Smt.and(definedCandidates))), anyTrue);
   }
 
   @Override
@@ -346,13 +432,23 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (!(e.getRangeExpression() instanceof ExpAllInstances all))
       throw unsupported("forAll over a range other than X.allInstances");
     String loopVariable = e.getVariableDeclarations().varDecl(0).name();
-    List<SmtTerm> conjuncts = new ArrayList<>();
+    List<SmtTerm> valueConjuncts = new ArrayList<>();
+    List<SmtTerm> definedConjuncts = new ArrayList<>();
+    List<SmtTerm> falseCandidates = new ArrayList<>();
     for (PolymorphicRange.Slot slot : PolymorphicRange.slotsOf(all.getSourceType(), context)) {
       TranslationContext extended = context.withBinding(loopVariable, slot.binding());
-      SmtTerm body = translate(e.getQueryExpression(), extended, positivePolarity);
-      conjuncts.add(Smt.app("=>", Smt.sym(slot.existsName()), body));
+      SmtTerm exists = Smt.sym(slot.existsName());
+      TranslatedExpression body =
+          translate(e.getQueryExpression(), extended, mode, positivePolarity);
+      valueConjuncts.add(Smt.app("=>", exists, body.value()));
+      definedConjuncts.add(Smt.app("=>", exists, body.defined()));
+      falseCandidates.add(
+          Smt.and(List.of(exists, body.defined(), Smt.not(body.value()))));
     }
-    result = Smt.and(conjuncts);
+    result =
+        new TranslatedExpression(
+            Smt.or(List.of(Smt.or(falseCandidates), Smt.and(definedConjuncts))),
+            Smt.and(valueConjuncts));
   }
 
   @Override

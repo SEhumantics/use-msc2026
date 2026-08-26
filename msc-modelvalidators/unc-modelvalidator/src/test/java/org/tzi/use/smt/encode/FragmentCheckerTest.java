@@ -10,12 +10,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import org.junit.Test;
 import org.tzi.use.parser.use.USECompiler;
 import org.tzi.use.smt.config.AssociationScope;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.ClassScope;
+import org.tzi.use.smt.config.TranslationMode;
 import org.tzi.use.smt.solver.*;
 import org.tzi.use.uml.mm.MClassInvariant;
 import org.tzi.use.uml.mm.MModel;
@@ -128,6 +131,39 @@ public class FragmentCheckerTest {
     }
 
     assertEquals(SolverOutcome.SAT, solve(script).outcome());
+
+    Map<String, Set<TranslationMode>> bothModes = new LinkedHashMap<>();
+    model
+        .classInvariants()
+        .forEach(
+            invariant ->
+                bothModes.put(
+                    invariant.qualifiedName(),
+                    Set.of(TranslationMode.NOMINAL, TranslationMode.UNCERTAIN)));
+    FragmentChecker.ReifiedResult reified =
+        FragmentChecker.checkAndReify(
+            model.classInvariants().stream().toList(), bothModes, ctx, script);
+    assertEquals(18, reified.ledger().entries().size());
+    reified.ledger().requireAllSupported();
+    List<SmtTerm> differences = new java.util.ArrayList<>();
+    for (MClassInvariant invariant : model.classInvariants()) {
+      InvariantClassification nominal =
+          reified
+              .classifications()
+              .get(
+                  new FragmentChecker.ClassificationKey(
+                      invariant.qualifiedName(), TranslationMode.NOMINAL));
+      InvariantClassification uncertain =
+          reified
+              .classifications()
+              .get(
+                  new FragmentChecker.ClassificationKey(
+                      invariant.qualifiedName(), TranslationMode.UNCERTAIN));
+      differences.add(Smt.not(Smt.eq(nominal.defined(), uncertain.defined())));
+      differences.add(Smt.not(Smt.eq(nominal.value(), uncertain.value())));
+    }
+    script.assertThat(Smt.or(differences));
+    assertEquals("crisp Library modes must coincide", SolverOutcome.UNSAT, solve(script).outcome());
   }
 
   @Test
@@ -171,6 +207,48 @@ public class FragmentCheckerTest {
     assertThrows(SmtTranslationException.class, () -> result.ledger().requireAllSupported());
   }
 
+  @Test
+  public void unsupportedSyntaxIsReportedForEveryRequestedModeBeforeSolving() {
+    MModel model =
+        compile(
+            """
+            model Unsupported
+            class Sample
+            end
+            constraints
+            context self : Sample inv Conditional: if true then true else false endif
+            """,
+            "Unsupported");
+    MClassInvariant invariant = model.classInvariants().iterator().next();
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots slots =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Sample", 1, 1))).get("Sample");
+    TranslationContext context =
+        new TranslationContext(
+            Map.of(), Map.of(), Map.of(), Map.of("Sample", slots), Map.of());
+
+    FragmentChecker.ReifiedResult result =
+        FragmentChecker.checkAndReify(
+            List.of(invariant),
+            Map.of(
+                invariant.qualifiedName(),
+                Set.of(TranslationMode.NOMINAL, TranslationMode.UNCERTAIN)),
+            context,
+            script);
+
+    assertEquals(2, result.ledger().entries().size());
+    assertEquals(
+        Set.of(TranslationMode.NOMINAL, TranslationMode.UNCERTAIN),
+        result.ledger().entries().stream()
+            .map(InvariantCoverage::mode)
+            .collect(java.util.stream.Collectors.toSet()));
+    assertTrue(result.ledger().entries().stream().noneMatch(InvariantCoverage::supported));
+    SmtTranslationException exception =
+        assertThrows(SmtTranslationException.class, result.ledger()::requireAllSupported);
+    assertTrue(exception.getMessage().contains("[NOMINAL]"));
+    assertTrue(exception.getMessage().contains("[UNCERTAIN]"));
+  }
+
   private static MModel compileLibrary() throws Exception {
     Path file = Path.of("../benchmark/examples/Library/Library.use");
     if (!Files.isRegularFile(file)) {
@@ -181,6 +259,14 @@ public class FragmentCheckerTest {
     PrintWriter err = new PrintWriter(System.err);
     MModel model = USECompiler.compileSpecification(source, "Library", err, factory);
     err.flush();
+    return model;
+  }
+
+  private static MModel compile(String source, String name) {
+    MModel model =
+        USECompiler.compileSpecification(
+            source, name, new PrintWriter(System.err), new ModelFactory());
+    if (model == null) throw new AssertionError("model did not compile: " + name);
     return model;
   }
 

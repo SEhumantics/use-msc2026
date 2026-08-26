@@ -62,6 +62,22 @@ public class QueryParserTest {
   }
 
   @Test
+  public void fragileRequirementsRequestNominalTargetAndUncertainActiveSet() {
+    QueryExpr query = QueryParser.parse("fragile(ReliablyFast)", VOCABULARY);
+
+    assertEquals(
+        Set.of(TranslationMode.NOMINAL, TranslationMode.UNCERTAIN),
+        QueryRequirements.requiredClassifications(
+                query, Set.of("Reading::ReliablyFast", "Reading::WellFormed"))
+            .get("Reading::ReliablyFast"));
+    assertEquals(
+        Set.of(TranslationMode.UNCERTAIN),
+        QueryRequirements.requiredClassifications(
+                query, Set.of("Reading::ReliablyFast", "Reading::WellFormed"))
+            .get("Reading::WellFormed"));
+  }
+
+  @Test
   public void rejectsMalformedUnknownAmbiguousAndInvalidTargetFormsWithPositions() {
     assertFailure("uncertain ReliablyFast true", "position 24", "expected 'is'");
     assertFailure("uncertain Missing is true", "position 11", "unknown invariant 'Missing'");

@@ -12,6 +12,8 @@ import org.tzi.use.smt.config.AnalysisConfiguration;
 import org.tzi.use.smt.config.AssociationScope;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.QueryExpr;
+import org.tzi.use.smt.config.QueryRequirements;
+import org.tzi.use.smt.config.TranslationMode;
 import org.tzi.use.smt.encode.AssociationLinkEncoder;
 import org.tzi.use.smt.encode.AssociationLinks;
 import org.tzi.use.smt.encode.AttributeEncoder;
@@ -19,6 +21,7 @@ import org.tzi.use.smt.encode.AttributeType;
 import org.tzi.use.smt.encode.AttributeValues;
 import org.tzi.use.smt.encode.FragmentChecker;
 import org.tzi.use.smt.encode.FragmentCoverageLedger;
+import org.tzi.use.smt.encode.InvariantClassification;
 import org.tzi.use.smt.encode.Multiplicity;
 import org.tzi.use.smt.encode.ObjectSlotEncoder;
 import org.tzi.use.smt.encode.ObjectSlots;
@@ -26,7 +29,6 @@ import org.tzi.use.smt.encode.TranslationContext;
 import org.tzi.use.smt.reconstruct.SystemStateReconstructor;
 import org.tzi.use.smt.solver.SmtModelParser;
 import org.tzi.use.smt.solver.SmtScript;
-import org.tzi.use.smt.solver.SmtTerm;
 import org.tzi.use.smt.solver.SmtValue;
 import org.tzi.use.smt.solver.SolverBinary;
 import org.tzi.use.smt.solver.SolverOutcome;
@@ -123,11 +125,6 @@ public final class SmtModelFinder {
 
   private static Solved solve(
       MModel model, AnalysisConfiguration config, SolverProcess externalSolverProcess) {
-    if (!QueryExpr.SATISFY.equals(config.query())) {
-      throw new IllegalArgumentException(
-          "query execution beyond SATISFY/EXISTS starts at Milestone 4.3; refusing to run a"
-              + " different query as SATISFY");
-    }
     SmtScript script = new SmtScript("QF_LIRA");
 
     Map<String, ObjectSlots> slotsByClass = ObjectSlotEncoder.encode(script, config.classScopes());
@@ -298,17 +295,40 @@ public final class SmtModelFinder {
         new TranslationContext(
             Map.of(), attributeValuesByKey, attributeDomainByKey, slotsByClass, linksByAssociation);
 
-    List<MClassInvariant> enforcedInvariants = new ArrayList<>();
+    Map<String, Set<TranslationMode>> requirements =
+        QueryRequirements.requiredClassifications(config.query(), config.activeInvariants());
+    List<MClassInvariant> requestedInvariants = new ArrayList<>();
     for (MClassInvariant invariant : model.classInvariants(true)) {
-      if (config.activeInvariants().contains(invariant.qualifiedName())) {
-        enforcedInvariants.add(invariant);
+      if (requirements.containsKey(invariant.qualifiedName())) {
+        requestedInvariants.add(invariant);
       }
     }
+    Set<String> resolvedInvariantNames =
+        requestedInvariants.stream()
+            .map(MClassInvariant::qualifiedName)
+            .collect(java.util.stream.Collectors.toSet());
+    if (!resolvedInvariantNames.equals(requirements.keySet())) {
+      Set<String> missing = new HashSet<>(requirements.keySet());
+      missing.removeAll(resolvedInvariantNames);
+      throw new IllegalArgumentException("query names invariant(s) absent from model: " + missing);
+    }
 
-    FragmentChecker.Result checked = FragmentChecker.check(enforcedInvariants, context);
+    FragmentChecker.ReifiedResult checked =
+        FragmentChecker.checkAndReify(requestedInvariants, requirements, context, script);
     checked.ledger().requireAllSupported();
-    for (SmtTerm term : checked.assembled().values()) {
-      script.assertThat(term);
+    if (!QueryExpr.SATISFY.equals(config.query())) {
+      throw new IllegalArgumentException(
+          "query execution beyond SATISFY/EXISTS starts at Milestone 4.3; refusing to run a"
+              + " different query as SATISFY");
+    }
+    for (String invariantName : config.activeInvariants()) {
+      InvariantClassification classification =
+          checked
+              .classifications()
+              .get(
+                  new FragmentChecker.ClassificationKey(
+                      invariantName, TranslationMode.UNCERTAIN));
+      script.assertThat(classification.trueTerm());
     }
 
     SolverProcess solverProcess =
