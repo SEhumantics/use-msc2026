@@ -2,7 +2,6 @@ package org.tzi.use.smt.finder;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
@@ -183,28 +182,37 @@ public class BooleanQueryAlgebraTest {
   }
 
   /**
-   * §5.2's other two "the incumbent cannot state" queries both mention {@code nominal}. They
-   * compile (Milestone 4.2 reified both modes), but no independent NOMINAL-erasure oracle over the
-   * reconstructed witness exists before Milestone 4.5, so the end-to-end path must refuse BY NAME
-   * rather than deliver a witness the oracle never checked in that mode.
+   * §5.2's other two "the incumbent cannot state" queries both mention {@code nominal}. Milestone
+   * 4.4 could only compile them, because no independent NOMINAL-erasure oracle over the
+   * reconstructed witness existed; Milestone 4.5 supplies one, so they now run end to end.
+   *
+   * <p>This model is CRISP, which is §5.1's degenerate case where the two modes coincide -- so both
+   * diagnostic queries ask for a discrepancy that cannot exist here and are correctly UNSAT, while
+   * the agreeing query is satisfiable. The positive case is what stops the two refusals from being
+   * vacuous: it proves the nominal oracle really does report on this invariant rather than the
+   * solve failing for some unrelated reason.
    */
   @Test
-  public void nominalAtomsFailClosedUntilTheNominalOracleExists() throws Exception {
+  public void nominalAtomsRunEndToEndAndCoincideWithUncertainOnACrispModel() throws Exception {
     MModel model = compile();
     for (String query :
         List.of(
             "nominal Sample::PIsOne is true and uncertain Sample::PIsOne is undefined",
             "nominal Sample::PIsOne is false and uncertain Sample::PIsOne is true")) {
-      AnalysisConfiguration configuration = config(model, query);
-      RuntimeException exception =
-          assertThrows(
-              "'" + query + "' must not deliver an unchecked witness",
-              RuntimeException.class,
-              () -> SmtModelFinder.find(model, configuration));
-      assertTrue(
-          "the refusal must name the milestone that owns it: " + exception.getMessage(),
-          exception.getMessage().contains("4.5"));
+      assertFalse(
+          "'" + query + "' asks for a nominal/uncertain discrepancy a crisp model cannot have",
+          SmtModelFinder.find(model, config(model, query)).satisfiable());
     }
+
+    ModelFinderResult agreeing =
+        SmtModelFinder.find(
+            model,
+            config(
+                model, "nominal Sample::PIsOne is true and uncertain Sample::PIsOne is" + " true"));
+    assertTrue(
+        "the two modes coincide on a crisp invariant, and BOTH were independently checked",
+        agreeing.satisfiable());
+    assertEquals(InvariantOutcome.TRUE, outcomes(agreeing).get("Sample::PIsOne"));
   }
 
   private static ModelFinderResult requireSat(ModelFinderResult result) {

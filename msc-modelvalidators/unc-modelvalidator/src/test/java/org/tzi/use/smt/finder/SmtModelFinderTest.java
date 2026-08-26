@@ -163,10 +163,10 @@ public class SmtModelFinderTest {
   }
 
   /**
-   * Milestone 4.3 made SATISFY and targeted COUNTEREXAMPLE executable; everything past them must
-   * still fail closed rather than quietly run as SATISFY. {@code fragile(j)} is the next one up
-   * (Milestone 4.5) and stands in for the rest here; {@code CounterexampleQueryTest} sweeps the
-   * whole deferred set.
+   * Milestones 4.3-4.5 made SATISFY, targeted COUNTEREXAMPLE and {@code fragile(j)} executable;
+   * everything past them must still fail closed rather than quietly run as SATISFY. The scenario
+   * profiles are the next one up (Milestone 4.6) and stand in for the rest here; {@code
+   * CounterexampleQueryTest} sweeps the whole deferred set.
    */
   @Test
   public void parsedFutureQueryFailsClosedInsteadOfSilentlyRunningSatisfy() throws Exception {
@@ -178,15 +178,14 @@ public class SmtModelFinderTest {
             legacy.associationScopes(),
             legacy.attributeDomains(),
             legacy.activeInvariants(),
-            new QueryExpr.Profiled(
-                ScenarioProfile.EXISTS, new QueryExpr.Fragile("Book::titleIsKey")),
+            new QueryExpr.Profiled(ScenarioProfile.COVER, new QueryExpr.Satisfy()),
             legacy.timeout(),
             legacy.modelLimit());
 
     IllegalArgumentException exception =
         assertThrows(IllegalArgumentException.class, () -> SmtModelFinder.find(model, future));
 
-    assertTrue(exception.getMessage(), exception.getMessage().contains("starts at Milestone 4.5"));
+    assertTrue(exception.getMessage(), exception.getMessage().contains("Milestone 4.6"));
   }
 
   private static AnalysisConfiguration readConfig(MModel model, String section) throws Exception {

@@ -27,7 +27,7 @@ import org.tzi.use.smt.config.QueryParser;
 import org.tzi.use.smt.verify.InvariantVerdict;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
-import org.tzi.use.uml.ocl.value.StringValue;
+import org.tzi.use.uml.ocl.value.IntegerValue;
 import org.tzi.use.uml.ocl.value.URealValue;
 import org.tzi.use.uml.sys.MObject;
 
@@ -194,8 +194,8 @@ public class FragileQueryTest {
 
   /**
    * W_FRAGILE's "every OTHER active invariant is U-aware true" conjunct is load-bearing, not
-   * decoration. The unsatisfiable section's only configured label violates {@code LabelOk}, so no
-   * snapshot can hold it; the satisfiable section offers a label that does, and the delivered
+   * decoration. The unsatisfiable section's only configured rank violates {@code RankIsOne}, so no
+   * snapshot can hold it; the satisfiable section offers a rank that does, and the delivered
    * witness must actually use it.
    */
   @Test
@@ -203,7 +203,7 @@ public class FragileQueryTest {
     MModel model = compile("FragileWithCompanion.use");
 
     assertFalse(
-        "no snapshot can make LabelOk true, so nothing is fragile here",
+        "no snapshot can make RankIsOne true, so nothing is fragile here",
         SmtModelFinder.find(
                 model, config(model, "FragileWithCompanion.properties", "companionUnsatisfiable"))
             .satisfiable());
@@ -214,8 +214,8 @@ public class FragileQueryTest {
     assertTrue(fragile.satisfiable());
     Map<String, InvariantOutcome> observed = outcomes(fragile);
     assertEquals(InvariantOutcome.FALSE, observed.get("UnidentifiedObject::ReliablyFast"));
-    assertEquals(InvariantOutcome.TRUE, observed.get("UnidentifiedObject::LabelOk"));
-    assertEquals(new StringValue("ok"), reconstructedLabel(model, fragile));
+    assertEquals(InvariantOutcome.TRUE, observed.get("UnidentifiedObject::RankIsOne"));
+    assertEquals(IntegerValue.valueOf(1), reconstructedRank(model, fragile));
   }
 
   /**
@@ -294,8 +294,8 @@ public class FragileQueryTest {
     return (URealValue) attribute(model, result, "speed");
   }
 
-  private static StringValue reconstructedLabel(MModel model, ModelFinderResult result) {
-    return (StringValue) attribute(model, result, "label");
+  private static IntegerValue reconstructedRank(MModel model, ModelFinderResult result) {
+    return (IntegerValue) attribute(model, result, "rank");
   }
 
   private static org.tzi.use.uml.ocl.value.Value attribute(

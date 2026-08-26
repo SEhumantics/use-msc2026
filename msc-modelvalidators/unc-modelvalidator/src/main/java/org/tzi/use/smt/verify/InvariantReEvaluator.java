@@ -2,7 +2,9 @@ package org.tzi.use.smt.verify;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import org.tzi.use.smt.config.InvariantOutcome;
+import org.tzi.use.smt.config.TranslationMode;
 import org.tzi.use.uml.mm.MClass;
 import org.tzi.use.uml.mm.MClassInvariant;
 import org.tzi.use.uml.mm.MModel;
@@ -45,15 +47,42 @@ import org.tzi.use.uml.sys.MSystemState;
 public final class InvariantReEvaluator {
   private InvariantReEvaluator() {}
 
+  /** Every invariant of the model, read U-AWARE -- the reading every pre-4.5 caller wants. */
   public static List<InvariantVerdict> reevaluate(MModel model, MSystem system) {
+    return reevaluate(model, system, TranslationMode.UNCERTAIN, null);
+  }
+
+  /**
+   * The same implicit context quantifier in either translation mode, over an optional subset of the
+   * model's invariants.
+   *
+   * <p>The context quantifier itself is mode-independent on purpose: {@code
+   * InvariantAssembler.classify} encodes ONE quantifier structure and selects the mode only inside
+   * the body, so an oracle that quantified differently per mode would disagree with the solver for
+   * a reason that has nothing to do with erasure. Only the body reading differs -- {@link
+   * ThreeValuedEvaluator} for {@code UNCERTAIN}, {@link NominalErasureEvaluator} for {@code
+   * NOMINAL}.
+   *
+   * @param onlyThese the qualified invariant names to classify, or {@code null} for all of them.
+   *     NOMINAL mode is deliberately asked for by name: an invariant with no type-directed erasure
+   *     rule is UNSUPPORTED, and refusing one the query never mentioned would be a fabricated
+   *     failure.
+   */
+  public static List<InvariantVerdict> reevaluate(
+      MModel model, MSystem system, TranslationMode mode, Set<String> onlyThese) {
     List<InvariantVerdict> verdicts = new ArrayList<>();
     for (MClassInvariant invariant : model.classInvariants(true)) {
-      verdicts.add(new InvariantVerdict(invariant.qualifiedName(), classify(invariant, system)));
+      if (onlyThese != null && !onlyThese.contains(invariant.qualifiedName())) {
+        continue;
+      }
+      verdicts.add(
+          new InvariantVerdict(invariant.qualifiedName(), classify(invariant, system, mode)));
     }
     return verdicts;
   }
 
-  private static InvariantOutcome classify(MClassInvariant invariant, MSystem system) {
+  private static InvariantOutcome classify(
+      MClassInvariant invariant, MSystem system, TranslationMode mode) {
     MSystemState state = system.state();
     if (!(invariant.cls() instanceof MClass contextClass)) {
       throw new IllegalStateException(
@@ -61,7 +90,7 @@ public final class InvariantReEvaluator {
     }
     List<MObject> instances = new ArrayList<>(state.objectsOfClassAndSubClasses(contextClass));
     EvalContext ctx = new EvalContext(state, state, system.varBindings(), null, "");
-    return overInstances(invariant, contextVariablesOf(invariant), 0, instances, ctx);
+    return overInstances(invariant, contextVariablesOf(invariant), 0, instances, ctx, mode);
   }
 
   /**
@@ -90,7 +119,8 @@ public final class InvariantReEvaluator {
       List<String> variables,
       int nesting,
       List<MObject> instances,
-      EvalContext ctx) {
+      EvalContext ctx,
+      TranslationMode mode) {
     boolean existential = invariant.isExistential();
     InvariantOutcome decisive = existential ? InvariantOutcome.TRUE : InvariantOutcome.FALSE;
     boolean anyUndefined = false;
@@ -100,8 +130,10 @@ public final class InvariantReEvaluator {
       try {
         outcome =
             nesting < variables.size() - 1
-                ? overInstances(invariant, variables, nesting + 1, instances, ctx)
-                : ThreeValuedEvaluator.eval(invariant.bodyExpression(), ctx);
+                ? overInstances(invariant, variables, nesting + 1, instances, ctx, mode)
+                : mode == TranslationMode.NOMINAL
+                    ? NominalErasureEvaluator.eval(invariant.bodyExpression(), ctx)
+                    : ThreeValuedEvaluator.eval(invariant.bodyExpression(), ctx);
       } finally {
         // See ThreeValuedEvaluator: popVarBinding() is package-private in use-core.
         ctx.varBindings().pop();

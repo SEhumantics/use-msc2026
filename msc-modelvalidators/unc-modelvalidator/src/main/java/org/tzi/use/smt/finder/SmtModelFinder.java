@@ -169,41 +169,51 @@ public final class SmtModelFinder {
     return finish(model, solved, system);
   }
 
+  /**
+   * Holds the delivered witness to the query it claims, in EVERY mode that query mentions.
+   *
+   * <p>{@link InvariantReEvaluator#reevaluate(MModel, MSystem)} drives the real USE evaluator over
+   * the reconstructed state, which is the U-AWARE reading. Milestone 4.5 adds the second mode:
+   * {@code NominalErasureEvaluator} reads the same reconstructed snapshot with every uncertainty
+   * erased, so a {@code nominal} atom is now independently checked rather than refused. Only the
+   * invariants the query actually classifies in NOMINAL mode are asked for -- an invariant with no
+   * type-directed erasure rule is UNSUPPORTED, and refusing one the query never mentioned would be
+   * a fabricated failure.
+   *
+   * <p>{@link QueryWitnessChecker} still reads ONLY these independent verdicts, never the solver's
+   * own {@code def}/{@code val} assignment, and an atom whose (invariant, mode) has no verdict is a
+   * hard refusal there. That is what replaces the pre-4.5 gate: the check is no longer "is a
+   * nominal oracle available at all" but "did the nominal oracle actually report on this atom".
+   */
   private static ModelFinderResult finish(MModel model, Solved solved, MSystem system) {
     List<InvariantVerdict> verdicts = InvariantReEvaluator.reevaluate(model, system);
-    // InvariantReEvaluator drives the real USE evaluator over the reconstructed state, which is the
-    // U-AWARE reading -- that is what makes these UNCERTAIN-mode verdicts and nothing else. A query
-    // atom in another mode finds no verdict here and is refused rather than assumed; see
-    // requireIndependentOracleAvailable, which stops that case before a solver is ever started.
-    QueryWitnessChecker.requireQuerySatisfied(
-        solved.obligation().core(), Map.of(TranslationMode.UNCERTAIN, verdicts));
+    Map<TranslationMode, List<InvariantVerdict>> observed = new LinkedHashMap<>();
+    observed.put(TranslationMode.UNCERTAIN, verdicts);
+    Set<String> nominalTargets = nominalTargetsOf(solved.obligation().core());
+    if (!nominalTargets.isEmpty()) {
+      observed.put(
+          TranslationMode.NOMINAL,
+          InvariantReEvaluator.reevaluate(model, system, TranslationMode.NOMINAL, nominalTargets));
+    }
+    QueryWitnessChecker.requireQuerySatisfied(solved.obligation().core(), observed);
     return new ModelFinderResult(true, solved.ledger(), verdicts, system);
   }
 
   /**
-   * Refuses, BEFORE solving, any query whose oracle contract this build cannot discharge.
-   *
-   * <p>Milestone 4.2 reifies {@code def}/{@code val} in both modes and Milestone 4.4 compiles atoms
-   * in both modes, but the independent oracle side is still uncertain-only: {@link
-   * InvariantReEvaluator} evaluates the reconstructed snapshot with USE's own U-aware evaluator,
-   * and the nominal-erasure oracle over that same snapshot is Milestone 4.5's deliverable.
-   * Delivering a SAT witness whose nominal classifications nothing independently checked would
-   * break §8's obligation 6 exactly where it matters most, so the query fails closed by that
-   * milestone's name instead. §5.2's two nominal diagnostic queries land here, and will start
-   * working when 4.5 adds the oracle -- not by weakening this check.
+   * The invariants a compiled core classifies in NOMINAL mode. The core is already desugared, so it
+   * holds no aggregate or macro node and the active-invariant set it would otherwise expand over is
+   * irrelevant here -- which is why the empty set is the right argument, not an oversight.
    */
-  private static void requireIndependentOracleAvailable(
-      QueryExpr core, Set<String> activeInvariants) {
-    boolean needsNominal =
-        QueryRequirements.requiredClassifications(core, activeInvariants).values().stream()
-            .anyMatch(modes -> modes.contains(TranslationMode.NOMINAL));
-    if (needsNominal) {
-      throw new IllegalArgumentException(
-          "this query classifies invariants in NOMINAL mode, but the only independent oracle over a"
-              + " reconstructed witness is USE's U-aware evaluation; the nominal-erasure oracle"
-              + " starts at Milestone 4.5. Refusing rather than delivering a witness nothing"
-              + " checked in that mode.");
-    }
+  private static Set<String> nominalTargetsOf(QueryExpr core) {
+    Set<String> targets = new java.util.LinkedHashSet<>();
+    QueryRequirements.requiredClassifications(core, Set.of())
+        .forEach(
+            (name, modes) -> {
+              if (modes.contains(TranslationMode.NOMINAL)) {
+                targets.add(name);
+              }
+            });
+    return targets;
   }
 
   private static Solved solve(
@@ -401,7 +411,6 @@ public final class SmtModelFinder {
     checked.ledger().requireAllSupported();
     QueryCompiler.Obligation obligation =
         QueryCompiler.compile(config.query(), config.activeInvariants(), checked.classifications());
-    requireIndependentOracleAvailable(obligation.core(), config.activeInvariants());
     script.assertThat(obligation.constraint());
 
     SolverProcess solverProcess =

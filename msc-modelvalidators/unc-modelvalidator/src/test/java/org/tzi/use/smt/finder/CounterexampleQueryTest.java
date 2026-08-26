@@ -240,20 +240,15 @@ public class CounterexampleQueryTest {
    * <p>{@code uncertain Book::titleIsKey is false} and {@code not satisfy} used to be listed here
    * too. Milestone 4.4 implemented them -- explicit atoms and Boolean connectives, checked against
    * the independent USE oracle by evaluating the compiled query over its verdicts -- so they moved
-   * to {@code BooleanQueryAlgebraTest} as working queries rather than refusals. What has NOT moved
-   * is a nominal-mode atom: Milestone 4.2 reifies it and 4.4 compiles it, but no nominal-erasure
-   * oracle over a reconstructed witness exists before 4.5, so the end-to-end path still refuses it.
+   * to {@code BooleanQueryAlgebraTest} as working queries rather than refusals. Milestone 4.5 has
+   * now done the same for {@code fragile(j)} and for nominal-mode atoms, which it moved into {@link
+   * #nominalQueriesNowRunAgainstTheRealLibraryCorpusConfiguration}. Only the scenario profiles
+   * remain deferred, and they still refuse BY NAME.
    */
   @Test
   public void unsupportedQueryShapesStillFailClosed() throws Exception {
     MModel model = compileLibrary();
-    for (String query :
-        new String[] {
-          "fragile(Book::titleIsKey)",
-          "cover satisfy",
-          "uniform satisfy",
-          "nominal Book::titleIsKey is true"
-        }) {
+    for (String query : new String[] {"cover satisfy", "uniform satisfy"}) {
       AnalysisConfiguration config = withQuery(model, readConfig(model, null), query);
       IllegalArgumentException exception =
           assertThrows(
@@ -262,6 +257,30 @@ public class CounterexampleQueryTest {
           "'" + query + "' failed with: " + exception.getMessage(),
           exception.getMessage().contains("Milestone"));
     }
+  }
+
+  /**
+   * The nominal oracle on the real, unmodified corpus configuration rather than only on the UReal
+   * micro-fixtures. Library is entirely crisp, so §5.1's degenerate case applies and nominal
+   * erasure is the identity -- which makes these two the sharpest available check that the erasure
+   * evaluator agrees with the U-aware one wherever there is nothing to erase.
+   */
+  @Test
+  public void nominalQueriesNowRunAgainstTheRealLibraryCorpusConfiguration() throws Exception {
+    MModel model = compileLibrary();
+
+    ModelFinderResult nominalTrue =
+        SmtModelFinder.find(
+            model, withQuery(model, readConfig(model, null), "nominal Book::titleIsKey is true"));
+    assertTrue(nominalTrue.satisfiable());
+    assertEquals(InvariantOutcome.TRUE, outcomes(nominalTrue).get("Book::titleIsKey"));
+
+    ModelFinderResult fragile =
+        SmtModelFinder.find(
+            model, withQuery(model, readConfig(model, null), "fragile(Book::titleIsKey)"));
+    assertFalse(
+        "a crisp invariant cannot be fragile: erasure changes nothing, so T_N and F_U conflict",
+        fragile.satisfiable());
   }
 
   private static Map<String, InvariantOutcome> outcomes(ModelFinderResult result) {

@@ -45,9 +45,9 @@ import org.tzi.use.smt.solver.SmtTerm;
  * never a substitute for {@code undef(m,i)}.
  *
  * <p>{@code B_K} (structural/domain constraints) is asserted unconditionally by the caller and is
- * deliberately not part of what this class emits. Every shape a later milestone owns -- {@code
- * fragile(j)}, the invariant-independence sweep, the COVER/UNIFORM profiles -- still fails closed
- * by that milestone's name, so nothing is silently degraded to a weaker query.
+ * deliberately not part of what this class emits. Every shape a later milestone owns -- the
+ * COVER/UNIFORM profiles -- still fails closed by that milestone's name, so nothing is silently
+ * degraded to a weaker query.
  */
 public final class QueryCompiler {
   private QueryCompiler() {}
@@ -94,7 +94,15 @@ public final class QueryCompiler {
    * <pre>
    *   SATISFY           = every active invariant is T_U
    *   COUNTEREXAMPLE(j) = target j is F_U and every other active invariant is T_U
+   *   FRAGILE(j)        = erased target j is T_N and U-aware target j is F_U
+   *                       and every other active invariant is T_U
    * </pre>
+   *
+   * <p>All three demand DEFINEDNESS, never merely "not true": {@code T_N} and {@code F_U} are the
+   * defined atoms, so invalid navigation or an illegal confidence argument can never masquerade as
+   * uncertainty fragility. Because {@code W_FRAGILE(j)} is literally {@code W_CEX(j)} with the
+   * extra {@code T_N(E(I_j))} conjunct, the proposal's {@code W_FRAGILE(j) => W_CEX(j)} is a
+   * property of this desugaring rather than a separate claim.
    */
   private static QueryExpr desugar(QueryExpr node, Set<String> activeInvariants, String target) {
     return switch (node) {
@@ -129,9 +137,16 @@ public final class QueryCompiler {
               "invariant-independence is a sweep of one counterexample obligation per active"
                   + " invariant, not a single solve; run it through"
                   + " SmtModelFinder.independenceSweep (Milestone 4.3)");
-      case QueryExpr.Fragile ignored ->
-          throw new IllegalArgumentException(
-              "fragile(j) needs the nominal-erasure oracle and starts at Milestone 4.5");
+      case QueryExpr.Fragile fragile -> {
+        String name = fragile.invariantName();
+        requireActive(name, activeInvariants, "fragile target");
+        yield new QueryExpr.And(
+            new QueryExpr.And(
+                new QueryExpr.Classification(TranslationMode.NOMINAL, name, InvariantOutcome.TRUE),
+                new QueryExpr.Classification(
+                    TranslationMode.UNCERTAIN, name, InvariantOutcome.FALSE)),
+            allAreTrue(TranslationMode.UNCERTAIN, others(activeInvariants, name)));
+      }
       case QueryExpr.Profiled ignored ->
           throw new IllegalArgumentException("a query can have only one scenario profile");
     };
