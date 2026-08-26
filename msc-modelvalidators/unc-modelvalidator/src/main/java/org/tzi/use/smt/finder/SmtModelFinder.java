@@ -13,6 +13,7 @@ import org.tzi.use.smt.config.AssociationScope;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.QueryExpr;
 import org.tzi.use.smt.config.QueryRequirements;
+import org.tzi.use.smt.config.ScenarioProfile;
 import org.tzi.use.smt.config.TranslationMode;
 import org.tzi.use.smt.encode.AssociationLinkEncoder;
 import org.tzi.use.smt.encode.AssociationLinks;
@@ -21,10 +22,10 @@ import org.tzi.use.smt.encode.AttributeType;
 import org.tzi.use.smt.encode.AttributeValues;
 import org.tzi.use.smt.encode.FragmentChecker;
 import org.tzi.use.smt.encode.FragmentCoverageLedger;
-import org.tzi.use.smt.encode.InvariantClassification;
 import org.tzi.use.smt.encode.Multiplicity;
 import org.tzi.use.smt.encode.ObjectSlotEncoder;
 import org.tzi.use.smt.encode.ObjectSlots;
+import org.tzi.use.smt.encode.QueryCompiler;
 import org.tzi.use.smt.encode.TranslationContext;
 import org.tzi.use.smt.reconstruct.SystemStateReconstructor;
 import org.tzi.use.smt.solver.SmtModelParser;
@@ -36,6 +37,7 @@ import org.tzi.use.smt.solver.SolverProcess;
 import org.tzi.use.smt.solver.SolverResult;
 import org.tzi.use.smt.verify.InvariantReEvaluator;
 import org.tzi.use.smt.verify.InvariantVerdict;
+import org.tzi.use.smt.verify.QueryWitnessChecker;
 import org.tzi.use.uml.mm.MAssociation;
 import org.tzi.use.uml.mm.MAssociationEnd;
 import org.tzi.use.uml.mm.MAttribute;
@@ -63,6 +65,7 @@ public final class SmtModelFinder {
   private record Solved(
       boolean satisfiable,
       FragmentCoverageLedger ledger,
+      QueryCompiler.Obligation obligation,
       TranslationContext context,
       Map<String, SmtValue> modelValues) {}
 
@@ -79,6 +82,54 @@ public final class SmtModelFinder {
     MSystem system =
         SystemStateReconstructor.reconstruct(model, solved.context(), solved.modelValues());
     return finish(model, solved, system);
+  }
+
+  /**
+   * The incumbent invariant-independence check, reproduced over the query algebra: activate the
+   * configured invariant set, then solve one targeted {@code counterexample(j)} obligation per
+   * active invariant {@code j} -- exactly what {@code kk-modelvalidator}'s {@code
+   * InvariantIndepChecker} does by negating one invariant at a time. An entry is satisfiable
+   * precisely when {@code j} is independent of the others, and its witness is already attributed to
+   * {@code j} alone by the same oracle every other query result goes through. All solves share one
+   * persistent solver process, since the sweep is by construction many solves of one model.
+   */
+  public static Map<String, ModelFinderResult> independenceSweep(
+      MModel model, AnalysisConfiguration config) throws UseApiException {
+    QueryExpr requested = config.query();
+    if (requested instanceof QueryExpr.Profiled profiled) {
+      if (profiled.profile() != ScenarioProfile.EXISTS) {
+        throw new IllegalArgumentException(
+            "scenario profile "
+                + profiled.profile()
+                + " has no executable oracle yet; it starts at Milestone 4.6");
+      }
+      requested = profiled.expression();
+    }
+    if (!(requested instanceof QueryExpr.InvariantIndependence)) {
+      throw new IllegalArgumentException(
+          "independenceSweep requires the invariant-independence query, got: " + config.query());
+    }
+    Map<String, ModelFinderResult> sweep = new LinkedHashMap<>();
+    try (SolverProcess shared =
+        SolverProcess.persistent(SolverBinary.resolve(), config.timeout())) {
+      for (MClassInvariant invariant : model.classInvariants(true)) {
+        String name = invariant.qualifiedName();
+        if (!config.activeInvariants().contains(name)) {
+          continue;
+        }
+        AnalysisConfiguration targeted =
+            new AnalysisConfiguration(
+                config.classScopes(),
+                config.associationScopes(),
+                config.attributeDomains(),
+                config.activeInvariants(),
+                new QueryExpr.Profiled(ScenarioProfile.EXISTS, new QueryExpr.Counterexample(name)),
+                config.timeout(),
+                config.modelLimit());
+        sweep.put(name, find(model, targeted, shared));
+      }
+    }
+    return sweep;
   }
 
   /**
@@ -120,6 +171,7 @@ public final class SmtModelFinder {
 
   private static ModelFinderResult finish(MModel model, Solved solved, MSystem system) {
     List<InvariantVerdict> verdicts = InvariantReEvaluator.reevaluate(model, system);
+    QueryWitnessChecker.requireExpectedOutcomes(solved.obligation().expectedOutcomes(), verdicts);
     return new ModelFinderResult(true, solved.ledger(), verdicts, system);
   }
 
@@ -316,20 +368,9 @@ public final class SmtModelFinder {
     FragmentChecker.ReifiedResult checked =
         FragmentChecker.checkAndReify(requestedInvariants, requirements, context, script);
     checked.ledger().requireAllSupported();
-    if (!QueryExpr.SATISFY.equals(config.query())) {
-      throw new IllegalArgumentException(
-          "query execution beyond SATISFY/EXISTS starts at Milestone 4.3; refusing to run a"
-              + " different query as SATISFY");
-    }
-    for (String invariantName : config.activeInvariants()) {
-      InvariantClassification classification =
-          checked
-              .classifications()
-              .get(
-                  new FragmentChecker.ClassificationKey(
-                      invariantName, TranslationMode.UNCERTAIN));
-      script.assertThat(classification.trueTerm());
-    }
+    QueryCompiler.Obligation obligation =
+        QueryCompiler.compile(config.query(), config.activeInvariants(), checked.classifications());
+    script.assertThat(obligation.constraint());
 
     SolverProcess solverProcess =
         externalSolverProcess != null
@@ -337,11 +378,11 @@ public final class SmtModelFinder {
             : new SolverProcess(SolverBinary.resolve(), config.timeout());
     SolverResult result = solverProcess.run(script.toSmtLib());
     if (result.outcome() != SolverOutcome.SAT) {
-      return new Solved(false, checked.ledger(), null, null);
+      return new Solved(false, checked.ledger(), obligation, null, null);
     }
 
     Map<String, SmtValue> modelValues = SmtModelParser.parse(result.modelText());
-    return new Solved(true, checked.ledger(), context, modelValues);
+    return new Solved(true, checked.ledger(), obligation, context, modelValues);
   }
 
   private static AttributeType attributeTypeOf(Type type) {

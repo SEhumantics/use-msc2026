@@ -23,8 +23,8 @@ import org.tzi.use.smt.config.ClassScope;
 import org.tzi.use.smt.config.ConfigurationReader;
 import org.tzi.use.smt.config.ConfigurationVocabulary;
 import org.tzi.use.smt.config.QueryExpr;
-import org.tzi.use.smt.config.ScenarioProfile;
 import org.tzi.use.smt.config.RawConfiguration;
+import org.tzi.use.smt.config.ScenarioProfile;
 import org.tzi.use.smt.solver.SolverBinary;
 import org.tzi.use.smt.solver.SolverProcess;
 import org.tzi.use.uml.mm.MModel;
@@ -162,6 +162,12 @@ public class SmtModelFinderTest {
         result.satisfiable());
   }
 
+  /**
+   * Milestone 4.3 made SATISFY and targeted COUNTEREXAMPLE executable; everything past them must
+   * still fail closed rather than quietly run as SATISFY. {@code fragile(j)} is the next one up
+   * (Milestone 4.5) and stands in for the rest here; {@code CounterexampleQueryTest} sweeps the
+   * whole deferred set.
+   */
   @Test
   public void parsedFutureQueryFailsClosedInsteadOfSilentlyRunningSatisfy() throws Exception {
     MModel model = compileLibrary();
@@ -173,14 +179,14 @@ public class SmtModelFinderTest {
             legacy.attributeDomains(),
             legacy.activeInvariants(),
             new QueryExpr.Profiled(
-                ScenarioProfile.EXISTS, new QueryExpr.Counterexample("Book::titleIsKey")),
+                ScenarioProfile.EXISTS, new QueryExpr.Fragile("Book::titleIsKey")),
             legacy.timeout(),
             legacy.modelLimit());
 
     IllegalArgumentException exception =
         assertThrows(IllegalArgumentException.class, () -> SmtModelFinder.find(model, future));
 
-    assertTrue(exception.getMessage().contains("refusing to run a different query as SATISFY"));
+    assertTrue(exception.getMessage(), exception.getMessage().contains("starts at Milestone 4.5"));
   }
 
   private static AnalysisConfiguration readConfig(MModel model, String section) throws Exception {
