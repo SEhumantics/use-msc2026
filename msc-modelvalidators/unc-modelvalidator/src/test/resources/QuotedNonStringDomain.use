@@ -1,0 +1,6 @@
+model QuotedNonStringDomain
+
+class Counter
+attributes
+  rank : Integer
+end

@@ -2,6 +2,7 @@ package org.tzi.use.smt.finder;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
@@ -92,19 +93,58 @@ public class QuotedStringDomainTest {
     AnalysisConfiguration config = config(model, "EmptyStringDomain");
 
     assertEquals(List.of(""), domainOf(config, "B", "tagB").enumeratedValues());
+
+    // Redefines' own documented intent, end to end: the entire candidate domain is the empty
+    // string, so nothing can satisfy TagBNotEmpty. This must be a real UNSAT -- dropping the
+    // empty element instead leaves guardString an empty String domain, which it rejects
+    // outright, turning a documented UNSAT into a spurious error.
+    assertFalse(SmtModelFinder.find(model, config).satisfiable());
   }
 
   /**
    * Parity guard against over-stripping: {@code adjustElement} touches quotes for String-typed
-   * attributes ONLY, so a non-String domain keeps its text verbatim and an accidentally quoted one
-   * still fails loudly rather than being silently repaired.
+   * attributes ONLY. A QUOTED non-String domain therefore keeps its quote characters verbatim, and
+   * the malformed configuration still fails loudly in {@code AttributeEncoder}'s number parsing
+   * instead of being silently repaired into a number the file never wrote.
+   *
+   * <p>The fixture has to be quoted for this to discriminate anything: an unquoted numeric domain
+   * is fixed by a quote strip as much as by no quote strip, so it cannot tell the two apart.
    */
   @Test
-  public void aNonStringEnumeratedDomainIsNotQuoteStripped() throws Exception {
+  public void aQuotedNonStringEnumeratedDomainKeepsItsQuotesAndIsRejected() throws Exception {
+    MModel model = compile(resourcePath("QuotedNonStringDomain.use"));
+    AnalysisConfiguration config = config(model, "QuotedNonStringDomain");
+
+    assertEquals(List.of("'1'", "'2'"), domainOf(config, "Counter", "rank").enumeratedValues());
+    assertThrows(
+        "a quoted Integer domain is malformed and must not be silently repaired",
+        IllegalArgumentException.class,
+        () -> SmtModelFinder.find(model, config));
+  }
+
+  /** The plain non-String case: an unquoted numeric domain is untouched. */
+  @Test
+  public void anUnquotedNonStringEnumeratedDomainIsUnchanged() throws Exception {
     MModel model = compile(resourcePath("QuotedStringDomain.use"));
     AnalysisConfiguration config = config(model, "QuotedStringDomain");
 
     assertEquals(List.of("1", "2"), domainOf(config, "Tag", "rank").enumeratedValues());
+  }
+
+  /**
+   * The incumbent removes ALL quote characters, not just surrounding ones, so {@code 'O'Brien'}
+   * denotes the candidate {@code OBrien} in both tools. Parity on the one file format both
+   * validators read outranks the more defensible surrounding-quotes-only reading, and this pins
+   * which of the two is implemented -- without a fixture carrying an interior quote, nothing
+   * distinguishes them.
+   */
+  @Test
+  public void everyQuoteCharacterIsRemoved() throws Exception {
+    MModel model = compile(resourcePath("QuotedStringDomain.use"));
+    AnalysisConfiguration config = config(model, "QuotedStringDomain");
+
+    assertEquals(
+        List.of("ok", "bad", "OBrien"), domainOf(config, "Tag", "label").enumeratedValues());
   }
 
   private static AttributeDomain domainOf(

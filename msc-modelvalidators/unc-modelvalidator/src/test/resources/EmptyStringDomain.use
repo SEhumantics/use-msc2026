@@ -4,3 +4,8 @@ class B
 attributes
   tagB : String
 end
+
+constraints
+
+context B inv TagBNotEmpty:
+  self.tagB <> ''
