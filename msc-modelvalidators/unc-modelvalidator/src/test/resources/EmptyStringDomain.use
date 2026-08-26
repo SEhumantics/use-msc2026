@@ -1,0 +1,6 @@
+model EmptyStringDomain
+
+class B
+attributes
+  tagB : String
+end

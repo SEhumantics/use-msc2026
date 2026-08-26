@@ -1,0 +1,12 @@
+model QuotedStringDomain
+
+class Tag
+attributes
+  label : String
+  rank : Integer
+end
+
+constraints
+
+context Tag inv LabelIsOk:
+  self.label = 'ok'
