@@ -15,7 +15,13 @@ import org.tzi.use.uncertainty.datatypes.UReal;
 final class URealThresholdBoundary {
   private static final double SEARCH_MIN = -8.0;
   private static final double SEARCH_MAX = 8.0;
-  private static final double MAX_WIDTH = 1.0e-8;
+
+  /**
+   * Package-visible so {@code TypeAndDefinednessPreservationTest} can hold {@code
+   * BoundedCompletenessQualification}'s declared numerical policy to the width actually bisected
+   * to. A policy sentence that names a different number from the code is a decoration.
+   */
+  static final double MAX_WIDTH = 1.0e-8;
 
   record Enclosure(BigDecimal lower, BigDecimal upper) {}
 

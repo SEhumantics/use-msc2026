@@ -23,18 +23,31 @@ import org.tzi.use.uml.sys.MSystem;
  * single-scenario EXISTS runs every pre-4.6 caller makes, and callers that care about the whole
  * profile read {@link #scenarios()}.
  *
+ * <p>Every result also carries its {@link BoundedCompletenessQualification}. That is not decoration
+ * on the SAT side and is load-bearing on the UNSAT side: the proposal's claim 7 states that "UNSAT
+ * is never presented as an unbounded or numerically exact theorem", so the scopes, domains,
+ * scenario policy and numerical policy that qualify a refutation travel WITH it.
+ *
  * @param scenarios every scenario the profile actually solved, in enumeration order. EXISTS reports
  *     the ONE scenario the solver chose (empty when the whole query is unsatisfiable, since no
  *     scenario was selected at all); COVER and UNIFORM report the complete configured scenario set.
+ * @param qualification what bounded this solve; never null.
  */
 public record ModelFinderResult(
     FragmentCoverageLedger ledger,
     ScenarioProfile profile,
     ProfileOutcome outcome,
-    List<ScenarioReport> scenarios) {
+    List<ScenarioReport> scenarios,
+    BoundedCompletenessQualification qualification) {
 
   public ModelFinderResult {
     scenarios = List.copyOf(scenarios);
+    if (qualification == null) {
+      // Every verdict carries what bounded it, and a REFUTED one most of all: an unqualified UNSAT
+      // is precisely the unbounded claim the proposal's claim 7 refuses to make.
+      throw new IllegalArgumentException(
+          "a result must carry the bounds that qualify it (see BoundedCompletenessQualification)");
+    }
   }
 
   /** True only when the requested profile itself was satisfied -- never a weaker one. */

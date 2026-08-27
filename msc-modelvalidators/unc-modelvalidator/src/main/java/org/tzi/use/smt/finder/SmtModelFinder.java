@@ -207,13 +207,21 @@ public final class SmtModelFinder {
       Solved solved = solve(model, config, solverProcess, null);
       if (solved.outcome() != SolverOutcome.SAT) {
         return new ModelFinderResult(
-            solved.ledger(), profile, aggregate(List.of(scenarioOutcomeOf(solved))), List.of());
+            solved.ledger(),
+            profile,
+            aggregate(List.of(scenarioOutcomeOf(solved))),
+            List.of(),
+            BoundedCompletenessQualification.of(config, profile, null));
       }
       Copy copy = solved.copies().get(0);
       Scenario chosen = decodeScenario(copy.context(), solved.modelValues());
       ScenarioReport report = witness(session, model, solved, copy, chosen, true);
       return new ModelFinderResult(
-          solved.ledger(), profile, ProfileOutcome.SATISFIED, List.of(report));
+          solved.ledger(),
+          profile,
+          ProfileOutcome.SATISFIED,
+          List.of(report),
+          BoundedCompletenessQualification.of(config, profile, null));
     }
 
     List<Scenario> space = scenarioSpace(model, config, profile);
@@ -226,7 +234,12 @@ public final class SmtModelFinder {
         ScenarioOutcome each = scenarioOutcomeOf(solved);
         List<ScenarioReport> reports =
             space.stream().map(s -> ScenarioReport.unwitnessed(s, each)).toList();
-        return new ModelFinderResult(solved.ledger(), profile, aggregate(List.of(each)), reports);
+        return new ModelFinderResult(
+            solved.ledger(),
+            profile,
+            aggregate(List.of(each)),
+            reports,
+            BoundedCompletenessQualification.of(config, profile, space));
       }
       List<ScenarioReport> reports = new ArrayList<>();
       boolean first = true;
@@ -237,7 +250,12 @@ public final class SmtModelFinder {
         reports.add(witness(session, model, solved, copy, copy.scenario(), first));
         first = false;
       }
-      return new ModelFinderResult(solved.ledger(), profile, ProfileOutcome.SATISFIED, reports);
+      return new ModelFinderResult(
+          solved.ledger(),
+          profile,
+          ProfileOutcome.SATISFIED,
+          reports,
+          BoundedCompletenessQualification.of(config, profile, space));
     }
 
     List<ScenarioReport> reports = new ArrayList<>();
@@ -257,7 +275,12 @@ public final class SmtModelFinder {
       firstWitness = false;
       outcomes.add(ScenarioOutcome.WITNESSED);
     }
-    return new ModelFinderResult(ledger, profile, aggregate(outcomes), reports);
+    return new ModelFinderResult(
+        ledger,
+        profile,
+        aggregate(outcomes),
+        reports,
+        BoundedCompletenessQualification.of(config, profile, space));
   }
 
   /**
