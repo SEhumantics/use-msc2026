@@ -1368,6 +1368,125 @@
       ]
     },
     {
+      "id": "UIntegerThreshold-Below",
+      "directory": "UIntegerThreshold",
+      "useFile": "ReliableCount.use",
+      "propertiesFile": "ReliableCount.properties",
+      "section": "below",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Second-U-type-family boundary case, authored for this thesis from the real USE UInteger evaluator transition. sigma = 1.0 and the crisp literal is 5 at 95% confidence, which is archive2/robust_utype_model_finding_proposal.md's own worked UInteger example. USE puts the real-valued transition at mu = 6.6448534751573820, so 6 is the integer immediately below it: observed P(6 > 5) = 0.8413447404370406, under the 0.95 demanded. This row is simultaneously the nominal-erasure discrepancy witness for UInteger, since erasing the uncertainty reads 6 > 5 as plainly true.",
+      "provenanceCitation": null,
+      "features": [],
+      "question": "Does the uncertainty-aware model finder reject the integer representative immediately below the evaluator-derived 95% threshold for units=UInteger(n,1.0), even though crisp 6 > 5 is true?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "oracleCaveats": [
+        "Kodkod cannot represent UInteger, so its cell on this row is an ARTEFACT, not a second opinion. Observed directly on this exact model and section: TypeConverter.convert has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UInteger, so the attribute type falls through to LOG.error(LogMessages.typeConvertError(...)) and return null (kk-modelvalidator TypeConverter.java:78) -- logged as 'ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UInteger'. The invariant that reads the absent attribute then fails to transform ('ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Batch::ReliableCount''), and InvariantTransformator.transformAndAdd swallows it. What reaches the incumbent's solver was observed to be class Batch with attributes=[] and invariants=[]: constant true. Its PropertyConfigurationVisitor was observed to report containErrors()=false with an EMPTY warning string, so the Batch_units_value/Batch_units_uncertainty keys are read by nobody and nothing warns. The recorded expectation below is the SMT-Z3 answer only. This is the same mechanism the URealThreshold rows record for UReal, re-observed for UInteger rather than assumed to carry over.",
+        "The UNSATISFIABLE expectation is qualified by the configured scope and domains and rests on the SMT encoding alone -- this project has an independent USE-evaluator oracle only on the SAT side, so a refutation is not independently re-checked here. It IS independently re-checked in the unc suite: UIntegerThresholdRoundTripTest.belowBoundaryIsFalseToUseAndBecomesUnsatWhenEnforced runs the identical representative with the invariant INACTIVE, has USE's own evaluator return FALSE on the reconstructed snapshot, and only then enforces it and observes UNSAT.",
+        "No supersession row is claimed. The incumbent's TRIVIALLY_SATISFIABLE here is wrong in the same direction the URealThreshold-Below row records, but spec S9's Study B table is already complete at four cases and this row would add a fifth instance of an already-evidenced mechanism, not a new case. Claiming it would also require the independent ground truth SupersessionDivergenceTest establishes for its own rows, which is written against UnidentifiedObject/speed and does not cover this model."
+      ],
+      "scenarioTags": [
+        "uinteger-threshold",
+        "evaluator-boundary",
+        "below-boundary",
+        "nominal-erasure-discrepancy",
+        "second-u-type-family"
+      ]
+    },
+    {
+      "id": "UIntegerThreshold-At",
+      "directory": "UIntegerThreshold",
+      "useFile": "ReliableCount.use",
+      "propertiesFile": "ReliableCount.properties",
+      "section": "at",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Second-U-type-family boundary case at the least admissible INTEGER representative. The real-valued transition is 6.6448534751573820, so 7 is the first integer that clears it: observed P(7 > 5) = 0.9772499379857728. Reconstruction is independently confirmed by USE's own evaluator on the SAT side.",
+      "provenanceCitation": null,
+      "features": [],
+      "question": "Does the uncertainty-aware model finder accept the least admissible integer representative for units=UInteger(n,1.0), with USE independently confirming the reconstructed witness?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "oracleCaveats": [
+        "Kodkod cannot represent UInteger, so its cell on this row is an ARTEFACT, not a second opinion. Observed directly on this exact model and section: TypeConverter.convert has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UInteger, so the attribute type falls through to LOG.error(LogMessages.typeConvertError(...)) and return null (kk-modelvalidator TypeConverter.java:78) -- logged as 'ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UInteger'. The invariant that reads the absent attribute then fails to transform ('ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Batch::ReliableCount''), and InvariantTransformator.transformAndAdd swallows it. What reaches the incumbent's solver was observed to be class Batch with attributes=[] and invariants=[]: constant true. Its PropertyConfigurationVisitor was observed to report containErrors()=false with an EMPTY warning string, so the Batch_units_value/Batch_units_uncertainty keys are read by nobody and nothing warns. The recorded expectation below is the SMT-Z3 answer only. This is the same mechanism the URealThreshold rows record for UReal, re-observed for UInteger rather than assumed to carry over."
+      ],
+      "scenarioTags": [
+        "uinteger-threshold",
+        "evaluator-boundary",
+        "at-boundary",
+        "second-u-type-family"
+      ]
+    },
+    {
+      "id": "UIntegerThreshold-Above",
+      "directory": "UIntegerThreshold",
+      "useFile": "ReliableCount.use",
+      "propertiesFile": "ReliableCount.properties",
+      "section": "above",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Second-U-type-family boundary case one whole unit above the least admissible integer representative: observed P(8 > 5) = 0.9986500327777663.",
+      "provenanceCitation": null,
+      "features": [],
+      "question": "Does the uncertainty-aware model finder accept an integer representative comfortably above the evaluator-derived 95% threshold for units=UInteger(n,1.0)?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "oracleCaveats": [
+        "Kodkod cannot represent UInteger, so its cell on this row is an ARTEFACT, not a second opinion. Observed directly on this exact model and section: TypeConverter.convert has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UInteger, so the attribute type falls through to LOG.error(LogMessages.typeConvertError(...)) and return null (kk-modelvalidator TypeConverter.java:78) -- logged as 'ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UInteger'. The invariant that reads the absent attribute then fails to transform ('ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Batch::ReliableCount''), and InvariantTransformator.transformAndAdd swallows it. What reaches the incumbent's solver was observed to be class Batch with attributes=[] and invariants=[]: constant true. Its PropertyConfigurationVisitor was observed to report containErrors()=false with an EMPTY warning string, so the Batch_units_value/Batch_units_uncertainty keys are read by nobody and nothing warns. The recorded expectation below is the SMT-Z3 answer only. This is the same mechanism the URealThreshold rows record for UReal, re-observed for UInteger rather than assumed to carry over."
+      ],
+      "scenarioTags": [
+        "uinteger-threshold",
+        "evaluator-boundary",
+        "above-boundary",
+        "second-u-type-family"
+      ]
+    },
+    {
+      "id": "UIntegerThreshold-Rounding",
+      "directory": "UIntegerThreshold",
+      "useFile": "ReliableCount.use",
+      "propertiesFile": "ReliableCount.properties",
+      "section": "rounding",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "The row that exists BECAUSE the representative is an integer, and the one thing this family adds that the UReal rows cannot state. Both integers straddling the real-valued transition 6.6448534751573820 are offered at once (Batch_units_value = Set{6,7}). The linear boundary the encoding emits is satisfied by every real from 6.6448534751573820 upward, so nothing but the Int sort of the declared representative rules 6 out -- the solver's own integer theory performs the rounding, exactly as the proposal describes with 'n >= 6.6448 implies n >= 7'. Observed SMT-Z3 witness: Batch#count=1;Batch.objects=[Batch{units=UInteger(7, 1.0)}].",
+      "provenanceCitation": null,
+      "features": [],
+      "question": "Offered both integers straddling the real-valued 95% threshold, does the solver's integer theory round up to the least admissible one?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "oracleCaveats": [
+        "Kodkod cannot represent UInteger, so its cell on this row is an ARTEFACT, not a second opinion. Observed directly on this exact model and section: TypeConverter.convert has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UInteger, so the attribute type falls through to LOG.error(LogMessages.typeConvertError(...)) and return null (kk-modelvalidator TypeConverter.java:78) -- logged as 'ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UInteger'. The invariant that reads the absent attribute then fails to transform ('ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Batch::ReliableCount''), and InvariantTransformator.transformAndAdd swallows it. What reaches the incumbent's solver was observed to be class Batch with attributes=[] and invariants=[]: constant true. Its PropertyConfigurationVisitor was observed to report containErrors()=false with an EMPTY warning string, so the Batch_units_value/Batch_units_uncertainty keys are read by nobody and nothing warns. The recorded expectation below is the SMT-Z3 answer only. This is the same mechanism the URealThreshold rows record for UReal, re-observed for UInteger rather than assumed to carry over."
+      ],
+      "scenarioTags": [
+        "uinteger-threshold",
+        "evaluator-boundary",
+        "integer-rounding",
+        "second-u-type-family"
+      ]
+    },
+    {
       "id": "ScenarioProfiles-ExistsOnly",
       "directory": "ScenarioProfiles",
       "useFile": "ScenarioProfiles.use",
