@@ -1,0 +1,10 @@
+model PlainRealLiteral
+
+class Calibration
+attributes
+  lowCut : Real
+end
+
+constraints
+context Calibration inv AboveAQuarter:
+  self.lowCut > 0.25

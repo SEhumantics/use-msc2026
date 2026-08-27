@@ -1,0 +1,21 @@
+model PlainRealRoundTrip
+
+class Calibration
+attributes
+  lowCut : Real
+  midCut : Real
+  highCut : Real
+end
+
+constraints
+
+-- Three DISTINCT real cut-off points, strictly ordered, strictly inside the
+-- open unit interval. Stated with Integer literals only: a Real literal is
+-- deliberately outside the translated fragment (see
+-- aRealLiteralIsRefusedExplicitlyRatherThanTruncated below), and this model
+-- exists to exercise the plain Real attribute path, not the literal path.
+context Calibration inv StrictlyIncreasing:
+  self.lowCut < self.midCut and self.midCut < self.highCut
+
+context Calibration inv InsideUnitInterval:
+  self.lowCut > 0 and self.highCut < 1
