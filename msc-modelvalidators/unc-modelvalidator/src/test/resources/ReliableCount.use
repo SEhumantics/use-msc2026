@@ -1,0 +1,10 @@
+model ReliableCount
+
+class Batch
+attributes
+  units : UInteger
+end
+
+constraints
+context self : Batch inv ReliableCount:
+  (self.units > 5).toBooleanC(0.95)

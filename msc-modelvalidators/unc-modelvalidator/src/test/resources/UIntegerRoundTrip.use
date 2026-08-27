@@ -1,0 +1,6 @@
+model UIntegerRoundTrip
+
+class Sample
+attributes
+  count : UInteger
+end
