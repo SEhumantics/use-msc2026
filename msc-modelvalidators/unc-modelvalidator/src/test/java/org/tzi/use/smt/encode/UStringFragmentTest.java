@@ -27,6 +27,8 @@ import org.tzi.use.smt.solver.SolverResult;
 import org.tzi.use.uml.mm.MClassInvariant;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
+import org.tzi.use.uml.ocl.expr.ExpAttrOp;
+import org.tzi.use.uml.ocl.expr.ExpStdOp;
 import org.tzi.use.uncertainty.datatypes.UString;
 
 /**
@@ -299,19 +301,32 @@ public class UStringFragmentTest {
    * A bare UString attribute access outside a supported projection is refused INSIDE the U-type
    * core, not silently decoded through the crisp string-index path it shares an SMT sort with.
    *
-   * <p>The shape is reachable and is not contrived: USE types {@code x <> oclUndefined(UString)} as
-   * a plain {@code Boolean} (its {@code someOfThemIsUndefined} arm), so the invariant compiles
-   * without any confidence projection and the attribute really does arrive in a crisp value
-   * position.
+   * <p><b>Reached directly, and the reason is recorded rather than dressed up.</b> No OCL shape
+   * currently gets a UString attribute into a crisp value position: USE types {@code self.id =
+   * oclUndefined(UString)} as a {@code UBoolean} (its {@code oclUndefined(UString)} operand is
+   * UString-typed, not Void, so the uncertain arm of {@code Op_equal.matches} wins) and so refuses
+   * it as an invariant body, and {@code oclIsUndefined()} is refused by the translator's operator
+   * table before its argument is ever visited. The arm is therefore DEFENSIVE, and this test drives
+   * {@code ExpressionTranslator} directly rather than pretending otherwise -- the guard is what
+   * stops the sort collision from becoming a silent misdecode if a future shape does reach it.
    */
   @Test
   public void aBareUStringAccessFailsClosedInsideTheCore() throws Exception {
+    SmtScript script = new SmtScript("QF_LIRA");
+    Prepared prepared = prepare(script, twoChoices());
+    MModel model = compileCrisp("self.id.oclIsUndefined()");
+    ExpAttrOp access =
+        (ExpAttrOp)
+            ((ExpStdOp) model.classInvariants(true).iterator().next().bodyExpression()).args()[0];
+    TranslationContext bound =
+        prepared.context().withBinding("self", new VariableBinding("Camera", 0));
+
     SmtTranslationException refusal =
         assertThrows(
             SmtTranslationException.class,
-            () -> emitCrisp("self.id <> oclUndefined(UString)", twoChoices()));
+            () -> ExpressionTranslator.translate(access, bound, TranslationMode.UNCERTAIN));
     assertEquals(FragmentBoundary.UTYPE_CORE, refusal.boundary());
-    assertTrue(refusal.getMessage(), refusal.getMessage().contains("UString"));
+    assertTrue(refusal.getMessage(), refusal.getMessage().contains("bare UString"));
   }
 
   /**
@@ -396,6 +411,17 @@ public class UStringFragmentTest {
       TranslationMode mode,
       MModel model)
       throws Exception {
+    TranslationContext context = prepare(script, domains).context();
+    MClassInvariant invariant = model.classInvariants(true).iterator().next();
+    SmtTerm term = InvariantAssembler.classify(invariant, context, mode).value();
+    script.assertThat(term);
+    return new Emitted(script, term);
+  }
+
+  private record Prepared(TranslationContext context) {}
+
+  /** Encodes the two UString attributes into {@code script} and builds a context over them. */
+  private static Prepared prepare(SmtScript script, Map<String, AttributeDomain[]> domains) {
     Map<String, ObjectSlots> slots =
         ObjectSlotEncoder.encode(script, List.of(new ClassScope("Camera", 1, 1)));
     Map<String, AttributeValues> attributes = new LinkedHashMap<>();
@@ -411,12 +437,7 @@ public class UStringFragmentTest {
       registered.put("Camera." + entry.getKey() + ".value", spelling);
       registered.put("Camera." + entry.getKey() + ".confidence", conf);
     }
-    TranslationContext context =
-        new TranslationContext(Map.of(), attributes, registered, slots, Map.of());
-    MClassInvariant invariant = model.classInvariants(true).iterator().next();
-    SmtTerm term = InvariantAssembler.classify(invariant, context, mode).value();
-    script.assertThat(term);
-    return new Emitted(script, term);
+    return new Prepared(new TranslationContext(Map.of(), attributes, registered, slots, Map.of()));
   }
 
   private static MModel compileCrisp(String body) {

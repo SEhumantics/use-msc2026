@@ -11,6 +11,7 @@ import org.tzi.use.uml.ocl.value.StringValue;
 import org.tzi.use.uml.ocl.value.UBooleanValue;
 import org.tzi.use.uml.ocl.value.UIntegerValue;
 import org.tzi.use.uml.ocl.value.URealValue;
+import org.tzi.use.uml.ocl.value.UStringValue;
 import org.tzi.use.uml.ocl.value.Value;
 
 /**
@@ -74,6 +75,28 @@ public final class SmtValueDecoder {
   public static UBooleanValue decodeUBoolean(SmtValue rawProbability) {
     return UBooleanValue.valueOf(
         true, rationalValue(rawProbability).asBigDecimal(10).doubleValue());
+  }
+
+  /**
+   * Decodes the SMT Int spelling INDEX and SMT Real confidence that jointly represent one {@code
+   * UString} attribute value.
+   *
+   * <p>The index is read against the same configured candidate list a crisp {@code String}
+   * attribute's index is read against -- the proposal's "configured spellings become a finite Z3
+   * enumeration" is literally the crisp String encoding, reused. It is read with {@link #intValue},
+   * not by rounding: the solver assigned it on the Int sort, so a non-integral model value would
+   * mean the encoding declared the wrong sort and must surface as a failure.
+   *
+   * <p>The second argument is passed to {@code UStringValue}'s parameter named {@code uncertainty},
+   * which is a MISNOMER in USE: the constructor stores it in {@code UString.sConf} and {@code
+   * confidence()} returns it unchanged. Reconstructing a confidence here is therefore correct, and
+   * the complement would be wrong.
+   */
+  public static UStringValue decodeUString(
+      SmtValue rawSpelling, SmtValue rawConfidence, AttributeDomain spellingDomain) {
+    int index = intValue(rawSpelling).intValueExact();
+    double confidence = rationalValue(rawConfidence).asBigDecimal(10).doubleValue();
+    return new UStringValue(spellingDomain.enumeratedValues().get(index), confidence);
   }
 
   /**

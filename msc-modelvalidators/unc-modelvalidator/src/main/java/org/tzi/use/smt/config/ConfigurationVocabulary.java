@@ -86,9 +86,16 @@ public record ConfigurationVocabulary(
   /**
    * Mirrors the incumbent's collection unwrap in {@code adjustElement}: a {@code Set(String)}
    * attribute's configured elements are Strings and are quoted the same way.
+   *
+   * <p>{@code UString} counts too, and must. Its {@code _value} component configures SPELLINGS,
+   * written in the {@code .properties} file with the same {@code 'quotes'} a String domain uses --
+   * {@code Camera_id_value = Set{'ALLY-7'}} -- so without this arm the quotes would survive into
+   * the candidate list and every spelling would silently fail to match the exact string an
+   * invariant names. The {@code _confidence} component is numeric and carries no quotes, so
+   * stripping them there is a no-op rather than a hazard.
    */
   private static boolean isStringTyped(Type type) {
     Type element = type instanceof CollectionType collection ? collection.elemType() : type;
-    return element.isTypeOfString();
+    return element.isTypeOfString() || element.isTypeOfUString();
   }
 }

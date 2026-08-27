@@ -459,9 +459,11 @@ public final class SmtModelFinder {
   /**
    * The declaring class plus every descendant that has a configured scope and does not redeclare
    * the attribute -- the same inheritance walk the paired U-types and the crisp attributes already
-   * do, so a UBoolean attribute is reachable on a subclass instance exactly as they are.
+   * do, so a {@code UBoolean} or {@code UString} attribute is reachable on a subclass instance
+   * exactly as they are. Shared by the two families that carry no scenario-quantifiable measurement
+   * quality and are therefore registered once rather than per scenario copy.
    */
-  private static List<String> uBooleanOwners(
+  private static List<String> nonScenarioUTypeOwners(
       MClass declaring, String attributeName, Set<String> explicitlyDeclaredAttributes) {
     List<String> owners = new ArrayList<>();
     owners.add(declaring.name());
@@ -618,9 +620,11 @@ public final class SmtModelFinder {
       MAttribute attribute = cls.attribute(attributeName, true);
       if (!attribute.type().isTypeOfUReal()
           && !attribute.type().isTypeOfUInteger()
-          && !attribute.type().isTypeOfUBoolean()) {
+          && !attribute.type().isTypeOfUBoolean()
+          && !attribute.type().isTypeOfUString()) {
         throw new IllegalArgumentException(
-            "component domains are only supported for UReal, UInteger and UBoolean attributes, got "
+            "component domains are only supported for U-typed attributes (UReal, UInteger,"
+                + " UBoolean, UString), got "
                 + className
                 + "."
                 + attributeName
@@ -628,6 +632,50 @@ public final class SmtModelFinder {
                 + attribute.type());
       }
       AttributeType uType = attributeTypeOf(attribute.type());
+      if (uType == AttributeType.USTRING) {
+        // The fourth family carries a SPELLING and a CONFIDENCE. Like UBoolean and unlike the two
+        // paired numeric families it has no measurement quality for a scenario profile to quantify
+        // over -- a confidence is a property of the reading itself, not of the instrument -- so
+        // both components belong to the snapshot S and are registered once, SHARED by every
+        // scenario copy rather than duplicated per copy.
+        if (!components.keySet().equals(Set.of("value", "confidence"))) {
+          throw new IllegalArgumentException(
+              "USTRING attribute '"
+                  + className
+                  + "."
+                  + attributeName
+                  + "' requires exactly value and confidence component domains, got "
+                  + components.keySet());
+        }
+        AttributeDomain spellingDomain = components.get("value");
+        AttributeDomain confidenceDomain = components.get("confidence");
+        for (String owningClass :
+            nonScenarioUTypeOwners(cls, attributeName, explicitlyDeclaredAttributes)) {
+          ObjectSlots uStringOwner = slotsByClass.get(owningClass);
+          if (uStringOwner == null) {
+            if (owningClass.equals(className)) {
+              throw new IllegalArgumentException(
+                  "attribute domain '"
+                      + className
+                      + "."
+                      + attributeName
+                      + "' names a class with no configured scope");
+            }
+            continue;
+          }
+          String uStringKey = owningClass + "." + attributeName;
+          attributeValuesByKey.put(
+              uStringKey,
+              AttributeEncoder.encodeUString(
+                  script, uStringOwner, attributeName, spellingDomain, confidenceDomain));
+          // The SPELLING domain is what reconstruction reads the index against, so it is the one
+          // registered under the bare key SystemStateReconstructor looks up.
+          attributeDomainByKey.put(uStringKey, spellingDomain);
+          attributeDomainByKey.put(uStringKey + ".value", spellingDomain);
+          attributeDomainByKey.put(uStringKey + ".confidence", confidenceDomain);
+        }
+        continue;
+      }
       if (uType == AttributeType.UBOOLEAN) {
         // The third family is canonicalised to ONE probability, so it has a single component and
         // no measurement quality for a scenario profile to quantify over. Its probability belongs
@@ -644,7 +692,7 @@ public final class SmtModelFinder {
         }
         AttributeDomain probabilityDomain = components.get("probability");
         for (String owningClass :
-            uBooleanOwners(cls, attributeName, explicitlyDeclaredAttributes)) {
+            nonScenarioUTypeOwners(cls, attributeName, explicitlyDeclaredAttributes)) {
           ObjectSlots uBooleanOwner = slotsByClass.get(owningClass);
           if (uBooleanOwner == null) {
             if (owningClass.equals(className)) {
@@ -835,6 +883,9 @@ public final class SmtModelFinder {
     if (type.isTypeOfUBoolean()) {
       return AttributeType.UBOOLEAN;
     }
+    if (type.isTypeOfUString()) {
+      return AttributeType.USTRING;
+    }
     if (type.isTypeOfReal()) {
       return AttributeType.REAL;
     }
@@ -897,7 +948,12 @@ public final class SmtModelFinder {
           .put(
               key,
               new AttributeValues(
-                  owner.className(), attributeName, type, representatives, uncertainties));
+                  owner.className(),
+                  attributeName,
+                  type,
+                  representatives,
+                  uncertainties,
+                  List.of()));
     }
   }
 

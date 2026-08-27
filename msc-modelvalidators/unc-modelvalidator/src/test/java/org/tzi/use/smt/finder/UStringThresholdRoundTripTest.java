@@ -127,7 +127,11 @@ public class UStringThresholdRoundTripTest {
     ModelFinderResult result = SmtModelFinder.find(model, configuration(model, "corroborated"));
 
     assertTrue(result.satisfiable());
-    assertEquals(new InvariantVerdict("Camera::Corroborated", true), result.verdicts().get(0));
+    assertTrue(
+        "USE's own evaluator must independently confirm the ENFORCED invariant on the"
+            + " reconstructed snapshot: "
+            + result.verdicts(),
+        result.verdicts().contains(new InvariantVerdict("Camera::Corroborated", true)));
     assertEquals(0.7, reconstructed(model, result, "id").confidence(), 0.0);
     assertEquals(0.85, reconstructed(model, result, "witness").confidence(), 0.0);
   }

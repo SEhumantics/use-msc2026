@@ -49,10 +49,18 @@ public final class AttributeEncoder {
                     + "."
                     + attributeName
                     + "' requires a probability domain");
+        case USTRING ->
+            throw new IllegalArgumentException(
+                type
+                    + " attribute '"
+                    + owner.className()
+                    + "."
+                    + attributeName
+                    + "' requires paired value/confidence domains");
         case BOOLEAN -> {}
       }
     }
-    return new AttributeValues(owner.className(), attributeName, type, names, List.of());
+    return new AttributeValues(owner.className(), attributeName, type, names);
   }
 
   /**
@@ -108,7 +116,7 @@ public final class AttributeEncoder {
               "=>", exists, Smt.app(">=", Smt.sym(uncertaintyName), Smt.realLit(BigDecimal.ZERO))));
     }
     return new AttributeValues(
-        owner.className(), attributeName, type, valueNames, uncertaintyNames);
+        owner.className(), attributeName, type, valueNames, uncertaintyNames, List.of());
   }
 
   /**
@@ -238,13 +246,105 @@ public final class AttributeEncoder {
                       Smt.app(">=", probability, Smt.realLit(BigDecimal.ZERO)),
                       Smt.app("<=", probability, Smt.realLit(BigDecimal.ONE))))));
     }
+    return new AttributeValues(owner.className(), attributeName, AttributeType.UBOOLEAN, names);
+  }
+
+  /**
+   * Encodes one {@code UString} attribute as a same-slot SMT pair: an Int SPELLING INDEX into the
+   * configured candidate spellings, and a Real CONFIDENCE.
+   *
+   * <p>The spelling index is the proposal's own default encoding, not a shortcut around native
+   * strings: "in the default bounded encoding, configured spellings become a finite Z3 enumeration
+   * and equality decides the spelling relation", with native Z3 String terms explicitly left as an
+   * optional experiment. It is also EXACTLY the representation crisp {@code String} attributes have
+   * always used here ({@link #guardString}), which is why this method reuses that guard rather than
+   * inventing a second one -- one enumeration mechanism, two attribute types.
+   *
+   * <p>The second component is a CONFIDENCE, and the naming is deliberate rather than inherited:
+   * {@code UStringValue(String str, double uncertainty)} names its parameter {@code uncertainty}
+   * but stores it in {@code UString.sConf}, returns it from {@code confidence()}, and multiplies it
+   * as a confidence in {@code UString.calculateConf} ({@code this.sConf * u.sConf}). The configured
+   * key is therefore {@code _confidence}, matching what the value MEANS rather than what one
+   * constructor parameter is spelled.
+   *
+   * <p>The {@code [0,1]} guard is asserted here rather than left to the configured domain because
+   * it is a property of the TYPE: {@code UString}'s own constructor throws {@code
+   * IllegalArgumentException("Invalid parameters")} outside that interval, so a solver assignment
+   * outside it could not be reconstructed at all. Both guards are comparisons, never arithmetic, so
+   * nothing this method emits can leave {@code QF_LIRA}.
+   */
+  public static AttributeValues encodeUString(
+      SmtScript script,
+      ObjectSlots owner,
+      String attributeName,
+      AttributeDomain spellingDomain,
+      AttributeDomain confidenceDomain) {
+    requireComponent(spellingDomain, owner.className(), attributeName, "value");
+    requireComponent(confidenceDomain, owner.className(), attributeName, "confidence");
+    if (spellingDomain.enumeratedValues().isEmpty()) {
+      // 7.2's excluded "unrestricted strings", hit at CONFIGURATION level rather than inside one
+      // invariant: the proposal's default bounded encoding is defined only where "configured
+      // spellings become a finite Z3 enumeration", and without one there is nothing to enumerate.
+      // This is deliberately not a ledger row -- the ledger records what one invariant asked for,
+      // and this is a property of the attribute's configuration, so it fails the run outright
+      // instead of quietly encoding a string the solver could choose freely.
+      throw new SmtTranslationException(
+          FragmentBoundary.UTYPE_UNRESTRICTED_STRING,
+          "UString attribute '"
+              + owner.className()
+              + "."
+              + attributeName
+              + "' has no finite configured spelling domain; the source's default bounded encoding"
+              + " turns configured spellings into a finite enumeration, and an unrestricted string"
+              + " is outside the supported fragment rather than something to approximate");
+    }
+    List<String> spellingNames = new ArrayList<>();
+    List<String> confidenceNames = new ArrayList<>();
+    for (int i = 0; i < owner.capacity(); i++) {
+      String stem = owner.className() + "_" + i + "_" + attributeName;
+      String spellingName = stem + "_value";
+      String confidenceName = stem + "_confidence";
+      script.declareConst(spellingName, SmtSort.INT);
+      script.declareConst(confidenceName, SmtSort.REAL);
+      spellingNames.add(spellingName);
+      confidenceNames.add(confidenceName);
+      SmtTerm exists = Smt.sym(owner.existsNames().get(i));
+      guardString(
+          script,
+          exists,
+          Smt.sym(spellingName),
+          spellingDomain,
+          owner.className(),
+          attributeName + ".value");
+      SmtTerm confidence = Smt.sym(confidenceName);
+      guardReal(
+          script,
+          exists,
+          confidence,
+          confidenceDomain,
+          owner.className(),
+          attributeName + ".confidence");
+      script.assertThat(
+          Smt.app(
+              "=>",
+              exists,
+              Smt.and(
+                  List.of(
+                      Smt.app(">=", confidence, Smt.realLit(BigDecimal.ZERO)),
+                      Smt.app("<=", confidence, Smt.realLit(BigDecimal.ONE))))));
+    }
     return new AttributeValues(
-        owner.className(), attributeName, AttributeType.UBOOLEAN, names, List.of());
+        owner.className(),
+        attributeName,
+        AttributeType.USTRING,
+        spellingNames,
+        List.of(),
+        confidenceNames);
   }
 
   private static SmtSort sort(AttributeType type) {
     return switch (type) {
-      case STRING, INTEGER, UINTEGER -> SmtSort.INT;
+      case STRING, INTEGER, UINTEGER, USTRING -> SmtSort.INT;
       case REAL, UREAL, UBOOLEAN -> SmtSort.REAL;
       case BOOLEAN -> SmtSort.BOOL;
     };

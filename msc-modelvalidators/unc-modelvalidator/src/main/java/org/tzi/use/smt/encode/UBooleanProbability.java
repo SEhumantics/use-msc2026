@@ -9,10 +9,13 @@ import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.solver.Smt;
 import org.tzi.use.smt.solver.SmtTerm;
 import org.tzi.use.uml.ocl.expr.ExpAttrOp;
+import org.tzi.use.uml.ocl.expr.ExpConstString;
+import org.tzi.use.uml.ocl.expr.ExpConstUString;
 import org.tzi.use.uml.ocl.expr.ExpStdOp;
 import org.tzi.use.uml.ocl.expr.ExpVariable;
 import org.tzi.use.uml.ocl.expr.Expression;
 import org.tzi.use.uncertainty.datatypes.UBoolean;
+import org.tzi.use.uncertainty.datatypes.UString;
 
 /**
  * Lowers a {@code UBoolean} expression to a finite, mutually exclusive, exhaustive set of CASES,
@@ -35,6 +38,17 @@ import org.tzi.use.uncertainty.datatypes.UBoolean;
  * {@code or} / {@code not} -- <b>no arithmetic operator is emitted at all</b>, so the emitted
  * script is trivially inside {@code QF_LIRA}. Anything that would require multiplying two
  * SOLVER-CHOSEN probabilities fails closed instead; see {@link #refuseNonFinite}.
+ *
+ * <p><b>{@code UString} equality lowers here too, and for the same reason.</b> The source's
+ * UString-to-UString rule is "let {@code b = c_s * c_r}; the evaluator returns {@code b} when the
+ * representative spellings match and {@code 1 - b} otherwise" -- another PRODUCT of two quantities
+ * the solver would otherwise choose. Its result type in USE really is a {@code UBoolean} ({@code
+ * Op_equal.matches} returns {@code TypeFactory.mkUBoolean()} whenever either operand is an
+ * uncertain type), so a UString equality is not a special case bolted on beside this lowering: it
+ * IS one of the UBoolean expressions this lowering exists to handle, and it composes with {@code
+ * not}/{@code and}/{@code or}/{@code implies} through the very same cases. The spellings and
+ * confidences are finite configured choices, so each case's probability is computed at translation
+ * time by USE's own {@code UString} and, again, no arithmetic operator is emitted.
  *
  * <p><b>The arithmetic is USE's, not a reimplementation of it.</b> Each combination calls the real
  * {@code org.tzi.use.uncertainty.datatypes.UBoolean}, and reproduces the SHORT-CIRCUITS of {@code
@@ -69,7 +83,24 @@ public final class UBooleanProbability {
    *     supported fragment.
    */
   public static List<Case> lower(Expression expression, TranslationContext context) {
-    return lower(expression, context, new LinkedHashSet<>());
+    return lower(expression, context, new LinkedHashSet<>(), false);
+  }
+
+  /**
+   * The NOMINAL-erasure lowering: identical in shape, but every case's probability is the
+   * independent oracle's erased Boolean rather than the source's confidence rule.
+   *
+   * <p>Only {@code UString} behaves differently between the two modes, and it must. {@code
+   * NominalErasureEvaluator} erases {@code UString(s,c)} to the representative spelling {@code s}
+   * and then compares CRISPLY, discarding the confidence outright -- so a matching spelling erases
+   * to {@code true} at any confidence, including one the uncertainty-aware reading rejects. Reading
+   * {@code p >= 0.5} off the confidence-derived probability instead would silently disagree with
+   * the oracle: at {@code c = 0.3} with a matching spelling it answers {@code false} where the
+   * erasure answers {@code true}. A stored UBoolean's probability, by contrast, IS its own erasure
+   * input ({@code p >= 0.5}), so nothing changes for that family.
+   */
+  public static List<Case> lowerNominal(Expression expression, TranslationContext context) {
+    return lower(expression, context, new LinkedHashSet<>(), true);
   }
 
   /**
@@ -107,12 +138,12 @@ public final class UBooleanProbability {
   }
 
   private static List<Case> lower(
-      Expression expression, TranslationContext context, Set<String> alreadyRead) {
+      Expression expression, TranslationContext context, Set<String> alreadyRead, boolean nominal) {
     if (expression instanceof ExpAttrOp attribute) {
       return storedProbability(attribute, context, alreadyRead);
     }
     if (expression instanceof ExpStdOp operation) {
-      return operation(operation, context, alreadyRead);
+      return operation(operation, context, alreadyRead, nominal);
     }
     throw unsupported(
         FragmentBoundary.UTYPE_CORE,
@@ -179,11 +210,14 @@ public final class UBooleanProbability {
   }
 
   private static List<Case> operation(
-      ExpStdOp operation, TranslationContext context, Set<String> alreadyRead) {
+      ExpStdOp operation, TranslationContext context, Set<String> alreadyRead, boolean nominal) {
     Expression[] args = operation.args();
     String name = operation.opname();
+    if (isUStringComparison(args)) {
+      return uStringComparison(operation, context, alreadyRead, nominal);
+    }
     if ("not".equals(name) && args.length == 1) {
-      List<Case> operand = lower(args[0], context, alreadyRead);
+      List<Case> operand = lower(args[0], context, alreadyRead, nominal);
       List<Case> negated = new ArrayList<>(operand.size());
       for (Case candidate : operand) {
         negated.add(new Case(candidate.guard(), complement(candidate.probability())));
@@ -191,8 +225,8 @@ public final class UBooleanProbability {
       return negated;
     }
     if (List.of("and", "or", "implies").contains(name) && args.length == 2) {
-      List<Case> left = lower(args[0], context, alreadyRead);
-      List<Case> right = lower(args[1], context, alreadyRead);
+      List<Case> left = lower(args[0], context, alreadyRead, nominal);
+      List<Case> right = lower(args[1], context, alreadyRead, nominal);
       if ((long) left.size() * right.size() > MAX_CASES) {
         throw unsupported(
             FragmentBoundary.UTYPE_NONLINEAR_OR_TRANSCENDENTAL,
@@ -278,6 +312,226 @@ public final class UBooleanProbability {
     }
   }
 
+  /**
+   * True when either operand of a binary operation is {@code UString}-typed, which is what routes
+   * an expression into {@link #uStringComparison}. Deliberately typed on the OPERANDS, not the
+   * operator: every UString shape USE lets into an invariant arrives as some binary operation over
+   * a UString-typed operand, and routing on the operand is what makes the unsupported ones fail
+   * closed HERE, with a UString-specific reason, instead of falling through to the
+   * numeric-comparison refusal and being misreported as a nonlinearity.
+   */
+  private static boolean isUStringComparison(Expression[] args) {
+    return args.length == 2
+        && (args[0].type().isTypeOfUString() || args[1].type().isTypeOfUString());
+  }
+
+  /**
+   * Lowers {@code <UString> = <UString|exact string>} and its negation to cases.
+   *
+   * <p>The rules are the source's, computed by USE's own {@code UString.uEquals} rather than
+   * reimplemented. Against an exact string the other operand is lifted to confidence {@code 1.0},
+   * which is exactly what {@code UStringValue.valueOf(StringValue)} does, so the exact-string rule
+   * ({@code c_s} on a match, {@code 1 - c_s} otherwise) is the {@code c_r = 1} special case of the
+   * two-UString rule ({@code b = c_s c_r} on a match, {@code 1 - b} otherwise) rather than a second
+   * rule. The {@code 1 - x} half is taken from the evaluator too: {@code uEquals} builds {@code new
+   * UBoolean(false, b)} and the constructor's {@code setNormalForm} is what turns it into {@code 1
+   * - b}, at double precision -- {@code 1 - 0.7} is {@code 0.30000000000000004}, and that is the
+   * number the encoding must carry, not {@code 0.3}.
+   *
+   * <p>{@code <>} is supported because USE DERIVES it: {@code UncertainValue.uDistinct} is
+   * literally {@code uEquals(other).not()}, and {@code not(p) = 1 - p} is one of the four rules the
+   * proposal gives. Nothing is assumed that the source does not state.
+   */
+  private static List<Case> uStringComparison(
+      ExpStdOp operation, TranslationContext context, Set<String> alreadyRead, boolean nominal) {
+    String name = operation.opname();
+    if (!"=".equals(name) && !"<>".equals(name)) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_UNRESTRICTED_STRING,
+          "UString operation '"
+              + name
+              + "' in '"
+              + operation
+              + "': the source scopes UString to equality and inequality against an exact string"
+              + " and between two configured UStrings, and puts unrestricted string-operation"
+              + " chains outside version 1");
+    }
+    Expression[] args = operation.args();
+    Side left = side(args[0], context, alreadyRead, nominal);
+    Side right = side(args[1], context, alreadyRead, nominal);
+    long combinations = (long) left.candidates().size() * right.candidates().size();
+    if (combinations > MAX_CASES) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_NONLINEAR_OR_TRANSCENDENTAL,
+          "UString '"
+              + name
+              + "' over "
+              + left.candidates().size()
+              + " x "
+              + right.candidates().size()
+              + " configured choices exceeds the "
+              + MAX_CASES
+              + "-combination expansion cap; the finite enumeration is what keeps the c_s * c_r"
+              + " rule inside QF_LIRA, so it is refused rather than emitted symbolically");
+    }
+    List<Case> cases = new ArrayList<>();
+    for (Candidate l : left.candidates()) {
+      for (Candidate r : right.candidates()) {
+        double probability = uStringProbability(name, l, r, nominal);
+        List<SmtTerm> guards = new ArrayList<>();
+        guards.addAll(l.guards());
+        guards.addAll(r.guards());
+        cases.add(new Case(guards.isEmpty() ? Smt.bool(true) : Smt.and(guards), probability));
+      }
+    }
+    return cases;
+  }
+
+  /**
+   * The equality probability of one combination.
+   *
+   * <p>In {@code UNCERTAIN} mode this is USE's own {@code UString} arithmetic. In {@code NOMINAL}
+   * mode it is the independent oracle's erasure instead -- {@code NominalErasureEvaluator} reduces
+   * {@code UString(s,c)} to the spelling {@code s} and compares crisply -- expressed as a {@code
+   * 1.0}/{@code 0.0} probability so that {@link #select} at {@code 0.5} reproduces it exactly. The
+   * spelling relation is the same one USE uses ({@code UString.uEquals} decides {@code
+   * this.string.compareTo(u.string) == 0}), so the two paths differ only in whether the confidence
+   * is consulted at all.
+   */
+  private static double uStringProbability(
+      String operator, Candidate left, Candidate right, boolean nominal) {
+    if (nominal) {
+      boolean same = left.spelling().equals(right.spelling());
+      boolean holds = "<>".equals(operator) != same;
+      return holds ? 1.0 : 0.0;
+    }
+    UBoolean equality =
+        new UString(left.spelling(), left.confidence())
+            .uEquals(new UString(right.spelling(), right.confidence()));
+    return "<>".equals(operator) ? equality.not().getC() : equality.getC();
+  }
+
+  /**
+   * One configured (spelling, confidence) choice of one operand, with the guards that select it.
+   */
+  private record Candidate(String spelling, double confidence, List<SmtTerm> guards) {}
+
+  /** All the choices one operand of a UString comparison can take. */
+  private record Side(List<Candidate> candidates) {}
+
+  /**
+   * The choices one operand offers.
+   *
+   * <p>An exact string literal offers exactly one, with confidence {@code 1.0} and no guard: it is
+   * not something the solver chooses. A stored UString attribute offers the cross product of its
+   * configured spellings and confidences -- except under {@code NOMINAL}, where the confidence is
+   * not read at all, so only the spellings are enumerated and no confidence symbol appears in the
+   * emitted guard. Anything else fails closed.
+   */
+  private static Side side(
+      Expression expression, TranslationContext context, Set<String> alreadyRead, boolean nominal) {
+    if (expression instanceof ExpConstString literal) {
+      // UStringValue.valueOf(StringValue) constructs new UStringValue(value, 1), so an exact string
+      // enters the rule as a certain UString. This is not a convention chosen here.
+      return new Side(List.of(new Candidate(literal.value(), 1.0, List.of())));
+    }
+    if (expression instanceof ExpConstUString) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "UString literal operand '"
+              + expression
+              + "': this slice encodes stored UString attributes against configured spellings, and"
+              + " a literal U-value is refused here exactly as it is everywhere else");
+    }
+    if (!(expression instanceof ExpAttrOp attribute)) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_UNRESTRICTED_STRING,
+          "UString operand '"
+              + expression
+              + "' ("
+              + expression.getClass().getSimpleName()
+              + ") is neither a stored UString attribute nor an exact string literal; the source"
+              + " puts unrestricted string-operation chains outside version 1");
+    }
+    VariableBinding binding = context.binding(variableNameOf(attribute.objExp()));
+    String attributeName = attribute.attr().name();
+    AttributeValues values = context.attributeValues(binding.className(), attributeName);
+    if (values.type() != AttributeType.USTRING) {
+      throw unsupported(
+          FragmentBoundary.ENCODING_SCOPE,
+          "no UString spelling/confidence symbols registered for "
+              + binding.className()
+              + "."
+              + attributeName);
+    }
+    String slot = binding.className() + "#" + binding.slotIndex() + "." + attributeName;
+    if (!alreadyRead.add(slot)) {
+      // Measured, not assumed: UString.uEquals is `double conf = (this == u) ? 1.0 :
+      // calculateConf(u)`, so two reads of one slot answer with CERTAINTY rather than with c * c --
+      // 1.0 against 0.49 at c = 0.7. The source's rules are written for independent operands, so an
+      // aliased comparison is outside them and is refused rather than encoded to either reading.
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "UString comparison reads "
+              + slot
+              + " more than once; USE's own UString.uEquals returns certainty rather than c_s * c_r"
+              + " for two references to one value, and the source's rules assume INDEPENDENT"
+              + " operands");
+    }
+    AttributeDomain spellings =
+        context.attributeDomain(binding.className(), attributeName, "value");
+    if (spellings.enumeratedValues().isEmpty()) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_UNRESTRICTED_STRING,
+          "UString attribute '"
+              + binding.className()
+              + "."
+              + attributeName
+              + "' has no finite configured spelling domain; the source's default bounded encoding"
+              + " turns configured spellings into a finite enumeration, and an unrestricted string"
+              + " is outside the supported fragment");
+    }
+    SmtTerm spellingSymbol = Smt.sym(values.valueNames().get(binding.slotIndex()));
+    List<Candidate> candidates = new ArrayList<>();
+    if (nominal) {
+      for (int i = 0; i < spellings.enumeratedValues().size(); i++) {
+        candidates.add(
+            new Candidate(
+                spellings.enumeratedValues().get(i),
+                Double.NaN,
+                List.of(Smt.eq(spellingSymbol, Smt.intLit(java.math.BigInteger.valueOf(i))))));
+      }
+      return new Side(candidates);
+    }
+    AttributeDomain confidences =
+        context.attributeDomain(binding.className(), attributeName, "confidence");
+    if (confidences.enumeratedValues().isEmpty()) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_NONLINEAR_OR_TRANSCENDENTAL,
+          "UString attribute '"
+              + binding.className()
+              + "."
+              + attributeName
+              + "' has no finite configured confidence domain; the source's c_s * c_r rule is a"
+              + " product of confidences, and only a finite configured choice lets it be evaluated"
+              + " at translation time instead of emitted as nonlinear SMT");
+    }
+    SmtTerm confidenceSymbol = Smt.sym(values.confidenceNames().get(binding.slotIndex()));
+    for (int i = 0; i < spellings.enumeratedValues().size(); i++) {
+      for (String candidate : confidences.enumeratedValues()) {
+        BigDecimal confidence = parse(candidate, binding.className(), attributeName);
+        candidates.add(
+            new Candidate(
+                spellings.enumeratedValues().get(i),
+                confidence.doubleValue(),
+                List.of(
+                    Smt.eq(spellingSymbol, Smt.intLit(java.math.BigInteger.valueOf(i))),
+                    Smt.eq(confidenceSymbol, Smt.realLit(confidence)))));
+      }
+    }
+    return new Side(candidates);
+  }
+
   private static SmtTranslationException refuseNonFinite(String attribute) {
     return unsupported(
         FragmentBoundary.UTYPE_NONLINEAR_OR_TRANSCENDENTAL,
@@ -305,7 +559,7 @@ public final class UBooleanProbability {
     }
     if (probability.signum() < 0 || probability.compareTo(BigDecimal.ONE) > 0) {
       throw new IllegalArgumentException(
-          "UBoolean probability candidate '"
+          "probability/confidence candidate '"
               + candidate
               + "' for attribute '"
               + className

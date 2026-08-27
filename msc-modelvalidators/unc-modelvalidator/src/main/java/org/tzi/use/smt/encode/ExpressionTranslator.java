@@ -93,12 +93,18 @@ public final class ExpressionTranslator implements ExpressionVisitor {
               + switch (v.type()) {
                 case UREAL -> "UReal";
                 case UINTEGER -> "UInteger";
+                case USTRING -> "UString";
                 default -> "UBoolean";
               }
               + " attribute access outside a supported "
-              + (v.type() == AttributeType.UBOOLEAN
-                  ? "toBooleanC projection"
-                  : "threshold comparison"));
+              + switch (v.type()) {
+                case UBOOLEAN -> "toBooleanC projection";
+                // A UString slot shares its SMT Int sort with a crisp String attribute's index, so
+                // falling through here would decode as a plain String and silently drop the
+                // confidence. It is refused rather than allowed to look like it worked.
+                case USTRING -> "equality projection";
+                default -> "threshold comparison";
+              });
     }
     result = defined(Smt.sym(v.valueNames().get(b.slotIndex())));
   }
@@ -184,12 +190,18 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (projectionArgs.length != 2) {
       throw unsupported(FragmentBoundary.UTYPE_CORE, "toBooleanC with a non-binary argument list");
     }
-    // Two disjoint families reach this operation, and the OPERAND decides which. A numeric
-    // comparison is UReal/UInteger's evaluator-derived normal-CDF threshold; anything else that is
-    // UBoolean-typed is the third family, whose probability is carried directly rather than
-    // derived from a comparison.
+    // Three disjoint families reach this operation, and the OPERAND decides which. A numeric
+    // ordered comparison is UReal/UInteger's evaluator-derived normal-CDF threshold; a UString
+    // comparison and anything else UBoolean-typed lower through UBooleanProbability, whose
+    // probability is carried or computed directly rather than derived from a normal CDF.
+    //
+    // The UString exclusion is load-bearing, not tidiness: USE types `<`/`<=`/`>`/`>=` over two
+    // UStrings as a UBoolean, so without it an ORDERED UString comparison would take the numeric
+    // route and be refused as "a non-U-typed attribute" -- a wrong reason for a real refusal. It
+    // belongs to the unrestricted-string boundary, which is where UBooleanProbability puts it.
     if (!(projectionArgs[0] instanceof ExpStdOp comparison)
-        || !List.of(">", ">=", "<", "<=").contains(comparison.opname())) {
+        || !List.of(">", ">=", "<", "<=").contains(comparison.opname())
+        || mentionsUString(comparison)) {
       return uBooleanThreshold(projectionArgs[0], projectionArgs[1]);
     }
     Expression[] comparisonArgs = comparison.args();
@@ -289,23 +301,54 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     if (mode == TranslationMode.NOMINAL) {
       // The independent oracle's erasure is E(b.toBooleanC(theta)) = E_B(b), and
-      // NominalErasureEvaluator has exactly ONE UBoolean rule for E_B: "a STORED UBoolean
-      // probability uses the p >= 0.5 rule", throwing for any other UBoolean shape. The SMT
-      // nominal arm must refuse exactly where the oracle refuses, or a FRAGILE verdict could rest
-      // on a nominal reading nothing can independently confirm.
+      // NominalErasureEvaluator defines E_B for exactly two shapes: "a STORED UBoolean probability
+      // uses the p >= 0.5 rule", and a COMPARISON, which "becomes its CRISP comparison" -- for a
+      // UString that means erasing each operand to its representative spelling and comparing those.
+      // The SMT nominal arm must refuse exactly where the oracle refuses, or a FRAGILE verdict
+      // could rest on a nominal reading nothing can independently confirm.
+      if (isUStringEquality(operand)) {
+        // lowerNominal, not lower: erasure discards the confidence outright rather than reading
+        // p >= 0.5 off the confidence rule, and at c < 0.5 with a matching spelling the two
+        // genuinely disagree.
+        return defined(
+            UBooleanProbability.select(UBooleanProbability.lowerNominal(operand, context), 0.5));
+      }
       if (!(operand instanceof ExpAttrOp)) {
         throw unsupported(
             FragmentBoundary.UTYPE_CORE,
             "nominal erasure of the composed UBoolean expression '"
                 + operand
                 + "': the proposal's erasure table defines E_B only for a STORED UBoolean"
-                + " probability (p >= 0.5), and NominalErasureEvaluator refuses the rest");
+                + " probability (p >= 0.5) and for a comparison erased to its crisp form, and"
+                + " NominalErasureEvaluator refuses the rest");
       }
       return defined(UBooleanProbability.select(UBooleanProbability.lower(operand, context), 0.5));
     }
     return defined(
         UBooleanProbability.select(
             UBooleanProbability.lower(operand, context), confidence.doubleValue()));
+  }
+
+  /** True when either operand of a binary operation is UString-typed. */
+  private static boolean mentionsUString(ExpStdOp operation) {
+    Expression[] args = operation.args();
+    return args.length == 2
+        && (args[0].type().isTypeOfUString() || args[1].type().isTypeOfUString());
+  }
+
+  /**
+   * True for {@code <UString> = ...} / {@code <UString> <> ...}, the one UBoolean-typed shape whose
+   * nominal erasure the independent oracle DOES define -- as a crisp comparison of the erased
+   * spellings, not as {@code p >= 0.5} over a confidence.
+   */
+  private static boolean isUStringEquality(Expression operand) {
+    if (!(operand instanceof ExpStdOp op) || op.args().length != 2) {
+      return false;
+    }
+    if (!List.of("=", "<>").contains(op.opname())) {
+      return false;
+    }
+    return op.args()[0].type().isTypeOfUString() || op.args()[1].type().isTypeOfUString();
   }
 
   /**

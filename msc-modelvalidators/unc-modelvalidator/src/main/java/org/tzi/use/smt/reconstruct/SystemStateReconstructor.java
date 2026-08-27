@@ -115,6 +115,10 @@ public final class SystemStateReconstructor {
               object, attribute, SmtValueDecoder.decodeUInteger(raw, rawUncertainty));
         } else if (values.type() == AttributeType.UBOOLEAN) {
           api.setAttributeValueEx(object, attribute, SmtValueDecoder.decodeUBoolean(raw));
+        } else if (values.type() == AttributeType.USTRING) {
+          SmtValue rawConfidence = modelValues.get(values.confidenceNames().get(i));
+          api.setAttributeValueEx(
+              object, attribute, SmtValueDecoder.decodeUString(raw, rawConfidence, domain));
         } else {
           api.setAttributeValueEx(
               object, attribute, SmtValueDecoder.decode(raw, attribute.type(), domain));
