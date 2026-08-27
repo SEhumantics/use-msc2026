@@ -194,6 +194,84 @@ public class ConfigurationReaderTest {
     assertTrue(exception.getMessage().contains("invalid enumerated domain for 'User_name'"));
   }
 
+  /**
+   * The type-wide primitive keys use a DIFFERENT unset sentinel from the per-attribute ones, and
+   * conflating them silently widens a domain.
+   *
+   * <p>kk-modelvalidator's {@code PropertyConfigurationVisitor.visitConfigurableType} reads them as
+   * {@code readSize(type.name() + "_min", Integer.MIN_VALUE, /* allowNegative *&#47; true)} (lines
+   * 200-201, 243-244, 249-250): absent means {@code Integer.MIN_VALUE}, and {@code -1} is an
+   * ordinary negative bound. The per-attribute keys are read as {@code readSize(searchName +
+   * "_min", DefaultConfigurationValues.attributesPerClassMin, false)} (line 346), where {@code -1}
+   * IS the "unset" default -- and there it means a COUNT of defined values, not a bound at all.
+   */
+  @Test
+  public void minusOneIsAnOrdinaryBoundForTheTypeWidePrimitiveKeys() throws Exception {
+    Path file = temporaryConfiguration("User_min = 1\nInteger_min = -1\nInteger_max = 5\n");
+
+    AnalysisConfiguration configuration =
+        ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY)
+            .requireSupported();
+
+    assertEquals(
+        java.util.Optional.of(
+            new AttributeDomain(
+                "",
+                "Integer",
+                null,
+                java.util.List.of(),
+                new java.math.BigDecimal("-1"),
+                new java.math.BigDecimal("5"))),
+        configuration.attributeDomains().stream()
+            .filter(
+                domain -> domain.className().isEmpty() && domain.attributeName().equals("Integer"))
+            .findFirst());
+  }
+
+  /**
+   * One-sided type-wide bounds are completed from the incumbent's own defaults, not left open.
+   * {@code visitConfigurableType} sets a range as soon as EITHER side is configured and fills the
+   * other from {@code DefaultConfigurationValues} (lines 260-266): {@code integerMin = -10}, {@code
+   * integerMax = 10}, {@code realMin = -2}, {@code realMax = 2}. Leaving the missing side open
+   * would make the SMT domain strictly wider than the search space the incumbent explores.
+   */
+  @Test
+  public void aOneSidedTypeWideBoundIsCompletedFromTheIncumbentDefaults() throws Exception {
+    Path file = temporaryConfiguration("User_min = 1\nInteger_max = 3\nReal_min = 1.5\n");
+
+    AnalysisConfiguration configuration =
+        ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY)
+            .requireSupported();
+
+    assertEquals(
+        java.util.Optional.of(
+            new AttributeDomain(
+                "",
+                "Integer",
+                null,
+                java.util.List.of(),
+                new java.math.BigDecimal("-10"),
+                new java.math.BigDecimal("3"))),
+        typeWide(configuration, "Integer"));
+    assertEquals(
+        java.util.Optional.of(
+            new AttributeDomain(
+                "",
+                "Real",
+                null,
+                java.util.List.of(),
+                new java.math.BigDecimal("1.5"),
+                new java.math.BigDecimal("2"))),
+        typeWide(configuration, "Real"));
+  }
+
+  private static java.util.Optional<AttributeDomain> typeWide(
+      AnalysisConfiguration configuration, String typeName) {
+    return configuration.attributeDomains().stream()
+        .filter(domain -> domain.className().isEmpty() && domain.attributeName().equals(typeName))
+        .findFirst();
+  }
+
   private static Path temporaryConfiguration(String contents) throws Exception {
     Path file = Files.createTempFile("unc-configuration", ".properties");
     Files.writeString(file, contents);

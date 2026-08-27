@@ -1,0 +1,16 @@
+-- Mirrors examples/EmployeeInvariants/Employee.use: ONE Integer attribute and
+-- an invariant that reads it, with the .properties file next to this one
+-- configuring the Integer domain TYPE-WIDE (Integer_min/Integer_max) and
+-- giving Employee.salary no per-attribute domain of its own. That is the
+-- incumbent's ordinary way of bounding a numeric attribute, and the whole
+-- point of this pair is that it must still produce a real verdict.
+model TypeWideFallback
+
+class Employee
+attributes
+  salary : Integer
+end
+
+constraints
+
+context Employee inv PositiveSalary: self.salary > 0

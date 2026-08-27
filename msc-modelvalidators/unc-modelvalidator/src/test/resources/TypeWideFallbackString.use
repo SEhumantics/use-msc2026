@@ -1,0 +1,16 @@
+-- The String half of the same configuration surface. String_min/String_max are
+-- NOT string bounds in the incumbent -- they are a COUNT of string atoms, and
+-- the atoms beyond the configured ones are GENERATED placeholder spellings
+-- (StringConfigurator.atoms: "String_string" + i). This project has no such
+-- notion, so the String type-wide keys are deliberately NOT consumed as a
+-- fallback domain and an unconfigured String attribute keeps failing closed.
+model TypeWideFallbackString
+
+class Person
+attributes
+  name : String
+end
+
+constraints
+
+context Person inv NameIsItself: self.name = self.name
