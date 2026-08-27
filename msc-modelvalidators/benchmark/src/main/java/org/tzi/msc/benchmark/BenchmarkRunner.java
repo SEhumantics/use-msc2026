@@ -248,6 +248,8 @@ public class BenchmarkRunner {
 		List<Double> wallMs = new ArrayList<>();
 		List<String> digests = new ArrayList<>();
 		String outcome = null;
+		Boolean reconstructed = null;
+		Boolean useChecked = null;
 
 		for (int i = 0; i < warmups + repeats; i++) {
 			boolean isWarmup = i < warmups;
@@ -266,6 +268,12 @@ public class BenchmarkRunner {
 
 				boolean sat = finderResult.allActiveInvariantsHold();
 				outcome = sat ? "SATISFIABLE" : "UNSATISFIABLE";
+				// Two independent facts, read off two independent accessors -- see
+				// SolverResult#reconstructed. system() is non-null exactly when a scenario was
+				// witnessed (a snapshot exists at all); allActiveInvariantsHold() additionally
+				// requires that the USE evaluator's own verdicts over that snapshot all hold.
+				reconstructed = finderResult.system() != null;
+				useChecked = sat;
 				if (!isWarmup && sat) {
 					digests.add(WitnessDigest.digest(mModel, finderResult.system().state()));
 				}
@@ -278,6 +286,7 @@ public class BenchmarkRunner {
 		}
 
 		finalizeResult(result, outcome, wallMs, List.of(), List.of(), digests);
+		recordReconstruction(result, reconstructed, useChecked);
 		return result;
 	}
 
@@ -383,6 +392,11 @@ public class BenchmarkRunner {
 		}
 
 		finalizeResult(result, outcome, wallMs, kodkodSolveMs, kodkodTranslateMs, digests);
+		// The incumbent re-checks nothing: it reports its own solver's verdict and stops. So the
+		// snapshot fact is available (it did or did not reconstruct one) but the USE re-evaluation
+		// fact is not -- null, not false. Study A prints that as not-applicable, and that gap IS a
+		// finding, not a hole in this runner.
+		recordReconstruction(result, isWitnessCapturingOutcome(result.outcome), null);
 		return result;
 	}
 
@@ -418,6 +432,27 @@ public class BenchmarkRunner {
 			result.allWitnessDigests = digests;
 			result.witnessDigest = digests.isEmpty() ? null : digests.get(0);
 		}
+	}
+
+	/**
+	 * Records this cell's {@link SolverResult#reconstructed}/{@link SolverResult#useChecked} facts,
+	 * subject to the same discipline {@link #finalizeResult} applies to witness digests: an ERROR cell
+	 * reached no verdict, so it makes no reconstruction or re-evaluation claim at all, whatever a
+	 * partially-completed repeat managed to build before it threw. Package-private and pure so a test
+	 * can exercise it without a solver.
+	 *
+	 * @param reconstructed whether a snapshot was actually built; null when the backend does not say
+	 * @param useChecked whether an INDEPENDENT USE re-evaluation of that snapshot passed; null when no
+	 *     such check was performed -- never false, which would claim it was performed and failed
+	 */
+	static void recordReconstruction(SolverResult result, Boolean reconstructed, Boolean useChecked) {
+		if ("ERROR".equals(result.outcome)) {
+			result.reconstructed = null;
+			result.useChecked = null;
+			return;
+		}
+		result.reconstructed = reconstructed;
+		result.useChecked = useChecked;
 	}
 
 	/**
