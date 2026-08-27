@@ -1510,6 +1510,83 @@
         "shared-snapshot",
         "two-scenario"
       ]
+    },
+    {
+      "id": "IntegerBitwidth-DailyCap",
+      "directory": "IntegerBitwidth",
+      "useFile": "DailyCap.use",
+      "propertiesFile": "DailyCap.properties",
+      "section": null,
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Study B (spec S9, RQ2) supersession case A, authored for this thesis: an integer model whose correct answer requires more than a practical Kodkod bitwidth. One transfer in cents under a 100000000-cent daily cap; the invariant is an ordinary two-sided range check written with Integer literals. The configured Integer domain is 1..100 and EVERY value in it satisfies the invariant, so no witness can be missing for want of a candidate, and both endpoints are representable at the corpus-wide bitwidth of 8, so the incumbent's own bitwidth check stays silent. Configuration note: Transfer_amountCents_min/_max exist because the SMT finder needs a per-attribute domain to register an attribute at all; the incumbent has no such key and reads them as PropertyEntry.attributeDefValuesMin/Max, a count of defined values. SupersessionDivergenceTest re-runs the incumbent with those two keys stripped out and asserts the outcome is unchanged, so the divergence cannot be blamed on a key the two backends read differently.",
+      "provenanceCitation": null,
+      "features": [],
+      "question": "Every value in the configured domain 1..100 satisfies 0 < amountCents < 100000000. Does each backend find one?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "supersession": {
+        "study": "B",
+        "kodkodOutcome": "UNSATISFIABLE",
+        "kodkodReason": "The invariant's literal 100000000 needs a signed bitwidth of 28 (2^27 = 134217728) to be representable; the corpus runs at bitwidth 8, whose signed range is -128..127. Kodkod integer arithmetic is bounded by that bitwidth, so the comparison the literal feeds cannot hold for any candidate and the incumbent refutes the model. It emits NO warning: PropertyConfigurationVisitor's bitwidth check inspects only Integer_min, Integer_max and configured specific values -- 1 and 100 here, both comfortable at bitwidth 8 -- and never inspects literals inside an invariant. Observed bitwidth sweep on this exact model and configuration: 8 -> UNSATISFIABLE, 9 -> UNSATISFIABLE, 16 -> TRIVIALLY_UNSATISFIABLE, 27 -> TRIVIALLY_UNSATISFIABLE, 28 -> SATISFIABLE (amountCents=1), 30 -> SATISFIABLE. So the answer is wrong at every bitwidth below 28, and 28 is far beyond what this corpus or any of its examples uses.",
+        "smtOutcome": "SATISFIABLE",
+        "groundTruth": "SATISFIABLE. The configured search domain is 1..100 and every one of those hundred values satisfies 0 < amountCents < 100000000. A reader establishes this by inspection, with no tool and no solver.",
+        "divergenceClass": "false-unsat"
+      },
+      "oracleCaveats": [
+        "The recorded expectation is the SMT-Z3 answer. The incumbent's cell for this row is UNSATISFIABLE and is WRONG, not a second opinion -- see the supersession block.",
+        "Raising the bitwidth to 28 does make the incumbent answer correctly (observed). The claim recorded here is therefore 'wrong at every practical bitwidth, including the one this corpus runs at', not 'unanswerable by Kodkod in principle'."
+      ],
+      "scenarioTags": [
+        "supersession",
+        "study-b",
+        "integer-bitwidth",
+        "false-unsat"
+      ]
+    },
+    {
+      "id": "RealGrid-UnitInterval",
+      "directory": "RealGrid",
+      "useFile": "Calibration.use",
+      "propertiesFile": "Calibration.properties",
+      "section": null,
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Study B (spec S9, RQ2) supersession case B, authored for this thesis: a real-valued model whose witness must fall between the incumbent's 0.5 enumeration grid points. Three calibration cut-offs, strictly increasing, strictly inside the open unit interval. The incumbent is handed EXACTLY its own documented default real search space -- Real_min = -2.0, Real_max = 2.0 (DefaultConfigurationValues.realMin/realMax) and no Real_step, so its own default step of 0.5 applies. Nothing narrows its grid, and the per-attribute bounds given to the SMT finder are the identical interval, so the only difference between the two searches is discretisation, not range. Both invariants use Integer literals only, deliberately: that keeps the incumbent's SEPARATE real-literal defect (DefaultExpressionVisitor.visitConstReal truncates every Real literal to its integer part, logging 'No support for real values. 0.25 becomes 0' through log4j) out of this case. Configuration note: the six Calibration_*_min/_max keys exist because the SMT finder needs a per-attribute domain to register an attribute; the incumbent reads them as PropertyEntry.attributeDefValuesMin/Max, fails to parse '-2.0' as an int, warns 'The value for ... is not a number! The default value will be used' and falls back to its own defaults. SupersessionDivergenceTest re-runs the incumbent with all six stripped out and asserts the outcome is unchanged.",
+      "provenanceCitation": null,
+      "question": "Three distinct reals, strictly increasing, strictly inside (0,1) and inside [-2,2]: does each backend find them?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "supersession": {
+        "study": "B",
+        "kodkodOutcome": "TRIVIALLY_UNSATISFIABLE",
+        "kodkodReason": "Two independent incumbent limits, both real, and the observed outcome is produced by the second. (1) The universe: the incumbent does not solve over the reals, it ENUMERATES them on a fixed grid (DefaultConfigurationValues realMin=-2, realMax=2, realStep=0.5; RealConfigurator.step=0.5). The open interval (0,1) contains exactly ONE point of that grid, 0.5, and this model needs three DISTINCT values there, so no assignment over its universe can satisfy it even in principle. (2) The transformer: measured on control models, the incumbent cannot compare a Real attribute at all. With the same default grid, 'self.a = 0.5' -- a value that IS on its grid -- returns TRIVIALLY_UNSATISFIABLE, and so do 'self.a > 0', 'self.a > 0.5' and 'self.a < self.b'. With no real-valued invariant active at all the same model returns SATISFIABLE with a = 2.0, so the grid and the reconstruction do work; it is the comparison that collapses to constant false at translation time. Limit (2) therefore fires before (1) can, which is why the refutation is TRIVIALLY_UNSATISFIABLE rather than a search result. Limit (1) is recorded because it would refute this model regardless of (2), and it is the limit this case was built to exhibit.",
+        "smtOutcome": "SATISFIABLE",
+        "groundTruth": "SATISFIABLE. 0.25 < 0.5 < 0.75 are three distinct reals, strictly increasing, strictly inside (0,1) and inside the incumbent's own configured range [-2,2]. A reader establishes this by inspection, with no tool and no solver.",
+        "divergenceClass": "false-unsat"
+      },
+      "oracleCaveats": [
+        "The recorded expectation is the SMT-Z3 answer. The incumbent's cell for this row is TRIVIALLY_UNSATISFIABLE and is WRONG, not a second opinion -- see the supersession block.",
+        "The divergence is classified false-unsat, which is the strong claim, and it is earned: the incumbent returns a refutation for a model that plainly has a witness. But the MECHANISM observed is not only the 0.5 grid the case was designed to exhibit. Its expression transformer collapses every real comparison to constant false, including ones whose operands sit exactly on its own grid. Both are stated in kodkodReason; neither is presented as the other.",
+        "This case shares the incumbent's real-valued weakness with the URealThreshold rows but is not the same claim: those rows are silently DROPPED (TypeConverter cannot represent UReal, so the invariant vanishes and Kodkod reports TRIVIALLY_SATISFIABLE). Here the invariant is not dropped, it is mistranslated into something constant-false, and the reported outcome is a refutation."
+      ],
+      "scenarioTags": [
+        "supersession",
+        "study-b",
+        "real-grid",
+        "off-grid-witness",
+        "false-unsat"
+      ]
     }
   ]
 }

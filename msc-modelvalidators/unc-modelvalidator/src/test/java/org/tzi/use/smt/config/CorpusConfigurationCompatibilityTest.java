@@ -18,15 +18,22 @@ import org.junit.Test;
  * <p>Milestone 4.6 added the corpus's FIRST query-carrying scenarios (the six {@code
  * ScenarioProfiles-*} rows), so "the corpus contains no query key at all" stopped being true and
  * stopped being the property worth pinning. What matters for backward compatibility is narrower and
- * is what {@link #everyLegacyCorpusScenarioNormalizesToTheExactSatisfyExistsSingleton} now asserts:
- * a scenario with NO query key still normalizes to the exact {@code QueryExpr.SATISFY} singleton.
- * The counts are split accordingly so a new corpus row cannot be added without a deliberate update
- * here.
+ * is what {@link #everyQuerylessCorpusScenarioNormalizesToTheExactSatisfyExistsSingleton} asserts:
+ * a scenario with NO query key still normalizes to the exact {@code QueryExpr.SATISFY} singleton,
+ * and the only rows allowed to carry a query key are still the six scenario-profile ones. The
+ * counts are split accordingly so a new corpus row cannot be added without a deliberate update here
+ * -- the Study B supersession rows added for spec S9 are the most recent such update, and they land
+ * on the query-less side.
  */
 public class CorpusConfigurationCompatibilityTest {
 
-  /** Corpus rows predating Milestone 4.6, none of which configures a query. */
-  private static final int LEGACY_QUERYLESS_SCENARIOS = 37;
+  /**
+   * Corpus rows that configure no query at all: the 37 that predate Milestone 4.6, plus the two
+   * Study B supersession rows ({@code IntegerBitwidth-DailyCap}, {@code RealGrid-UnitInterval}),
+   * which are ordinary satisfiability questions asked of both backends and so carry no query key
+   * either.
+   */
+  private static final int QUERYLESS_SCENARIOS = 39;
 
   /** The Milestone 4.6 scenario-profile rows, the first corpus entries to configure a query. */
   private static final int QUERY_CARRYING_SCENARIOS = 6;
@@ -56,12 +63,11 @@ public class CorpusConfigurationCompatibilityTest {
       loaded++;
     }
 
-    assertEquals(
-        "manifest corpus size", LEGACY_QUERYLESS_SCENARIOS + QUERY_CARRYING_SCENARIOS, loaded);
+    assertEquals("manifest corpus size", QUERYLESS_SCENARIOS + QUERY_CARRYING_SCENARIOS, loaded);
   }
 
   @Test
-  public void everyLegacyCorpusScenarioNormalizesToTheExactSatisfyExistsSingleton()
+  public void everyQuerylessCorpusScenarioNormalizesToTheExactSatisfyExistsSingleton()
       throws Exception {
     Path repository = repositoryRoot();
     Path manifest =
@@ -71,7 +77,7 @@ public class CorpusConfigurationCompatibilityTest {
       parsed = new Gson().fromJson(reader, Manifest.class);
     }
 
-    int legacy = 0;
+    int queryless = 0;
     int withQuery = 0;
     for (Example example : parsed.examples) {
       if (!example.mode.contains("finding")) continue;
@@ -94,10 +100,10 @@ public class CorpusConfigurationCompatibilityTest {
           ConfigurationReader.normalize(raw, ConfigurationVocabulary.empty())
               .configuration()
               .query());
-      legacy++;
+      queryless++;
     }
 
-    assertEquals("query-less corpus size", LEGACY_QUERYLESS_SCENARIOS, legacy);
+    assertEquals("query-less corpus size", QUERYLESS_SCENARIOS, queryless);
     assertEquals("query-carrying corpus size", QUERY_CARRYING_SCENARIOS, withQuery);
   }
 

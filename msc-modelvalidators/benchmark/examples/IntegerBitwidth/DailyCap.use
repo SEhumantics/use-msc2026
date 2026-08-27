@@ -1,0 +1,24 @@
+model DailyCap
+
+-- Study B (spec S9, RQ2) supersession case A: an integer model whose correct
+-- answer requires more than a practical Kodkod bitwidth.
+--
+-- A single transfer, in cents, under a one-million-currency-unit daily cap
+-- (100 000 000 cents). Nothing here is exotic: money in minor units routinely
+-- runs to eight or nine digits, and the invariant is an ordinary two-sided
+-- range check written with Integer literals.
+--
+-- The literal 100000000 needs a signed bitwidth of 28 to be representable
+-- (2^27 = 134 217 728). The corpus runs at bitwidth 8, where the representable
+-- range is -128..127. The configured search domain (see DailyCap.properties)
+-- is 1..100, so EVERY candidate value in it satisfies this invariant and no
+-- witness can be missing for want of a candidate.
+
+class Transfer
+attributes
+  amountCents : Integer
+end
+
+constraints
+context Transfer inv WithinDailyCap:
+  self.amountCents > 0 and self.amountCents < 100000000

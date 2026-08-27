@@ -1,0 +1,36 @@
+model Calibration
+
+-- Study B (spec S9, RQ2) supersession case B: a real-valued model whose
+-- witness lies off the incumbent's 0.5 enumeration grid.
+--
+-- Three calibration cut-off points, strictly increasing, strictly inside the
+-- open unit interval. Ordinary modelling: fractions of a normalised scale.
+--
+-- The incumbent does not solve over the reals; it enumerates them on a fixed
+-- grid (DefaultConfigurationValues realMin=-2, realMax=2, realStep=0.5,
+-- RealConfigurator.step=0.5). The open interval (0, 1) contains exactly ONE
+-- point of that grid, 0.5, and this model needs three DISTINCT values there.
+--
+-- Both invariants are stated with Integer literals only. That is deliberate
+-- and is itself part of the evidence: the SMT finder refuses a Real literal
+-- explicitly rather than weakening it (see PlainRealAttributeRoundTripTest),
+-- whereas the incumbent's DefaultExpressionVisitor.visitConstReal truncates
+-- every Real literal to its integer part and logs
+-- "No support for real values. 0.25 becomes 0" as a log4j warning. Using only
+-- Integer literals keeps that second, separate incumbent defect OUT of this
+-- case, so the divergence recorded here is about the grid and the reals, not
+-- about literal truncation.
+
+class Calibration
+attributes
+  lowCut : Real
+  midCut : Real
+  highCut : Real
+end
+
+constraints
+context Calibration inv StrictlyIncreasing:
+  self.lowCut < self.midCut and self.midCut < self.highCut
+
+context Calibration inv InsideUnitInterval:
+  self.lowCut > 0 and self.highCut < 1
