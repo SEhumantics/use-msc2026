@@ -1729,6 +1729,119 @@
           }
         },
         {
+          "id": "utype.ustring-spelling-and-confidence",
+          "name": "UString stored as a finite spelling enumeration plus a confidence",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/TypeConverter.java:63-80 convert() has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UString, so a UString attribute type reaches LOG.error(LogMessages.typeConvertError(...)) at TypeConverter.java:78 and returns null; msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/ocl/SimpleExpressionVisitor.java:354-355 visitConstUString throws \"UString not supported\". Observed directly on examples/UStringThreshold/CameraIdentity.use: both attribute types report shortName=UString with isTypeOfString()=false and isTypeOfUString()=true, and false to every other predicate convert() dispatches on, then \"ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UString\" twice (once per attribute) followed by \"ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Camera::ConfidentIdentity'. Cannot find attribute id.\" and the same for Camera::Corroborated, with both resolvable SAT4J backends answering TRIVIALLY_SATISFIABLE and the witness Camera#count=1;Camera.objects=[Camera{id=null,witness=null}].",
+              "notes": "KK-ModelValidator has no UString value representation at all; the attribute does not exist on its transformed model.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No KK scenario evidence; the five UStringThreshold scenarios exercise only unc-modelvalidator."
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/AttributeEncoder.java:276-338 encodeUString declares ONE SmtSort.INT spelling index and ONE SmtSort.REAL confidence per slot, guards the index with the same guardString (AttributeEncoder.java:386-395) a crisp String attribute uses, and asserts an existence-guarded 0 <= c <= 1; msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/reconstruct/SmtValueDecoder.java:95-100 decodeUString reads the index against the configured candidates and rebuilds a genuine UStringValue; msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/finder/SmtModelFinder.java:635-678 registers the value/confidence component pair. The quantity really is a confidence, read off use-core: use-core/src/main/java/org/tzi/use/uml/ocl/value/UStringValue.java stores its constructor's `uncertainty` parameter into UString.sConf and returns it from confidence(), and use-core/src/main/java/org/tzi/use/uncertainty/datatypes/UString.java:233-236 calculateConf multiplies those sConf values directly. Exercised end to end by msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/finder/UStringAttributeRoundTripTest.java:43-73.",
+              "notes": "The configured components are _value (the spellings) and _confidence -- not _uncertainty. The Java constructor parameter is named `uncertainty` and that name is the misnomer: the stored quantity is what confidence() returns and what the evaluator multiplies as c_s * c_r. ConfigurationVocabulary.java:86-100 treats a UString attribute as string-typed for quoting, so Camera_id_value = Set{'ALLY-7'} has its quotes stripped exactly as a crisp String domain does; without that arm every spelling would silently fail to match.",
+              "satScenarioIds": [
+                "UStringThreshold-At",
+                "UStringThreshold-Above",
+                "UStringThreshold-Spelling",
+                "UStringThreshold-Corroborated"
+              ],
+              "unsatScenarioIds": [
+                "UStringThreshold-Below"
+              ],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "All five manifest scenarios configure both components. The spelling index is deliberately the SAME mechanism crisp String attributes use rather than a parallel one, so it inherits that path's existing coverage as well."
+            }
+          }
+        },
+        {
+          "id": "utype.ustring-equality-confidence-rule",
+          "name": "UString equality/inequality wrapped in the confidence rule and thresholded by toBooleanC",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/TypeConverter.java:63-80 convert() has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UString, so a UString attribute type reaches LOG.error(LogMessages.typeConvertError(...)) at TypeConverter.java:78 and returns null; msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/ocl/SimpleExpressionVisitor.java:354-355 visitConstUString throws \"UString not supported\". Observed directly on examples/UStringThreshold/CameraIdentity.use: both attribute types report shortName=UString with isTypeOfString()=false and isTypeOfUString()=true, and false to every other predicate convert() dispatches on, then \"ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UString\" twice (once per attribute) followed by \"ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Camera::ConfidentIdentity'. Cannot find attribute id.\" and the same for Camera::Corroborated, with both resolvable SAT4J backends answering TRIVIALLY_SATISFIABLE and the witness Camera#count=1;Camera.objects=[Camera{id=null,witness=null}].",
+              "notes": "The invariants that read the UString attributes fail to transform outright, so no equality reaches the incumbent's solver at all.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No KK scenario evidence; the five UStringThreshold scenarios exercise only unc-modelvalidator."
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/UBooleanProbability.java:345-398 uStringComparison lowers = and <> to guarded cases and :401-416 uStringProbability computes each case's probability with USE's own UString.uEquals; msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/ExpressionTranslator.java:198-206 routes a UString comparison to the UBoolean projection instead of the numeric normal-CDF one. The rules are use-core's: use-core/src/main/java/org/tzi/use/uncertainty/datatypes/UString.java:97-105 uEquals returns new UBoolean(spellingsMatch, c_s * c_r), and UBoolean's setNormalForm turns the false case into 1 - b; UStringValue.valueOf lifts a plain StringValue to confidence 1, which is what makes the exact-string rule the c_r = 1 case of the two-UString rule. <> is USE's own derivation: use-core/src/main/java/org/tzi/use/uml/ocl/value/UncertainValue.java:54-61 uDistinct is uEquals(other).not(). Exercised by msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/finder/UStringThresholdRoundTripTest.java:45-146 and msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/encode/UStringFragmentTest.java:115-161.",
+              "notes": "Measured against the real datatype rather than quoted: UString('ALLY-7',0.70) = 'ALLY-7' is 0.7, = 'ALLY-8' is 0.30000000000000004 (1-c at double precision, produced by UBoolean's own normal form, not rounded to 0.3 here), UString('ALLY-7',0.70) = UString('ALLY-7',0.85) is 0.595 and the differing-spelling case is 0.405. The proposal's worked example reproduces exactly: 0.70 against a required 0.80 rejects despite the matching spelling.",
+              "satScenarioIds": [
+                "UStringThreshold-At",
+                "UStringThreshold-Above",
+                "UStringThreshold-Spelling",
+                "UStringThreshold-Corroborated"
+              ],
+              "unsatScenarioIds": [
+                "UStringThreshold-Below"
+              ],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "The five manifest scenarios exercise = against an exact string and = between two UStrings. <> shares the identical lowering and is complemented by the same UBoolean.not the source's rules give, but it is covered only in the unc suite (UStringFragmentTest.inequalityIsTheComplementUseItselfComputes and the 27 UString points of ExpressionAgreementDifferentialTest), not by a manifest row."
+            }
+          }
+        },
+        {
+          "id": "utype.ustring-finite-domain-composition",
+          "name": "UString c_s * c_r product composed over finite configured choices, inside QF_LIRA",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/TypeConverter.java:63-80 convert() has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UString, so a UString attribute type reaches LOG.error(LogMessages.typeConvertError(...)) at TypeConverter.java:78 and returns null; msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/ocl/SimpleExpressionVisitor.java:354-355 visitConstUString throws \"UString not supported\". Observed directly on examples/UStringThreshold/CameraIdentity.use: both attribute types report shortName=UString with isTypeOfString()=false and isTypeOfUString()=true, and false to every other predicate convert() dispatches on, then \"ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UString\" twice (once per attribute) followed by \"ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Camera::ConfidentIdentity'. Cannot find attribute id.\" and the same for Camera::Corroborated, with both resolvable SAT4J backends answering TRIVIALLY_SATISFIABLE and the witness Camera#count=1;Camera.objects=[Camera{id=null,witness=null}].",
+              "notes": "Not applicable: no UString attribute and no UString equality exists on the transformed model, so there is no product to compose.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No KK scenario evidence; UStringThreshold-Corroborated exercises only unc-modelvalidator."
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/UBooleanProbability.java:431-534 side() enumerates one candidate per (configured spelling, configured confidence) pair and :345-398 cross-multiplies the two sides at TRANSLATION time, emitting only (= <symbol> <literal>) atoms under and/or; :359-377 caps the expansion at 256 combinations and fails closed rather than emitting a script whose size is a surprise. That the emitted script contains no arithmetic operator ANYWHERE -- declarations, spelling guard and [0,1] confidence guard included -- is asserted by msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/encode/UStringFragmentTest.java:64-86, which is the ONLY authority on the claim: Z3 does not enforce the declared logic, so the companion solver test at :95-112 establishes only well-sortedness and answerability.",
+              "notes": "new SmtScript(\"QF_LIRA\") at SmtModelFinder.java:537 is untouched by this family. The mitigation is the proposal's own -- \"in the default bounded encoding, configured spellings become a finite Z3 enumeration\" plus finite configured confidences -- and it is the same one the UBoolean family uses, reused rather than rebuilt. UStringThreshold-Corroborated offers two confidences per attribute, so four products (0.3, 0.42, 0.425, 0.595) are enumerated and the solver picks the one combination clearing both demands.",
+              "satScenarioIds": [
+                "UStringThreshold-Corroborated",
+                "UStringThreshold-Spelling"
+              ],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "Corroborated is the only manifest row where BOTH sides of the product are solver-chosen; the other four have one certain operand, where the product degenerates to c_s * 1. Composition of a UString equality with and/or/implies rides the existing UBoolean connectives and is covered in the unc suite only."
+            }
+          }
+        },
+        {
+          "id": "utype.ustring-other-expressions",
+          "name": "Other UString expression shapes (unrestricted spellings, string-operation chains, ordered comparison, literals, aliased operands)",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/TypeConverter.java:63-80 convert() has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UString, so a UString attribute type reaches LOG.error(LogMessages.typeConvertError(...)) at TypeConverter.java:78 and returns null; msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/ocl/SimpleExpressionVisitor.java:354-355 visitConstUString throws \"UString not supported\". Observed directly on examples/UStringThreshold/CameraIdentity.use: both attribute types report shortName=UString with isTypeOfString()=false and isTypeOfUString()=true, and false to every other predicate convert() dispatches on, then \"ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UString\" twice (once per attribute) followed by \"ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Camera::ConfidentIdentity'. Cannot find attribute id.\" and the same for Camera::Corroborated, with both resolvable SAT4J backends answering TRIVIALLY_SATISFIABLE and the witness Camera#count=1;Camera.objects=[Camera{id=null,witness=null}].",
+              "notes": "UString literals and every other UString shape are not translated by KK-ModelValidator; SimpleExpressionVisitor.visitConstUString throws outright.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "Source-only unsupported boundary; no manifest scenario covers these broader shapes."
+            },
+            "unc-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/AttributeEncoder.java:283-299 refuses a UString attribute with no finite configured spelling domain (FragmentBoundary.UTYPE_UNRESTRICTED_STRING) and msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/UBooleanProbability.java:483-492 refuses the same at lowering time; UBooleanProbability.java:348-358 refuses any UString operation that is not = or <>, :446-455 refuses an operand that is neither a stored UString attribute nor an exact string literal (a string-operation chain), :438-445 refuses a UString literal operand (UTYPE_CORE, matching ExpressionTranslator.visitConstUString), :468-480 refuses reading one slot twice (UTYPE_CORE) and :508-518 a confidence with no finite configured domain (UTYPE_NONLINEAR_OR_TRANSCENDENTAL); ExpressionTranslator.java:86-108 refuses a bare UString attribute access. Each refusal is exercised by a named test in msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/encode/UStringFragmentTest.java:163-338.",
+              "notes": "This family is what finally gives FragmentBoundary.UTYPE_UNRESTRICTED_STRING a throw site: before it, the constant existed in the taxonomy with no reachable use anywhere. Three boundaries are worth naming. An ORDERED UString comparison types as a UBoolean in USE and so really does reach the lowering, but the source scopes UString to equality and inequality, so it is refused under the unrestricted-string boundary rather than misreported as a nonlinearity. Reading one slot twice is refused because use-core/src/main/java/org/tzi/use/uncertainty/datatypes/UString.java:97-105 uEquals is `(this == u) ? 1.0 : calculateConf(u)`, measured directly: an aliased comparison answers 1.0 where the source's independent rule answers 0.49 at c = 0.7. uEqualsIgnoreCase is given NO throw site and needs none -- USE registers no such OCL operation on UString, so the type checker rejects self.id.equalsIgnoreCase('x') with \"Undefined operation `UString.equalsIgnoreCase(String)'\" before any translation runs; that is recorded by UStringFragmentTest.equalsIgnoreCaseIsRefusedByTheTypeCheckerAndWouldDisagreeAnyway, which also shows the two would disagree (0.70 versus 1 - 0.70 on 'ally-7').",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "Source-only fail-closed boundary; no manifest scenario claims broader UString expression support."
+            }
+          }
+        },
+        {
           "id": "prim.real-type-relation-unpopulated",
           "name": "RealType as a distinct type (oclIsTypeOf(Real), allInstances-style Real casts)",
           "support": {

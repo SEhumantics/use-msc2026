@@ -114,26 +114,40 @@ public class UStringThresholdRoundTripTest {
   }
 
   /**
-   * The {@code b = c_s * c_r} rule, which only UString-to-UString equality can state. Both stored
-   * confidences are below the demanded one on their own; their PRODUCT is what clears it.
+   * The {@code b = c_s * c_r} rule, which only UString-to-UString equality can state, driven as a
+   * finite-choice SEARCH rather than as a single pinned combination. Each attribute offers two
+   * candidate confidences, so there are four products, and exactly one combination satisfies both
+   * the {@code 0.55} the pair equality demands and the {@code 0.80} the exact-string invariant
+   * demands of the same object. The solver has to find it -- which is the whole point of expanding
+   * the product over configured choices instead of emitting a symbolic multiplication.
    */
   @Test
   public void twoUStringsComposeThroughTheProductOfTheirConfidences() throws Exception {
-    double product = betweenUStrings("ALLY-7", 0.7, "ALLY-7", 0.85);
-    assertEquals("the source's b = c_s * c_r rule", 0.7 * 0.85, product, 0.0);
-    assertTrue(product >= PAIR_CONFIDENCE);
+    assertEquals("the source's b = c_s * c_r rule", 0.85 * 0.7, product("ALLY-7", 0.85, 0.7), 0.0);
+    assertTrue(product("ALLY-7", 0.6, 0.5) < PAIR_CONFIDENCE);
+    assertTrue(product("ALLY-7", 0.6, 0.7) < PAIR_CONFIDENCE);
+    assertTrue(product("ALLY-7", 0.85, 0.5) < PAIR_CONFIDENCE);
+    assertTrue(product("ALLY-7", 0.85, 0.7) >= PAIR_CONFIDENCE);
 
     MModel model = compile(resourcePath("CameraIdentity.use"));
     ModelFinderResult result = SmtModelFinder.find(model, configuration(model, "corroborated"));
 
     assertTrue(result.satisfiable());
     assertTrue(
-        "USE's own evaluator must independently confirm the ENFORCED invariant on the"
-            + " reconstructed snapshot: "
+        "USE's own evaluator must independently confirm the pair equality on the reconstructed"
+            + " snapshot: "
             + result.verdicts(),
         result.verdicts().contains(new InvariantVerdict("Camera::Corroborated", true)));
-    assertEquals(0.7, reconstructed(model, result, "id").confidence(), 0.0);
-    assertEquals(0.85, reconstructed(model, result, "witness").confidence(), 0.0);
+    assertEquals(
+        "only the (0.85, 0.7) combination of four clears both demands",
+        0.85,
+        reconstructed(model, result, "id").confidence(),
+        0.0);
+    assertEquals(0.7, reconstructed(model, result, "witness").confidence(), 0.0);
+  }
+
+  private static double product(String spelling, double left, double right) {
+    return betweenUStrings(spelling, left, spelling, right);
   }
 
   /** USE's own exact-string equality probability, not a reimplementation of it. */

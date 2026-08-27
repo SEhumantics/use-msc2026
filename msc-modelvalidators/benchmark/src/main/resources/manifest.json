@@ -2001,6 +2001,171 @@
         "product-rule",
         "third-u-type-family"
       ]
+    },
+    {
+      "id": "UStringThreshold-Below",
+      "directory": "UStringThreshold",
+      "useFile": "CameraIdentity.use",
+      "propertiesFile": "CameraIdentity.properties",
+      "section": "below",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Fourth-U-type-family boundary case, authored for this thesis from the real USE UString arithmetic, and the proposal's own worked example verbatim: \"UString('ALLY-7',0.70) compared with exact 'ALLY-7' yields equality probability (0.70); a required confidence of (0.80) rejects it despite a matching spelling.\" The invariant is (self.id = 'ALLY-7').toBooleanC(0.80). Observed with org.tzi.use.uncertainty.datatypes.UString: UString('ALLY-7',0.70).uEquals(UString('ALLY-7',1.0)) = 0.7, under the 0.80 demanded -- the exact string being lifted to confidence 1 by UStringValue.valueOf, which is what makes the exact-string rule the c_r = 1 case of the two-UString rule. This row is simultaneously the nominal-erasure discrepancy witness for UString, and a blunter one than the other three families': the proposal's erasure table maps UString(s,c) to the representative spelling s and discards c ENTIRELY, so the crisp reading here does not merely round differently, it ignores the measurement quality altogether and accepts a matching spelling at any confidence.",
+      "provenanceCitation": null,
+      "features": [
+        "utype.ustring-equality-confidence-rule",
+        "utype.ustring-spelling-and-confidence"
+      ],
+      "question": "Does the uncertainty-aware model finder reject an identity whose SPELLING matches exactly but whose confidence falls under the demanded one, where nominal erasure -- which keeps only the spelling -- accepts?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "oracleCaveats": [
+        "Kodkod cannot represent UString, so its cell on this row is an ARTEFACT, not a second opinion. Observed directly on this exact model and section rather than carried over from the UReal, UInteger or UBoolean rows: the attribute type reports shortName=UString with isTypeOfString()=false and isTypeOfUString()=true, and it answers false to every other predicate TypeConverter.convert dispatches on (isTypeOfVoidType, isTypeOfBoolean, isTypeOfInteger, isTypeOfReal, isTypeOfEnum, isTypeOfClass, isTypeOfOclAny, isKindOfCollection), so it matches no arm and falls through to LOG.error(LogMessages.typeConvertError(...)) and return null (kk-modelvalidator TypeConverter.java:78) -- logged twice, once per attribute, as 'ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UString'. Both invariants that read the absent attributes then fail to transform ('ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Camera::ConfidentIdentity'. Cannot find attribute id.' and the same for Camera::Corroborated), and InvariantTransformator.transformAndAdd swallows both. The two SAT4J backends that resolve in this environment both answered TRIVIALLY_SATISFIABLE with the witness Camera#count=1;Camera.objects=[Camera{id=null,witness=null}] -- both spellings and both confidences gone, so the configured Camera_id_value/_confidence and Camera_witness_value/_confidence keys reach nobody. MiniSat, MiniSatProver and Lingeling report ERROR here for an unrelated environmental reason (missing native solver libraries). The recorded expectation below is the SMT-Z3 answer only.",
+        "The UNSATISFIABLE expectation is qualified by the configured scope and domains and rests on the SMT encoding alone -- this project has an independent USE-evaluator oracle only on the SAT side, so a refutation is not independently re-checked here. It IS independently re-checked in the unc suite: UStringThresholdRoundTripTest.belowTheThresholdIsFalseToUseAndBecomesUnsatWhenEnforced runs the identical spelling and confidence with the invariant INACTIVE, observes the reconstructed UString('ALLY-7', 0.7), and only then enforces the invariant and observes UNSAT.",
+        "No supersession row is claimed. The incumbent's outcome here is wrong in the same direction the URealThreshold-Below, UIntegerThreshold-Below and UBooleanThreshold-Below rows already record, but spec S9's Study B table is complete at four cases and this row would add a fifth instance of an already-evidenced mechanism, not a new case."
+      ],
+      "scenarioTags": [
+        "ustring-threshold",
+        "evaluator-boundary",
+        "below-boundary",
+        "nominal-erasure-discrepancy",
+        "fourth-u-type-family"
+      ]
+    },
+    {
+      "id": "UStringThreshold-At",
+      "directory": "UStringThreshold",
+      "useFile": "CameraIdentity.use",
+      "propertiesFile": "CameraIdentity.properties",
+      "section": "at",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "The >= tie of toBooleanC, exercised rather than approached. USE's Op_uBoolean_toBooleanC is literally 'left.probability() >= confidence', and UString('ALLY-7',0.80).uEquals(UString('ALLY-7',1.0)) is 0.8 -- c_s * 1.0, bit-identical to the literal 0.80 -- so this row lands on the tie itself rather than near it. Reconstruction is independently confirmed by USE's own evaluator on the SAT side; the observed witness is Camera{id=UString('ALLY-7', 0.8),witness=UString('ALLY-7', 1.0)}.",
+      "provenanceCitation": null,
+      "features": [
+        "utype.ustring-equality-confidence-rule",
+        "utype.ustring-spelling-and-confidence"
+      ],
+      "question": "Does the uncertainty-aware model finder accept an equality probability sitting EXACTLY on the demanded confidence, with USE independently confirming the reconstructed witness?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "oracleCaveats": [
+        "Kodkod cannot represent UString, so its cell on this row is an ARTEFACT, not a second opinion. Observed directly on this exact model and section rather than carried over from the UReal, UInteger or UBoolean rows: the attribute type reports shortName=UString with isTypeOfString()=false and isTypeOfUString()=true, and it answers false to every other predicate TypeConverter.convert dispatches on (isTypeOfVoidType, isTypeOfBoolean, isTypeOfInteger, isTypeOfReal, isTypeOfEnum, isTypeOfClass, isTypeOfOclAny, isKindOfCollection), so it matches no arm and falls through to LOG.error(LogMessages.typeConvertError(...)) and return null (kk-modelvalidator TypeConverter.java:78) -- logged twice, once per attribute, as 'ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UString'. Both invariants that read the absent attributes then fail to transform ('ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Camera::ConfidentIdentity'. Cannot find attribute id.' and the same for Camera::Corroborated), and InvariantTransformator.transformAndAdd swallows both. The two SAT4J backends that resolve in this environment both answered TRIVIALLY_SATISFIABLE with the witness Camera#count=1;Camera.objects=[Camera{id=null,witness=null}] -- both spellings and both confidences gone, so the configured Camera_id_value/_confidence and Camera_witness_value/_confidence keys reach nobody. MiniSat, MiniSatProver and Lingeling report ERROR here for an unrelated environmental reason (missing native solver libraries). The recorded expectation below is the SMT-Z3 answer only."
+      ],
+      "scenarioTags": [
+        "ustring-threshold",
+        "evaluator-boundary",
+        "at-boundary",
+        "fourth-u-type-family"
+      ]
+    },
+    {
+      "id": "UStringThreshold-Above",
+      "directory": "UStringThreshold",
+      "useFile": "CameraIdentity.use",
+      "propertiesFile": "CameraIdentity.properties",
+      "section": "above",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Fourth-U-type-family boundary case above the threshold: observed UString('ALLY-7',0.95).uEquals(UString('ALLY-7',1.0)) = 0.95, against the 0.80 demanded. Observed witness Camera{id=UString('ALLY-7', 0.95),witness=UString('ALLY-7', 1.0)}.",
+      "provenanceCitation": null,
+      "features": [
+        "utype.ustring-equality-confidence-rule",
+        "utype.ustring-spelling-and-confidence"
+      ],
+      "question": "Does the uncertainty-aware model finder accept an equality probability comfortably above the demanded confidence?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "oracleCaveats": [
+        "Kodkod cannot represent UString, so its cell on this row is an ARTEFACT, not a second opinion. Observed directly on this exact model and section rather than carried over from the UReal, UInteger or UBoolean rows: the attribute type reports shortName=UString with isTypeOfString()=false and isTypeOfUString()=true, and it answers false to every other predicate TypeConverter.convert dispatches on (isTypeOfVoidType, isTypeOfBoolean, isTypeOfInteger, isTypeOfReal, isTypeOfEnum, isTypeOfClass, isTypeOfOclAny, isKindOfCollection), so it matches no arm and falls through to LOG.error(LogMessages.typeConvertError(...)) and return null (kk-modelvalidator TypeConverter.java:78) -- logged twice, once per attribute, as 'ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UString'. Both invariants that read the absent attributes then fail to transform ('ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Camera::ConfidentIdentity'. Cannot find attribute id.' and the same for Camera::Corroborated), and InvariantTransformator.transformAndAdd swallows both. The two SAT4J backends that resolve in this environment both answered TRIVIALLY_SATISFIABLE with the witness Camera#count=1;Camera.objects=[Camera{id=null,witness=null}] -- both spellings and both confidences gone, so the configured Camera_id_value/_confidence and Camera_witness_value/_confidence keys reach nobody. MiniSat, MiniSatProver and Lingeling report ERROR here for an unrelated environmental reason (missing native solver libraries). The recorded expectation below is the SMT-Z3 answer only."
+      ],
+      "scenarioTags": [
+        "ustring-threshold",
+        "evaluator-boundary",
+        "above-boundary",
+        "fourth-u-type-family"
+      ]
+    },
+    {
+      "id": "UStringThreshold-Spelling",
+      "directory": "UStringThreshold",
+      "useFile": "CameraIdentity.use",
+      "propertiesFile": "CameraIdentity.properties",
+      "section": "spelling",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "The finite spelling ENUMERATION doing real work, and the row that shows what the encoding actually decides. The proposal's default bounded encoding says 'configured spellings become a finite Z3 enumeration and equality decides the spelling relation', and that enumeration is literally the index encoding crisp String attributes already use here. Two candidate spellings are offered, Set{'ALLY-7','ALLY-8'}, both at confidence 0.95; only one of them matches the exact string the invariant names, and the other yields UString('ALLY-8',0.95).uEquals(UString('ALLY-7',1.0)) = 0.050000000000000044, nowhere near the 0.80 demanded. The solver has to choose the matching index. Observed witness Camera{id=UString('ALLY-7', 0.95),witness=UString('ALLY-7', 1.0)}.",
+      "provenanceCitation": null,
+      "features": [
+        "utype.ustring-equality-confidence-rule",
+        "utype.ustring-finite-domain-composition",
+        "utype.ustring-spelling-and-confidence"
+      ],
+      "question": "Offered two candidate spellings, does the solver pick the one whose spelling relation clears the confidence rather than its complement?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "oracleCaveats": [
+        "Kodkod cannot represent UString, so its cell on this row is an ARTEFACT, not a second opinion. Observed directly on this exact model and section rather than carried over from the UReal, UInteger or UBoolean rows: the attribute type reports shortName=UString with isTypeOfString()=false and isTypeOfUString()=true, and it answers false to every other predicate TypeConverter.convert dispatches on (isTypeOfVoidType, isTypeOfBoolean, isTypeOfInteger, isTypeOfReal, isTypeOfEnum, isTypeOfClass, isTypeOfOclAny, isKindOfCollection), so it matches no arm and falls through to LOG.error(LogMessages.typeConvertError(...)) and return null (kk-modelvalidator TypeConverter.java:78) -- logged twice, once per attribute, as 'ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UString'. Both invariants that read the absent attributes then fail to transform ('ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Camera::ConfidentIdentity'. Cannot find attribute id.' and the same for Camera::Corroborated), and InvariantTransformator.transformAndAdd swallows both. The two SAT4J backends that resolve in this environment both answered TRIVIALLY_SATISFIABLE with the witness Camera#count=1;Camera.objects=[Camera{id=null,witness=null}] -- both spellings and both confidences gone, so the configured Camera_id_value/_confidence and Camera_witness_value/_confidence keys reach nobody. MiniSat, MiniSatProver and Lingeling report ERROR here for an unrelated environmental reason (missing native solver libraries). The recorded expectation below is the SMT-Z3 answer only."
+      ],
+      "scenarioTags": [
+        "ustring-threshold",
+        "finite-spelling-enumeration",
+        "spelling-relation",
+        "fourth-u-type-family"
+      ]
+    },
+    {
+      "id": "UStringThreshold-Corroborated",
+      "directory": "UStringThreshold",
+      "useFile": "CameraIdentity.use",
+      "propertiesFile": "CameraIdentity.properties",
+      "section": "corroborated",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "The row that exists BECAUSE the rule is a product, and the one thing UString-to-UString equality adds that comparison against an exact string cannot state. The source's rule is 'let b = c_s * c_r; the evaluator returns b when the representative spellings match and 1 - b otherwise' -- nonlinear, and this project pins QF_LIRA, so a symbolic product of two solver-chosen confidences is not encodable at all. The same mitigation the UBoolean family uses is reused: spellings and confidences are finite configured choices and every combination is composed by USE's own UString at translation time. Both attributes offer two candidate confidences, so there are four products -- observed 0.6*0.5 = 0.3, 0.6*0.7 = 0.42, 0.85*0.5 = 0.425, 0.85*0.7 = 0.595 -- and exactly one combination satisfies both the 0.55 the pair equality demands and the 0.80 the exact-string invariant demands of the same object. Observed witness Camera{id=UString('ALLY-7', 0.85),witness=UString('ALLY-7', 0.7)}: the solver found it. What reaches the solver carries no arithmetic operator whatsoever -- only equalities between a spelling index or a confidence symbol and a literal -- which is what keeps the emitted script inside QF_LIRA.",
+      "provenanceCitation": null,
+      "features": [
+        "utype.ustring-equality-confidence-rule",
+        "utype.ustring-finite-domain-composition",
+        "utype.ustring-spelling-and-confidence"
+      ],
+      "question": "Offered two candidate confidences per attribute, does the solver find the one combination of four whose c_s * c_r PRODUCT clears the demanded confidence?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "oracleCaveats": [
+        "Kodkod cannot represent UString, so its cell on this row is an ARTEFACT, not a second opinion. Observed directly on this exact model and section rather than carried over from the UReal, UInteger or UBoolean rows: the attribute type reports shortName=UString with isTypeOfString()=false and isTypeOfUString()=true, and it answers false to every other predicate TypeConverter.convert dispatches on (isTypeOfVoidType, isTypeOfBoolean, isTypeOfInteger, isTypeOfReal, isTypeOfEnum, isTypeOfClass, isTypeOfOclAny, isKindOfCollection), so it matches no arm and falls through to LOG.error(LogMessages.typeConvertError(...)) and return null (kk-modelvalidator TypeConverter.java:78) -- logged twice, once per attribute, as 'ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UString'. Both invariants that read the absent attributes then fail to transform ('ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Camera::ConfidentIdentity'. Cannot find attribute id.' and the same for Camera::Corroborated), and InvariantTransformator.transformAndAdd swallows both. The two SAT4J backends that resolve in this environment both answered TRIVIALLY_SATISFIABLE with the witness Camera#count=1;Camera.objects=[Camera{id=null,witness=null}] -- both spellings and both confidences gone, so the configured Camera_id_value/_confidence and Camera_witness_value/_confidence keys reach nobody. MiniSat, MiniSatProver and Lingeling report ERROR here for an unrelated environmental reason (missing native solver libraries). The recorded expectation below is the SMT-Z3 answer only."
+      ],
+      "scenarioTags": [
+        "ustring-threshold",
+        "finite-domain-composition",
+        "product-rule",
+        "fourth-u-type-family"
+      ]
     }
   ]
 }
