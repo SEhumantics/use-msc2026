@@ -56,17 +56,24 @@ public record BoundedCompletenessQualification(
   public static final int RECONSTRUCTION_DECIMAL_SCALE = 10;
 
   /**
-   * The numerical policy every UReal threshold in this slice is encoded under, in one sentence.
+   * The numerical policy every U-type threshold in this slice is encoded under, in one sentence.
    *
    * <p>USE's own normal CDF is a Zelen and Severo rational-polynomial approximation and its inverse
    * a bisection search; neither is expressible to Z3. The boundary is therefore computed in Java
    * from the SAME approximation the evaluator uses, enclosed to {@link #QUANTILE_ENCLOSURE_WIDTH},
    * and rounded OUTWARD by polarity so a rounded boundary can never manufacture a witness -- which
    * is exactly why a refutation inside that band is not a refutation of anything.
+   *
+   * <p>{@code UInteger} is covered by the SAME sentence, not by a second policy: USE widens a
+   * UInteger comparison to UReal before evaluating it, so the boundary is literally the same one.
+   * The Int sort of the representative then narrows the admissible witnesses to the integers on the
+   * satisfying side of that boundary, which is a restriction of the search space rather than a
+   * different numerical policy.
    */
   public static final String NUMERICAL_POLICY =
-      "UReal confidence thresholds are encoded as linear inequalities against a boundary computed"
-          + " in Java from USE's own CDF approximation, enclosed to a standardized width of "
+      "UReal and UInteger confidence thresholds are encoded as linear inequalities against a"
+          + " boundary computed in Java from USE's own CDF approximation, enclosed to a"
+          + " standardized width of "
           + QUANTILE_ENCLOSURE_WIDTH
           + " and rounded outward by polarity, with solved rationals reconstructed at "
           + RECONSTRUCTION_DECIMAL_SCALE

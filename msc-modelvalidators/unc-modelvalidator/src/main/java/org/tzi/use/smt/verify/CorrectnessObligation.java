@@ -23,8 +23,8 @@ import java.util.List;
  * distinctness and finite termination for {@code ENUMERATE}. This slice has no {@code ENUMERATE}
  * wrapper at all, so an obligation for it would be an assertion about code that does not exist. The
  * variance-form equivalence for affine numeric operations is likewise absent: only the {@code
- * UReal} threshold family is translated today (see {@code FragmentBoundary#UTYPE_CORE}), and affine
- * arithmetic over U-values is not yet in the fragment.
+ * UReal} and {@code UInteger} threshold families are translated today (see {@code
+ * FragmentBoundary#UTYPE_CORE}), and affine arithmetic over U-values is not yet in the fragment.
  */
 public enum CorrectnessObligation {
 
