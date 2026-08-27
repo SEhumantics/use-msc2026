@@ -121,16 +121,24 @@ public class MultiVariableContextInvariantTest {
   }
 
   /**
-   * The same model and the same single shared {@code n} value, but only slot 0 exists. Both
-   * violating pairs, (0,1) and (1,0), involve the non-existing slot 1, so the invariant is
-   * vacuously TRUE. Guarding only the first context variable leaves (0,1) firing; guarding only the
-   * last leaves (1,0) firing; either way this test fails.
+   * Only slot 0 exists. Both violating pairs, (0,1) and (1,0), touch the non-existing slot 1, so
+   * the invariant is vacuously TRUE. Guarding only the first context variable leaves (0,1) firing;
+   * guarding only the last leaves (1,0) firing; either way this test fails.
+   *
+   * <p>The body is deliberately {@code p1 <> p2 implies false} and not the attribute comparison the
+   * other tests use. A non-existing slot's attribute carries NO domain constraint -- the encoder
+   * emits the domain as {@code (=> exists domain)} -- so with an attribute body a wrongly-guarded
+   * pair could still be satisfied by handing the dead slot a convenient value, and only half of
+   * this test would bite. With a structural body the dead pair's violation is unconditional, so
+   * both halves do. The third assertion keeps the other two honest: with BOTH slots alive the very
+   * same invariant IS decisively false, so what the first two read is the existence guard and not a
+   * body that can never fire.
    */
   @Test
   public void everyContextVariableCarriesItsOwnExistenceGuard() {
     MModel model = compile(pairwiseModel());
 
-    Setup holds = setUp(model, "pairwise", 1, 2, List.of("5"));
+    Setup holds = setUp(model, "structural", 1, 2, List.of("5"));
     holds.script().assertThat(Smt.not(Smt.sym("Person_1_exists")));
     holds.script().assertThat(holds.classification().trueTerm());
     assertEquals(
@@ -138,10 +146,14 @@ public class MultiVariableContextInvariantTest {
         SolverOutcome.SAT,
         solve(holds.script()));
 
-    Setup cannotBeFalse = setUp(model, "pairwise", 1, 2, List.of("5"));
+    Setup cannotBeFalse = setUp(model, "structural", 1, 2, List.of("5"));
     cannotBeFalse.script().assertThat(Smt.not(Smt.sym("Person_1_exists")));
     cannotBeFalse.script().assertThat(cannotBeFalse.classification().falseTerm());
     assertEquals(SolverOutcome.UNSAT, solve(cannotBeFalse.script()));
+
+    Setup bothAlive = setUp(model, "structural", 2, 2, List.of("5"));
+    bothAlive.script().assertThat(bothAlive.classification().falseTerm());
+    assertEquals(SolverOutcome.SAT, solve(bothAlive.script()));
   }
 
   /**
@@ -277,6 +289,8 @@ public class MultiVariableContextInvariantTest {
     constraints
     context p1, p2 : Person inv pairwise:
       p1 <> p2 implies p1.n <> p2.n
+    context p1, p2 : Person inv structural:
+      p1 <> p2 implies false
     """;
   }
 
