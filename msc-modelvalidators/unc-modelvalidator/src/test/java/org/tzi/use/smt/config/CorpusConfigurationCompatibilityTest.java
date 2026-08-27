@@ -1,9 +1,9 @@
 package org.tzi.use.smt.config;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 import com.google.gson.Gson;
 import java.io.Reader;
@@ -57,9 +57,7 @@ public class CorpusConfigurationCompatibilityTest {
     }
 
     assertEquals(
-        "manifest corpus size",
-        LEGACY_QUERYLESS_SCENARIOS + QUERY_CARRYING_SCENARIOS,
-        loaded);
+        "manifest corpus size", LEGACY_QUERYLESS_SCENARIOS + QUERY_CARRYING_SCENARIOS, loaded);
   }
 
   @Test
