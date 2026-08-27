@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedBy": "kk-feature-checklist workflow (7-agent: 6 capability-area source audits + 1 scenario-mapping pass), msc-4 session 2026-08-22; restructured to a plugin-keyed schema and deduped (3 true id-collisions merged) during the msc-4 feature-model rework session; independently re-verified against source by a 6-area + 14-scenario + 2-cross-check (22-agent) audit workflow, consolidating 15 further near-duplicate features (different ids, same underlying capability, found across areas) and correcting 1 support-status misclassification plus ~20 scenario-mapping errors; unc-modelvalidator support entries populated for the first time (0/126 -> 126/126) by a 6-area parallel evidence-gathering workflow, msc-4 session 2026-08-25, cross-referencing the real benchmark manifest/results.json and direct source citations, not guessed; Phase 5 UReal feature-matrix sync (Task D), msc-4 session 2026-08-26; query-algebra capability area (13 features: the `query` key and its recursive grammar, def/val classification, three-valued outcomes, NOMINAL/UNCERTAIN modes, the SATISFY, COUNTEREXAMPLE, invariant-independence and FRAGILE macros, Boolean connectives, all/others aggregates, EXISTS/COVER/UNIFORM profiles, and the nominal-erasure oracle) added at Milestone 4.7b / STOP GATE 4, together with corrections to the five invIndep.*/cmd.invIndep unc-modelvalidator entries Milestone 4.3's independenceSweep had made factually stale",
+  "generatedBy": "kk-feature-checklist workflow (7-agent: 6 capability-area source audits + 1 scenario-mapping pass), msc-4 session 2026-08-22; restructured to a plugin-keyed schema and deduped (3 true id-collisions merged) during the msc-4 feature-model rework session; independently re-verified against source by a 6-area + 14-scenario + 2-cross-check (22-agent) audit workflow, consolidating 15 further near-duplicate features (different ids, same underlying capability, found across areas) and correcting 1 support-status misclassification plus ~20 scenario-mapping errors; unc-modelvalidator support entries populated for the first time (0/126 -> 126/126) by a 6-area parallel evidence-gathering workflow, msc-4 session 2026-08-25, cross-referencing the real benchmark manifest/results.json and direct source citations, not guessed; Phase 5 UReal feature-matrix sync (Task D), msc-4 session 2026-08-26; query-algebra capability area (13 features: the `query` key and its recursive grammar, def/val classification, three-valued outcomes, NOMINAL/UNCERTAIN modes, the SATISFY, COUNTEREXAMPLE, invariant-independence and FRAGILE macros, Boolean connectives, all/others aggregates, EXISTS/COVER/UNIFORM profiles, and the nominal-erasure oracle) added at Milestone 4.7b / STOP GATE 4, together with corrections to the five invIndep.*/cmd.invIndep unc-modelvalidator entries Milestone 4.3's independenceSweep had made factually stale; UInteger feature entries (4: paired Int-representative/Real-uncertainty attribute encoding and reconstruction, the (UInteger attr op crisp literal).toBooleanC(theta) threshold family, solver-performed integer rounding of the real-valued boundary, and the explicit fail-closed boundary for every other UInteger shape) added when the second U-type family landed, msc-4 session 2026-08-27",
   "sourceAudited": "kk-modelvalidator/src/main (as of this session)",
   "scenarioManifest": "msc-modelvalidators/benchmark/src/main/resources/manifest.json (21 base scenarios + 16 paired UNSAT mutations)",
   "plugins": [
@@ -1464,6 +1464,116 @@
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
               "coverageNote": "Source-only fail-closed boundary; no manifest scenario claims broader UReal expression support."
+            }
+          }
+        },
+        {
+          "id": "utype.uinteger-attribute-roundtrip",
+          "name": "UInteger attribute encoding/reconstruction (Int representative + Real uncertainty)",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/TypeConverter.java:63-80 convert() has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UInteger, so a UInteger attribute type reaches LOG.error(LogMessages.typeConvertError(...)) at TypeConverter.java:78 and returns null; SimpleExpressionVisitor.java:344-346 visitConstUInteger throws \"UInteger not supported\". Observed directly on examples/UIntegerThreshold/ReliableCount.use: \"ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UInteger\" followed by \"Cannot transform invariant `Batch::ReliableCount'\", with the transformed class arriving as attributes=[] invariants=[].",
+              "notes": "KK-ModelValidator has no UInteger value representation to encode or reconstruct; the attribute does not exist on its transformed model at all.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No KK scenario evidence; the four UIntegerThreshold scenarios exercise only unc-modelvalidator."
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/AttributeType.java:8,17-19 adds UINTEGER and the isUType() predicate the paired shape is keyed off; AttributeEncoder.java:62-104 encodeUType declares the pair, with representativeSort() at AttributeEncoder.java:204-206 putting the representative on SmtSort.INT and the uncertainty on SmtSort.REAL; SmtModelFinder.java:602-666,771-772,799-841 discovers the component domains, maps the OCL type through attributeTypeOf and registers the symbols; SmtValueDecoder.java:57-61 decodeUInteger reads the representative with intValueExact and SystemStateReconstructor.java:112-116 sets a genuine UIntegerValue; UIntegerAttributeRoundTripTest.java:34-55 verifies the real round trip (UInteger(7, 1.0)).",
+              "notes": "Each bounded UInteger attribute is represented by one SMT Int term and one non-negative SMT Real term, and reconstructs as a USE UIntegerValue with both components intact. The representative is decoded with intValueExact rather than by rounding a decimal, so a non-integral model value would surface as a failure instead of being quietly rounded away.",
+              "satScenarioIds": [
+                "UIntegerThreshold-At",
+                "UIntegerThreshold-Above",
+                "UIntegerThreshold-Rounding"
+              ],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "The manifest scenarios have validation disabled, so the oracle list is empty; UIntegerAttributeRoundTripTest independently checks the reconstructed USE value."
+            }
+          }
+        },
+        {
+          "id": "utype.uinteger-confidence-threshold",
+          "name": "(UInteger attribute op crisp literal).toBooleanC(constant confidence) for >, >=, <, <=",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/TypeConverter.java:63-80 convert() has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UInteger, so a UInteger attribute type reaches LOG.error(LogMessages.typeConvertError(...)) at TypeConverter.java:78 and returns null; SimpleExpressionVisitor.java:344-346 visitConstUInteger throws \"UInteger not supported\". Observed directly on examples/UIntegerThreshold/ReliableCount.use: \"ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UInteger\" followed by \"Cannot transform invariant `Batch::ReliableCount'\", with the transformed class arriving as attributes=[] invariants=[].",
+              "notes": "The crisp Kodkod backend has no UInteger confidence-threshold semantics; the invariant that reads the attribute fails to transform and is swallowed before the solver runs.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No KK scenario evidence; the four UIntegerThreshold scenarios are unc-modelvalidator-only."
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/ExpressionTranslator.java:175-246 uTypeThreshold accepts a UReal OR UInteger attribute compared with a crisp numeric literal for >, >=, <, <= under a constant confidence, and reuses the SAME URealThresholdBoundary enclosure for both families rather than deriving a second one -- which is correct because use-core's UInteger.java:265-280 defines lt/le/gt/ge as toUReal().<op>(...) and StandardOperationsNumber.java:1034-1039 Op_number_greater.evalUBooleanResult evaluates the comparison through URealValue.valueOf(args[0]).gt(args[1]); UIntegerThresholdRoundTripTest.java:49-97 exercises below/at/above with USE's evaluator confirming each SAT witness, and :203-213 asserts the widening equality directly.",
+              "notes": "Support is deliberately limited to `(UInteger attribute op crisp literal).toBooleanC(constant confidence)`. No second threshold approximation exists: the boundary is the same evaluator-bisected normal-CDF enclosure the UReal family uses, because USE itself widens a UInteger comparison to UReal before evaluating it.",
+              "satScenarioIds": [
+                "UIntegerThreshold-At",
+                "UIntegerThreshold-Above",
+                "UIntegerThreshold-Rounding"
+              ],
+              "unsatScenarioIds": [
+                "UIntegerThreshold-Below"
+              ],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "The four manifest scenario verdicts exercise the `>` slice at sigma = 1.0 against the crisp literal 5 at 0.95 confidence. The >=, < and <= directions are covered for the shared boundary by the UReal evaluator-backed JUnit tests; they are NOT separately exercised for UInteger, and no scenario claims they are."
+            }
+          }
+        },
+        {
+          "id": "utype.uinteger-representative-rounding",
+          "name": "Integer representative rounded at the threshold by the solver's own integer theory",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/TypeConverter.java:63-80 convert() has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UInteger, so a UInteger attribute type reaches LOG.error(LogMessages.typeConvertError(...)) at TypeConverter.java:78 and returns null; SimpleExpressionVisitor.java:344-346 visitConstUInteger throws \"UInteger not supported\". Observed directly on examples/UIntegerThreshold/ReliableCount.use: \"ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UInteger\" followed by \"Cannot transform invariant `Batch::ReliableCount'\", with the transformed class arriving as attributes=[] invariants=[].",
+              "notes": "Not applicable: no UInteger attribute reaches the incumbent's solver, so there is no representative to round.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No KK scenario evidence."
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "The representative is DECLARED on SmtSort.INT (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/AttributeEncoder.java:204-206) and only LIFTED with to_real inside the emitted linear inequality (ExpressionTranslator.java:223-224), so the real-valued boundary is rounded by the solver while searching, not by the decoder afterwards. Evidenced by UIntegerThresholdRoundTripTest.java:106-124, which offers both integers straddling the transition and gets 7, and :139-164, which leaves the representative free over 0..20 and still gets an integer at or above the least admissible one. Corpus row UIntegerThreshold-Rounding records the same result as a re-runnable artefact (Batch#count=1;Batch.objects=[Batch{units=UInteger(7, 1.0)}]).",
+              "notes": "For the proposal's worked example (self.units > 5).toBooleanC(0.95) at sigma = 1.0, USE's evaluator puts the real-valued transition at mu = 6.6448534751573820 and the solver answers 7. Adversarially confirmed load-bearing: declaring the representative on Real instead makes the free-range fixture return the boundary itself, 891857137/134217728 = 6.644853480160236. The to_real lift, by contrast, was MEASURED not to be load-bearing for Z3 (which coerces silently) and is retained for SMT-LIB portability only.",
+              "satScenarioIds": [
+                "UIntegerThreshold-Rounding"
+              ],
+              "unsatScenarioIds": [
+                "UIntegerThreshold-Below"
+              ],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "One scenario states the rounding directly; UIntegerThreshold-Below is the paired refutation one unit below. The free-range form cannot be a corpus row because the legacy .properties key format carries no range syntax for a U-type component -- it lives in the JUnit suite instead."
+            }
+          }
+        },
+        {
+          "id": "utype.uinteger-other-expressions",
+          "name": "Other UInteger expression shapes (UInteger literals, arithmetic, uncertain-vs-uncertain comparisons)",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/TypeConverter.java:63-80 convert() has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UInteger, so a UInteger attribute type reaches LOG.error(LogMessages.typeConvertError(...)) at TypeConverter.java:78 and returns null; SimpleExpressionVisitor.java:344-346 visitConstUInteger throws \"UInteger not supported\". Observed directly on examples/UIntegerThreshold/ReliableCount.use: \"ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UInteger\" followed by \"Cannot transform invariant `Batch::ReliableCount'\", with the transformed class arriving as attributes=[] invariants=[].",
+              "notes": "UInteger literals, arithmetic and uncertain-vs-uncertain comparisons are not translated by KK-ModelValidator.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "Source-only unsupported boundary; no manifest scenario covers these broader shapes."
+            },
+            "unc-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/ExpressionTranslator.java:89-95 rejects a bare U-typed attribute access outside the direct threshold shape; :190-195 requires the comparison's left operand to be a UReal or UInteger attribute and :196-202 requires a crisp numeric literal for both the comparison threshold and the confidence; :546-548 rejects ExpConstUInteger. All refuse through FragmentBoundary.UTYPE_CORE or UTYPE_UNCERTAIN_VERSUS_UNCERTAIN, never silently.",
+              "notes": "The implemented boundary excludes UInteger literals, UInteger arithmetic, uncertain-versus-uncertain comparisons, non-attribute UInteger operands, and non-constant or uncertain thresholds/confidences -- the same boundary the UReal family draws, since the two share one translation path.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "Source-only fail-closed boundary; no manifest scenario claims broader UInteger expression support."
             }
           }
         },
