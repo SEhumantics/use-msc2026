@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.util.List;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
@@ -86,11 +87,22 @@ public class ReportBuilder {
 			template = sb.toString();
 		}
 
+		// Computed HERE, from the very manifest and results this report is about, and embedded as the
+		// finished table -- see ParityTable's class javadoc. The report's own JS renders it and does
+		// not re-derive it: a second implementation of the agreement rule, in a language with no test
+		// suite behind it, is exactly how a parity number quietly grows.
+		ParityTable.Table parity = ParityTable.compute(manifest.examples, results);
+
 		String manifestJson = gson.toJson(manifest.examples);
 		String resultsJson = gson.toJson(results);
 		String soilResultsJson = gson.toJson(soilResults);
 		String runMetadataJson = gson.toJson(runMetadata);
 		String featureMatrixJson = gson.toJson(featureMatrix);
+		// serializeNulls: Row.agree is deliberately null outside the parity intersection ("there is no
+		// agreement question here"), and Row.reconstructed/useChecked are null where no such claim was
+		// made. Dropping those keys would let the page's `=== null` checks see `undefined` instead and
+		// lose the distinction between "not applicable" and "no".
+		String parityJson = new GsonBuilder().serializeNulls().create().toJson(parity);
 
 		// String.replace(CharSequence, CharSequence) is a literal substitution (not regex), so the
 		// JSON payload -- which can contain '$'/backslash characters in citation text -- is inserted
@@ -100,7 +112,8 @@ public class ReportBuilder {
 				.replace("__RESULTS_JSON_PLACEHOLDER__", resultsJson)
 				.replace("__SOIL_RESULTS_JSON_PLACEHOLDER__", soilResultsJson)
 				.replace("__RUN_METADATA_JSON_PLACEHOLDER__", runMetadataJson)
-				.replace("__FEATURE_MATRIX_JSON_PLACEHOLDER__", featureMatrixJson);
+				.replace("__FEATURE_MATRIX_JSON_PLACEHOLDER__", featureMatrixJson)
+				.replace("__PARITY_JSON_PLACEHOLDER__", parityJson);
 
 		try (FileWriter w = new FileWriter(outputFile, StandardCharsets.UTF_8)) {
 			w.write(rendered);

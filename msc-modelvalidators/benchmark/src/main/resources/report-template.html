@@ -303,6 +303,7 @@
       <nav class="page-nav" aria-label="Report sections">
         <a href="#benchmark" class="page-tab" id="tabBenchmark">Benchmark results</a>
         <a href="#matrix" class="page-tab" id="tabMatrix">Feature matrix <span class="count" id="tabMatrixCount"></span></a>
+        <a href="#parity" class="page-tab" id="tabParity">Parity <span class="count" id="tabParityCount"></span></a>
       </nav>
     </header>
 
@@ -387,6 +388,57 @@
     </section>
     </div>
 
+    <div class="view view-parity">
+    <section class="block" id="paritySection">
+      <div class="section-head">
+        <h2>Study A &mdash; parity <span class="h2-sub">RQ1 &mdash; computed from this run, not transcribed beside it</span></h2>
+      </div>
+      <div class="panel" style="margin-bottom:1rem">
+        <p class="lede" id="parityLede" style="margin-top:0"></p>
+        <div class="verdict-row" id="paritySummaryRow"></div>
+      </div>
+      <div class="table-scroll"><table class="data-table" id="parityTable">
+        <thead><tr>
+          <th scope="col">Example</th>
+          <th scope="col">Features</th>
+          <th scope="col">Kodkod result</th>
+          <th scope="col">SMT result</th>
+          <th scope="col">Agree</th>
+          <th scope="col">Reconstructed</th>
+          <th scope="col">USE-checked</th>
+          <th scope="col">Classification</th>
+        </tr></thead>
+        <tbody id="parityBody"></tbody>
+      </table></div>
+    </section>
+
+    <section class="block" id="parityDisagreementSection">
+      <div class="section-head">
+        <h2>Every non-agreeing row, retained <span class="h2-sub" id="parityDisagreementSub"></span></h2>
+      </div>
+      <div class="table-scroll"><table class="data-table" id="parityDisagreementTable">
+        <thead><tr>
+          <th scope="col">Example</th><th scope="col">Kodkod</th><th scope="col">SMT</th>
+          <th scope="col">Classification</th><th scope="col">Why</th>
+        </tr></thead>
+        <tbody id="parityDisagreementBody"></tbody>
+      </table></div>
+    </section>
+
+    <section class="block" id="studyBSection">
+      <div class="section-head">
+        <h2>Study B &mdash; supersession <span class="h2-sub">RQ2 &mdash; declared divergences, excluded from the parity denominator</span></h2>
+      </div>
+      <div class="table-scroll"><table class="data-table" id="studyBTable">
+        <thead><tr>
+          <th scope="col">Case</th><th scope="col">Kodkod outcome</th><th scope="col">Kodkod reason</th>
+          <th scope="col">SMT outcome</th><th scope="col">Ground truth</th><th scope="col">Divergence class</th>
+        </tr></thead>
+        <tbody id="studyBBody"></tbody>
+      </table></div>
+    </section>
+    </div>
+
     <footer class="viz-foot" id="footNote"></footer>
   </div>
 </main>
@@ -407,6 +459,7 @@
 <script type="application/json" id="soil-results-json">__SOIL_RESULTS_JSON_PLACEHOLDER__</script>
 <script type="application/json" id="run-metadata-json">__RUN_METADATA_JSON_PLACEHOLDER__</script>
 <script type="application/json" id="feature-matrix-json">__FEATURE_MATRIX_JSON_PLACEHOLDER__</script>
+<script type="application/json" id="parity-json">__PARITY_JSON_PLACEHOLDER__</script>
 
 <script>
 (function () {
@@ -415,6 +468,10 @@
   const SOIL_RESULTS = JSON.parse(document.getElementById('soil-results-json').textContent);
   const RUN_METADATA = JSON.parse(document.getElementById('run-metadata-json').textContent);
   const FEATURE_MATRIX = JSON.parse(document.getElementById('feature-matrix-json').textContent);
+  // Already computed by ParityTable.java from the very MANIFEST/RESULTS above. Nothing below
+  // re-derives agreement from RESULTS: the rule that a Kodkod TRIVIALLY_SATISFIABLE is not agreement
+  // is tested Java, and a second copy of it here would be an untested one.
+  const PARITY = JSON.parse(document.getElementById('parity-json').textContent);
 
   const root = document.documentElement;
   function cssVar(name) { return getComputedStyle(document.querySelector('.viz-root')).getPropertyValue(name).trim(); }
@@ -1539,6 +1596,99 @@
     `(currently Kodkod, millisecond resolution, last-attempt only).` +
     (metaParts.length ? `<br>${metaParts.join(' &middot; ')}` : '');
 
+  // --------------------------------------------------------------- parity (Study A)
+  // Everything below only FORMATS PARITY. It computes nothing: agreement, the real-verdict test and
+  // the denominators are ParityTable.java's, under test, and re-implementing any of them here would
+  // put the project's headline RQ1 number behind an untested second opinion.
+  const PARITY_CLASS_BADGE = {
+    AGREE: 'match',
+    DECLARED_DIVERGENCE: 'mixed',
+    KODKOD_DEFECT: 'known-defect',
+    SMT_DEFECT: 'mismatch',
+    UNCLASSIFIED_DISAGREEMENT: 'mismatch',
+    KODKOD_NO_REAL_VERDICT: 'unsupported',
+    SMT_NO_VERDICT: 'unsupported',
+    NEITHER_VERDICT: 'no-oracle'
+  };
+  const PARITY_CLASS_LABEL = {
+    AGREE: 'agree',
+    DECLARED_DIVERGENCE: 'declared divergence',
+    KODKOD_DEFECT: 'Kodkod defect',
+    SMT_DEFECT: 'SMT defect',
+    UNCLASSIFIED_DISAGREEMENT: 'unclassified disagreement',
+    KODKOD_NO_REAL_VERDICT: 'no real Kodkod verdict',
+    SMT_NO_VERDICT: 'no SMT verdict',
+    NEITHER_VERDICT: 'neither reached a verdict'
+  };
+
+  function parityBadge(cls) {
+    return `<span class="status-badge ${PARITY_CLASS_BADGE[cls] || 'unverified'}">${escapeHtml(PARITY_CLASS_LABEL[cls] || cls)}</span>`;
+  }
+
+  // Three states, not two: null means "this question does not arise here" (no agreement question
+  // outside the intersection; no USE re-evaluation performed by the incumbent at all). Rendering
+  // that as "no" would turn an absent claim into a failed one.
+  function triCell(v) {
+    if (v === null || v === undefined) return '<span class="status-badge no-oracle">n/a</span>';
+    return v ? '<span class="status-badge match">yes</span>' : '<span class="status-badge mismatch">no</span>';
+  }
+
+  function renderParity() {
+    const s = PARITY.summary;
+    document.getElementById('tabParityCount').textContent = `${s.agreements}/${s.intersection}`;
+    document.getElementById('parityLede').innerHTML =
+      `Parity is claimable only where <b>both</b> backends reach a real, searched verdict. Kodkod reaches one on `
+      + `<b>${s.kodkodRealVerdicts}</b> rows, this project on <b>${s.smtRealVerdicts}</b>, and the intersection is `
+      + `<b>${s.intersection}</b> of ${s.corpusRows} corpus rows (${s.parityPopulation} after excluding the `
+      + `${s.declaredDivergenceRows} declared Study&nbsp;B divergences). A Kodkod <code>TRIVIALLY_SATISFIABLE</code> `
+      + `is a verdict reached without search, produced after silently dropping what the incumbent could not `
+      + `represent &mdash; it is never counted here as agreement.`;
+
+    const kpis = [
+      { v: s.kodkodRealVerdicts, l: 'Kodkod real verdicts' },
+      { v: s.smtRealVerdicts, l: 'SMT real verdicts' },
+      { v: s.intersection, l: 'Intersection (the denominator)' },
+      { v: `${s.agreements}/${s.intersection}`, l: 'Agreement on the intersection' },
+      { v: s.disagreements, l: 'Undeclared disagreements', crit: s.disagreements > 0 },
+      { v: s.smtNoVerdict, l: 'SMT refused (fail-closed)' },
+      { v: s.kodkodNoRealVerdict, l: 'Kodkod reached no real verdict' }
+    ];
+    document.getElementById('paritySummaryRow').innerHTML = kpis.map(k =>
+      `<div class="kpi"><div class="kpi-value tabular${k.crit ? ' crit' : ''}">${escapeHtml(String(k.v))}</div>`
+      + `<div class="kpi-label">${escapeHtml(k.l)}</div></div>`).join('');
+
+    document.getElementById('parityBody').innerHTML = PARITY.rows.map(r => `<tr>
+        <td>${escapeHtml(r.exampleId)}</td>
+        <td class="center tabular">${r.featureCount}</td>
+        <td>${escapeHtml(r.kodkodResult)}</td>
+        <td>${escapeHtml(r.smtResult)}</td>
+        <td class="center">${triCell(r.agree)}</td>
+        <td class="center">${triCell(r.reconstructed)}</td>
+        <td class="center">${triCell(r.useChecked)}</td>
+        <td>${parityBadge(r.parityClass)}</td>
+      </tr>`).join('');
+
+    const nonAgreeing = PARITY.rows.filter(r => r.parityClass !== 'AGREE');
+    document.getElementById('parityDisagreementSub').textContent =
+      `${nonAgreeing.length} of ${PARITY.rows.length} rows \u2014 spec \u00a79: disagreements are not summarised away`;
+    document.getElementById('parityDisagreementBody').innerHTML = nonAgreeing.map(r => `<tr>
+        <td>${escapeHtml(r.exampleId)}</td>
+        <td>${escapeHtml(r.kodkodResult)}</td>
+        <td>${escapeHtml(r.smtResult)}</td>
+        <td>${parityBadge(r.parityClass)}</td>
+        <td>${escapeHtml(r.note)}</td>
+      </tr>`).join('');
+
+    document.getElementById('studyBBody').innerHTML = PARITY.studyB.map(b => `<tr>
+        <td>${escapeHtml(b.exampleId)}</td>
+        <td>${escapeHtml(b.kodkodOutcome)}</td>
+        <td>${escapeHtml(b.kodkodReason)}</td>
+        <td>${escapeHtml(b.smtOutcome)}</td>
+        <td>${escapeHtml(b.groundTruth)}</td>
+        <td>${escapeHtml(b.divergenceClass)}</td>
+      </tr>`).join('');
+  }
+
   function renderAll() {
     const vis = visibleExamples();
     renderVerdict();
@@ -1546,32 +1696,41 @@
     renderFeatureSupport();
     renderHeatmap(vis);
     renderScenarioTable(vis);
+    renderParity();
   }
 
   // --------------------------------------------------------------- view routing
-  // Two views (benchmark results / feature matrix) share one file rather than being built as two
-  // separate HTML outputs, so the report stays a single portable file -- routed by URL hash instead
-  // (bookmarkable/shareable/back-button-friendly), each view a plain <div class="view view-*">.
-  const tabBenchmark = document.getElementById('tabBenchmark');
-  const tabMatrix = document.getElementById('tabMatrix');
+  // Three views (benchmark results / feature matrix / Study A parity) share one file rather than
+  // being built as separate HTML outputs, so the report stays a single portable file -- routed by URL
+  // hash instead (bookmarkable/shareable/back-button-friendly), each view a plain
+  // <div class="view view-*">. Adding a view means one entry in VIEWS below and one tab link.
+  const VIEWS = {
+    benchmark: { tab: 'tabBenchmark', hash: '#benchmark', heading: '#leaderboardSection h2' },
+    matrix: { tab: 'tabMatrix', hash: '#matrix', heading: '#featureSupportSection h2' },
+    parity: { tab: 'tabParity', hash: '#parity', heading: '#paritySection h2' }
+  };
+  const VIEW_NAMES = Object.keys(VIEWS);
   function currentView() {
-    return location.hash === '#matrix' ? 'matrix' : 'benchmark';
+    const name = location.hash.replace(/^#/, '');
+    return VIEWS[name] ? name : 'benchmark';
   }
   function applyView(opts) {
     const focusHeading = !(opts && opts.skipFocus);
     const view = currentView();
-    document.querySelectorAll('.view-benchmark').forEach(el => el.classList.toggle('hidden', view !== 'benchmark'));
-    document.querySelectorAll('.view-matrix').forEach(el => el.classList.toggle('hidden', view !== 'matrix'));
-    if (view === 'benchmark') { tabBenchmark.setAttribute('aria-current', 'page'); tabMatrix.removeAttribute('aria-current'); }
-    else { tabMatrix.setAttribute('aria-current', 'page'); tabBenchmark.removeAttribute('aria-current'); }
+    VIEW_NAMES.forEach(name => {
+      document.querySelectorAll('.view-' + name).forEach(el => el.classList.toggle('hidden', name !== view));
+      const tab = document.getElementById(VIEWS[name].tab);
+      if (name === view) tab.setAttribute('aria-current', 'page');
+      else tab.removeAttribute('aria-current');
+    });
     if (focusHeading) {
-      const heading = document.querySelector(view === 'matrix' ? '#featureSupportSection h2' : '#leaderboardSection h2');
+      const heading = document.querySelector(VIEWS[view].heading);
       if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus({ preventScroll: false }); }
     }
   }
   function setView(view) {
     if (currentView() === view) { applyView({ skipFocus: true }); return; }
-    location.hash = view === 'matrix' ? '#matrix' : '#benchmark';
+    location.hash = VIEWS[view] ? VIEWS[view].hash : '#benchmark';
   }
   window.addEventListener('hashchange', () => applyView());
   applyView({ skipFocus: true });
