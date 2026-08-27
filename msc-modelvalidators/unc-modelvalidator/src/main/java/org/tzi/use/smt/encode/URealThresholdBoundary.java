@@ -24,7 +24,11 @@ final class URealThresholdBoundary {
   static Enclosure enclose(BigDecimal confidence) {
     double target = confidence.doubleValue();
     if (!(target > 0.0 && target < 1.0)) {
+      // Inside 7.2's toBooleanC core, but outside the threshold shape it fixes: USE's own
+      // Op_uBoolean_toBooleanC yields UndefinedValue for a confidence outside [0,1], which is a
+      // definedness question this linear-boundary encoding does not answer.
       throw new SmtTranslationException(
+          FragmentBoundary.UTYPE_CORE,
           "UReal confidence threshold must be strictly between 0 and 1, got " + confidence);
     }
 

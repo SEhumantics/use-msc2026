@@ -710,6 +710,11 @@ public final class SmtModelFinder {
               context,
               script,
               scenarios == null ? "" : scenarioSuffix(scenarios.get(i)));
+      // Two different fail-closed gates, in this order and both BEFORE any solver call: nothing
+      // the query needs was MISSED, then nothing it needs was REFUSED. Only the second is visible
+      // to `allSupported()` -- an omitted pair produces no entry at all and is vacuously "all
+      // supported", which is exactly the silent hole Milestone 4.7's definition of done names.
+      checked.ledger().requireAccountedFor(requirements);
       checked.ledger().requireAllSupported();
       if (ledger == null) {
         ledger = checked.ledger();

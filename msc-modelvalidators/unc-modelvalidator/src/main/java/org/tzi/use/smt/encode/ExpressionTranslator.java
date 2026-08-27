@@ -53,6 +53,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   @Override
   public void visitConstString(ExpConstString e) {
     throw unsupported(
+        FragmentBoundary.TIER_2,
         "free-standing string literal ('" + e.value() + "') outside an attribute comparison");
   }
 
@@ -77,6 +78,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   @Override
   public void visitVariable(ExpVariable e) {
     throw unsupported(
+        FragmentBoundary.TIER_1,
         "bare variable reference '" + e.getVarname() + "' outside an attribute access");
   }
 
@@ -85,7 +87,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     VariableBinding b = context.binding(variableNameOf(e.objExp()));
     AttributeValues v = context.attributeValues(b.className(), e.attr().name());
     if (v.type() == AttributeType.UREAL) {
-      throw unsupported("bare UReal attribute access outside a supported threshold comparison");
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "bare UReal attribute access outside a supported threshold comparison");
     }
     result = defined(Smt.sym(v.valueNames().get(b.slotIndex())));
   }
@@ -111,7 +115,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           case "=" -> comparison(a[0], a[1]);
           case "<>" -> negate(comparison(a[0], a[1]));
           case ">=", "<=", ">", "<" -> orderedComparison(e.opname(), a[0], a[1]);
-          default -> throw unsupported("operator '" + e.opname() + "'");
+          default ->
+              throw unsupported(boundaryOfOperator(e.opname()), "operator '" + e.opname() + "'");
         };
   }
 
@@ -157,26 +162,38 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   private TranslatedExpression uRealThreshold(ExpStdOp projection) {
     Expression[] projectionArgs = projection.args();
     if (projectionArgs.length != 2 || !(projectionArgs[0] instanceof ExpStdOp comparison)) {
-      throw unsupported("toBooleanC outside a direct comparison");
+      throw unsupported(FragmentBoundary.UTYPE_CORE, "toBooleanC outside a direct comparison");
     }
     if (!List.of(">", ">=", "<", "<=").contains(comparison.opname())) {
-      throw unsupported("toBooleanC over comparison operator '" + comparison.opname() + "'");
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "toBooleanC over comparison operator '" + comparison.opname() + "'");
     }
     Expression[] comparisonArgs = comparison.args();
     if (comparisonArgs.length != 2 || !(comparisonArgs[0] instanceof ExpAttrOp attribute)) {
-      throw unsupported("UReal threshold whose left operand is not an attribute access");
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "UReal threshold whose left operand is not an attribute access");
     }
     if (!attribute.type().isTypeOfUReal()) {
-      throw unsupported("toBooleanC comparison over a non-UReal attribute");
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE, "toBooleanC comparison over a non-UReal attribute");
     }
 
-    BigDecimal literal = decimalLiteral(comparisonArgs[1], "comparison threshold");
-    BigDecimal confidence = decimalLiteral(projectionArgs[1], "confidence threshold");
+    BigDecimal literal =
+        decimalLiteral(
+            comparisonArgs[1],
+            "comparison threshold",
+            FragmentBoundary.UTYPE_UNCERTAIN_VERSUS_UNCERTAIN);
+    BigDecimal confidence =
+        decimalLiteral(projectionArgs[1], "confidence threshold", FragmentBoundary.UTYPE_CORE);
 
     VariableBinding binding = context.binding(variableNameOf(attribute.objExp()));
     AttributeValues values = context.attributeValues(binding.className(), attribute.attr().name());
     if (values.type() != AttributeType.UREAL) {
-      throw unsupported("UReal threshold without paired value/uncertainty SMT terms");
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "UReal threshold without paired value/uncertainty SMT terms");
     }
     SmtTerm representative = Smt.sym(values.valueNames().get(binding.slotIndex()));
     SmtTerm uncertainty = Smt.sym(values.uncertaintyNames().get(binding.slotIndex()));
@@ -202,14 +219,66 @@ public final class ExpressionTranslator implements ExpressionVisitor {
                 Smt.and(List.of(Smt.app(">", uncertainty, zero), uncertain)))));
   }
 
-  private static BigDecimal decimalLiteral(Expression expression, String role) {
+  /**
+   * @param boundary a non-literal COMPARISON operand is 7.2's excluded general
+   *     uncertain-versus-uncertain comparison -- the core supports "comparison against one exact
+   *     operand" and nothing wider -- while a non-literal CONFIDENCE operand is still inside the
+   *     {@code toBooleanC} core, just not in the fixed-threshold shape this slice encodes.
+   */
+  private static BigDecimal decimalLiteral(
+      Expression expression, String role, FragmentBoundary boundary) {
     if (expression instanceof ExpConstReal real) {
       return BigDecimal.valueOf(real.value());
     }
     if (expression instanceof ExpConstInteger integer) {
       return BigDecimal.valueOf(integer.value());
     }
-    throw unsupported(role + " is not a crisp numeric literal");
+    throw unsupported(boundary, role + " is not a crisp numeric literal");
+  }
+
+  /**
+   * 7.1 puts "integer arithmetic and comparisons" in Tier 2 and the collection iterators in Tier 3;
+   * an operator in neither list is out of the required first fragment. Classifying by name keeps
+   * one unimplemented arithmetic operator from being reported as the same kind of gap as, say,
+   * {@code sortedBy}.
+   */
+  private static FragmentBoundary boundaryOfOperator(String opname) {
+    if (List.of("+", "-", "*", "/", "div", "mod", "abs", "max", "min").contains(opname)) {
+      return FragmentBoundary.TIER_2;
+    }
+    if (List.of(
+            "size",
+            "isEmpty",
+            "notEmpty",
+            "includes",
+            "excludes",
+            "includesAll",
+            "excludesAll",
+            "union",
+            "intersection",
+            "including",
+            "excluding",
+            "asSet",
+            "asBag",
+            "asSequence",
+            "sum",
+            "count",
+            "flatten")
+        .contains(opname)) {
+      return FragmentBoundary.TIER_3;
+    }
+    if (List.of("oclIsUndefined", "oclIsInvalid", "oclAsType", "oclIsKindOf", "oclIsTypeOf")
+        .contains(opname)) {
+      return FragmentBoundary.TIER_2;
+    }
+    if (List.of("toBooleanC", "confidence", "probability", "uncertainty").contains(opname)) {
+      return FragmentBoundary.UTYPE_CORE;
+    }
+    if (List.of("exp", "log", "sqrt", "sin", "cos", "tan", "power", "floor", "round")
+        .contains(opname)) {
+      return FragmentBoundary.UTYPE_NONLINEAR_OR_TRANSCENDENTAL;
+    }
+    return FragmentBoundary.BEYOND_FIRST_FRAGMENT;
   }
 
   /**
@@ -356,12 +425,14 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (links.bEnd().className().equals(source.className()))
       return Smt.sym(links.linkNames()[otherIndex][source.slotIndex()]);
     throw unsupported(
+        FragmentBoundary.TIER_3,
         "association " + links.associationName() + " does not connect class " + source.className());
   }
 
   private SmtTerm resolve(ExpConstString literal, Expression other) {
     if (!(other instanceof ExpAttrOp a))
-      throw unsupported("string literal compared against a non-attribute expression");
+      throw unsupported(
+          FragmentBoundary.TIER_2, "string literal compared against a non-attribute expression");
     VariableBinding b = context.binding(variableNameOf(a.objExp()));
     AttributeDomain d = context.attributeDomain(b.className(), a.attr().name());
     int i = d.enumeratedValues().indexOf(literal.value());
@@ -379,81 +450,90 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   private static String variableNameOf(Expression e) {
     if (e instanceof ExpVariable v) return v.getVarname();
     throw new SmtTranslationException(
+        FragmentBoundary.TIER_2,
         "attribute access on a non-variable receiver is not yet supported");
   }
 
-  private static SmtTranslationException unsupported(String c) {
-    return new SmtTranslationException("unsupported OCL construct in this translation slice: " + c);
+  /**
+   * Every refusal names BOTH the construct (wording unchanged, so no located message built by
+   * Milestones 4.3-4.6 regresses) and the supported-fragment boundary it hit. The boundary is a
+   * required argument rather than a defaulted one on purpose: a construct added later cannot be
+   * refused without someone deciding, at the call site, which tier or U-type rule excludes it.
+   */
+  private static SmtTranslationException unsupported(FragmentBoundary boundary, String c) {
+    return new SmtTranslationException(
+        boundary, "unsupported OCL construct in this translation slice: " + c);
   }
 
   @Override
   public void visitAllInstances(ExpAllInstances e) {
-    throw unsupported("allInstances outside a forAll range is not yet supported");
+    throw unsupported(
+        FragmentBoundary.TIER_2, "allInstances outside a forAll range is not yet supported");
   }
 
   @Override
   public void visitAny(ExpAny e) {
-    throw unsupported("any");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "any");
   }
 
   @Override
   public void visitAsType(ExpAsType e) {
-    throw unsupported("asType");
+    throw unsupported(FragmentBoundary.TIER_2, "asType");
   }
 
   @Override
   public void visitBagLiteral(ExpBagLiteral e) {
-    throw unsupported("Bag literal");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "Bag literal");
   }
 
   @Override
   public void visitCollect(ExpCollect e) {
-    throw unsupported("collect");
+    throw unsupported(FragmentBoundary.TIER_3, "collect");
   }
 
   @Override
   public void visitCollectNested(ExpCollectNested e) {
-    throw unsupported("collectNested");
+    throw unsupported(FragmentBoundary.TIER_3, "collectNested");
   }
 
   @Override
   public void visitConstEnum(ExpConstEnum e) {
-    throw unsupported("enum literal");
+    throw unsupported(FragmentBoundary.TIER_3, "enum literal");
   }
 
   @Override
   public void visitConstReal(ExpConstReal e) {
-    throw unsupported("Real literal");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "Real literal");
   }
 
   @Override
   public void visitConstUBoolean(ExpConstUBoolean e) {
-    throw unsupported("UBoolean literal");
+    throw unsupported(FragmentBoundary.UTYPE_CORE, "UBoolean literal");
   }
 
   @Override
   public void visitConstSBoolean(ExpConstSBoolean e) {
-    throw unsupported("SBoolean literal");
+    throw unsupported(FragmentBoundary.UTYPE_SBOOLEAN, "SBoolean literal");
   }
 
   @Override
   public void visitConstUInteger(ExpConstUInteger e) {
-    throw unsupported("UInteger literal");
+    throw unsupported(FragmentBoundary.UTYPE_CORE, "UInteger literal");
   }
 
   @Override
   public void visitConstUReal(ExpConstUReal e) {
-    throw unsupported("UReal literal");
+    throw unsupported(FragmentBoundary.UTYPE_CORE, "UReal literal");
   }
 
   @Override
   public void visitConstUString(ExpConstUString e) {
-    throw unsupported("UString literal");
+    throw unsupported(FragmentBoundary.UTYPE_CORE, "UString literal");
   }
 
   @Override
   public void visitEmptyCollection(ExpEmptyCollection e) {
-    throw unsupported("empty collection");
+    throw unsupported(FragmentBoundary.TIER_3, "empty collection");
   }
 
   /**
@@ -468,11 +548,12 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   @Override
   public void visitExists(ExpExists e) {
     if (e.getVariableDeclarations().size() != 2)
-      throw unsupported("exists with a variable count other than two");
+      throw unsupported(FragmentBoundary.TIER_2, "exists with a variable count other than two");
     if (!(e.getRangeExpression() instanceof ExpNavigation range))
-      throw unsupported("exists over a range other than a collection-valued navigation");
+      throw unsupported(
+          FragmentBoundary.TIER_2, "exists over a range other than a collection-valued navigation");
     if (!range.getDestination().isCollection())
-      throw unsupported("exists over a single-valued navigation");
+      throw unsupported(FragmentBoundary.TIER_2, "exists over a single-valued navigation");
     VariableBinding source = context.binding(variableNameOf(range.getObjectExpression()));
     String destClass = range.getDestination().cls().name();
     AssociationLinks links = context.linksFor(range.getDestination().association().name());
@@ -505,9 +586,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   @Override
   public void visitForAll(ExpForAll e) {
     if (e.getVariableDeclarations().size() != 1)
-      throw unsupported("forAll with more than one loop variable");
+      throw unsupported(FragmentBoundary.TIER_1, "forAll with more than one loop variable");
     if (!(e.getRangeExpression() instanceof ExpAllInstances all))
-      throw unsupported("forAll over a range other than X.allInstances");
+      throw unsupported(FragmentBoundary.TIER_1, "forAll over a range other than X.allInstances");
     String loopVariable = e.getVariableDeclarations().varDecl(0).name();
     List<SmtTerm> valueConjuncts = new ArrayList<>();
     List<SmtTerm> definedConjuncts = new ArrayList<>();
@@ -529,166 +610,166 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
   @Override
   public void visitIf(ExpIf e) {
-    throw unsupported("if");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "if");
   }
 
   @Override
   public void visitIsKindOf(ExpIsKindOf e) {
-    throw unsupported("isKindOf");
+    throw unsupported(FragmentBoundary.TIER_2, "isKindOf");
   }
 
   @Override
   public void visitIsTypeOf(ExpIsTypeOf e) {
-    throw unsupported("isTypeOf");
+    throw unsupported(FragmentBoundary.TIER_2, "isTypeOf");
   }
 
   @Override
   public void visitIsUnique(ExpIsUnique e) {
-    throw unsupported("isUnique");
+    throw unsupported(FragmentBoundary.TIER_3, "isUnique");
   }
 
   @Override
   public void visitIterate(ExpIterate e) {
-    throw unsupported("iterate");
+    throw unsupported(FragmentBoundary.TIER_3, "iterate");
   }
 
   @Override
   public void visitLet(ExpLet e) {
-    throw unsupported("let");
+    throw unsupported(FragmentBoundary.TIER_3, "let");
   }
 
   @Override
   public void visitNavigation(ExpNavigation e) {
-    throw unsupported("navigation");
+    throw unsupported(FragmentBoundary.TIER_2, "navigation");
   }
 
   @Override
   public void visitObjAsSet(ExpObjAsSet e) {
-    throw unsupported("objAsSet");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "objAsSet");
   }
 
   @Override
   public void visitInstanceOp(ExpInstanceOp e) {
-    throw unsupported("instance operation");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "instance operation");
   }
 
   @Override
   public void visitObjRef(ExpObjRef e) {
-    throw unsupported("object reference");
+    throw unsupported(FragmentBoundary.TIER_2, "object reference");
   }
 
   @Override
   public void visitOne(ExpOne e) {
-    throw unsupported("one");
+    throw unsupported(FragmentBoundary.TIER_3, "one");
   }
 
   @Override
   public void visitOrderedSetLiteral(ExpOrderedSetLiteral e) {
-    throw unsupported("OrderedSet literal");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "OrderedSet literal");
   }
 
   @Override
   public void visitQuery(ExpQuery e) {
-    throw unsupported("query");
+    throw unsupported(FragmentBoundary.TIER_3, "query");
   }
 
   @Override
   public void visitReject(ExpReject e) {
-    throw unsupported("reject");
+    throw unsupported(FragmentBoundary.TIER_3, "reject");
   }
 
   @Override
   public void visitWithValue(ExpressionWithValue e) {
-    throw unsupported("withValue");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "withValue");
   }
 
   @Override
   public void visitSelect(ExpSelect e) {
-    throw unsupported("select");
+    throw unsupported(FragmentBoundary.TIER_3, "select");
   }
 
   @Override
   public void visitSequenceLiteral(ExpSequenceLiteral e) {
-    throw unsupported("Sequence literal");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "Sequence literal");
   }
 
   @Override
   public void visitSetLiteral(ExpSetLiteral e) {
-    throw unsupported("Set literal");
+    throw unsupported(FragmentBoundary.TIER_3, "Set literal");
   }
 
   @Override
   public void visitSortedBy(ExpSortedBy e) {
-    throw unsupported("sortedBy");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "sortedBy");
   }
 
   @Override
   public void visitTupleLiteral(ExpTupleLiteral e) {
-    throw unsupported("Tuple literal");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "Tuple literal");
   }
 
   @Override
   public void visitTupleSelectOp(ExpTupleSelectOp e) {
-    throw unsupported("tuple select");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "tuple select");
   }
 
   @Override
   public void visitClosure(ExpClosure e) {
-    throw unsupported("closure");
+    throw unsupported(FragmentBoundary.TIER_3, "closure");
   }
 
   @Override
   public void visitOclInState(ExpOclInState e) {
-    throw unsupported("oclInState");
+    throw unsupported(FragmentBoundary.UTYPE_BEHAVIOURAL_OCL, "oclInState");
   }
 
   @Override
   public void visitVarDeclList(VarDeclList e) {
-    throw unsupported("VarDeclList");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "VarDeclList");
   }
 
   @Override
   public void visitVarDecl(VarDecl e) {
-    throw unsupported("VarDecl");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "VarDecl");
   }
 
   @Override
   public void visitObjectByUseId(ExpObjectByUseId e) {
-    throw unsupported("objectByUseId");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "objectByUseId");
   }
 
   @Override
   public void visitConstUnlimitedNatural(ExpConstUnlimitedNatural e) {
-    throw unsupported("UnlimitedNatural literal");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "UnlimitedNatural literal");
   }
 
   @Override
   public void visitSelectByKind(ExpSelectByKind e) {
-    throw unsupported("selectByKind");
+    throw unsupported(FragmentBoundary.TIER_3, "selectByKind");
   }
 
   @Override
   public void visitExpSelectByType(ExpSelectByType e) {
-    throw unsupported("selectByType");
+    throw unsupported(FragmentBoundary.TIER_3, "selectByType");
   }
 
   @Override
   public void visitRange(ExpRange e) {
-    throw unsupported("range");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "range");
   }
 
   @Override
   public void visitNavigationClassifierSource(ExpNavigationClassifierSource e) {
-    throw unsupported("navigationClassifierSource");
+    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "navigationClassifierSource");
   }
 
   @Override
   public void visitUSelectC(ExpUSelectC e) {
-    throw unsupported("USelectC");
+    throw unsupported(FragmentBoundary.UTYPE_VALUE_COLLECTION, "USelectC");
   }
 
   @Override
   public void visitUSelect(ExpUSelect e) {
-    throw unsupported("USelect");
+    throw unsupported(FragmentBoundary.UTYPE_VALUE_COLLECTION, "USelect");
   }
 }

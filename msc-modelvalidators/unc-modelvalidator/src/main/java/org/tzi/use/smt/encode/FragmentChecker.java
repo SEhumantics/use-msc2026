@@ -33,9 +33,9 @@ public final class FragmentChecker {
       try {
         SmtTerm term = InvariantAssembler.assemble(invariant, baseContext);
         assembled.put(invariant.name(), term);
-        coverage.add(new InvariantCoverage(invariant.name(), true, null));
+        coverage.add(InvariantCoverage.supported(invariant.name(), TranslationMode.UNCERTAIN));
       } catch (SmtTranslationException e) {
-        coverage.add(new InvariantCoverage(invariant.name(), false, e.getMessage()));
+        coverage.add(InvariantCoverage.refused(invariant.name(), TranslationMode.UNCERTAIN, e));
       }
     }
     return new Result(new FragmentCoverageLedger(coverage), assembled);
@@ -72,10 +72,9 @@ public final class FragmentChecker {
               InvariantAssembler.reify(script, invariant, baseContext, mode, scenarioSuffix);
           classifications.put(
               new ClassificationKey(invariant.qualifiedName(), mode), classification);
-          coverage.add(new InvariantCoverage(invariant.qualifiedName(), mode, true, null));
+          coverage.add(InvariantCoverage.supported(invariant.qualifiedName(), mode));
         } catch (SmtTranslationException e) {
-          coverage.add(
-              new InvariantCoverage(invariant.qualifiedName(), mode, false, e.getMessage()));
+          coverage.add(InvariantCoverage.refused(invariant.qualifiedName(), mode, e));
         }
       }
     }

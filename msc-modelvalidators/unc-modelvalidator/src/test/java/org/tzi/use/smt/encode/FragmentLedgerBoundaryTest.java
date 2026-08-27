@@ -33,6 +33,13 @@ import org.tzi.use.uml.mm.ModelFactory;
  */
 public class FragmentLedgerBoundaryTest {
 
+  /**
+   * One battery, one invariant per boundary. Every body here is a WELL-TYPED Boolean invariant,
+   * which is a real constraint on what can be tested this way and worth recording: USE rejects an
+   * invariant whose static type is {@code UBoolean} (7.3), so {@code self.speed = self.other} does
+   * not compile at all and the translator's bare-UReal-access refusal is unreachable from a parsed
+   * model. The {@code UReal} literal comparison is the reachable U-type-core shape.
+   */
   private static final String BOUNDARY_MODEL =
       """
       model Boundaries
@@ -56,8 +63,8 @@ public class FragmentLedgerBoundaryTest {
         Set{1,2} = Set{1}
       context self : Sample inv BeyondFirstFragmentConditional:
         if true then true else false endif
-      context self : Sample inv UTypeCoreBareAccess:
-        self.speed = self.other
+      context self : Sample inv UTypeCoreLiteral:
+        (UReal(0.5, 0.1) > 0.30).toBooleanC(0.95)
       context self : Sample inv UTypeUncertainVersusUncertain:
         (self.speed > self.other).toBooleanC(0.95)
       """;
@@ -75,7 +82,7 @@ public class FragmentLedgerBoundaryTest {
     expected.put("Sample::Tier3Enumeration", FragmentBoundary.TIER_3);
     expected.put("Sample::Tier3SetLiteral", FragmentBoundary.TIER_3);
     expected.put("Sample::BeyondFirstFragmentConditional", FragmentBoundary.BEYOND_FIRST_FRAGMENT);
-    expected.put("Sample::UTypeCoreBareAccess", FragmentBoundary.UTYPE_CORE);
+    expected.put("Sample::UTypeCoreLiteral", FragmentBoundary.UTYPE_CORE);
     expected.put(
         "Sample::UTypeUncertainVersusUncertain", FragmentBoundary.UTYPE_UNCERTAIN_VERSUS_UNCERTAIN);
 
@@ -134,7 +141,10 @@ public class FragmentLedgerBoundaryTest {
     assertTrue(message, message.contains("Sample::Tier3SetLiteral"));
     assertTrue(message, message.contains("[UNCERTAIN]"));
     assertTrue("the construct must still be named", message.contains("Set literal"));
-    assertTrue("the construct must still be named", message.contains("oclIsTypeOf"));
+    assertTrue("the construct must still be named", message.contains("isTypeOf"));
+    assertTrue(
+        "the located reason must survive",
+        message.contains("comparison threshold is not a crisp numeric literal"));
     assertTrue(message, message.contains(FragmentBoundary.TIER_3.name()));
     assertTrue(message, message.contains(FragmentBoundary.UTYPE_UNCERTAIN_VERSUS_UNCERTAIN.name()));
   }

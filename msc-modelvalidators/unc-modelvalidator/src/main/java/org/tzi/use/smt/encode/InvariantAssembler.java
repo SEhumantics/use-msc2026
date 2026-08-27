@@ -77,7 +77,10 @@ public final class InvariantAssembler {
       return "self";
     }
     if (invariant.vars().size() != 1) {
+      // 7.1 Tier 1 "invariant transformation": a single-context-variable invariant is the shape
+      // the corpus overwhelmingly uses and the shape this translation encodes.
       throw new SmtTranslationException(
+          FragmentBoundary.TIER_1,
           "invariant '"
               + invariant.qualifiedName()
               + "' has "

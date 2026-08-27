@@ -22,6 +22,7 @@ public record TranslationContext(
     AttributeDomain domain = domains.get(className + "." + attributeName + "." + component);
     if (domain == null) {
       throw new SmtTranslationException(
+          FragmentBoundary.ENCODING_SCOPE,
           "no " + component + " domain registered for " + className + "." + attributeName);
     }
     return domain;
@@ -30,7 +31,8 @@ public record TranslationContext(
   public VariableBinding binding(String variableName) {
     VariableBinding binding = variables.get(variableName);
     if (binding == null) {
-      throw new SmtTranslationException("unbound OCL variable '" + variableName + "'");
+      throw new SmtTranslationException(
+          FragmentBoundary.ENCODING_SCOPE, "unbound OCL variable '" + variableName + "'");
     }
     return binding;
   }
@@ -38,7 +40,8 @@ public record TranslationContext(
   public ObjectSlots slotsFor(String className) {
     ObjectSlots slots = slotsByClass.get(className);
     if (slots == null) {
-      throw new SmtTranslationException("no object slots registered for class " + className);
+      throw new SmtTranslationException(
+          FragmentBoundary.ENCODING_SCOPE, "no object slots registered for class " + className);
     }
     return slots;
   }
@@ -46,7 +49,9 @@ public record TranslationContext(
   public AssociationLinks linksFor(String associationName) {
     AssociationLinks links = linksByAssociation.get(associationName);
     if (links == null) {
-      throw new SmtTranslationException("no association links registered for " + associationName);
+      throw new SmtTranslationException(
+          FragmentBoundary.ENCODING_SCOPE,
+          "no association links registered for " + associationName);
     }
     return links;
   }
@@ -63,6 +68,7 @@ public record TranslationContext(
     T value = map.get(className + "." + attributeName);
     if (value == null) {
       throw new SmtTranslationException(
+          FragmentBoundary.ENCODING_SCOPE,
           "no " + what + " registered for " + className + "." + attributeName);
     }
     return value;
