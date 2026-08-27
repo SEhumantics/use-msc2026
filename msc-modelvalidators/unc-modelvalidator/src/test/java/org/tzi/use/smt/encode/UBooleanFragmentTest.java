@@ -56,11 +56,22 @@ public class UBooleanFragmentTest {
     SmtScript script = new SmtScript("QF_LIRA");
     Emitted emitted = emit(script, "self.hitsTarget and self.isClear", 0.81, twoChoices());
 
-    Matcher found = ARITHMETIC.matcher(emitted.invariantTerm());
     assertFalse(
         "a product rule must not reach the solver as arithmetic; emitted: "
             + emitted.invariantTerm(),
-        found.find());
+        ARITHMETIC.matcher(emitted.invariantTerm()).find());
+    // Scanned over the WHOLE script, not just the invariant term. That distinction was found by
+    // adversarial mutation and matters: injecting a genuinely nonlinear DOMAIN GUARD -- (<= (* p p)
+    // 1.0) in place of (<= p 1.0) -- left the invariant term untouched and every test green,
+    // because the pinned solver does not police the declared logic (see
+    // thePinnedSolverAcceptsTheWholeComposedScriptUnderALiteralQfLiraLogic). This assertion is
+    // therefore the ONLY thing standing between a nonlinear term and the emitted script.
+    Matcher inScript = ARITHMETIC.matcher(emitted.wholeScript());
+    assertFalse(
+        "no arithmetic operator may appear ANYWHERE in a UBoolean script -- declarations, domain"
+            + " guards and the [0,1] type guard included; emitted:\n"
+            + emitted.wholeScript(),
+        inScript.find());
     assertTrue(
         "the emitted term must be built from equalities between a probability symbol and a"
             + " rational literal, and nothing else: "
@@ -75,24 +86,30 @@ public class UBooleanFragmentTest {
   }
 
   /**
-   * The empirical half, and the authority that matters: {@code SmtTerm} is untyped text, so a Java
-   * assertion about linearity is only a second guess. The pinned solver is asked to accept the
-   * COMPLETE script -- declarations, domain guards, {@code [0,1]} type guard and the composed
-   * invariant -- under a literal {@code (set-logic QF_LIRA)}. A nonlinear term makes Z3 reject the
-   * script rather than answer it.
+   * The empirical half: the pinned solver answers the COMPLETE script -- declarations, domain
+   * guards, {@code [0,1]} type guard and the composed invariant -- under a literal {@code
+   * (set-logic QF_LIRA)}, and answers it {@code SAT} rather than rejecting it as ill-sorted.
+   *
+   * <p><b>What this does NOT prove, measured rather than assumed.</b> It does not prove the script
+   * is inside {@code QF_LIRA}. Z3 does not enforce the declared logic: asked the three-line script
+   * {@code (set-logic QF_LIRA) (declare-const p Real) (assert (<= (* p p) 1.0)) (assert (>= p 0.5))
+   * (check-sat)}, the pinned Z3 5.1.0 answers {@code sat}, not an error. Conformance to the pinned
+   * logic is therefore established by {@link #theComposedProductRuleEmitsNoArithmeticOperatorAtAll}
+   * scanning the emitted text, and by that alone; this test's job is the narrower one of showing
+   * the script is well-sorted and genuinely answerable.
    */
   @Test
   public void thePinnedSolverAcceptsTheWholeComposedScriptUnderALiteralQfLiraLogic()
       throws Exception {
     SmtScript script = new SmtScript("QF_LIRA");
     Emitted emitted = emit(script, "self.hitsTarget and self.isClear", 0.81, twoChoices());
-    script.assertThat(emitted.term());
 
-    assertTrue(script.toSmtLib().contains("(set-logic QF_LIRA)"));
+    assertTrue(emitted.wholeScript().contains("(set-logic QF_LIRA)"));
     SolverResult result =
-        new SolverProcess(SolverBinary.resolve(), Duration.ofSeconds(30)).run(script.toSmtLib());
+        new SolverProcess(SolverBinary.resolve(), Duration.ofSeconds(30))
+            .run(emitted.wholeScript());
     assertEquals(
-        "QF_LIRA must accept the composed UBoolean script outright: " + result.rawOutput(),
+        "the composed UBoolean script must be well-sorted and answerable: " + result.rawOutput(),
         SolverOutcome.SAT,
         result.outcome());
   }
@@ -294,9 +311,14 @@ public class UBooleanFragmentTest {
 
   // ---------------------------------------------------------------------------------------------
 
-  private record Emitted(SmtTerm term) {
+  private record Emitted(SmtScript script, SmtTerm term) {
     String invariantTerm() {
       return term.toSmtLib();
+    }
+
+    /** Declarations, domain guards, type guard and the asserted invariant -- everything emitted. */
+    String wholeScript() {
+      return script.toSmtLib();
     }
   }
 
@@ -352,7 +374,9 @@ public class UBooleanFragmentTest {
     TranslationContext context =
         new TranslationContext(Map.of(), attributes, registered, slots, Map.of());
     MClassInvariant invariant = model.classInvariants(true).iterator().next();
-    return new Emitted(InvariantAssembler.classify(invariant, context, mode).value());
+    SmtTerm term = InvariantAssembler.classify(invariant, context, mode).value();
+    script.assertThat(term);
+    return new Emitted(script, term);
   }
 
   private static MModel compile(String body, double confidence) {
