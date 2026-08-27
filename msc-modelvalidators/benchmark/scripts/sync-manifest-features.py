@@ -1,8 +1,19 @@
 #!/usr/bin/env python3
 """Regenerate every scenario's `features` array in manifest.json by inverting
 docs/modelvalidator-feature-matrix.json: for each scenario ID, collect every
-feature ID whose kk-modelvalidator support entry cites that scenario in
-satScenarioIds / unsatScenarioIds / validationOracleScenarioIds.
+feature ID whose support entry -- under ANY plugin registered in the matrix's
+`plugins` list -- cites that scenario in satScenarioIds / unsatScenarioIds /
+validationOracleScenarioIds.
+
+The union across plugins is the point, not an optimisation. A scenario's
+`features` says which features THAT SCENARIO exercises; it is a property of
+the scenario, independent of which plugin happens to be able to handle it.
+Inverting one hardcoded plugin gave `features: []` to every scenario only a
+second plugin exercises -- exactly the scenarios that differentiate this
+project -- and that empty array reaches the Study A parity table as a literal
+`Features = 0`. (Same class of defect as Task 3.13's `primary_plugin =
+plugins[0]` in the sibling script sync-feature-matrix-md.py, which rendered
+only the first registered plugin's rows.)
 
 The matrix is the source of truth for "which feature does this scenario
 exercise" -- manifest.json's `features` field is a derived, denormalized
@@ -30,17 +41,28 @@ import sys
 from pathlib import Path
 
 
-def invert_matrix(matrix, plugin_id="kk-modelvalidator"):
-    """Returns {scenario_id: sorted [feature_id, ...]}."""
+def invert_matrix(matrix, plugin_ids=None):
+    """Returns {scenario_id: sorted [feature_id, ...]}, unioned over `plugin_ids`.
+
+    `plugin_ids` defaults to every plugin registered in the matrix's `plugins`
+    list, so a newly registered plugin's citations are picked up without
+    editing this script. Pass an explicit list only to inspect one plugin's
+    contribution in isolation (the tests do this to prove the union is
+    additive); the sync itself must always use the default.
+    """
+    if plugin_ids is None:
+        plugin_ids = [p["id"] for p in matrix.get("plugins", [])]
     by_scenario = {}
     for area in matrix["areas"]:
         for f in area["features"]:
-            sup = f["support"].get(plugin_id)
-            if not sup:
+            supports = [f["support"].get(pid) for pid in plugin_ids]
+            supports = [sup for sup in supports if sup]
+            if not supports:
                 continue
             cited = set()
-            for key in ("satScenarioIds", "unsatScenarioIds", "validationOracleScenarioIds"):
-                cited.update(sup.get(key) or [])
+            for sup in supports:
+                for key in ("satScenarioIds", "unsatScenarioIds", "validationOracleScenarioIds"):
+                    cited.update(sup.get(key) or [])
             for sid in cited:
                 by_scenario.setdefault(sid, set()).add(f["id"])
     return {sid: sorted(fids) for sid, fids in by_scenario.items()}

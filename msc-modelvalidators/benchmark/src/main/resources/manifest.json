@@ -24,13 +24,22 @@
         "config.association-bounds",
         "config.attribute-bounds",
         "config.class-bounds",
+        "invIndep.full-model-sweep",
+        "invIndep.targeted-single-invariant",
         "invariant.transform-to-kodkod",
+        "ocl.allinstances-class",
         "ocl.attribute-access",
+        "ocl.exists",
         "ocl.forAll",
         "ocl.navigation-regular-assoc",
         "prim.boolean-literals-ops",
+        "prim.integer-comparisons",
         "prim.object-reference-equality-undefined",
+        "prim.oclundefined-literal",
         "prim.string-literals-equality",
+        "query.macro-counterexample",
+        "query.macro-invariant-independence",
+        "query.macro-satisfy",
         "reconstruction.object-diagram",
         "solve.trivial-sat-unsat-dispatch"
       ],
@@ -321,6 +330,8 @@
         "ocl.select",
         "ocl.type-tests-casts",
         "prim.boolean-literals-ops",
+        "prim.integer-comparisons",
+        "query.macro-satisfy",
         "reconstruction.object-diagram",
         "solve.trivial-sat-unsat-dispatch"
       ],
@@ -446,6 +457,9 @@
         "ocl.forAll",
         "ocl.type-tests-casts",
         "prim.boolean-literals-ops",
+        "prim.integer-comparisons",
+        "prim.string-literals-equality",
+        "query.macro-satisfy",
         "reconstruction.object-diagram",
         "solve.trivial-sat-unsat-dispatch"
       ],
@@ -800,7 +814,27 @@
       "provenanceDetail": "Paired UNSAT mutation of Library, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as Library, new [titleCollision] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
-        "cmd.validate"
+        "assoc.binary",
+        "assoc.min-max-link-count",
+        "assoc.multiplicity.ranges",
+        "assoc.multiplicity.zero-one-undefined-padding",
+        "attr.declaration-typing-multiplicity",
+        "class.basic-and-instantiation",
+        "cmd.validate",
+        "config.association-bounds",
+        "config.attribute-bounds",
+        "config.class-bounds",
+        "invariant.transform-to-kodkod",
+        "ocl.allinstances-class",
+        "ocl.attribute-access",
+        "ocl.forAll",
+        "ocl.navigation-regular-assoc",
+        "prim.boolean-literals-ops",
+        "prim.integer-comparisons",
+        "prim.object-reference-equality-undefined",
+        "prim.oclundefined-literal",
+        "prim.string-literals-equality",
+        "query.macro-satisfy"
       ],
       "question": "Does Book_titleIsKey correctly reject a population where Book_min=Book_max=3 forces 3 distinct Book objects to exist but only 2 distinct candidate title strings are offered, making pairwise-distinct titles pigeonhole-impossible while Users, Copies, and every other invariant stay normally populated and satisfiable?",
       "expected": {
@@ -965,7 +999,18 @@
       "provenanceDetail": "Paired UNSAT mutation of Inheritance, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as Inheritance, new [nonpositivewheels] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
-        "cmd.validate"
+        "attr.declaration-typing-multiplicity",
+        "class.basic-and-instantiation",
+        "cmd.validate",
+        "config.attribute-bounds",
+        "config.class-bounds",
+        "inherit.attribute-and-invariant-inheritance",
+        "inherit.single",
+        "invariant.transform-to-kodkod",
+        "ocl.attribute-access",
+        "prim.boolean-literals-ops",
+        "prim.integer-comparisons",
+        "query.macro-satisfy"
       ],
       "question": "With Car/Truck population still forced (1/1 each, unchanged from the SAT config), does narrowing the inherited Vehicle_wheels candidate domain to only non-positive values (Set{0,-2,-4}) make the superclass invariant PositiveWheels (v.wheels &gt; 0) structurally unsatisfiable while ReasonableDoors and PositivePayload remain ordinarily satisfiable?",
       "expected": {
@@ -1019,7 +1064,20 @@
       "provenanceDetail": "Paired UNSAT mutation of MultipleInheritance, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as MultipleInheritance, new [collision] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
-        "cmd.validate"
+        "attr.declaration-typing-multiplicity",
+        "class.basic-and-instantiation",
+        "cmd.validate",
+        "config.attribute-bounds",
+        "config.class-bounds",
+        "inherit.attribute-and-invariant-inheritance",
+        "inherit.diamond",
+        "inherit.multiple",
+        "invariant.transform-to-kodkod",
+        "ocl.attribute-access",
+        "prim.boolean-literals-ops",
+        "prim.integer-comparisons",
+        "prim.string-literals-equality",
+        "query.macro-satisfy"
       ],
       "question": "Does collapsing B_levelB and C_levelC -- the two diamond-ancestor attributes D inherits along its two distinct paths back to A -- into the exact same singleton candidate value make D::LevelsDiffer (d.levelB &lt;&gt; d.levelC) genuinely infeasible, while the rest of the five-object population and the other two invariants stay satisfiable?",
       "expected": {
@@ -1244,7 +1302,9 @@
       "provenanceType": "authored-for-thesis",
       "provenanceDetail": "SOICT S4 boundary case authored from the real USE UReal evaluator transition. The representative is the lower endpoint of the recorded evaluator-derived enclosure and therefore must fail the 0.95 confidence threshold.",
       "provenanceCitation": null,
-      "features": [],
+      "features": [
+        "utype.ureal-confidence-threshold"
+      ],
       "question": "Does the uncertainty-aware model finder reject the representative immediately below the evaluator-derived 95% threshold for speed=UReal(mu,0.02)?",
       "expected": {
         "classification": "unsat",
@@ -1287,7 +1347,10 @@
       "provenanceType": "authored-for-thesis",
       "provenanceDetail": "SOICT S4 boundary case authored from the real USE UReal evaluator transition. The representative is the conservative upper endpoint used by the positive-polarity SMT translation.",
       "provenanceCitation": null,
-      "features": [],
+      "features": [
+        "utype.ureal-attribute-roundtrip",
+        "utype.ureal-confidence-threshold"
+      ],
       "question": "Does the uncertainty-aware model finder accept the conservative at-boundary representative for speed=UReal(mu,0.02), with USE independently confirming the reconstructed witness?",
       "expected": {
         "classification": "sat",
@@ -1312,7 +1375,10 @@
       "provenanceType": "authored-for-thesis",
       "provenanceDetail": "SOICT S4 boundary case immediately above the real USE UReal evaluator transition.",
       "provenanceCitation": null,
-      "features": [],
+      "features": [
+        "utype.ureal-attribute-roundtrip",
+        "utype.ureal-confidence-threshold"
+      ],
       "question": "Does the uncertainty-aware model finder accept a representative immediately above the evaluator-derived 95% threshold for speed=UReal(mu,0.02)?",
       "expected": {
         "classification": "sat",
@@ -1337,7 +1403,12 @@
       "provenanceType": "authored-for-thesis",
       "provenanceDetail": "SOICT S4 discrepancy witness: nominal erasure accepts 0.31 > 0.30, while USE's UReal evaluator assigns only about 0.69146 probability and rejects the required 0.95 confidence.",
       "provenanceCitation": null,
-      "features": [],
+      "features": [
+        "query.macro-fragile",
+        "query.nominal-erasure-oracle",
+        "query.translation-modes",
+        "utype.ureal-confidence-threshold"
+      ],
       "question": "Does uncertainty-aware evaluation reject speed=UReal(0.31,0.02) even though erasing uncertainty would make the crisp comparison 0.31 > 0.30 true?",
       "expected": {
         "classification": "unsat",
@@ -1380,7 +1451,10 @@
       "provenanceType": "authored-for-thesis",
       "provenanceDetail": "Second-U-type-family boundary case, authored for this thesis from the real USE UInteger evaluator transition. sigma = 1.0 and the crisp literal is 5 at 95% confidence, which is archive2/robust_utype_model_finding_proposal.md's own worked UInteger example. USE puts the real-valued transition at mu = 6.6448534751573820, so 6 is the integer immediately below it: observed P(6 > 5) = 0.8413447404370406, under the 0.95 demanded. This row is simultaneously the nominal-erasure discrepancy witness for UInteger, since erasing the uncertainty reads 6 > 5 as plainly true.",
       "provenanceCitation": null,
-      "features": [],
+      "features": [
+        "utype.uinteger-confidence-threshold",
+        "utype.uinteger-representative-rounding"
+      ],
       "question": "Does the uncertainty-aware model finder reject the integer representative immediately below the evaluator-derived 95% threshold for units=UInteger(n,1.0), even though crisp 6 > 5 is true?",
       "expected": {
         "classification": "unsat",
@@ -1412,7 +1486,10 @@
       "provenanceType": "authored-for-thesis",
       "provenanceDetail": "Second-U-type-family boundary case at the least admissible INTEGER representative. The real-valued transition is 6.6448534751573820, so 7 is the first integer that clears it: observed P(7 > 5) = 0.9772499379857728. Reconstruction is independently confirmed by USE's own evaluator on the SAT side.",
       "provenanceCitation": null,
-      "features": [],
+      "features": [
+        "utype.uinteger-attribute-roundtrip",
+        "utype.uinteger-confidence-threshold"
+      ],
       "question": "Does the uncertainty-aware model finder accept the least admissible integer representative for units=UInteger(n,1.0), with USE independently confirming the reconstructed witness?",
       "expected": {
         "classification": "sat",
@@ -1441,7 +1518,10 @@
       "provenanceType": "authored-for-thesis",
       "provenanceDetail": "Second-U-type-family boundary case one whole unit above the least admissible integer representative: observed P(8 > 5) = 0.9986500327777663.",
       "provenanceCitation": null,
-      "features": [],
+      "features": [
+        "utype.uinteger-attribute-roundtrip",
+        "utype.uinteger-confidence-threshold"
+      ],
       "question": "Does the uncertainty-aware model finder accept an integer representative comfortably above the evaluator-derived 95% threshold for units=UInteger(n,1.0)?",
       "expected": {
         "classification": "sat",
@@ -1470,7 +1550,11 @@
       "provenanceType": "authored-for-thesis",
       "provenanceDetail": "The row that exists BECAUSE the representative is an integer, and the one thing this family adds that the UReal rows cannot state. Both integers straddling the real-valued transition 6.6448534751573820 are offered at once (Batch_units_value = Set{6,7}). The linear boundary the encoding emits is satisfied by every real from 6.6448534751573820 upward, so nothing but the Int sort of the declared representative rules 6 out -- the solver's own integer theory performs the rounding, exactly as the proposal describes with 'n >= 6.6448 implies n >= 7'. Observed SMT-Z3 witness: Batch#count=1;Batch.objects=[Batch{units=UInteger(7, 1.0)}].",
       "provenanceCitation": null,
-      "features": [],
+      "features": [
+        "utype.uinteger-attribute-roundtrip",
+        "utype.uinteger-confidence-threshold",
+        "utype.uinteger-representative-rounding"
+      ],
       "question": "Offered both integers straddling the real-valued 95% threshold, does the solver's integer theory round up to the least admissible one?",
       "expected": {
         "classification": "sat",
@@ -1499,7 +1583,11 @@
       "provenanceType": "authored-for-thesis",
       "provenanceDetail": "Milestone 4.6 scenario-profile evidence, authored for this thesis. The model pairs a positive confidence demand with a NEGATED one on the same UReal slot so the satisfying window SHIFTS with the measurement uncertainty instead of nesting into itself; with nested windows COVER would trivially imply UNIFORM and the three profiles could not be told apart. Scenario-enumeration convention: one configured uncertainty per potentially live U-type slot, so Sigma_K is the cross product over those slots -- here one object slot and one two-valued _uncertainty domain, i.e. |Sigma_K| = 2. kk-modelvalidator SILENTLY IGNORES configuration keys it does not understand rather than rejecting them, so BOTH the `query = <profile> satisfy` key (absent from the incumbent's key vocabulary) and the UReal invariants themselves (TypeConverter cannot represent UReal, exactly as for examples/URealThreshold) are quietly dropped on the Kodkod side. Kodkod therefore reports TRIVIALLY_SATISFIABLE for this row no matter what it asks, which is NOT a comparison with the SMT answer and must not be read as backend agreement or disagreement. The recorded expectation below is the SMT-Z3 answer only.",
       "provenanceCitation": null,
-      "features": [],
+      "features": [
+        "query.config-key",
+        "query.macro-satisfy",
+        "query.scenario-profiles"
+      ],
       "question": "EXISTS(SATISFY): is there SOME scenario and SOME snapshot satisfying both confidence demands, when the only configured representative works at sigma=0.02 and fails at sigma=0.06?",
       "expected": {
         "classification": "sat",
@@ -1529,7 +1617,11 @@
       "provenanceType": "authored-for-thesis",
       "provenanceDetail": "Milestone 4.6 scenario-profile evidence, authored for this thesis. The model pairs a positive confidence demand with a NEGATED one on the same UReal slot so the satisfying window SHIFTS with the measurement uncertainty instead of nesting into itself; with nested windows COVER would trivially imply UNIFORM and the three profiles could not be told apart. Scenario-enumeration convention: one configured uncertainty per potentially live U-type slot, so Sigma_K is the cross product over those slots -- here one object slot and one two-valued _uncertainty domain, i.e. |Sigma_K| = 2. kk-modelvalidator SILENTLY IGNORES configuration keys it does not understand rather than rejecting them, so BOTH the `query = <profile> satisfy` key (absent from the incumbent's key vocabulary) and the UReal invariants themselves (TypeConverter cannot represent UReal, exactly as for examples/URealThreshold) are quietly dropped on the Kodkod side. Kodkod therefore reports TRIVIALLY_SATISFIABLE for this row no matter what it asks, which is NOT a comparison with the SMT answer and must not be read as backend agreement or disagreement. The recorded expectation below is the SMT-Z3 answer only.",
       "provenanceCitation": null,
-      "features": [],
+      "features": [
+        "query.config-key",
+        "query.macro-satisfy",
+        "query.scenario-profiles"
+      ],
       "question": "COVER(SATISFY) over the SAME configuration: does EVERY configured scenario have a witness? It must not, because sigma=0.06 has no representative in its window -- so COVER is strictly stronger than the EXISTS row above.",
       "expected": {
         "classification": "unsat",
@@ -1559,7 +1651,11 @@
       "provenanceType": "authored-for-thesis",
       "provenanceDetail": "Milestone 4.6 scenario-profile evidence, authored for this thesis. The model pairs a positive confidence demand with a NEGATED one on the same UReal slot so the satisfying window SHIFTS with the measurement uncertainty instead of nesting into itself; with nested windows COVER would trivially imply UNIFORM and the three profiles could not be told apart. Scenario-enumeration convention: one configured uncertainty per potentially live U-type slot, so Sigma_K is the cross product over those slots -- here one object slot and one two-valued _uncertainty domain, i.e. |Sigma_K| = 2. kk-modelvalidator SILENTLY IGNORES configuration keys it does not understand rather than rejecting them, so BOTH the `query = <profile> satisfy` key (absent from the incumbent's key vocabulary) and the UReal invariants themselves (TypeConverter cannot represent UReal, exactly as for examples/URealThreshold) are quietly dropped on the Kodkod side. Kodkod therefore reports TRIVIALLY_SATISFIABLE for this row no matter what it asks, which is NOT a comparison with the SMT answer and must not be read as backend agreement or disagreement. The recorded expectation below is the SMT-Z3 answer only.",
       "provenanceCitation": null,
-      "features": [],
+      "features": [
+        "query.config-key",
+        "query.macro-satisfy",
+        "query.scenario-profiles"
+      ],
       "question": "UNIFORM(SATISFY) over the SAME configuration: is there ONE snapshot that works in every scenario? It must not, for the same reason COVER fails.",
       "expected": {
         "classification": "unsat",
@@ -1589,7 +1685,11 @@
       "provenanceType": "authored-for-thesis",
       "provenanceDetail": "Milestone 4.6 scenario-profile evidence, authored for this thesis. The model pairs a positive confidence demand with a NEGATED one on the same UReal slot so the satisfying window SHIFTS with the measurement uncertainty instead of nesting into itself; with nested windows COVER would trivially imply UNIFORM and the three profiles could not be told apart. Scenario-enumeration convention: one configured uncertainty per potentially live U-type slot, so Sigma_K is the cross product over those slots -- here one object slot and one two-valued _uncertainty domain, i.e. |Sigma_K| = 2. kk-modelvalidator SILENTLY IGNORES configuration keys it does not understand rather than rejecting them, so BOTH the `query = <profile> satisfy` key (absent from the incumbent's key vocabulary) and the UReal invariants themselves (TypeConverter cannot represent UReal, exactly as for examples/URealThreshold) are quietly dropped on the Kodkod side. Kodkod therefore reports TRIVIALLY_SATISFIABLE for this row no matter what it asks, which is NOT a comparison with the SMT answer and must not be read as backend agreement or disagreement. The recorded expectation below is the SMT-Z3 answer only.",
       "provenanceCitation": null,
-      "features": [],
+      "features": [
+        "query.config-key",
+        "query.macro-satisfy",
+        "query.scenario-profiles"
+      ],
       "question": "COVER(SATISFY) with two configured representatives: can every scenario be witnessed when sigma=0.02 needs mu=0.35 and sigma=0.06 needs mu=0.42, i.e. a DIFFERENT snapshot per scenario?",
       "expected": {
         "classification": "sat",
@@ -1619,7 +1719,11 @@
       "provenanceType": "authored-for-thesis",
       "provenanceDetail": "Milestone 4.6 scenario-profile evidence, authored for this thesis. The model pairs a positive confidence demand with a NEGATED one on the same UReal slot so the satisfying window SHIFTS with the measurement uncertainty instead of nesting into itself; with nested windows COVER would trivially imply UNIFORM and the three profiles could not be told apart. Scenario-enumeration convention: one configured uncertainty per potentially live U-type slot, so Sigma_K is the cross product over those slots -- here one object slot and one two-valued _uncertainty domain, i.e. |Sigma_K| = 2. kk-modelvalidator SILENTLY IGNORES configuration keys it does not understand rather than rejecting them, so BOTH the `query = <profile> satisfy` key (absent from the incumbent's key vocabulary) and the UReal invariants themselves (TypeConverter cannot represent UReal, exactly as for examples/URealThreshold) are quietly dropped on the Kodkod side. Kodkod therefore reports TRIVIALLY_SATISFIABLE for this row no matter what it asks, which is NOT a comparison with the SMT answer and must not be read as backend agreement or disagreement. The recorded expectation below is the SMT-Z3 answer only.",
       "provenanceCitation": null,
-      "features": [],
+      "features": [
+        "query.config-key",
+        "query.macro-satisfy",
+        "query.scenario-profiles"
+      ],
       "question": "UNIFORM(SATISFY) over the SAME configuration COVER just satisfied: the two satisfying windows are disjoint, so no single shared representative exists and UNIFORM must be refuted. This is the row that separates COVER from UNIFORM.",
       "expected": {
         "classification": "unsat",
@@ -1649,7 +1753,11 @@
       "provenanceType": "authored-for-thesis",
       "provenanceDetail": "Milestone 4.6 scenario-profile evidence, authored for this thesis. The model pairs a positive confidence demand with a NEGATED one on the same UReal slot so the satisfying window SHIFTS with the measurement uncertainty instead of nesting into itself; with nested windows COVER would trivially imply UNIFORM and the three profiles could not be told apart. Scenario-enumeration convention: one configured uncertainty per potentially live U-type slot, so Sigma_K is the cross product over those slots -- here one object slot and one two-valued _uncertainty domain, i.e. |Sigma_K| = 2. kk-modelvalidator SILENTLY IGNORES configuration keys it does not understand rather than rejecting them, so BOTH the `query = <profile> satisfy` key (absent from the incumbent's key vocabulary) and the UReal invariants themselves (TypeConverter cannot represent UReal, exactly as for examples/URealThreshold) are quietly dropped on the Kodkod side. Kodkod therefore reports TRIVIALLY_SATISFIABLE for this row no matter what it asks, which is NOT a comparison with the SMT answer and must not be read as backend agreement or disagreement. The recorded expectation below is the SMT-Z3 answer only.",
       "provenanceCitation": null,
-      "features": [],
+      "features": [
+        "query.config-key",
+        "query.macro-satisfy",
+        "query.scenario-profiles"
+      ],
       "question": "UNIFORM(SATISFY) with overlapping windows: does ONE snapshot (mu=0.37) hold in BOTH the sigma=0.02 and sigma=0.03 scenarios, each independently re-evaluated by USE with that scenario's uncertainty substituted into the reconstructed UReal?",
       "expected": {
         "classification": "sat",
@@ -1679,7 +1787,14 @@
       "provenanceType": "authored-for-thesis",
       "provenanceDetail": "Study B (spec S9, RQ2) supersession case A, authored for this thesis: an integer model whose correct answer requires more than a practical Kodkod bitwidth. One transfer in cents under a 100000000-cent daily cap; the invariant is an ordinary two-sided range check written with Integer literals. The configured Integer domain is 1..100 and EVERY value in it satisfies the invariant, so no witness can be missing for want of a candidate, and both endpoints are representable at the corpus-wide bitwidth of 8, so the incumbent's own bitwidth check stays silent. Configuration note: Transfer_amountCents_min/_max exist because the SMT finder needs a per-attribute domain to register an attribute at all; the incumbent has no such key and reads them as PropertyEntry.attributeDefValuesMin/Max, a count of defined values. SupersessionDivergenceTest re-runs the incumbent with those two keys stripped out and asserts the outcome is unchanged, so the divergence cannot be blamed on a key the two backends read differently.",
       "provenanceCitation": null,
-      "features": [],
+      "features": [
+        "attr.declaration-typing-multiplicity",
+        "class.basic-and-instantiation",
+        "ocl.attribute-access",
+        "prim.boolean-literals-ops",
+        "prim.integer-bitwidth-overflow",
+        "prim.integer-comparisons"
+      ],
       "question": "Every value in the configured domain 1..100 satisfies 0 < amountCents < 100000000. Does each backend find one?",
       "expected": {
         "classification": "sat",
@@ -1741,6 +1856,12 @@
         "real-grid",
         "off-grid-witness",
         "false-unsat"
+      ],
+      "features": [
+        "attr.declaration-typing-multiplicity",
+        "class.basic-and-instantiation",
+        "ocl.attribute-access",
+        "prim.boolean-literals-ops"
       ]
     }
   ]
