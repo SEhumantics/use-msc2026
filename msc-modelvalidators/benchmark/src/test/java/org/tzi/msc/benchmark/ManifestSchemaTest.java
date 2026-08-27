@@ -185,8 +185,8 @@ public class ManifestSchemaTest {
 		}
 
 		assertEquals("spec S9 lists four Study B cases; the corpus must carry one row for each",
-				List.of("IntegerBitwidth-DailyCap", "RealGrid-UnitInterval", "URealThreshold-Below",
-						"URealThreshold-NominalErasure"),
+				List.of("URealThreshold-Below", "URealThreshold-NominalErasure", "IntegerBitwidth-DailyCap",
+						"RealGrid-UnitInterval"),
 				List.copyOf(byId.keySet()));
 		assertEquals("integer bitwidth: the incumbent wrongly refutes", "false-unsat",
 				byId.get("IntegerBitwidth-DailyCap"));

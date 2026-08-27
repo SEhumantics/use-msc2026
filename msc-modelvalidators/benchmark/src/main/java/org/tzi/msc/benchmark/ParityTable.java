@@ -98,6 +98,51 @@ public final class ParityTable {
 		NEITHER_VERDICT
 	}
 
+	/**
+	 * WHICH WAY a declared divergence points. {@link ParityClass#DECLARED_DIVERGENCE} says only "the
+	 * corpus expected these two backends to differ here"; it does not say whether the incumbent
+	 * wrongly refused a model that has a witness or wrongly blessed one that has none. Those are not
+	 * the same finding, and for a verification tool they are not even the same severity, so the Study
+	 * B table names the direction instead of leaving a reader to infer it from two outcome strings.
+	 */
+	public enum DivergenceDirection {
+		/**
+		 * The incumbent ACCEPTED a model that has no satisfying instance -- it reported that a valid
+		 * instance exists, and produced one, where the ground truth is a refutation. The dangerous
+		 * direction: a verification tool answering "fine" is indistinguishable, to its user, from a
+		 * model that really is fine, so nothing prompts anyone to look again.
+		 */
+		FALSE_ACCEPT,
+		/**
+		 * The incumbent REFUTED a model that does have a witness. Wrong, and costly, but self-
+		 * announcing: the user is told there is no instance and gets no snapshot, which is a visible
+		 * failure rather than a silent one.
+		 */
+		FALSE_REJECT,
+		/**
+		 * The incumbent gave no wrong ANSWER -- it could not state the question (silent-drop,
+		 * cannot-configure) or it failed (error). Kept separate on purpose: promoting one of these to
+		 * a direction would upgrade a weak claim into a strong one, which is the specific dishonesty
+		 * {@code ExampleEntry.Supersession#divergenceClass} exists to prevent.
+		 */
+		NO_ANSWER
+	}
+
+	/**
+	 * Maps a corpus divergence class onto its direction. Only the two STRONG classes have one; the
+	 * mapping is exhaustive over the vocabulary {@code ManifestSchemaTest} enforces, and anything
+	 * outside it falls to {@link DivergenceDirection#NO_ANSWER} rather than being guessed at.
+	 */
+	static DivergenceDirection divergenceDirection(String divergenceClass) {
+		if ("false-sat".equals(divergenceClass)) {
+			return DivergenceDirection.FALSE_ACCEPT;
+		}
+		if ("false-unsat".equals(divergenceClass)) {
+			return DivergenceDirection.FALSE_REJECT;
+		}
+		return DivergenceDirection.NO_ANSWER;
+	}
+
 	/** One Study A row -- the spec's seven columns plus the bookkeeping that justifies them. */
 	public static final class Row {
 		public String exampleId;
@@ -120,6 +165,8 @@ public final class ParityTable {
 		/** Whether OUR backend's independent USE re-evaluation passed; null when none was performed. */
 		public Boolean useChecked;
 		public String parityClass;
+		/** Null unless this row is a declared Study B divergence; see {@link DivergenceDirection}. */
+		public DivergenceDirection divergenceDirection;
 		public String note;
 	}
 
@@ -131,6 +178,8 @@ public final class ParityTable {
 		public String smtOutcome;
 		public String groundTruth;
 		public String divergenceClass;
+		/** Derived from {@link #divergenceClass}, so the table cannot label one and imply the other. */
+		public DivergenceDirection divergenceDirection;
 	}
 
 	/** The denominators, which the gate requires be stated plainly rather than implied. */
@@ -139,6 +188,10 @@ public final class ParityTable {
 		public int corpusRows;
 		/** Rows the corpus declares as deliberate divergence (Study B); excluded from parity. */
 		public int declaredDivergenceRows;
+		/** Declared divergences where the incumbent wrongly ACCEPTED -- the dangerous direction. */
+		public int falseAcceptRows;
+		/** Declared divergences where the incumbent wrongly REFUTED. */
+		public int falseRejectRows;
 		/** {@link #corpusRows} minus {@link #declaredDivergenceRows}. */
 		public int parityPopulation;
 		/** Parity-population rows where the incumbent reached a real, searched verdict. */
@@ -241,6 +294,7 @@ public final class ParityTable {
 			String groundTruth = ex.expected == null ? null : ex.expected.outcome;
 			ParityClass parityClass = classify(row.kodkodResult, row.smtResult, declared, groundTruth);
 			row.parityClass = parityClass.name();
+			row.divergenceDirection = declared ? divergenceDirection(ex.supersession.divergenceClass) : null;
 			row.inIntersection = !declared && row.kodkodRealVerdict && row.smtRealVerdict;
 			row.agree = row.inIntersection ? Boolean.valueOf(parityClass == ParityClass.AGREE) : null;
 			row.note = noteFor(parityClass, row);
@@ -249,6 +303,11 @@ public final class ParityTable {
 			table.summary.corpusRows++;
 			if (declared) {
 				table.summary.declaredDivergenceRows++;
+				if (row.divergenceDirection == DivergenceDirection.FALSE_ACCEPT) {
+					table.summary.falseAcceptRows++;
+				} else if (row.divergenceDirection == DivergenceDirection.FALSE_REJECT) {
+					table.summary.falseRejectRows++;
+				}
 			} else {
 				table.summary.parityPopulation++;
 				if (row.kodkodRealVerdict) {
@@ -284,6 +343,7 @@ public final class ParityTable {
 				b.smtOutcome = ex.supersession.smtOutcome;
 				b.groundTruth = ex.supersession.groundTruth;
 				b.divergenceClass = ex.supersession.divergenceClass;
+				b.divergenceDirection = row.divergenceDirection;
 				table.studyB.add(b);
 			}
 		}
@@ -313,7 +373,13 @@ public final class ParityTable {
 	private static String noteFor(ParityClass parityClass, Row row) {
 		return switch (parityClass) {
 			case AGREE -> "both backends searched and returned " + row.smtResult;
-			case DECLARED_DIVERGENCE -> "declared Study B supersession row; see the Study B table";
+			case DECLARED_DIVERGENCE -> "declared Study B supersession row ("
+					+ (row.divergenceDirection == DivergenceDirection.FALSE_ACCEPT
+							? "the incumbent wrongly ACCEPTED a model with no instance"
+							: row.divergenceDirection == DivergenceDirection.FALSE_REJECT
+									? "the incumbent wrongly REFUTED a model that has one"
+									: "no wrong answer, only an unstatable question")
+					+ "); see the Study B table";
 			case KODKOD_DEFECT -> "undeclared disagreement, ground truth backs the SMT backend";
 			case SMT_DEFECT -> "undeclared disagreement, ground truth backs the incumbent";
 			case UNCLASSIFIED_DISAGREEMENT -> "undeclared disagreement with no ground truth to settle it";
@@ -381,12 +447,24 @@ public final class ParityTable {
 		}
 
 		sb.append("\n### Study B -- Supersession (RQ2)\n\n");
-		sb.append("| Case | Kodkod outcome | Kodkod reason | SMT outcome | Ground truth | Divergence class |\n");
-		sb.append("|---|---|---|---|---|---|\n");
+		sb.append("The corpus declares ").append(s.declaredDivergenceRows).append(" supersession rows, in TWO")
+				.append(" directions, which are not the same finding and are not the same severity.\n\n");
+		sb.append("- **").append(s.falseRejectRows).append(" `FALSE_REJECT`** -- the incumbent refutes a model")
+				.append(" that does have a witness. Wrong, and costly, but self-announcing: the user is told")
+				.append(" there is no instance and gets no snapshot.\n");
+		sb.append("- **").append(s.falseAcceptRows).append(" `FALSE_ACCEPT`** -- the incumbent reports a")
+				.append(" satisfying instance for a model that has none, and hands over a snapshot. For a")
+				.append(" verification tool this is the more dangerous error: a false ACCEPT is")
+				.append(" indistinguishable, to its user, from a model that really is correct, so nothing")
+				.append(" prompts anyone to look again.\n\n");
+		sb.append("| Case | Kodkod outcome | Kodkod reason | SMT outcome | Ground truth | Divergence class |")
+				.append(" Divergence direction |\n");
+		sb.append("|---|---|---|---|---|---|---|\n");
 		for (StudyBRow b : t.studyB) {
 			sb.append("| ").append(b.exampleId).append(" | ").append(b.kodkodOutcome).append(" | ")
 					.append(oneLine(b.kodkodReason)).append(" | ").append(b.smtOutcome).append(" | ")
-					.append(oneLine(b.groundTruth)).append(" | ").append(b.divergenceClass).append(" |\n");
+					.append(oneLine(b.groundTruth)).append(" | ").append(b.divergenceClass).append(" | ")
+					.append(b.divergenceDirection).append(" |\n");
 		}
 		return sb.toString();
 	}

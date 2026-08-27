@@ -429,10 +429,12 @@
       <div class="section-head">
         <h2>Study B &mdash; supersession <span class="h2-sub">RQ2 &mdash; declared divergences, excluded from the parity denominator</span></h2>
       </div>
+      <p class="lede" id="studyBLede" style="margin-top:0"></p>
       <div class="table-scroll"><table class="data-table" id="studyBTable">
         <thead><tr>
           <th scope="col">Case</th><th scope="col">Kodkod outcome</th><th scope="col">Kodkod reason</th>
           <th scope="col">SMT outcome</th><th scope="col">Ground truth</th><th scope="col">Divergence class</th>
+          <th scope="col">Divergence direction</th>
         </tr></thead>
         <tbody id="studyBBody"></tbody>
       </table></div>
@@ -1679,6 +1681,17 @@
         <td>${escapeHtml(r.note)}</td>
       </tr>`).join('');
 
+    // Two directions, deliberately not flattened into one "declared divergence" bucket: a wrong
+    // refutation is a visible failure, a wrong acceptance is a snapshot the user has no reason to
+    // distrust. See ParityTable.DivergenceDirection.
+    document.getElementById('studyBLede').innerHTML =
+      `The corpus declares <b>${s.declaredDivergenceRows}</b> supersession rows in two directions. `
+      + `<b>${s.falseRejectRows} FALSE_REJECT</b> &mdash; the incumbent refutes a model that does have a `
+      + `witness; wrong and costly, but self-announcing. <b>${s.falseAcceptRows} FALSE_ACCEPT</b> &mdash; it `
+      + `reports a satisfying instance for a model that has none, and hands over a snapshot. For a `
+      + `verification tool the false accept is the more dangerous error: it is indistinguishable, to its `
+      + `user, from a model that really is correct.`;
+
     document.getElementById('studyBBody').innerHTML = PARITY.studyB.map(b => `<tr>
         <td>${escapeHtml(b.exampleId)}</td>
         <td>${escapeHtml(b.kodkodOutcome)}</td>
@@ -1686,6 +1699,7 @@
         <td>${escapeHtml(b.smtOutcome)}</td>
         <td>${escapeHtml(b.groundTruth)}</td>
         <td>${escapeHtml(b.divergenceClass)}</td>
+        <td>${escapeHtml(b.divergenceDirection)}</td>
       </tr>`).join('');
   }
 

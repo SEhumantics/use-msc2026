@@ -1250,10 +1250,28 @@
         "classification": "unsat",
         "outcome": "UNSATISFIABLE"
       },
+      "supersession": {
+        "study": "B",
+        "kodkodOutcome": "TRIVIALLY_SATISFIABLE",
+        "kodkodReason": "Spec S9 Study B case C: an invariant using OCL the Kodkod transformer drops silently. TypeConverter.convert has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections, and NO arm for UReal, so a UReal attribute falls through to LOG.error(LogMessages.typeConvertError(...)) and return null (kk-modelvalidator TypeConverter.java:78). Observed on this exact model and section: 'ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UReal'. The null type means the attribute is never created on the incumbent's model, so the invariant that reads it fails to transform -- 'TransformationException: Cannot find attribute speed' thrown by VariableOperationVisitor.visitAttrOp -- and InvariantTransformator.transformAndAdd CATCHES that exception, logs it through printTransformationError, and then logs 'Invariant transformation successful' anyway (InvariantTransformator.java:129-166). What reaches the solver is class UnidentifiedObject with attributes=[] and invariants=[]: constant true, so TRIVIALLY_SATISFIABLE is returned with no search at all. UseKodkodModelValidator.trivially_satisfiable() then calls the SAME handleSolution() a real SATISFIABLE calls and builds an object diagram, so the incumbent does not merely fail to answer -- it presents an instance. The corpus run records that instance as 'UnidentifiedObject#count=1;UnidentifiedObject.objects=[UnidentifiedObject{speed=null}]': the very attribute the invariant constrains is absent from the snapshot offered as a witness. Nothing warns. Observed for this section: PropertyConfigurationVisitor.containErrors() is false and its warning writer receives the EMPTY string, and the benchmark's own results row for DefaultSAT4J carries error=null. The one log4j ERROR line above never reaches the outcome, the object diagram, or the corpus log -- which is what 'silently' means here.",
+        "smtOutcome": "UNSATISFIABLE",
+        "groundTruth": "UNSATISFIABLE. The configuration pins the search space to exactly one object (UnidentifiedObject_min = UnidentifiedObject_max = 1) and exactly one candidate attribute value (UnidentifiedObject_speed_value = Set{0.3328970694541931152343750}, UnidentifiedObject_speed_uncertainty = Set{0.02}), so the entire space is a single snapshot. USE's own evaluator -- neither model finder -- evaluates UnidentifiedObject::ReliablyFast FALSE on that snapshot, because (self.speed > 0.30) carries confidence 0.9499999997475513, just under the 0.95 the invariant demands. One candidate, and it fails, so no satisfying instance exists. A reader re-establishes this with the USE evaluator alone; SupersessionDivergenceTest.useEvaluatorRefutesTheSingleCandidateEachConfigurationAllows does exactly that, from the corpus files, with no solver involved.",
+        "divergenceClass": "false-sat"
+      },
+      "oracleCaveats": [
+        "The recorded expectation is the SMT-Z3 answer. The incumbent's cell for this row is TRIVIALLY_SATISFIABLE and is WRONG, not a second opinion -- see the supersession block.",
+        "The divergence is classified false-sat, the strong claim, and it is the DANGEROUS direction: the incumbent reports a satisfying instance for a model that has none. A false-unsat row (IntegerBitwidth-DailyCap, RealGrid-UnitInterval) is a visible failure to produce a snapshot; this one is a snapshot a user has no reason to distrust.",
+        "The margin is deliberately a hair: 0.9499999997475513 against a 0.95 threshold. That makes the row a boundary case for the SMT finder's own precision, and it is NOT what earns the false-sat label -- the incumbent never evaluates the threshold at all, since the invariant is gone before the solver runs. URealThreshold-NominalErasure carries the same claim with a wide margin (0.69146 against 0.95) for exactly that reason.",
+        "The mechanism is shared with URealThreshold-NominalErasure and with the At/Above rows, which are not Study B rows because their ground truth is SATISFIABLE: the incumbent's TRIVIALLY_SATISFIABLE happens to point the same way there, so those rows evidence the drop without evidencing a wrong answer."
+      ],
       "scenarioTags": [
         "ureal-threshold",
         "evaluator-boundary",
-        "below-boundary"
+        "below-boundary",
+        "supersession",
+        "study-b",
+        "silently-dropped-invariant",
+        "false-sat"
       ]
     },
     {
@@ -1325,10 +1343,28 @@
         "classification": "unsat",
         "outcome": "UNSATISFIABLE"
       },
+      "supersession": {
+        "study": "B",
+        "kodkodOutcome": "TRIVIALLY_SATISFIABLE",
+        "kodkodReason": "Spec S9 Study B case D: a U-typed model the incumbent cannot configure at all. The drop mechanism is the one recorded on URealThreshold-Below (TypeConverter.convert has no UReal arm and returns null, kk-modelvalidator TypeConverter.java:78; the invariant then fails to transform and InvariantTransformator.transformAndAdd swallows the exception), but this row records the CONFIGURATION half of the limit. The incumbent has no U-type in its configuration vocabulary at all: 'UReal' occurs nowhere in kk-modelvalidator's sources except two SimpleExpressionVisitor guards that throw 'UReal not supported' for UReal LITERALS, and because TypeConverter returned null the attribute does not exist on its model, so there is no key by which speed could be bounded even in principle. The corpus's UnidentifiedObject_speed_value and UnidentifiedObject_speed_uncertainty keys are therefore read by nobody: observed PropertyConfigurationVisitor output for this section is containErrors()=false with an EMPTY warning string -- it neither rejects them, nor warns about them, nor applies them. The incumbent then returns TRIVIALLY_SATISFIABLE and builds an object diagram recorded as 'UnidentifiedObject#count=1;UnidentifiedObject.objects=[UnidentifiedObject{speed=null}]'. Here the acceptance is wrong by a wide margin rather than a boundary hair: USE's own UReal evaluator gives (self.speed > 0.30) a confidence of 0.6914624677876595 for UReal(0.31, 0.02), far below the 0.95 the invariant demands. Erasing the uncertainty and reading 0.31 > 0.30 as simply true is precisely the mistake an empty translation cannot avoid making, and it is the mistake this row exhibits.",
+        "smtOutcome": "UNSATISFIABLE",
+        "groundTruth": "UNSATISFIABLE. The configuration pins the search space to exactly one object (UnidentifiedObject_min = UnidentifiedObject_max = 1) and exactly one candidate attribute value (UnidentifiedObject_speed_value = Set{0.31}, UnidentifiedObject_speed_uncertainty = Set{0.02}), so the entire space is a single snapshot. USE's own evaluator -- neither model finder -- evaluates UnidentifiedObject::ReliablyFast FALSE on it: (self.speed > 0.30) holds with confidence 0.6914624677876595, and the invariant demands 0.95. One candidate, and it fails by a wide margin, so no satisfying instance exists. A reader re-establishes this with the USE evaluator alone; SupersessionDivergenceTest.useEvaluatorRefutesTheSingleCandidateEachConfigurationAllows does exactly that, from the corpus files, with no solver involved.",
+        "divergenceClass": "false-sat"
+      },
+      "oracleCaveats": [
+        "The recorded expectation is the SMT-Z3 answer. The incumbent's cell for this row is TRIVIALLY_SATISFIABLE and is WRONG, not a second opinion -- see the supersession block.",
+        "The divergence is classified false-sat, the strong claim, and it is earned with room to spare: the gap between the evaluator's 0.69146 and the invariant's 0.95 is far too wide to be an arithmetic-precision artefact on either side.",
+        "The incumbent is not being blamed for a nominal-erasure DECISION. It makes no decision: the invariant is gone before its solver runs, so the crisp reading 0.31 > 0.30 is what its empty translation amounts to, not a semantics it chose.",
+        "This row and URealThreshold-Below share one model and one drop mechanism. They are kept as two Study B rows because spec S9 lists the dropped invariant and the unconfigurable U-type as two cases and each row carries the evidence for one of them -- not because two independent defects were found."
+      ],
       "scenarioTags": [
         "ureal-threshold",
         "nominal-erasure-discrepancy",
-        "fragile-witness"
+        "fragile-witness",
+        "supersession",
+        "study-b",
+        "unconfigurable-u-type",
+        "false-sat"
       ]
     },
     {
