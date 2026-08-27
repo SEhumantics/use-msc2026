@@ -3037,6 +3037,38 @@
           }
         },
         {
+          "id": "ocl.size",
+          "name": "size()",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "supported",
+              "evidence": "StandardOperationVisitor.visitStdOp (StandardOperationVisitor.java:36-53) reflectively dispatches every ExpStdOp operator name via invokeMethod, including `size`; SetOperationGroup.size(Expression, Boolean) (SetOperationGroup.java:358-364) lowers a Set-typed source to the Kodkod native relation cardinality src.count() (or a 0/1 IntConstant for the ExpObjAsSet 0..1-navigation-as-set shape, selected by the object_type_nav flag DefaultExpressionVisitor threads through).",
+              "notes": "size() itself is accurate wherever its source is a genuine Kodkod relation -- an ordinary association-end navigation (a real Set, no multiset concern) or allInstances() -- which is exactly the shape CollectionSemantics::hasThreeSongs (self.songs->size() = 3) exercises: reaches a real verdict across every kk-modelvalidator solver on both CollectionSemantics (SATISFIABLE) and CollectionSemantics-UNSAT (UNSATISFIABLE), per latest-results.json. size() only INHERITS a wrong count when its OWN source already came from a degraded ->collect() (see ocl.collect / collection.type-system-collapse's Bag->Set collapse, which this same fixture's header/NOTES.md documents for a DIFFERENT invariant chain, ->collect(...)->size(), not hasThreeSongs) -- that is collect()'s defect propagating forward, not a second, independent defect of size() itself, so it is not double-counted here.",
+              "satScenarioIds": [
+                "CollectionSemantics"
+              ],
+              "unsatScenarioIds": [
+                "CollectionSemantics-UNSAT"
+              ],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "ExpressionTranslator.java:254 routes ExpStdOp opname `size` to collectionSize(a[0]) (~1022-1031), which accepts only a single-hop, collection-valued association-end navigation (self.<role>, an ExpNavigation whose destination isCollection()) and resolves its population through the SAME populationOf association-end branch (~929-963) isUnique's Shape 2 already uses -- reused directly via populationOf(navigation, \"size()\"), not re-derived. Each population member's linkTerm indicator is folded into an SMT Integer sum by sizeTerm/indicator (~1041-1053), mirroring AssociationLinkEncoder's own aggregate degree count (ite-per-slot, folded with `+`). The result is an ordinary, always-defined TranslatedExpression, so it composes with the EXISTING comparison/orderedComparison machinery with no special-casing: self.songs->size() = 3 is just an equality between two already-translated operands (verified for both = and <, SizeTranslationTest). Genuinely exercised and solved: the real BenchmarkRunner regression guard shows CollectionSemantics SATISFIABLE (11.4ms, witness independently re-checked against the real USE evaluator) and CollectionSemantics-UNSAT UNSATISFIABLE (3.7ms), with every one of the other 56 SMT-Z3 rows' outcome AND witnessDigest byte-identical to the pre-change run -- no regression.",
+              "notes": "Deliberately narrower than isUnique's two population sources: only self.<role>->size() is supported. X.allInstances()->size() is refused even though isUnique supports allInstances as a population source, because the real corpus evidences only the association-end shape (SizeTranslationTest.allInstancesSourceFailsClosed). Also refused, each with a size()-specific TIER_3 message rather than the isUnique-flavored one populationOf used to hard-code before this task parameterized it: a filtered/derived collection (->select(...)->size()), a chained multi-hop navigation, size() on a String (never reaches an ExpNavigation receiver, so no confusion with collection cardinality is possible), and a single-valued 0..1 navigation coerced to a set via OCL's own ExpObjAsSet \"uniform syntax\" rule -- the exact shape behind AssociationClass::AtMostOneEmployer (p.employer->size() <= 1), confirmed still ERROR after this change: still refused (now with the size()-specific message), alongside two entirely unrelated pre-existing refusals in that same scenario (navigationClassifierSource, an association-class link-resolution gap) that this task does not touch. Adversarially verified (SizeTranslationTest): a fixture where 3 of 4 candidate Songs are linked (a non-contiguous subset, not a trailing gap) proves the sum is genuinely over LINKED slots, not existing ones or a fixed prefix; a companion UNSAT fixture (2 of 3 linked) and a second comparator's own non-contiguous-subset fixture (< 4, with 3 of 5 linked) repeat the same proof independently. CollectionSemantics-UNSAT's UNSAT verdict was confirmed, by direct experiment rather than assumed, to be driven by TWO INDEPENDENTLY SUFFICIENT mechanisms: the per-Playlist structural degree bound from the Song[3] role multiplicity alone (invariant not even asserted) is already UNSAT against the [shortage] section's Contains aggregate cap of 2, and the size() = 3 invariant alone (structural bound loosened to unbounded) is independently UNSAT against that same aggregate cap -- matching the fixture's own comment that the invariant \"additionally restates (not merely implies)\" the structural bound.",
+              "satScenarioIds": [
+                "CollectionSemantics"
+              ],
+              "unsatScenarioIds": [
+                "CollectionSemantics-UNSAT"
+              ],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            }
+          }
+        },
+        {
           "id": "collection.flatten",
           "name": "flatten()",
           "support": {

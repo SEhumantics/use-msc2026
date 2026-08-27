@@ -20,10 +20,10 @@ import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
 
 /**
- * {@code self.<one-hop, collection-valued association end>->size()} -- the single population
- * source named by THESIS_SMT_MODEL_FINDER_PLAN.md 7.1's Tier 3 list and confirmed as the sole
- * refusal blocking {@code CollectionSemantics}/{@code CollectionSemantics-UNSAT} (real invariant
- * {@code Playlist::hasThreeSongs}, {@code self.songs->size() = 3}).
+ * {@code self.<one-hop, collection-valued association end>->size()} -- the single population source
+ * named by THESIS_SMT_MODEL_FINDER_PLAN.md 7.1's Tier 3 list and confirmed as the sole refusal
+ * blocking {@code CollectionSemantics}/{@code CollectionSemantics-UNSAT} (real invariant {@code
+ * Playlist::hasThreeSongs}, {@code self.songs->size() = 3}).
  *
  * <p>Deliberately narrower than {@code isUnique}'s two supported population sources: only the
  * {@code self.<role>} association-end shape is supported for {@code size()}. {@code
@@ -43,8 +43,7 @@ public class SizeTranslationTest {
 
     SmtScript script = new SmtScript("QF_LIA");
     ObjectSlots playlists =
-        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Playlist", 1, 1)))
-            .get("Playlist");
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Playlist", 1, 1))).get("Playlist");
     ObjectSlots songs =
         ObjectSlotEncoder.encode(script, List.of(new ClassScope("Song", 3, 3))).get("Song");
     AssociationLinks contains =
@@ -81,9 +80,9 @@ public class SizeTranslationTest {
   /**
    * Adversarial: FOUR candidate Songs exist, but only THREE are actually linked -- and the unlinked
    * one (slot 2) is neither the first nor the last, so the correct count genuinely depends on which
-   * specific subset is linked, not on "all slots" or "a contiguous prefix/suffix". An implementation
-   * that counted EXISTENCE instead of LINKAGE, or that assumed the population is always fully
-   * linked, would wrongly compute 4 here instead of 3.
+   * specific subset is linked, not on "all slots" or "a contiguous prefix/suffix". An
+   * implementation that counted EXISTENCE instead of LINKAGE, or that assumed the population is
+   * always fully linked, would wrongly compute 4 here instead of 3.
    */
   @Test
   public void hasThreeSongsOnTheRealAstIsSatWhenExactlyThreeOfFourCandidateSongsAreLinked()
@@ -93,8 +92,7 @@ public class SizeTranslationTest {
 
     SmtScript script = new SmtScript("QF_LIA");
     ObjectSlots playlists =
-        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Playlist", 1, 1)))
-            .get("Playlist");
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Playlist", 1, 1))).get("Playlist");
     ObjectSlots songs =
         ObjectSlotEncoder.encode(script, List.of(new ClassScope("Song", 4, 4))).get("Song");
     AssociationLinks contains =
@@ -145,8 +143,7 @@ public class SizeTranslationTest {
 
     SmtScript script = new SmtScript("QF_LIA");
     ObjectSlots playlists =
-        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Playlist", 1, 1)))
-            .get("Playlist");
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Playlist", 1, 1))).get("Playlist");
     ObjectSlots songs =
         ObjectSlotEncoder.encode(script, List.of(new ClassScope("Song", 3, 3))).get("Song");
     AssociationLinks contains =
@@ -198,8 +195,7 @@ public class SizeTranslationTest {
 
     SmtScript script = new SmtScript("QF_LIA");
     ObjectSlots bs = ObjectSlotEncoder.encode(script, List.of(new ClassScope("B", 1, 1))).get("B");
-    ObjectSlots cs =
-        ObjectSlotEncoder.encode(script, List.of(new ClassScope("C", 5, 5))).get("C");
+    ObjectSlots cs = ObjectSlotEncoder.encode(script, List.of(new ClassScope("C", 5, 5))).get("C");
     AssociationLinks bc =
         AssociationLinkEncoder.encode(
             script,
@@ -241,8 +237,7 @@ public class SizeTranslationTest {
 
     SmtScript script = new SmtScript("QF_LIA");
     ObjectSlots bs = ObjectSlotEncoder.encode(script, List.of(new ClassScope("B", 1, 1))).get("B");
-    ObjectSlots cs =
-        ObjectSlotEncoder.encode(script, List.of(new ClassScope("C", 4, 4))).get("C");
+    ObjectSlots cs = ObjectSlotEncoder.encode(script, List.of(new ClassScope("C", 4, 4))).get("C");
     AssociationLinks bc =
         AssociationLinkEncoder.encode(
             script,
@@ -361,10 +356,10 @@ public class SizeTranslationTest {
   }
 
   /**
-   * The exact shape behind {@code AssociationClass::AtMostOneEmployer} ({@code
-   * p.employer->size() <= 1}): a single-valued 0..1 navigation coerced into a set via OCL's own
-   * "uniform syntax" rule ({@code ExpObjAsSet}), NOT a genuinely collection-valued navigation. Must
-   * fail closed rather than being silently accepted as if it were {@code self.<role>->size()}.
+   * The exact shape behind {@code AssociationClass::AtMostOneEmployer} ({@code p.employer->size()
+   * <= 1}): a single-valued 0..1 navigation coerced into a set via OCL's own "uniform syntax" rule
+   * ({@code ExpObjAsSet}), NOT a genuinely collection-valued navigation. Must fail closed rather
+   * than being silently accepted as if it were {@code self.<role>->size()}.
    */
   @Test
   public void singleValuedNavigationCoercedToASetIsNotConfusedAndFailsClosed() throws Exception {

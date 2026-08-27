@@ -415,6 +415,7 @@
         "config.class-scoped-attribute-domain",
         "invariant.transform-to-kodkod",
         "ocl.collect",
+        "ocl.size",
         "prim.boolean-literals-ops",
         "query.mv-vs-plain-ocl-agreement",
         "reconstruction.object-diagram",
@@ -1042,7 +1043,8 @@
       "provenanceDetail": "Paired UNSAT mutation of CollectionSemantics, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as CollectionSemantics, new [shortage] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
-        "cmd.validate"
+        "cmd.validate",
+        "ocl.size"
       ],
       "question": "With the same Playlist/Song population as the SAT case (1 Playlist, 3 Songs), can the model finder still satisfy the Contains association's [3] songs-multiplicity (and the redundant hasThreeSongs invariant) when the Contains link count itself is capped at 2 -- one below what a single Playlist structurally requires?",
       "expected": {

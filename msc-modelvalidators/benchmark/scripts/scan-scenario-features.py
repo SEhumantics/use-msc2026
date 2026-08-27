@@ -66,6 +66,7 @@ TRIGGERS = [
     ("ocl.iterate", re.compile(r"->\s*iterate\s*\("), "`->iterate(`"),
     ("ocl.closure", re.compile(r"->\s*closure\s*\("), "`->closure(`"),
     ("ocl.isUnique", re.compile(r"->\s*isUnique\s*\("), "`->isUnique(`"),
+    ("ocl.size", re.compile(r"->\s*size\s*\("), "`->size(`"),
     ("ocl.let", re.compile(r"\blet\s+\w+\s*(:\s*\w+\s*)?="), "`let ... in` expression"),
     ("ocl.if-then-else", re.compile(r"\bif\b.*\bthen\b.*\belse\b.*\bendif\b", re.S), "`if ... then ... else ... endif`"),
     ("ocl.tuples", re.compile(r"\bTuple\s*\("), "`Tuple(...)` type"),

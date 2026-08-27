@@ -432,7 +432,7 @@ public class IsUniqueTranslationTest {
         context b: B inv filteredSource:
           b.cs->select(val > 0)->isUnique(val)
         context b: B inv unsupportedBodyShape:
-          b.cs->isUnique(b.cs->size())
+          b.cs->isUnique(b.cs->select(val > 0)->size())
         """;
     ModelFactory factory = new ModelFactory();
     PrintWriter err = new PrintWriter(System.err);

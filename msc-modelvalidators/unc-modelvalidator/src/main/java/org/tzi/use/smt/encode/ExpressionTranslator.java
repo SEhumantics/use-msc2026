@@ -251,6 +251,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           case "=" -> comparison(a[0], a[1]);
           case "<>" -> negate(comparison(a[0], a[1]));
           case ">=", "<=", ">", "<" -> orderedComparison(e.opname(), a[0], a[1]);
+          case "size" -> collectionSize(a[0]);
           default ->
               throw unsupported(boundaryOfOperator(e.opname()), "operator '" + e.opname() + "'");
         };
@@ -500,7 +501,6 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       return FragmentBoundary.TIER_2;
     }
     if (List.of(
-            "size",
             "isEmpty",
             "notEmpty",
             "includes",
@@ -908,20 +908,29 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     String loopVariable = e.getVariableDeclarations().varDecl(0).name();
     result =
-        isUniqueOver(populationOf(e.getRangeExpression()), loopVariable, e.getQueryExpression());
+        isUniqueOver(
+            populationOf(e.getRangeExpression(), "isUnique"), loopVariable, e.getQueryExpression());
   }
 
   /**
-   * The finite, existence/link-guarded population {@code isUnique} ranges over, for exactly the two
-   * supported source shapes -- anything else (a filtered/derived collection such as {@code
-   * ->select(...)->isUnique(...)}, a chained multi-hop navigation, a set literal, ...) fails closed
-   * here, before a single body translation is even attempted.
+   * The finite, existence/link-guarded population BOTH {@code isUnique} and {@link #collectionSize}
+   * range over, for exactly the two supported source shapes -- anything else (a filtered/derived
+   * collection such as {@code ->select(...)->isUnique(...)}, a chained multi-hop navigation, a set
+   * literal, ...) fails closed here, before a single body translation (or, for {@code size()}, the
+   * summation) is even attempted.
+   *
+   * @param construct the calling construct's own name, spliced into both refusal messages so a
+   *     {@code size()} refusal reads as a {@code size()} refusal and not a leftover {@code
+   *     isUnique} one -- {@link #collectionSize} additionally pre-filters to the {@code
+   *     ExpNavigation} shape before ever reaching here, so only the "more than one hop" message is
+   *     reachable through it in practice; the second message stays parameterized too rather than
+   *     silently keeping its original wording as a trap for the next caller.
    */
-  private List<UniquePopulationMember> populationOf(Expression range) {
+  private List<PopulationMember> populationOf(Expression range, String construct) {
     if (range instanceof ExpAllInstances all) {
-      List<UniquePopulationMember> population = new ArrayList<>();
+      List<PopulationMember> population = new ArrayList<>();
       for (PolymorphicRange.Slot slot : PolymorphicRange.slotsOf(all.getSourceType(), context)) {
-        population.add(new UniquePopulationMember(slot.binding(), Smt.sym(slot.existsName())));
+        population.add(new PopulationMember(slot.binding(), Smt.sym(slot.existsName())));
       }
       return population;
     }
@@ -929,33 +938,35 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       if (!(navigation.getObjectExpression() instanceof ExpVariable sourceVar)) {
         throw unsupported(
             FragmentBoundary.TIER_3,
-            "isUnique over a collection-valued navigation with more than one hop is not yet"
+            construct
+                + " over a collection-valued navigation with more than one hop is not yet"
                 + " supported");
       }
       String destClass = navigation.getDestination().cls().name();
       AssociationLinks links = context.linksFor(navigation.getDestination().association().name());
       ObjectSlots destSlots = context.slotsFor(destClass);
       VariableBinding source = context.binding(sourceVar.getVarname());
-      List<UniquePopulationMember> population = new ArrayList<>();
+      List<PopulationMember> population = new ArrayList<>();
       for (int k = 0; k < destSlots.capacity(); k++) {
         population.add(
-            new UniquePopulationMember(
-                new VariableBinding(destClass, k), linkTerm(links, source, k)));
+            new PopulationMember(new VariableBinding(destClass, k), linkTerm(links, source, k)));
       }
       return population;
     }
     throw unsupported(
         FragmentBoundary.TIER_3,
-        "isUnique over a range other than X.allInstances() or a single-hop collection-valued"
+        construct
+            + " over a range other than X.allInstances() or a single-hop collection-valued"
             + " association end is not yet supported");
   }
 
   /**
-   * One candidate member of {@code isUnique}'s population: its loop-variable binding, plus the SMT
-   * term guarding whether it is actually present -- an existence flag for {@link #populationOf}'s
-   * allInstances branch, a {@link #linkTerm} for its association-end branch.
+   * One candidate population member shared by {@code isUnique} and {@link #collectionSize}: its
+   * loop-variable binding, plus the SMT term guarding whether it is actually present -- an
+   * existence flag for {@link #populationOf}'s allInstances branch, a {@link #linkTerm} for its
+   * association-end branch.
    */
-  private record UniquePopulationMember(VariableBinding binding, SmtTerm memberGuard) {}
+  private record PopulationMember(VariableBinding binding, SmtTerm memberGuard) {}
 
   /**
    * Shared "population -> pairwise distinctness" core for BOTH supported {@code isUnique} source
@@ -967,9 +978,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * evaluator's own empty/singleton-range behaviour.
    */
   private TranslatedExpression isUniqueOver(
-      List<UniquePopulationMember> population, String loopVariable, Expression body) {
+      List<PopulationMember> population, String loopVariable, Expression body) {
     List<TranslatedExpression> bodies = new ArrayList<>(population.size());
-    for (UniquePopulationMember member : population) {
+    for (PopulationMember member : population) {
       TranslationContext extended = context.withBinding(loopVariable, member.binding());
       bodies.add(translate(body, extended, mode, positivePolarity));
     }
@@ -983,6 +994,63 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       }
     }
     return defined(Smt.and(distinctPairs));
+  }
+
+  /**
+   * {@code self.<one-hop, collection-valued association end>->size()} -- the sole {@code size()}
+   * source shape evidenced by the real corpus (e.g. {@code CollectionSemantics::hasThreeSongs},
+   * {@code self.songs->size() = 3}). Resolves its population through the SAME {@link #populationOf}
+   * association-end branch {@code isUnique}'s Shape 2 already uses -- reused directly, not
+   * re-derived -- then sums each member's {@link PopulationMember#memberGuard()} indicator into an
+   * SMT Integer via {@link #sizeTerm}. The result is an ordinary, always-defined {@link
+   * TranslatedExpression}, so it composes with the generic {@link #comparison}/{@link
+   * #orderedComparison} machinery for free: {@code self.songs->size() = 3} needs no special-casing
+   * on the comparison side, it is just an equality between two already-translated operands.
+   *
+   * <p>Deliberately narrower than {@link #populationOf} as a whole: only its {@code ExpNavigation}
+   * branch is a supported {@code size()} source, checked HERE before {@link #populationOf} is even
+   * consulted. {@code X.allInstances()->size()} is a different shape, not evidenced by the real
+   * corpus and out of this slice's scope, so it is refused with a {@code size()}-specific message
+   * rather than silently falling into {@link #populationOf}'s allInstances branch. The same refusal
+   * covers a filtered/derived collection ({@code ->select(...)->size()}, not an {@link
+   * ExpNavigation}), a single-valued 0..1 navigation coerced to a set via OCL's own {@code ->op}
+   * "uniform syntax" rule ({@link ExpObjAsSet}, not an {@link ExpNavigation} either -- e.g. {@code
+   * AssociationClass}'s {@code p.employer->size()}, {@code employer} being a 0..1 end), and {@code
+   * size()} on a String -- which never reaches this method with an {@link ExpNavigation} receiver
+   * at all, since a String operand is never navigation-shaped.
+   */
+  private TranslatedExpression collectionSize(Expression receiver) {
+    if (!(receiver instanceof ExpNavigation navigation)
+        || !navigation.getDestination().isCollection()) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "size() over anything other than a single-hop, collection-valued association navigation"
+              + " is not yet supported");
+    }
+    return defined(sizeTerm(populationOf(navigation, "size()")));
+  }
+
+  /**
+   * A population's cardinality as an SMT Integer term: one per-member indicator (1 if {@link
+   * PopulationMember#memberGuard()} holds, 0 otherwise), folded with {@code "+"} -- the SAME
+   * ite-per-slot/"+" pattern {@link AssociationLinkEncoder}'s own aggregate degree count already
+   * uses over the identical link booleans, applied here to build a VALUE rather than a constraint.
+   * An empty population is 0, matching {@link Smt#and}/{@link Smt#or}'s own empty-list convention
+   * elsewhere in this class.
+   */
+  private static SmtTerm sizeTerm(List<PopulationMember> population) {
+    if (population.isEmpty()) {
+      return Smt.intLit(BigInteger.ZERO);
+    }
+    SmtTerm total = indicator(population.get(0));
+    for (int i = 1; i < population.size(); i++) {
+      total = Smt.app("+", total, indicator(population.get(i)));
+    }
+    return total;
+  }
+
+  private static SmtTerm indicator(PopulationMember member) {
+    return Smt.ite(member.memberGuard(), Smt.intLit(BigInteger.ONE), Smt.intLit(BigInteger.ZERO));
   }
 
   @Override
