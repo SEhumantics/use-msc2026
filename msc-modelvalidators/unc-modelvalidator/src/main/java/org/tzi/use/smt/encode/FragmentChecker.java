@@ -47,13 +47,29 @@ public final class FragmentChecker {
       Map<String, Set<TranslationMode>> requirements,
       TranslationContext baseContext,
       SmtScript script) {
+    return checkAndReify(invariants, requirements, baseContext, script, "");
+  }
+
+  /**
+   * The same check, reifying into one named SCENARIO COPY (see {@link InvariantAssembler#reify(
+   * SmtScript, MClassInvariant, TranslationContext, TranslationMode, String)}). The ledger it
+   * returns describes the same invariants in the same modes, so a query that is unsupported in one
+   * scenario is unsupported in all of them -- the fragment is a property of the expression, not of
+   * the measurement quality.
+   */
+  public static ReifiedResult checkAndReify(
+      List<MClassInvariant> invariants,
+      Map<String, Set<TranslationMode>> requirements,
+      TranslationContext baseContext,
+      SmtScript script,
+      String scenarioSuffix) {
     List<InvariantCoverage> coverage = new ArrayList<>();
     Map<ClassificationKey, InvariantClassification> classifications = new LinkedHashMap<>();
     for (MClassInvariant invariant : invariants) {
       for (TranslationMode mode : requirements.getOrDefault(invariant.qualifiedName(), Set.of())) {
         try {
           InvariantClassification classification =
-              InvariantAssembler.reify(script, invariant, baseContext, mode);
+              InvariantAssembler.reify(script, invariant, baseContext, mode, scenarioSuffix);
           classifications.put(
               new ClassificationKey(invariant.qualifiedName(), mode), classification);
           coverage.add(new InvariantCoverage(invariant.qualifiedName(), mode, true, null));

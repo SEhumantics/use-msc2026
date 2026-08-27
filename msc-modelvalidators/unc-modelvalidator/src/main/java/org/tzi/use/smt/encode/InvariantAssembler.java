@@ -95,11 +95,31 @@ public final class InvariantAssembler {
       MClassInvariant invariant,
       TranslationContext baseContext,
       TranslationMode mode) {
+    return reify(script, invariant, baseContext, mode, "");
+  }
+
+  /**
+   * The same reification, in one named SCENARIO COPY.
+   *
+   * <p>UNIFORM asserts {@code W_Q(S,s)} for every configured {@code s} inside ONE solve, so the
+   * per-invariant {@code def}/{@code val} symbols exist once per scenario -- they genuinely differ,
+   * because the scenario's uncertainty symbols differ. The snapshot symbols they are computed FROM
+   * (object existence, links, representative values) are shared, which is exactly what makes
+   * UNIFORM stronger than COVER. The suffix is empty for the ordinary single-copy encoding, keeping
+   * the emitted names byte-identical to every pre-4.6 run.
+   */
+  public static InvariantClassification reify(
+      SmtScript script,
+      MClassInvariant invariant,
+      TranslationContext baseContext,
+      TranslationMode mode,
+      String scenarioSuffix) {
     TranslatedExpression translated = classify(invariant, baseContext, mode);
     String stem =
         mode.name().toLowerCase()
             + "_"
-            + invariant.qualifiedName().replaceAll("[^A-Za-z0-9_]", "_");
+            + invariant.qualifiedName().replaceAll("[^A-Za-z0-9_]", "_")
+            + scenarioSuffix;
     String definedName = "def_" + stem;
     String valueName = "val_" + stem;
     script.declareConst(definedName, SmtSort.BOOL);

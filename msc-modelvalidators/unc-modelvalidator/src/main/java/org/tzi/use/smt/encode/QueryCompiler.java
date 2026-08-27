@@ -45,9 +45,14 @@ import org.tzi.use.smt.solver.SmtTerm;
  * never a substitute for {@code undef(m,i)}.
  *
  * <p>{@code B_K} (structural/domain constraints) is asserted unconditionally by the caller and is
- * deliberately not part of what this class emits. Every shape a later milestone owns -- the
- * COVER/UNIFORM profiles -- still fails closed by that milestone's name, so nothing is silently
- * degraded to a weaker query.
+ * deliberately not part of what this class emits.
+ *
+ * <p>Milestone 4.6 adds the orthogonal SCENARIO axis. It is not another truth semantics and so does
+ * not change anything above: COVER and UNIFORM lower the SAME desugared core once per configured
+ * scenario, over that scenario's own reified symbols. That is why {@link #desugared} and {@link
+ * #lowerCore} are separate entry points, and why holding the target fixed across scenarios needs no
+ * extra machinery -- there is literally one core. What DOES need stating is the proposal's
+ * disjunction rule, which {@link #requireTargetDeterminate} enforces.
  */
 public final class QueryCompiler {
   private QueryCompiler() {}
@@ -71,19 +76,106 @@ public final class QueryCompiler {
       QueryExpr query,
       Set<String> activeInvariants,
       Map<FragmentChecker.ClassificationKey, InvariantClassification> classifications) {
-    QueryExpr body = query;
-    if (query instanceof QueryExpr.Profiled profiled) {
-      if (profiled.profile() != ScenarioProfile.EXISTS) {
-        throw new IllegalArgumentException(
-            "scenario profile "
-                + profiled.profile()
-                + " has no executable oracle yet; it starts at Milestone 4.6 and is never"
-                + " silently degraded to EXISTS");
-      }
-      body = profiled.expression();
-    }
-    QueryExpr core = desugar(body, activeInvariants, othersTargetOf(body));
+    return lowerCore(desugared(query, activeInvariants), classifications);
+  }
+
+  /**
+   * The desugared core of a query, independent of any scenario copy's reified symbols.
+   *
+   * <p>Milestone 4.6 needs this separately because COVER and UNIFORM lower the SAME core once per
+   * scenario: desugaring is a property of the query and the active-invariant set, never of the
+   * measurement quality, so it must be computed once and reused. That is also what pins the TARGET
+   * outside the scenario quantifiers -- every scenario obligation is lowered from the identical
+   * atom, so two scenarios cannot diagnose different invariants.
+   */
+  public static QueryExpr desugared(QueryExpr query, Set<String> activeInvariants) {
+    QueryExpr body = query instanceof QueryExpr.Profiled profiled ? profiled.expression() : query;
+    return desugar(body, activeInvariants, othersTargetOf(body));
+  }
+
+  /** Lowers an already-desugared core onto one scenario copy's reified {@code def}/{@code val}. */
+  public static Obligation lowerCore(
+      QueryExpr core,
+      Map<FragmentChecker.ClassificationKey, InvariantClassification> classifications) {
     return new Obligation(lower(core, classifications), core);
+  }
+
+  /**
+   * The binding rule the proposal states for the two stronger profiles: "For COUNTEREXAMPLE(j) and
+   * FRAGILE(j) under COVER or UNIFORM, the target j is fixed outside the scenario quantifiers.
+   * Version 1 permits an untargeted disjunction only with EXISTS; this prevents different scenarios
+   * from silently diagnosing different target invariants under one aggregate result."
+   *
+   * <p>Fixing the target is structural here -- one desugared core is reused for every scenario --
+   * so all that remains is the disjunction clause. A core is TARGET-DETERMINATE when every branch
+   * of every {@code or} diagnoses the same invariants, where "diagnoses" means naming one in an
+   * atom that is not a plain U-aware {@code true}: a defined-false, an undefined, or a nominal
+   * atom. {@code satisfy}, {@code counterexample(j)} and {@code fragile(j)} are all determinate by
+   * construction; {@code false(m,i) or false(m,k)} is exactly the shape the rule excludes.
+   */
+  public static void requireTargetDeterminate(QueryExpr core, ScenarioProfile profile) {
+    if (profile == ScenarioProfile.EXISTS) {
+      return;
+    }
+    checkDeterminate(core, profile);
+  }
+
+  private static void checkDeterminate(QueryExpr node, ScenarioProfile profile) {
+    switch (node) {
+      case QueryExpr.Or or -> {
+        Set<String> left = new LinkedHashSet<>();
+        Set<String> right = new LinkedHashSet<>();
+        collectDiagnosed(or.left(), left);
+        collectDiagnosed(or.right(), right);
+        if (!left.equals(right)) {
+          throw new IllegalArgumentException(
+              "scenario profile "
+                  + profile
+                  + " refuses an untargeted disjunction: its branches diagnose "
+                  + left
+                  + " and "
+                  + right
+                  + ", so different scenarios could silently diagnose different target invariants"
+                  + " under one aggregate result. Version 1 permits an untargeted disjunction only"
+                  + " with EXISTS; name the target explicitly instead");
+        }
+        checkDeterminate(or.left(), profile);
+        checkDeterminate(or.right(), profile);
+      }
+      case QueryExpr.And and -> {
+        checkDeterminate(and.left(), profile);
+        checkDeterminate(and.right(), profile);
+      }
+      case QueryExpr.Not not -> checkDeterminate(not.operand(), profile);
+      default -> {
+        // Atoms and constants diagnose at most one invariant and cannot vary per scenario.
+      }
+    }
+  }
+
+  /**
+   * The invariants a core singles out, i.e. names any atom other than {@code true(uncertain,i)}.
+   */
+  private static void collectDiagnosed(QueryExpr node, Set<String> into) {
+    switch (node) {
+      case QueryExpr.Classification atom -> {
+        if (atom.mode() != TranslationMode.UNCERTAIN || atom.outcome() != InvariantOutcome.TRUE) {
+          into.add(atom.invariantName());
+        }
+      }
+      case QueryExpr.And and -> {
+        collectDiagnosed(and.left(), into);
+        collectDiagnosed(and.right(), into);
+      }
+      case QueryExpr.Or or -> {
+        collectDiagnosed(or.left(), into);
+        collectDiagnosed(or.right(), into);
+      }
+      case QueryExpr.Not not -> collectDiagnosed(not.operand(), into);
+      default -> {
+        // Constants name nothing; no other node survives desugaring.
+      }
+    }
   }
 
   /**

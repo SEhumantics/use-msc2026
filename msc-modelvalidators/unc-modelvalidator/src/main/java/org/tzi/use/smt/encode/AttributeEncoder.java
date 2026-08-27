@@ -46,7 +46,13 @@ public final class AttributeEncoder {
     return new AttributeValues(owner.className(), attributeName, type, names, List.of());
   }
 
-  /** Encodes the nominal and uncertainty components of one UReal as a same-slot SMT pair. */
+  /**
+   * Encodes the nominal and uncertainty components of one UReal as a same-slot SMT pair -- the
+   * single-scenario form, whose emitted declaration and assertion ORDER is deliberately left
+   * byte-identical to every pre-4.6 run so an existing witness cannot shift underneath the
+   * benchmark corpus. The two halves are also available separately, for the multi-scenario UNIFORM
+   * encoding that has to share one and copy the other.
+   */
   public static AttributeValues encodeUReal(
       SmtScript script,
       ObjectSlots owner,
@@ -86,6 +92,82 @@ public final class AttributeEncoder {
     }
     return new AttributeValues(
         owner.className(), attributeName, AttributeType.UREAL, valueNames, uncertaintyNames);
+  }
+
+  /**
+   * The REPRESENTATIVE half of a UReal attribute -- the part that belongs to the snapshot {@code S}
+   * and is therefore declared exactly ONCE even when several scenario copies are encoded into the
+   * same script. Sharing these symbols across scenario obligations is precisely what makes UNIFORM
+   * stronger than COVER; giving each scenario its own copy would silently turn one into the other.
+   */
+  public static List<String> encodeURealRepresentatives(
+      SmtScript script, ObjectSlots owner, String attributeName, AttributeDomain valueDomain) {
+    requireComponent(valueDomain, owner.className(), attributeName, "value");
+    List<String> valueNames = new ArrayList<>();
+    for (int i = 0; i < owner.capacity(); i++) {
+      String valueName = owner.className() + "_" + i + "_" + attributeName + "_value";
+      script.declareConst(valueName, SmtSort.REAL);
+      valueNames.add(valueName);
+      guardReal(
+          script,
+          Smt.sym(owner.existsNames().get(i)),
+          Smt.sym(valueName),
+          valueDomain,
+          owner.className(),
+          attributeName + ".value");
+    }
+    return valueNames;
+  }
+
+  /**
+   * The MEASUREMENT-QUALITY half -- the part that belongs to the scenario {@code s}.
+   *
+   * @param scenarioSuffix distinguishes one scenario copy's uncertainty symbols from another's
+   *     inside a single script (UNIFORM). Empty for the ordinary single-copy encoding, which keeps
+   *     the emitted symbol names byte-identical to every pre-4.6 run.
+   * @param pinned one configured value per slot, fixing this scenario's measurement quality, or
+   *     null to leave the component free within its configured domain -- which is what EXISTS
+   *     wants, since {@code exists s exists S} lets the solver choose the scenario too.
+   */
+  public static List<String> encodeURealUncertainties(
+      SmtScript script,
+      ObjectSlots owner,
+      String attributeName,
+      AttributeDomain uncertaintyDomain,
+      String scenarioSuffix,
+      List<BigDecimal> pinned) {
+    requireComponent(uncertaintyDomain, owner.className(), attributeName, "uncertainty");
+    if (pinned != null && pinned.size() != owner.capacity()) {
+      throw new IllegalArgumentException(
+          "a scenario must fix the measurement quality of every candidate slot of "
+              + owner.className()
+              + "."
+              + attributeName);
+    }
+    List<String> uncertaintyNames = new ArrayList<>();
+    for (int i = 0; i < owner.capacity(); i++) {
+      String uncertaintyName =
+          owner.className() + "_" + i + "_" + attributeName + "_uncertainty" + scenarioSuffix;
+      script.declareConst(uncertaintyName, SmtSort.REAL);
+      uncertaintyNames.add(uncertaintyName);
+      SmtTerm exists = Smt.sym(owner.existsNames().get(i));
+      SmtTerm symbol = Smt.sym(uncertaintyName);
+      if (pinned == null) {
+        guardReal(
+            script,
+            exists,
+            symbol,
+            uncertaintyDomain,
+            owner.className(),
+            attributeName + ".uncertainty");
+      } else {
+        // A scenario fixes the quality of every POTENTIALLY live slot, so the pin is
+        // unconditional; a dead slot's pinned component is simply never read back.
+        script.assertThat(Smt.eq(symbol, Smt.realLit(pinned.get(i))));
+      }
+      script.assertThat(Smt.app("=>", exists, Smt.app(">=", symbol, Smt.realLit(BigDecimal.ZERO))));
+    }
+    return uncertaintyNames;
   }
 
   private static SmtSort sort(AttributeType type) {

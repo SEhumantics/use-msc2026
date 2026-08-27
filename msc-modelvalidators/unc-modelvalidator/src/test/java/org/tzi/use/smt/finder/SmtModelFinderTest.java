@@ -4,7 +4,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
@@ -163,16 +162,20 @@ public class SmtModelFinderTest {
   }
 
   /**
-   * Milestones 4.3-4.5 made SATISFY, targeted COUNTEREXAMPLE and {@code fragile(j)} executable;
-   * everything past them must still fail closed rather than quietly run as SATISFY. The scenario
-   * profiles are the next one up (Milestone 4.6) and stand in for the rest here; {@code
-   * CounterexampleQueryTest} sweeps the whole deferred set.
+   * A scenario profile over the CRISP corpus, which is the degenerate case of Milestone 4.6.
+   *
+   * <p>Library declares no U-typed attribute, so {@code Sigma_K} has exactly ONE (empty) scenario
+   * and the three profile equations genuinely coincide on it -- {@code exists s} and {@code forall
+   * s} over a one-element set are the same statement. Reporting SATISFIED here is therefore the
+   * equations' own answer, not a silent degradation to EXISTS, and the result still says COVER so
+   * no caller can mistake which question was asked. {@code ScenarioProfileTest} carries the
+   * fixtures where the three strengths genuinely diverge.
    */
   @Test
-  public void parsedFutureQueryFailsClosedInsteadOfSilentlyRunningSatisfy() throws Exception {
+  public void aScenarioProfileOverACrispModelHasExactlyOneScenario() throws Exception {
     MModel model = compileLibrary();
     AnalysisConfiguration legacy = readConfig(model, null);
-    AnalysisConfiguration future =
+    AnalysisConfiguration covered =
         new AnalysisConfiguration(
             legacy.classScopes(),
             legacy.associationScopes(),
@@ -182,10 +185,13 @@ public class SmtModelFinderTest {
             legacy.timeout(),
             legacy.modelLimit());
 
-    IllegalArgumentException exception =
-        assertThrows(IllegalArgumentException.class, () -> SmtModelFinder.find(model, future));
+    ModelFinderResult result = SmtModelFinder.find(model, covered);
 
-    assertTrue(exception.getMessage(), exception.getMessage().contains("Milestone 4.6"));
+    assertEquals(ScenarioProfile.COVER, result.profile());
+    assertEquals(ProfileOutcome.SATISFIED, result.outcome());
+    assertEquals("a crisp model has exactly one (empty) scenario", 1, result.scenarios().size());
+    assertTrue(result.scenarios().get(0).scenario().bindings().isEmpty());
+    assertTrue(result.allActiveInvariantsHold());
   }
 
   private static AnalysisConfiguration readConfig(MModel model, String section) throws Exception {

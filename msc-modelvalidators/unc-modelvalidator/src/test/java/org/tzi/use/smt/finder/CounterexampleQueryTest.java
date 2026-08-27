@@ -2,7 +2,6 @@ package org.tzi.use.smt.finder;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
@@ -20,6 +19,7 @@ import org.tzi.use.smt.config.InvariantOutcome;
 import org.tzi.use.smt.config.QueryExpr;
 import org.tzi.use.smt.config.QueryParser;
 import org.tzi.use.smt.config.RawConfiguration;
+import org.tzi.use.smt.config.ScenarioProfile;
 import org.tzi.use.smt.verify.InvariantVerdict;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
@@ -235,27 +235,26 @@ public class CounterexampleQueryTest {
   }
 
   /**
-   * Milestones 4.5-4.6 stay closed: no query shape is silently degraded to a weaker one.
+   * The deferred-shape sweep, now empty of scenario profiles.
    *
-   * <p>{@code uncertain Book::titleIsKey is false} and {@code not satisfy} used to be listed here
-   * too. Milestone 4.4 implemented them -- explicit atoms and Boolean connectives, checked against
-   * the independent USE oracle by evaluating the compiled query over its verdicts -- so they moved
-   * to {@code BooleanQueryAlgebraTest} as working queries rather than refusals. Milestone 4.5 has
-   * now done the same for {@code fragile(j)} and for nominal-mode atoms, which it moved into {@link
-   * #nominalQueriesNowRunAgainstTheRealLibraryCorpusConfiguration}. Only the scenario profiles
-   * remain deferred, and they still refuse BY NAME.
+   * <p>{@code uncertain Book::titleIsKey is false} and {@code not satisfy} were listed here until
+   * Milestone 4.4 implemented them; {@code fragile(j)} and the nominal-mode atoms until 4.5; and
+   * {@code cover}/{@code uniform satisfy} until 4.6, which is what this test now asserts instead.
+   * Each profile RUNS and REPORTS ITSELF: a COVER answer says COVER, so nothing is degraded to the
+   * weaker EXISTS behind the caller's back. Library is crisp, so its scenario set is the single
+   * empty scenario and all three profiles legitimately agree here.
    */
   @Test
-  public void unsupportedQueryShapesStillFailClosed() throws Exception {
+  public void scenarioProfilesRunAndReportTheProfileTheyWereAsked() throws Exception {
     MModel model = compileLibrary();
-    for (String query : new String[] {"cover satisfy", "uniform satisfy"}) {
-      AnalysisConfiguration config = withQuery(model, readConfig(model, null), query);
-      IllegalArgumentException exception =
-          assertThrows(
-              query, IllegalArgumentException.class, () -> SmtModelFinder.find(model, config));
-      assertTrue(
-          "'" + query + "' failed with: " + exception.getMessage(),
-          exception.getMessage().contains("Milestone"));
+    for (ScenarioProfile profile :
+        new ScenarioProfile[] {ScenarioProfile.COVER, ScenarioProfile.UNIFORM}) {
+      AnalysisConfiguration config =
+          withQuery(model, readConfig(model, null), profile.name().toLowerCase() + " satisfy");
+      ModelFinderResult result = SmtModelFinder.find(model, config);
+      assertEquals(profile, result.profile());
+      assertEquals(ProfileOutcome.SATISFIED, result.outcome());
+      assertEquals(1, result.scenarios().size());
     }
   }
 

@@ -143,6 +143,13 @@ public class ScenarioProfileTest {
       uncertainties.add(uncertaintyOf(report));
       representatives.add(representativeOf(report.system(), model));
       systems.add(report.system());
+      // The independent check must have run with THIS scenario's measurement quality substituted
+      // into the reconstructed U-value, not with some other scenario's.
+      assertEquals(
+          "the reconstructed U-value carries this scenario's uncertainty",
+          uncertaintyOf(report),
+          ((URealValue) speedOf(report.system(), model)).uncertainty(),
+          0.0);
       assertEquals(
           "every active invariant independently re-evaluated in this scenario",
           2,

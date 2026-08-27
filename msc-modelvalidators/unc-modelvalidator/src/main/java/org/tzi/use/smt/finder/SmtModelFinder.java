@@ -1,5 +1,6 @@
 package org.tzi.use.smt.finder;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -13,6 +14,7 @@ import org.tzi.use.smt.config.AssociationScope;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.QueryExpr;
 import org.tzi.use.smt.config.QueryRequirements;
+import org.tzi.use.smt.config.Scenario;
 import org.tzi.use.smt.config.ScenarioProfile;
 import org.tzi.use.smt.config.TranslationMode;
 import org.tzi.use.smt.encode.AssociationLinkEncoder;
@@ -26,7 +28,9 @@ import org.tzi.use.smt.encode.Multiplicity;
 import org.tzi.use.smt.encode.ObjectSlotEncoder;
 import org.tzi.use.smt.encode.ObjectSlots;
 import org.tzi.use.smt.encode.QueryCompiler;
+import org.tzi.use.smt.encode.ScenarioSpace;
 import org.tzi.use.smt.encode.TranslationContext;
+import org.tzi.use.smt.reconstruct.SmtValueDecoder;
 import org.tzi.use.smt.reconstruct.SystemStateReconstructor;
 import org.tzi.use.smt.solver.SmtModelParser;
 import org.tzi.use.smt.solver.SmtScript;
@@ -61,13 +65,23 @@ import org.tzi.use.uml.sys.MSystem;
 public final class SmtModelFinder {
   private SmtModelFinder() {}
 
-  /** Solving is session-independent; only reconstruction (on SAT) needs a target session. */
+  /**
+   * One solve's outcome. A single script may carry SEVERAL scenario copies (that is what UNIFORM
+   * is), so the reconstruction inputs are a LIST: one context and one compiled core per scenario,
+   * over shared snapshot symbols.
+   */
   private record Solved(
-      boolean satisfiable,
+      SolverOutcome outcome,
       FragmentCoverageLedger ledger,
-      QueryCompiler.Obligation obligation,
-      TranslationContext context,
+      List<Copy> copies,
       Map<String, SmtValue> modelValues) {}
+
+  /**
+   * One scenario's share of a solve. {@code scenario} is null exactly for the free-uncertainty
+   * EXISTS encoding, where the solver picks the measurement quality itself and the scenario is
+   * decoded back out of the assignment afterwards.
+   */
+  private record Copy(Scenario scenario, QueryExpr core, TranslationContext context) {}
 
   /**
    * Headless convenience: reconstructs (on SAT) into a throwaway {@link Session}/system. Every
@@ -75,13 +89,7 @@ public final class SmtModelFinder {
    */
   public static ModelFinderResult find(MModel model, AnalysisConfiguration config)
       throws UseApiException {
-    Solved solved = solve(model, config, null);
-    if (!solved.satisfiable()) {
-      return new ModelFinderResult(false, solved.ledger(), List.of(), null);
-    }
-    MSystem system =
-        SystemStateReconstructor.reconstruct(model, solved.context(), solved.modelValues());
-    return finish(model, solved, system);
+    return run(null, model, config, null);
   }
 
   /**
@@ -97,11 +105,14 @@ public final class SmtModelFinder {
       MModel model, AnalysisConfiguration config) throws UseApiException {
     QueryExpr requested = config.query();
     if (requested instanceof QueryExpr.Profiled profiled) {
+      // The parser already refuses `cover invariant-independence`; this catches a caller that
+      // built the AST directly. A sweep is many solves, so a profile over it would have to mean
+      // a profile over each entry -- a shape version 1 does not define.
       if (profiled.profile() != ScenarioProfile.EXISTS) {
         throw new IllegalArgumentException(
-            "scenario profile "
-                + profiled.profile()
-                + " has no executable oracle yet; it starts at Milestone 4.6");
+            "invariant-independence is a sweep of one solve per active invariant and cannot"
+                + " carry the scenario profile "
+                + profiled.profile());
       }
       requested = profiled.expression();
     }
@@ -143,30 +154,131 @@ public final class SmtModelFinder {
   public static ModelFinderResult find(
       MModel model, AnalysisConfiguration config, SolverProcess solverProcess)
       throws UseApiException {
-    Solved solved = solve(model, config, solverProcess);
-    if (!solved.satisfiable()) {
-      return new ModelFinderResult(false, solved.ledger(), List.of(), null);
-    }
-    MSystem system =
-        SystemStateReconstructor.reconstruct(model, solved.context(), solved.modelValues());
-    return finish(model, solved, system);
+    return run(null, model, config, solverProcess);
   }
 
   /**
    * Reconstructs (on SAT) into the given {@link Session}'s own system instead of a throwaway one --
    * the form a live GUI plugin action must use, so the result becomes visible as "the current
    * session" rather than a system nothing is looking at.
+   *
+   * <p>A session holds ONE state, so when a profile delivers several snapshots only the FIRST
+   * witnessed scenario is reconstructed into the session; the remaining scenarios are reconstructed
+   * into throwaway systems and are still independently checked and reported. Nothing is skipped --
+   * only what the GUI ends up displaying is chosen.
    */
   public static ModelFinderResult find(Session session, MModel model, AnalysisConfiguration config)
       throws UseApiException {
-    Solved solved = solve(model, config, null);
-    if (!solved.satisfiable()) {
-      return new ModelFinderResult(false, solved.ledger(), List.of(), null);
+    return run(session, model, config, null);
+  }
+
+  /**
+   * Applies the requested SCENARIO PROFILE, which is orthogonal to the witness predicate {@code
+   * W_Q} the query names -- the reported mode is a pair such as {@code SATISFY/EXISTS} or {@code
+   * FRAGILE/COVER}. Straight from the proposal's equations:
+   *
+   * <pre>
+   *   EXISTS(Q)  = exists s exists S      : W_Q(S,s)
+   *   COVER(Q)   = forall s exists S_s    : W_Q(S_s,s)     -- the snapshot may differ per scenario
+   *   UNIFORM(Q) = exists S forall s      : W_Q(S,s)       -- ONE shared snapshot
+   * </pre>
+   *
+   * Each is a genuinely different solve, and never each other's fallback:
+   *
+   * <ul>
+   *   <li>EXISTS leaves the measurement quality FREE inside its configured domain, so the solver
+   *       chooses {@code s} along with {@code S}. The chosen scenario is decoded back out of the
+   *       assignment for the report.
+   *   <li>COVER runs ONE INDEPENDENT SOLVE PER SCENARIO with that scenario's uncertainty pinned, so
+   *       each scenario may answer with its own snapshot. Every scenario is solved even after one
+   *       is refuted, because the definition of done requires the evidence to identify every
+   *       scenario.
+   *   <li>UNIFORM runs ONE SOLVE carrying every scenario at once: the object, link and
+   *       REPRESENTATIVE symbols are declared once and shared, while each scenario gets its own
+   *       pinned uncertainty symbols and its own reified {@code def}/{@code val} pair. Solving the
+   *       first scenario and reporting UNIFORM would be EXISTS wearing a different label.
+   * </ul>
+   */
+  private static ModelFinderResult run(
+      Session session, MModel model, AnalysisConfiguration config, SolverProcess solverProcess)
+      throws UseApiException {
+    ScenarioProfile profile = profileOf(config.query());
+    if (profile == ScenarioProfile.EXISTS) {
+      Solved solved = solve(model, config, solverProcess, null);
+      if (solved.outcome() != SolverOutcome.SAT) {
+        return new ModelFinderResult(
+            solved.ledger(), profile, aggregate(List.of(scenarioOutcomeOf(solved))), List.of());
+      }
+      Copy copy = solved.copies().get(0);
+      Scenario chosen = decodeScenario(copy.context(), solved.modelValues());
+      ScenarioReport report = witness(session, model, solved, copy, chosen, true);
+      return new ModelFinderResult(
+          solved.ledger(), profile, ProfileOutcome.SATISFIED, List.of(report));
     }
+
+    List<Scenario> space = scenarioSpace(model, config, profile);
+    if (profile == ScenarioProfile.UNIFORM) {
+      Solved solved = solve(model, config, solverProcess, space);
+      if (solved.outcome() != SolverOutcome.SAT) {
+        // The refutation is JOINT over the whole scenario set -- "no ONE snapshot works for all of
+        // them" -- so it is not attributable to any single scenario, and every scenario is
+        // reported with the same status rather than one being blamed.
+        ScenarioOutcome each = scenarioOutcomeOf(solved);
+        List<ScenarioReport> reports =
+            space.stream().map(s -> ScenarioReport.unwitnessed(s, each)).toList();
+        return new ModelFinderResult(solved.ledger(), profile, aggregate(List.of(each)), reports);
+      }
+      List<ScenarioReport> reports = new ArrayList<>();
+      boolean first = true;
+      for (Copy copy : solved.copies()) {
+        // One reconstruction and one INDEPENDENT USE check per scenario, over the same shared
+        // snapshot symbols. Checking a UNIFORM witness once is the silent degradation this
+        // milestone exists to prevent.
+        reports.add(witness(session, model, solved, copy, copy.scenario(), first));
+        first = false;
+      }
+      return new ModelFinderResult(solved.ledger(), profile, ProfileOutcome.SATISFIED, reports);
+    }
+
+    List<ScenarioReport> reports = new ArrayList<>();
+    List<ScenarioOutcome> outcomes = new ArrayList<>();
+    FragmentCoverageLedger ledger = null;
+    boolean firstWitness = true;
+    for (Scenario scenario : space) {
+      Solved solved = solve(model, config, solverProcess, List.of(scenario));
+      ledger = solved.ledger();
+      if (solved.outcome() != SolverOutcome.SAT) {
+        ScenarioOutcome outcome = scenarioOutcomeOf(solved);
+        outcomes.add(outcome);
+        reports.add(ScenarioReport.unwitnessed(scenario, outcome));
+        continue;
+      }
+      reports.add(witness(session, model, solved, solved.copies().get(0), scenario, firstWitness));
+      firstWitness = false;
+      outcomes.add(ScenarioOutcome.WITNESSED);
+    }
+    return new ModelFinderResult(ledger, profile, aggregate(outcomes), reports);
+  }
+
+  /**
+   * Reconstructs one scenario's snapshot and holds it to the query core with the independent USE
+   * oracle. Every profile funnels through here, so no profile can deliver an unchecked snapshot.
+   */
+  private static ScenarioReport witness(
+      Session session,
+      MModel model,
+      Solved solved,
+      Copy copy,
+      Scenario scenario,
+      boolean intoSession)
+      throws UseApiException {
     MSystem system =
-        SystemStateReconstructor.reconstruct(
-            session, model, solved.context(), solved.modelValues());
-    return finish(model, solved, system);
+        session != null && intoSession
+            ? SystemStateReconstructor.reconstruct(
+                session, model, copy.context(), solved.modelValues())
+            : SystemStateReconstructor.reconstruct(model, copy.context(), solved.modelValues());
+    return new ScenarioReport(
+        scenario, ScenarioOutcome.WITNESSED, system, checkedVerdicts(model, copy.core(), system));
   }
 
   /**
@@ -184,19 +296,23 @@ public final class SmtModelFinder {
    * own {@code def}/{@code val} assignment, and an atom whose (invariant, mode) has no verdict is a
    * hard refusal there. That is what replaces the pre-4.5 gate: the check is no longer "is a
    * nominal oracle available at all" but "did the nominal oracle actually report on this atom".
+   *
+   * <p>Milestone 4.6 changes only how OFTEN this runs: once per delivered snapshot for COVER, and
+   * once per SCENARIO for UNIFORM -- the same objects, links and representative values each time,
+   * with that scenario's uncertainty substituted into the reconstructed U-values.
    */
-  private static ModelFinderResult finish(MModel model, Solved solved, MSystem system) {
-    List<InvariantVerdict> verdicts = InvariantReEvaluator.reevaluate(model, system);
+  private static Map<TranslationMode, List<InvariantVerdict>> checkedVerdicts(
+      MModel model, QueryExpr core, MSystem system) {
     Map<TranslationMode, List<InvariantVerdict>> observed = new LinkedHashMap<>();
-    observed.put(TranslationMode.UNCERTAIN, verdicts);
-    Set<String> nominalTargets = nominalTargetsOf(solved.obligation().core());
+    observed.put(TranslationMode.UNCERTAIN, InvariantReEvaluator.reevaluate(model, system));
+    Set<String> nominalTargets = nominalTargetsOf(core);
     if (!nominalTargets.isEmpty()) {
       observed.put(
           TranslationMode.NOMINAL,
           InvariantReEvaluator.reevaluate(model, system, TranslationMode.NOMINAL, nominalTargets));
     }
-    QueryWitnessChecker.requireQuerySatisfied(solved.obligation().core(), observed);
-    return new ModelFinderResult(true, solved.ledger(), verdicts, system);
+    QueryWitnessChecker.requireQuerySatisfied(core, observed);
+    return observed;
   }
 
   /**
@@ -216,9 +332,173 @@ public final class SmtModelFinder {
     return targets;
   }
 
+  private static ScenarioProfile profileOf(QueryExpr query) {
+    return query instanceof QueryExpr.Profiled profiled
+        ? profiled.profile()
+        : ScenarioProfile.EXISTS;
+  }
+
+  private static ScenarioOutcome scenarioOutcomeOf(Solved solved) {
+    return solved.outcome() == SolverOutcome.UNSAT
+        ? ScenarioOutcome.REFUTED
+        : ScenarioOutcome.UNRESOLVED;
+  }
+
+  /**
+   * The proposal's own aggregation rule for a profile that quantifies over scenarios: "success
+   * means every scenario has a checked witness; one qualified UNSAT scenario refutes coverage,
+   * while any unresolved scenario makes the aggregate result UNKNOWN/PARTIAL." A refutation
+   * outranks an unresolved scenario because one UNSAT already settles the universal claim.
+   */
+  private static ProfileOutcome aggregate(List<ScenarioOutcome> outcomes) {
+    if (outcomes.contains(ScenarioOutcome.REFUTED)) {
+      return ProfileOutcome.REFUTED;
+    }
+    return outcomes.contains(ScenarioOutcome.UNRESOLVED)
+        ? ProfileOutcome.PARTIAL
+        : ProfileOutcome.SATISFIED;
+  }
+
+  /** {@code Sigma_K} for the configuration, refused rather than sampled when it is not finite. */
+  private static List<Scenario> scenarioSpace(
+      MModel model, AnalysisConfiguration config, ScenarioProfile profile) {
+    List<ScenarioSpace.UncertainAttribute> attributes = new ArrayList<>();
+    for (Map.Entry<String, Map<String, AttributeDomain>> entry :
+        componentDomains(config).entrySet()) {
+      AttributeDomain uncertainty = entry.getValue().get("uncertainty");
+      if (uncertainty == null) {
+        continue;
+      }
+      for (String className : owningClasses(model, config, uncertainty)) {
+        attributes.add(
+            new ScenarioSpace.UncertainAttribute(
+                className,
+                uncertainty.attributeName(),
+                capacityOf(config, className),
+                uncertainty));
+      }
+    }
+    return ScenarioSpace.enumerate(attributes, profile);
+  }
+
+  /** The component domains of every attribute the configuration gives components for. */
+  private static Map<String, Map<String, AttributeDomain>> componentDomains(
+      AnalysisConfiguration config) {
+    Map<String, Map<String, AttributeDomain>> byAttribute = new LinkedHashMap<>();
+    for (AttributeDomain domain : config.attributeDomains()) {
+      if (domain.component() != null && !domain.className().isEmpty()) {
+        byAttribute
+            .computeIfAbsent(
+                domain.className() + "." + domain.attributeName(), ignored -> new LinkedHashMap<>())
+            .put(domain.component(), domain);
+      }
+    }
+    return byAttribute;
+  }
+
+  /**
+   * Every concrete class whose slots actually carry this attribute -- the declaring class plus each
+   * descendant with a configured scope of its own. This mirrors {@link #registerURealAttribute}'s
+   * own inheritance walk exactly, because a scenario must bind precisely the slots that were
+   * encoded: one axis too few leaves an uncertainty symbol free inside a universally quantified
+   * profile, and one too many pins a symbol that does not exist.
+   */
+  private static List<String> owningClasses(
+      MModel model, AnalysisConfiguration config, AttributeDomain domain) {
+    Set<String> explicitlyDeclared = new HashSet<>();
+    for (AttributeDomain other : config.attributeDomains()) {
+      if (!other.className().isEmpty()) {
+        explicitlyDeclared.add(other.className() + "." + other.attributeName());
+      }
+    }
+    Set<String> scoped = new HashSet<>();
+    config.classScopes().forEach(scope -> scoped.add(scope.className()));
+
+    List<String> owners = new ArrayList<>();
+    if (!scoped.contains(domain.className())) {
+      throw new IllegalArgumentException(
+          "attribute domain '"
+              + domain.className()
+              + "."
+              + domain.attributeName()
+              + "' names a class with no configured scope");
+    }
+    owners.add(domain.className());
+    for (MClassifier descendant : model.getClass(domain.className()).allChildren()) {
+      String key = descendant.name() + "." + domain.attributeName();
+      if (!explicitlyDeclared.contains(key) && scoped.contains(descendant.name())) {
+        owners.add(descendant.name());
+      }
+    }
+    return owners;
+  }
+
+  private static int capacityOf(AnalysisConfiguration config, String className) {
+    return config.classScopes().stream()
+        .filter(scope -> scope.className().equals(className))
+        .findFirst()
+        .orElseThrow(
+            () -> new IllegalArgumentException("no configured scope for class '" + className + "'"))
+        .max();
+  }
+
+  /**
+   * The scenario the solver itself chose, read back out of a free-uncertainty EXISTS assignment.
+   *
+   * <p>Only LIVE slots are reported: a dead slot's component is left unconstrained by the
+   * existence-guarded domain encoding, so reporting it would be reporting noise. COVER and UNIFORM
+   * instead pin every candidate slot, because liveness is not known before solving.
+   */
+  private static Scenario decodeScenario(
+      TranslationContext context, Map<String, SmtValue> modelValues) {
+    List<Scenario.Binding> bindings = new ArrayList<>();
+    for (AttributeValues values : context.attributes().values()) {
+      if (values.type() != AttributeType.UREAL) {
+        continue;
+      }
+      ObjectSlots slots = context.slotsFor(values.className());
+      for (int i = 0; i < values.uncertaintyNames().size(); i++) {
+        SmtValue alive = modelValues.get(slots.existsNames().get(i));
+        if (!(alive instanceof SmtValue.Bool bool) || !bool.value()) {
+          continue;
+        }
+        SmtValue uncertainty = modelValues.get(values.uncertaintyNames().get(i));
+        if (uncertainty == null) {
+          continue;
+        }
+        bindings.add(
+            new Scenario.Binding(
+                values.className(),
+                values.attributeName(),
+                i,
+                "uncertainty",
+                SmtValueDecoder.decodeReal(uncertainty)));
+      }
+    }
+    return new Scenario(0, bindings);
+  }
+
+  /**
+   * Encodes and solves ONE script.
+   *
+   * @param scenarios null for the free-uncertainty encoding EXISTS uses (byte-identical to every
+   *     pre-4.6 run), or the scenario copies to carry in this one script. A singleton list is one
+   *     COVER obligation; the full list is UNIFORM, whose copies deliberately SHARE the object,
+   *     link and representative symbols and differ only in their pinned uncertainty symbols and the
+   *     {@code def}/{@code val} pair computed from them.
+   */
   private static Solved solve(
-      MModel model, AnalysisConfiguration config, SolverProcess externalSolverProcess) {
+      MModel model,
+      AnalysisConfiguration config,
+      SolverProcess externalSolverProcess,
+      List<Scenario> scenarios) {
     SmtScript script = new SmtScript("QF_LIRA");
+    List<Map<String, AttributeValues>> scenarioAttributes = new ArrayList<>();
+    if (scenarios != null) {
+      for (int i = 0; i < scenarios.size(); i++) {
+        scenarioAttributes.add(new LinkedHashMap<>());
+      }
+    }
 
     Map<String, ObjectSlots> slotsByClass = ObjectSlotEncoder.encode(script, config.classScopes());
 
@@ -332,7 +612,9 @@ public final class SmtModelFinder {
           valueDomain,
           uncertaintyDomain,
           attributeValuesByKey,
-          attributeDomainByKey);
+          attributeDomainByKey,
+          scenarios,
+          scenarioAttributes);
 
       for (MClassifier descendant : cls.allChildren()) {
         String descendantKey = descendant.name() + "." + attributeName;
@@ -350,7 +632,9 @@ public final class SmtModelFinder {
             valueDomain,
             uncertaintyDomain,
             attributeValuesByKey,
-            attributeDomainByKey);
+            attributeDomainByKey,
+            scenarios,
+            scenarioAttributes);
       }
     }
 
@@ -384,10 +668,6 @@ public final class SmtModelFinder {
       linksByAssociation.put(scope.associationName(), links);
     }
 
-    TranslationContext context =
-        new TranslationContext(
-            Map.of(), attributeValuesByKey, attributeDomainByKey, slotsByClass, linksByAssociation);
-
     Map<String, Set<TranslationMode>> requirements =
         QueryRequirements.requiredClassifications(config.query(), config.activeInvariants());
     List<MClassInvariant> requestedInvariants = new ArrayList<>();
@@ -406,12 +686,37 @@ public final class SmtModelFinder {
       throw new IllegalArgumentException("query names invariant(s) absent from model: " + missing);
     }
 
-    FragmentChecker.ReifiedResult checked =
-        FragmentChecker.checkAndReify(requestedInvariants, requirements, context, script);
-    checked.ledger().requireAllSupported();
-    QueryCompiler.Obligation obligation =
-        QueryCompiler.compile(config.query(), config.activeInvariants(), checked.classifications());
-    script.assertThat(obligation.constraint());
+    // ONE desugaring, reused by every scenario copy. That is what fixes a targeted
+    // COUNTEREXAMPLE/FRAGILE invariant OUTSIDE the scenario quantifiers: each copy lowers the
+    // identical atom, so two scenarios cannot end up diagnosing different invariants.
+    QueryExpr core = QueryCompiler.desugared(config.query(), config.activeInvariants());
+    QueryCompiler.requireTargetDeterminate(core, profileOf(config.query()));
+
+    List<Copy> copies = new ArrayList<>();
+    FragmentCoverageLedger ledger = null;
+    int copyCount = scenarios == null ? 1 : scenarios.size();
+    for (int i = 0; i < copyCount; i++) {
+      Map<String, AttributeValues> attributes = new LinkedHashMap<>(attributeValuesByKey);
+      if (scenarios != null) {
+        attributes.putAll(scenarioAttributes.get(i));
+      }
+      TranslationContext context =
+          new TranslationContext(
+              Map.of(), attributes, attributeDomainByKey, slotsByClass, linksByAssociation);
+      FragmentChecker.ReifiedResult checked =
+          FragmentChecker.checkAndReify(
+              requestedInvariants,
+              requirements,
+              context,
+              script,
+              scenarios == null ? "" : scenarioSuffix(scenarios.get(i)));
+      checked.ledger().requireAllSupported();
+      if (ledger == null) {
+        ledger = checked.ledger();
+      }
+      script.assertThat(QueryCompiler.lowerCore(core, checked.classifications()).constraint());
+      copies.add(new Copy(scenarios == null ? null : scenarios.get(i), core, context));
+    }
 
     SolverProcess solverProcess =
         externalSolverProcess != null
@@ -419,11 +724,9 @@ public final class SmtModelFinder {
             : new SolverProcess(SolverBinary.resolve(), config.timeout());
     SolverResult result = solverProcess.run(script.toSmtLib());
     if (result.outcome() != SolverOutcome.SAT) {
-      return new Solved(false, checked.ledger(), obligation, null, null);
+      return new Solved(result.outcome(), ledger, copies, Map.of());
     }
-
-    Map<String, SmtValue> modelValues = SmtModelParser.parse(result.modelText());
-    return new Solved(true, checked.ledger(), obligation, context, modelValues);
+    return new Solved(SolverOutcome.SAT, ledger, copies, SmtModelParser.parse(result.modelText()));
   }
 
   private static AttributeType attributeTypeOf(Type type) {
@@ -445,6 +748,15 @@ public final class SmtModelFinder {
     throw new IllegalArgumentException("unsupported attribute type for encoding: " + type);
   }
 
+  /**
+   * Registers one UReal attribute's symbols.
+   *
+   * <p>Without scenario copies this is the pre-4.6 encoding, unchanged. With them the split is the
+   * whole point of the milestone: the REPRESENTATIVE symbols are declared ONCE and shared by every
+   * copy (they belong to the snapshot {@code S}), while each copy gets its own pinned uncertainty
+   * symbols (they belong to the scenario {@code s}). Letting each copy allocate its own
+   * representatives would quietly turn UNIFORM into COVER.
+   */
   private static void registerURealAttribute(
       SmtScript script,
       ObjectSlots owner,
@@ -452,14 +764,78 @@ public final class SmtModelFinder {
       AttributeDomain valueDomain,
       AttributeDomain uncertaintyDomain,
       Map<String, AttributeValues> attributeValuesByKey,
-      Map<String, AttributeDomain> attributeDomainByKey) {
-    AttributeValues values =
-        AttributeEncoder.encodeUReal(script, owner, attributeName, valueDomain, uncertaintyDomain);
+      Map<String, AttributeDomain> attributeDomainByKey,
+      List<Scenario> scenarios,
+      List<Map<String, AttributeValues>> scenarioAttributes) {
     String key = owner.className() + "." + attributeName;
-    attributeValuesByKey.put(key, values);
     attributeDomainByKey.put(key, valueDomain);
     attributeDomainByKey.put(key + ".value", valueDomain);
     attributeDomainByKey.put(key + ".uncertainty", uncertaintyDomain);
+    if (scenarios == null) {
+      attributeValuesByKey.put(
+          key,
+          AttributeEncoder.encodeUReal(
+              script, owner, attributeName, valueDomain, uncertaintyDomain));
+      return;
+    }
+    List<String> representatives =
+        AttributeEncoder.encodeURealRepresentatives(script, owner, attributeName, valueDomain);
+    for (int i = 0; i < scenarios.size(); i++) {
+      Scenario scenario = scenarios.get(i);
+      List<String> uncertainties =
+          AttributeEncoder.encodeURealUncertainties(
+              script,
+              owner,
+              attributeName,
+              uncertaintyDomain,
+              scenarioSuffix(scenario),
+              pinnedUncertainties(scenario, owner, attributeName));
+      scenarioAttributes
+          .get(i)
+          .put(
+              key,
+              new AttributeValues(
+                  owner.className(),
+                  attributeName,
+                  AttributeType.UREAL,
+                  representatives,
+                  uncertainties));
+    }
+  }
+
+  private static String scenarioSuffix(Scenario scenario) {
+    return "_s" + scenario.index();
+  }
+
+  /** This scenario's configured measurement quality for every candidate slot, in slot order. */
+  private static List<BigDecimal> pinnedUncertainties(
+      Scenario scenario, ObjectSlots owner, String attributeName) {
+    List<BigDecimal> pinned = new ArrayList<>();
+    for (int slot = 0; slot < owner.capacity(); slot++) {
+      BigDecimal value = null;
+      for (Scenario.Binding binding : scenario.bindings()) {
+        if (binding.className().equals(owner.className())
+            && binding.attributeName().equals(attributeName)
+            && binding.slotIndex() == slot) {
+          value = binding.value();
+          break;
+        }
+      }
+      if (value == null) {
+        throw new IllegalArgumentException(
+            "scenario "
+                + scenario.label()
+                + " fixes no measurement quality for slot "
+                + slot
+                + " of "
+                + owner.className()
+                + "."
+                + attributeName
+                + "; a scenario must bind every potentially live U-type slot");
+      }
+      pinned.add(value);
+    }
+    return pinned;
   }
 
   private static Multiplicity toMultiplicity(MMultiplicity multiplicity) {

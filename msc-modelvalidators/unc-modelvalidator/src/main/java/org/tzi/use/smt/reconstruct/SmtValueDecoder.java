@@ -44,6 +44,15 @@ public final class SmtValueDecoder {
     return new URealValue(value, uncertainty);
   }
 
+  /**
+   * The exact decimal a solver-assigned Real symbol carries, at the same ten-place precision {@link
+   * #decodeUReal} rounds to -- used to read a chosen measurement scenario back out of an EXISTS
+   * assignment.
+   */
+  public static java.math.BigDecimal decodeReal(SmtValue raw) {
+    return rationalValue(raw).asBigDecimal(10).stripTrailingZeros();
+  }
+
   private static BigInteger intValue(SmtValue raw) {
     if (raw instanceof SmtValue.Int i) {
       return i.value();

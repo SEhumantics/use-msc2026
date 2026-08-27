@@ -170,16 +170,34 @@ public class QueryCompilerAlgebraTest {
     assertTrue(exception.getMessage().contains("others"));
   }
 
-  /** Everything Milestone 4.4 does not own keeps failing closed by the milestone that does. */
+  /**
+   * What still fails closed here, now that Milestone 4.6 has landed the scenario profiles.
+   *
+   * <p>{@code cover satisfy} used to be listed as a refusal; it is now executable, and {@code
+   * ScenarioProfileTest} owns its behaviour. Two shapes remain closed for reasons that are not "not
+   * implemented yet":
+   *
+   * <ul>
+   *   <li>invariant-independence is a SWEEP of one solve per active invariant, not a single
+   *       constraint, so it has no single compiled obligation to be.
+   *   <li>an UNTARGETED DISJUNCTION under COVER/UNIFORM is refused by the proposal itself --
+   *       "version 1 permits an untargeted disjunction only with EXISTS" -- because otherwise
+   *       different scenarios could silently diagnose different target invariants under one
+   *       aggregate result. The same disjunction under EXISTS compiles fine.
+   * </ul>
+   */
   @Test
   public void shapesOutsideThisMilestoneStillFailClosedByName() throws Exception {
     IllegalArgumentException independence =
         assertThrows(IllegalArgumentException.class, () -> compiled("invariant-independence"));
     assertTrue(independence.getMessage().contains("independenceSweep"));
 
-    IllegalArgumentException profile =
-        assertThrows(IllegalArgumentException.class, () -> compiled("cover satisfy"));
-    assertTrue(profile.getMessage().contains("4.6"));
+    String untargeted = "uncertain Sample::PIsOne is false or uncertain Sample::QIsOne is false";
+    IllegalArgumentException disjunction =
+        assertThrows(IllegalArgumentException.class, () -> compiled("cover (" + untargeted + ")"));
+    assertTrue(
+        disjunction.getMessage(), disjunction.getMessage().contains("untargeted disjunction"));
+    assertTrue(compiled("exists (" + untargeted + ")").startsWith("(or "));
   }
 
   /** An atom naming an invariant outside the active set A_K has no witness predicate to state. */
@@ -215,6 +233,11 @@ public class QueryCompilerAlgebraTest {
             QueryRequirements.requiredClassifications(parsed, ACTIVE),
             fixture.context,
             fixture.script);
+    QueryCompiler.requireTargetDeterminate(
+        QueryCompiler.desugared(parsed, ACTIVE),
+        parsed instanceof QueryExpr.Profiled profiled
+            ? profiled.profile()
+            : org.tzi.use.smt.config.ScenarioProfile.EXISTS);
     return QueryCompiler.compile(parsed, ACTIVE, checked.classifications()).constraint().toSmtLib();
   }
 
