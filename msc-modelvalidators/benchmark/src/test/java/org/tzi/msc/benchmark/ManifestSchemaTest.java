@@ -8,6 +8,9 @@ import static org.junit.Assert.assertTrue;
 import java.io.File;
 import java.io.FileReader;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.BeforeClass;
@@ -127,8 +130,9 @@ public class ManifestSchemaTest {
 	 * be possible. Every column is required, the incumbent's outcome must be a real Kodkod outcome
 	 * name, the SMT column must agree with the row's own expected oracle, and the divergence class
 	 * must come from the fixed vocabulary in which "false-unsat"/"false-sat" are the STRONG claims
-	 * and "silent-drop"/"cannot-configure"/"error" are the weaker ones. Two rows carry this block
-	 * today; the count is pinned so a third cannot appear without a deliberate update here.
+	 * and "silent-drop"/"cannot-configure"/"error" are the weaker ones. Four rows carry this block
+	 * today -- one per spec S9 Study B case; the count is pinned so a fifth cannot appear without a
+	 * deliberate update here.
 	 */
 	@Test
 	public void everySupersessionRowFillsAllFiveStudyBColumnsConsistently() {
@@ -158,7 +162,63 @@ public class ManifestSchemaTest {
 			assertFalse(ex.id + ": a supersession row must actually diverge from the incumbent",
 					ex.supersession.kodkodOutcome.equals(ex.supersession.smtOutcome));
 		}
-		assertEquals("Study B supersession rows in the corpus", 2, rows);
+		assertEquals("Study B supersession rows in the corpus", 4, rows);
+	}
+
+	/**
+	 * Spec S9 names FOUR Study B cases, and the corpus is where "covering all four" is either true or
+	 * not. Pinning the exact four ids stops the table quietly shrinking back to two, and pinning each
+	 * row's divergence class stops the two DIRECTIONS collapsing into one: the bitwidth and off-grid
+	 * rows are {@code false-unsat} (the incumbent wrongly REFUTES a model that has a witness), the two
+	 * UReal rows are {@code false-sat} (it wrongly ACCEPTS a model that has none). For a verification
+	 * tool those are not interchangeable -- a false accept reports the model is fine when it is not --
+	 * so a corpus that labelled all four identically would be recording a weaker finding than the
+	 * evidence supports.
+	 */
+	@Test
+	public void theFourStudyBRowsCoverBothDivergenceDirections() {
+		Map<String, String> byId = new LinkedHashMap<>();
+		for (ExampleEntry ex : manifest.examples) {
+			if (ex.supersession != null) {
+				byId.put(ex.id, ex.supersession.divergenceClass);
+			}
+		}
+
+		assertEquals("spec S9 lists four Study B cases; the corpus must carry one row for each",
+				List.of("IntegerBitwidth-DailyCap", "RealGrid-UnitInterval", "URealThreshold-Below",
+						"URealThreshold-NominalErasure"),
+				List.copyOf(byId.keySet()));
+		assertEquals("integer bitwidth: the incumbent wrongly refutes", "false-unsat",
+				byId.get("IntegerBitwidth-DailyCap"));
+		assertEquals("off-grid real: the incumbent wrongly refutes", "false-unsat",
+				byId.get("RealGrid-UnitInterval"));
+		assertEquals("dropped UReal invariant: the incumbent wrongly ACCEPTS", "false-sat",
+				byId.get("URealThreshold-Below"));
+		assertEquals("nominal erasure: the incumbent wrongly ACCEPTS", "false-sat",
+				byId.get("URealThreshold-NominalErasure"));
+	}
+
+	/**
+	 * The two false-accept rows are the corpus's most dangerous claim, so their ground truth must be a
+	 * refutation and their recorded incumbent outcome must be one of Kodkod's two SATISFIABLE names.
+	 * Without this, "false-sat" could be pinned onto a row whose oracle is SAT, which would make the
+	 * label decorative.
+	 */
+	@Test
+	public void everyFalseSatRowHasAnUnsatisfiableOracleAndASatisfiableIncumbentOutcome() {
+		int rows = 0;
+		for (ExampleEntry ex : manifest.examples) {
+			if (ex.supersession == null || !"false-sat".equals(ex.supersession.divergenceClass)) {
+				continue;
+			}
+			rows++;
+			assertEquals(ex.id + ": a false ACCEPT requires an UNSAT oracle", "unsat", ex.expected.classification);
+			assertEquals(ex.id + ": a false ACCEPT requires an UNSAT oracle", "UNSATISFIABLE",
+					ex.expected.outcome);
+			assertTrue(ex.id + ": the incumbent must have ACCEPTED, was " + ex.supersession.kodkodOutcome,
+					Set.of("SATISFIABLE", "TRIVIALLY_SATISFIABLE").contains(ex.supersession.kodkodOutcome));
+		}
+		assertEquals("false-sat rows in the corpus", 2, rows);
 	}
 
 	@Test

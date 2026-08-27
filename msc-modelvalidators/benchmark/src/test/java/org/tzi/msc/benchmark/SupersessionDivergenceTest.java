@@ -22,6 +22,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.tzi.kodkod.KodkodModelValidatorConfiguration;
 import org.tzi.kodkod.model.config.impl.PropertyConfigurationVisitor;
+import org.tzi.kodkod.model.iface.IClass;
 import org.tzi.kodkod.model.iface.IModel;
 import org.tzi.use.config.Options;
 import org.tzi.use.config.Options.WarningType;
@@ -36,9 +37,16 @@ import org.tzi.use.smt.config.RawConfiguration;
 import org.tzi.use.smt.finder.ModelFinderResult;
 import org.tzi.use.smt.finder.SmtModelFinder;
 import org.tzi.use.smt.verify.InvariantVerdict;
+import org.tzi.use.uml.mm.MAttribute;
+import org.tzi.use.uml.mm.MClass;
+import org.tzi.use.uml.mm.MClassInvariant;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
+import org.tzi.use.uml.ocl.expr.Evaluator;
+import org.tzi.use.uml.ocl.value.BooleanValue;
 import org.tzi.use.uml.ocl.value.RealValue;
+import org.tzi.use.uml.ocl.value.URealValue;
+import org.tzi.use.uml.ocl.value.Value;
 import org.tzi.use.uml.sys.MObject;
 import org.tzi.use.uml.sys.MSystem;
 import org.tzi.use.uml.sys.MSystemState;
@@ -78,6 +86,9 @@ public class SupersessionDivergenceTest {
 
 	private static final String INTEGER_CASE = "IntegerBitwidth-DailyCap";
 	private static final String REAL_CASE = "RealGrid-UnitInterval";
+	private static final String UREAL_BELOW_CASE = "URealThreshold-Below";
+	private static final String UREAL_ERASURE_CASE = "URealThreshold-NominalErasure";
+	private static final List<String> FALSE_ACCEPT_CASES = List.of(UREAL_BELOW_CASE, UREAL_ERASURE_CASE);
 
 	private static ExampleManifest manifest;
 
@@ -174,6 +185,130 @@ public class SupersessionDivergenceTest {
 				offGrid >= 2);
 	}
 
+	// ---------------------------------------------------------------- the false ACCEPTS
+
+	/**
+	 * The other divergence DIRECTION, and the dangerous one. The two cases above are false
+	 * REJECTIONS: the incumbent refutes a model that has a witness, which a user notices, because the
+	 * tool visibly declines to produce a snapshot. The two rows below are false ACCEPTANCES: the
+	 * incumbent reports a satisfying instance for a model that has none, which a user does NOT
+	 * notice, because a verification tool saying "fine" is exactly what a correct model looks like.
+	 * Everything here is checked the same three ways as the false rejections: the incumbent is run on
+	 * the SAME unmodified corpus files, its mechanism is inspected rather than inferred, and ground
+	 * truth is established by the USE evaluator alone -- neither model finder is consulted for it.
+	 */
+	@Test
+	public void bothFalseAcceptCasesAreRecordedInTheCorpusAsUnsatisfiable() {
+		for (String id : FALSE_ACCEPT_CASES) {
+			ExampleEntry ex = entry(id);
+			assertEquals(id + ": Study B rows carry the corpus-wide bitwidth", 8, ex.bitwidth);
+			assertNotNull(id + ": missing expected oracle", ex.expected);
+			assertEquals(id + ": ground truth is a refutation", "unsat", ex.expected.classification);
+			assertEquals(id + ": ground truth is a refutation", "UNSATISFIABLE", ex.expected.outcome);
+			assertNotNull(id + ": a Study B row must carry its supersession columns", ex.supersession);
+			assertEquals(id + ": this is the wrong-acceptance direction", "false-sat",
+					ex.supersession.divergenceClass);
+		}
+	}
+
+	@Test
+	public void kodkodAcceptsTheURealModelWhoseOnlyCandidateFailsTheInvariant() throws Exception {
+		assertObservedKodkodOutcome(entry(UREAL_BELOW_CASE), Solution.Outcome.TRIVIALLY_SATISFIABLE);
+	}
+
+	@Test
+	public void kodkodAcceptsTheNominalErasureModelItsOwnConfigurationCannotExpress() throws Exception {
+		assertObservedKodkodOutcome(entry(UREAL_ERASURE_CASE), Solution.Outcome.TRIVIALLY_SATISFIABLE);
+	}
+
+	/**
+	 * The MECHANISM behind both acceptances, inspected rather than inferred. {@code
+	 * TypeConverter.convert} has no {@code UReal} arm, so it falls through to {@code LOG.error} and
+	 * returns null; the attribute is therefore never created on the incumbent's model, the invariant
+	 * that reads it fails to transform with "Cannot find attribute speed", {@code
+	 * InvariantTransformator.transformAndAdd} CATCHES that and only logs it, and what reaches the
+	 * solver is a class with no attributes and no invariants -- constant true. This asserts the end
+	 * state directly: nothing survives to be searched.
+	 */
+	@Test
+	public void theURealAttributeAndItsInvariantAreBothGoneBeforeAnySearch() throws Exception {
+		IModel transformed = transformedKodkodModel(entry(UREAL_BELOW_CASE));
+
+		IClass unidentified = null;
+		for (IClass c : transformed.classes()) {
+			if ("UnidentifiedObject".equals(c.name())) {
+				unidentified = c;
+			}
+		}
+		assertNotNull("the class itself does survive; only what constrains it does not", unidentified);
+		assertTrue("the UReal attribute must be absent -- TypeConverter returned null for it, was "
+				+ unidentified.attributes(), unidentified.attributes().isEmpty());
+		assertTrue("the invariant reading it must have been dropped, was " + unidentified.invariants(),
+				unidentified.invariants().isEmpty());
+	}
+
+	/**
+	 * And it is dropped SILENTLY as far as anything a caller can see: the incumbent's configuration
+	 * check reports neither an error nor a single warning, so nothing in the corpus record
+	 * distinguishes this run from one where the invariant was honoured. (It does write a log4j ERROR
+	 * line; that never reaches the outcome, the object diagram, or the benchmark's own results file,
+	 * whose {@code error} column is null for these rows.)
+	 */
+	@Test
+	public void theIncumbentEmitsNoErrorAndNoWarningWhileDroppingTheInvariant() throws Exception {
+		for (String id : FALSE_ACCEPT_CASES) {
+			String warnings = configurationWarnings(entry(id));
+			assertTrue(id + ": the incumbent must ACCEPT this configuration", warnings != null);
+			assertTrue(id + ": dropping the invariant produced a warning, so it is not silent after all: "
+					+ warnings, warnings.isBlank());
+		}
+	}
+
+	/**
+	 * Ground truth, established by the USE evaluator alone. Both configurations pin the object count
+	 * to exactly one and the attribute to exactly ONE candidate value, so the entire search space is
+	 * a single snapshot; USE evaluates the invariant FALSE on it; therefore no satisfying instance
+	 * exists and UNSATISFIABLE is the correct answer. No model finder is involved in this argument.
+	 */
+	@Test
+	public void useEvaluatorRefutesTheSingleCandidateEachConfigurationAllows() throws Exception {
+		for (String id : FALSE_ACCEPT_CASES) {
+			ExampleEntry ex = entry(id);
+			Configuration config = section(ex);
+			assertEquals(id + ": the search space must be exactly one object", "1",
+					config.getString("UnidentifiedObject_min"));
+			assertEquals(id + ": the search space must be exactly one object", "1",
+					config.getString("UnidentifiedObject_max"));
+			List<Double> values = singletonSet(config.getString("UnidentifiedObject_speed_value"));
+			List<Double> uncertainties = singletonSet(config.getString("UnidentifiedObject_speed_uncertainty"));
+			assertEquals(id + ": exactly one candidate value, or the argument below does not close", 1,
+					values.size());
+			assertEquals(id + ": exactly one candidate uncertainty", 1, uncertainties.size());
+
+			MModel model = compile(ex);
+			MClass cls = model.getClass("UnidentifiedObject");
+			MAttribute speed = cls.attribute("speed", true);
+			MSystemState state = new MSystem(model).state();
+			state.createObject(cls, "o1").state(state)
+					.setAttributeValue(speed, new URealValue(values.get(0), uncertainties.get(0)));
+
+			MClassInvariant invariant = model.classInvariants().iterator().next();
+			Value verdict = new Evaluator().eval(invariant.expandedExpression(), state);
+			assertTrue(id + ": the invariant must evaluate to a definite Boolean, was " + verdict,
+					verdict instanceof BooleanValue);
+			assertFalse(id + ": USE must REFUTE the only candidate, or the corpus's UNSAT oracle is wrong "
+					+ "and this whole row must be withdrawn", ((BooleanValue) verdict).value());
+		}
+	}
+
+	@Test
+	public void smtRefutesBothFalseAcceptCases() throws Exception {
+		for (String id : FALSE_ACCEPT_CASES) {
+			ModelFinderResult result = smtResult(entry(id));
+			assertFalse(id + ": expected UNSAT", result.satisfiable());
+		}
+	}
+
 	@Test
 	public void kodkodOutcomeIsUnchangedWhenTheKeysItMisreadsAreRemoved() throws Exception {
 		assertEquals("stripping the per-attribute domain keys must not change the integer refutation",
@@ -204,6 +339,50 @@ public class SupersessionDivergenceTest {
 			assertTrue(verdict.invariantName() + " must be re-evaluated TRUE, was " + verdict.outcome(),
 					verdict.holds());
 		}
+	}
+
+	/** The incumbent's model AFTER transformation -- where a dropped invariant is visible as absence. */
+	private static IModel transformedKodkodModel(ExampleEntry ex) throws Exception {
+		invalidatePluginModelFactoryCache();
+		return PluginModelFactory.INSTANCE.getModel(compile(ex));
+	}
+
+	/** Everything the incumbent's configuration check wrote for this row; "" when it wrote nothing. */
+	private static String configurationWarnings(ExampleEntry ex) throws Exception {
+		IModel kodkodModel = transformedKodkodModel(ex);
+		StringWriter warnings = new StringWriter();
+		PrintWriter warningsOut = new PrintWriter(warnings);
+		PropertyConfigurationVisitor visitor = new PropertyConfigurationVisitor(section(ex), warningsOut);
+		kodkodModel.accept(visitor);
+		warningsOut.flush();
+		assertFalse(ex.id + ": the incumbent must ACCEPT this configuration. Warnings were: " + warnings,
+				visitor.containErrors());
+		invalidatePluginModelFactoryCache();
+		return warnings.toString();
+	}
+
+	private static Configuration section(ExampleEntry ex) throws Exception {
+		INIConfiguration ini = new INIConfiguration();
+		ini.setListDelimiterHandler(new LegacyListDelimiterHandler(','));
+		try (FileReader reader = new FileReader(propertiesFile(ex))) {
+			ini.read(reader);
+		}
+		String section = ex.section != null ? ex.section
+				: (ini.getSections().isEmpty() ? null : ini.getSections().iterator().next());
+		return ini.getSection(section);
+	}
+
+	/** Parses a {@code Set{...}} configuration literal into its numbers, in order. */
+	private static List<Double> singletonSet(String literal) {
+		assertNotNull("missing configuration value", literal);
+		String inner = literal.trim().replaceFirst("^Set\\s*\\{", "").replaceFirst("\\}$", "");
+		List<Double> values = new ArrayList<>();
+		for (String part : inner.split(",")) {
+			if (!part.isBlank()) {
+				values.add(Double.parseDouble(part.trim()));
+			}
+		}
+		return values;
 	}
 
 	private static ExampleEntry entry(String id) {

@@ -3,6 +3,7 @@ package org.tzi.msc.benchmark;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -129,21 +130,30 @@ public class ParityTableTest {
 	// ------------------------------------------------------- over the real corpus run
 
 	/**
-	 * The three figures the gate demands be stated plainly, pinned against a real run rather than
-	 * asserted in prose: Kodkod reaches a real verdict on 33 parity-population rows, this project on
-	 * 16, and the intersection where parity is claimable at all is 6.
+	 * The figures the gate demands be stated plainly, pinned against a real run rather than asserted
+	 * in prose.
+	 *
+	 * <p><b>What completing Study B did and did not move.</b> The parity CLAIM is untouched: Kodkod
+	 * still reaches a real verdict on 33 parity-population rows, the intersection is still 6, and it
+	 * is still 6 agreements and 0 undeclared disagreements. What moved is bookkeeping that follows
+	 * mechanically from the existing rule that a declared divergence leaves the parity population:
+	 * the two {@code URealThreshold} false-accept rows became Study B rows, so declared divergences
+	 * went 2 -> 4, the parity population 43 -> 41, and OUR real-verdict count 16 -> 14. That last one
+	 * moves against this project (two rows where we answered and the incumbent did not are no longer
+	 * counted in our favour), which is the direction an honest reclassification is allowed to move.
 	 */
 	@Test
 	public void theHonestDenominatorOverTheRealCorpusRun() {
 		assertEquals("corpus finding rows", 45, table.summary.corpusRows);
-		assertEquals("Study B rows are declared divergences, not parity evidence", 2,
+		assertEquals("Study B rows are declared divergences, not parity evidence", 4,
 				table.summary.declaredDivergenceRows);
-		assertEquals("parity population", 43, table.summary.parityPopulation);
+		assertEquals("parity population", 41, table.summary.parityPopulation);
 		assertEquals("Kodkod real verdicts", 33, table.summary.kodkodRealVerdicts);
-		assertEquals("SMT real verdicts", 16, table.summary.smtRealVerdicts);
+		assertEquals("SMT real verdicts", 14, table.summary.smtRealVerdicts);
 		assertEquals("intersection -- the only honest parity denominator", 6, table.summary.intersection);
 		assertEquals("agreements", 6, table.summary.agreements);
 		assertEquals("undeclared disagreements", 0, table.summary.disagreements);
+		assertEquals("unclassified disagreements", 0, table.summary.unclassifiedDisagreements);
 	}
 
 	/** The exact six rows the intersection consists of, named, so it cannot silently change shape. */
@@ -210,14 +220,89 @@ public class ParityTableTest {
 
 	@Test
 	public void studyBRowsComeFromTheCorpusWithAllSixColumnsFilled() {
-		assertEquals(2, table.studyB.size());
+		assertEquals("spec S9 lists four Study B cases", 4, table.studyB.size());
 		for (ParityTable.StudyBRow row : table.studyB) {
 			assertTrue(row.exampleId, notBlank(row.kodkodOutcome));
 			assertTrue(row.exampleId, notBlank(row.kodkodReason));
 			assertTrue(row.exampleId, notBlank(row.smtOutcome));
 			assertTrue(row.exampleId, notBlank(row.groundTruth));
 			assertTrue(row.exampleId, notBlank(row.divergenceClass));
+			assertNotNull(row.exampleId + ": every Study B row must state which way it diverges",
+					row.divergenceDirection);
 		}
+	}
+
+	// ------------------------------------------------- the two divergence DIRECTIONS
+
+	/**
+	 * A refutation of a model that has a witness and an acceptance of a model that has none are both
+	 * "the incumbent is wrong", and flattening them into one class would lose the finding that
+	 * matters most: for a verification tool the false ACCEPT is the dangerous one, because it reports
+	 * the model is fine when it is not. These are the unit-level pins; {@link
+	 * #theRealCorpusCarriesBothDirectionsOnTheNamedRows} is the same claim over the real run.
+	 */
+	@Test
+	public void aWrongRefutationAndAWrongAcceptanceAreDifferentDirections() {
+		assertEquals(ParityTable.DivergenceDirection.FALSE_REJECT, ParityTable.divergenceDirection("false-unsat"));
+		assertEquals(ParityTable.DivergenceDirection.FALSE_ACCEPT, ParityTable.divergenceDirection("false-sat"));
+		assertNotEquals("a wrong refutation and a wrong acceptance must never share a direction",
+				ParityTable.divergenceDirection("false-unsat"), ParityTable.divergenceDirection("false-sat"));
+	}
+
+	/**
+	 * The weaker vocabulary entries are "the incumbent could not state the question", which is not a
+	 * wrong answer in either direction. Mapping one of them onto FALSE_ACCEPT or FALSE_REJECT would
+	 * upgrade a weak claim into a strong one, the exact dishonesty {@code ExampleEntry.Supersession}
+	 * documents the divergence-class field as existing to prevent.
+	 */
+	@Test
+	public void theWeakerDivergenceClassesClaimNoDirectionAtAll() {
+		for (String weak : List.of("silent-drop", "cannot-configure", "error")) {
+			assertEquals(weak + " is not a wrong ANSWER, so it has no direction",
+					ParityTable.DivergenceDirection.NO_ANSWER, ParityTable.divergenceDirection(weak));
+		}
+	}
+
+	@Test
+	public void theRealCorpusCarriesBothDirectionsOnTheNamedRows() {
+		List<String> falseRejects = new ArrayList<>();
+		List<String> falseAccepts = new ArrayList<>();
+		for (ParityTable.StudyBRow row : table.studyB) {
+			if (row.divergenceDirection == ParityTable.DivergenceDirection.FALSE_REJECT) {
+				falseRejects.add(row.exampleId);
+			} else if (row.divergenceDirection == ParityTable.DivergenceDirection.FALSE_ACCEPT) {
+				falseAccepts.add(row.exampleId);
+			}
+		}
+
+		assertEquals("the incumbent wrongly REFUTES these", List.of("IntegerBitwidth-DailyCap",
+				"RealGrid-UnitInterval"), falseRejects);
+		assertEquals("the incumbent wrongly ACCEPTS these", List.of("URealThreshold-Below",
+				"URealThreshold-NominalErasure"), falseAccepts);
+		assertEquals("false rejects, counted in the summary", 2, table.summary.falseRejectRows);
+		assertEquals("false accepts, counted in the summary", 2, table.summary.falseAcceptRows);
+	}
+
+	/**
+	 * A false ACCEPT is an acceptance: the incumbent's outcome must be one of Kodkod's two
+	 * SATISFIABLE names while the row's own ground truth refutes. Checked here, over the real corpus,
+	 * rather than trusted from the label.
+	 */
+	@Test
+	public void everyFalseAcceptRowActuallyAcceptsWhatItsGroundTruthRefutes() {
+		int checked = 0;
+		for (ParityTable.StudyBRow row : table.studyB) {
+			if (row.divergenceDirection != ParityTable.DivergenceDirection.FALSE_ACCEPT) {
+				continue;
+			}
+			checked++;
+			assertTrue(row.exampleId + ": the incumbent must have accepted, was " + row.kodkodOutcome,
+					row.kodkodOutcome.endsWith("SATISFIABLE") && !row.kodkodOutcome.contains("UNSAT"));
+			assertEquals(row.exampleId + ": our answer must be the refutation", "UNSATISFIABLE", row.smtOutcome);
+			assertTrue(row.exampleId + ": ground truth must state the refutation",
+					row.groundTruth.startsWith("UNSATISFIABLE"));
+		}
+		assertEquals(2, checked);
 	}
 
 	/**
@@ -240,7 +325,7 @@ public class ParityTableTest {
 		String md = ParityTable.toMarkdown(table);
 
 		assertTrue("Kodkod denominator", md.contains("33"));
-		assertTrue("SMT denominator", md.contains("16"));
+		assertTrue("SMT denominator", md.contains("14"));
 		assertTrue("intersection denominator", md.contains("6 of 45"));
 		for (ParityTable.Row row : table.rows) {
 			assertTrue("missing row " + row.exampleId, md.contains("| " + row.exampleId + " |"));
@@ -249,6 +334,26 @@ public class ParityTableTest {
 		assertTrue("Study B heading", md.contains("Study B"));
 		assertFalse("a trivial Kodkod outcome must never be printed as agreement",
 				md.contains("TRIVIALLY_SATISFIABLE | yes"));
+	}
+
+	/**
+	 * The rendered Study B table is what a reader of the thesis actually sees, so the direction has
+	 * to survive rendering -- a distinction that exists only in the JSON is not evidence in a table.
+	 */
+	@Test
+	public void theRenderedStudyBTableShowsBothDirectionsAndNamesTheDangerousOne() {
+		String md = ParityTable.toMarkdown(table);
+		String studyB = md.substring(md.indexOf("### Study B"));
+
+		assertTrue("the Study B table needs a direction column", studyB.contains("Divergence direction"));
+		assertTrue("false rejects must be labelled as such", studyB.contains("FALSE_REJECT"));
+		assertTrue("false accepts must be labelled as such", studyB.contains("FALSE_ACCEPT"));
+		assertTrue("the table must say why a false accept is the worse error for a verification tool",
+				studyB.contains("false ACCEPT"));
+		for (String id : List.of("IntegerBitwidth-DailyCap", "RealGrid-UnitInterval", "URealThreshold-Below",
+				"URealThreshold-NominalErasure")) {
+			assertTrue("missing Study B row " + id, studyB.contains("| " + id + " |"));
+		}
 	}
 
 	private static boolean notBlank(String s) {
