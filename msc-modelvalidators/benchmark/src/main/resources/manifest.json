@@ -1279,7 +1279,8 @@
       "provenanceCitation": null,
       "features": [
         "cmd.validate",
-        "config.primitive-type-wide-value-domain"
+        "config.primitive-type-wide-value-domain",
+        "ocl.isUnique"
       ],
       "question": "Does the 6x6 Sudoku model become unsatisfiable if one square boundary is redrawn so that the cells at (row1,col3) and (row2,col4) -- two of the puzzle's own pre-existing clues, both fixed to value 6 -- fall inside the same 2x3 box, given the box's own uniqueValuesSquare invariant still demands all six of its cells be pairwise distinct?",
       "expected": {

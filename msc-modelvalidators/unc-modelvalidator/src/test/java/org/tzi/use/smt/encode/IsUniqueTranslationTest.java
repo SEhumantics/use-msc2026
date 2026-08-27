@@ -25,9 +25,9 @@ import org.tzi.use.uml.mm.ModelFactory;
  * {@code isUnique} over the two evidence-grounded population sources named by
  * THESIS_SMT_MODEL_FINDER_PLAN.md 7.1's Tier 3 list and confirmed as the sole remaining refusal
  * blocking Sudoku/Sudoku-UNSAT: {@code X.allInstances()->isUnique(body)} (Shape 1, real invariants
- * {@code Column::columnIndexUnique}/{@code Row::rowIndexUnique}) and {@code
- * self.<single-hop, collection-valued association end>->isUnique(body)} (Shape 2, real invariants
- * {@code Row::uniqueValuesRow}/{@code Column::uniqueValuesColumn}/{@code Square::uniqueValuesSquare}).
+ * {@code Column::columnIndexUnique}/{@code Row::rowIndexUnique}) and {@code self.<single-hop,
+ * collection-valued association end>->isUnique(body)} (Shape 2, real invariants {@code
+ * Row::uniqueValuesRow}/{@code Column::uniqueValuesColumn}/{@code Square::uniqueValuesSquare}).
  *
  * <p>Real USE isUnique semantics, established by executing the real evaluator (not inferred): the
  * result is ALWAYS a defined Boolean for these two source shapes -- never undefined, regardless of
@@ -50,7 +50,8 @@ public class IsUniqueTranslationTest {
     SmtScript script = new SmtScript("QF_LIA");
     ObjectSlots columns =
         ObjectSlotEncoder.encode(script, List.of(new ClassScope("Column", 2, 2))).get("Column");
-    AttributeDomain indexDomain = new AttributeDomain("Column", "index", null, List.of(), null, null);
+    AttributeDomain indexDomain =
+        new AttributeDomain("Column", "index", null, List.of(), null, null);
     AttributeValues indexValues =
         AttributeEncoder.encode(script, columns, "index", AttributeType.INTEGER, indexDomain);
 
@@ -80,7 +81,8 @@ public class IsUniqueTranslationTest {
     SmtScript script = new SmtScript("QF_LIA");
     ObjectSlots columns =
         ObjectSlotEncoder.encode(script, List.of(new ClassScope("Column", 2, 2))).get("Column");
-    AttributeDomain indexDomain = new AttributeDomain("Column", "index", null, List.of(), null, null);
+    AttributeDomain indexDomain =
+        new AttributeDomain("Column", "index", null, List.of(), null, null);
     AttributeValues indexValues =
         AttributeEncoder.encode(script, columns, "index", AttributeType.INTEGER, indexDomain);
 
@@ -106,14 +108,16 @@ public class IsUniqueTranslationTest {
 
   /** Proves the existence guard is load-bearing: a duplicate on a non-existent slot is harmless. */
   @Test
-  public void columnIndexUniqueIsVacuouslySatisfiedWhenTheSecondSlotDoesNotExist() throws Exception {
+  public void columnIndexUniqueIsVacuouslySatisfiedWhenTheSecondSlotDoesNotExist()
+      throws Exception {
     MModel model = compileSudoku();
     MClassInvariant inv = findInvariant(model, "columnIndexUnique");
 
     SmtScript script = new SmtScript("QF_LIA");
     ObjectSlots columns =
         ObjectSlotEncoder.encode(script, List.of(new ClassScope("Column", 1, 2))).get("Column");
-    AttributeDomain indexDomain = new AttributeDomain("Column", "index", null, List.of(), null, null);
+    AttributeDomain indexDomain =
+        new AttributeDomain("Column", "index", null, List.of(), null, null);
     AttributeValues indexValues =
         AttributeEncoder.encode(script, columns, "index", AttributeType.INTEGER, indexDomain);
 
@@ -152,7 +156,8 @@ public class IsUniqueTranslationTest {
     MClassInvariant inv = findInvariant(model, "uniqueValuesRow");
 
     SmtScript script = new SmtScript("QF_LIA");
-    ObjectSlots rows = ObjectSlotEncoder.encode(script, List.of(new ClassScope("Row", 1, 1))).get("Row");
+    ObjectSlots rows =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Row", 1, 1))).get("Row");
     ObjectSlots fields =
         ObjectSlotEncoder.encode(script, List.of(new ClassScope("Field", 3, 3))).get("Field");
     AssociationLinks rowFields =
@@ -164,7 +169,8 @@ public class IsUniqueTranslationTest {
             fields,
             new Multiplicity(0, -1),
             new AssociationScope("RowFields", 0, -1));
-    AttributeDomain valueDomain = new AttributeDomain("Field", "value", null, List.of(), null, null);
+    AttributeDomain valueDomain =
+        new AttributeDomain("Field", "value", null, List.of(), null, null);
     AttributeValues valueValues =
         AttributeEncoder.encode(script, fields, "value", AttributeType.INTEGER, valueDomain);
 
@@ -185,9 +191,12 @@ public class IsUniqueTranslationTest {
     script.assertThat(Smt.sym(rowFields.linkNames()[0][0]));
     script.assertThat(Smt.sym(rowFields.linkNames()[0][1]));
     script.assertThat(Smt.sym(rowFields.linkNames()[0][2]));
-    script.assertThat(Smt.eq(Smt.sym(valueValues.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(7))));
-    script.assertThat(Smt.eq(Smt.sym(valueValues.valueNames().get(1)), Smt.intLit(BigInteger.valueOf(8))));
-    script.assertThat(Smt.eq(Smt.sym(valueValues.valueNames().get(2)), Smt.intLit(BigInteger.valueOf(7))));
+    script.assertThat(
+        Smt.eq(Smt.sym(valueValues.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(7))));
+    script.assertThat(
+        Smt.eq(Smt.sym(valueValues.valueNames().get(1)), Smt.intLit(BigInteger.valueOf(8))));
+    script.assertThat(
+        Smt.eq(Smt.sym(valueValues.valueNames().get(2)), Smt.intLit(BigInteger.valueOf(7))));
     script.assertThat(translated);
 
     assertEquals(SolverOutcome.UNSAT, solve(script).outcome());
@@ -200,7 +209,8 @@ public class IsUniqueTranslationTest {
     MClassInvariant inv = findInvariant(model, "uniqueValuesRow");
 
     SmtScript script = new SmtScript("QF_LIA");
-    ObjectSlots rows = ObjectSlotEncoder.encode(script, List.of(new ClassScope("Row", 1, 1))).get("Row");
+    ObjectSlots rows =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Row", 1, 1))).get("Row");
     ObjectSlots fields =
         ObjectSlotEncoder.encode(script, List.of(new ClassScope("Field", 3, 3))).get("Field");
     AssociationLinks rowFields =
@@ -212,7 +222,8 @@ public class IsUniqueTranslationTest {
             fields,
             new Multiplicity(0, -1),
             new AssociationScope("RowFields", 0, -1));
-    AttributeDomain valueDomain = new AttributeDomain("Field", "value", null, List.of(), null, null);
+    AttributeDomain valueDomain =
+        new AttributeDomain("Field", "value", null, List.of(), null, null);
     AttributeValues valueValues =
         AttributeEncoder.encode(script, fields, "value", AttributeType.INTEGER, valueDomain);
 
@@ -232,9 +243,12 @@ public class IsUniqueTranslationTest {
     script.assertThat(Smt.sym(rowFields.linkNames()[0][0]));
     script.assertThat(Smt.sym(rowFields.linkNames()[0][1]));
     script.assertThat(Smt.sym(rowFields.linkNames()[0][2]));
-    script.assertThat(Smt.eq(Smt.sym(valueValues.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(7))));
-    script.assertThat(Smt.eq(Smt.sym(valueValues.valueNames().get(1)), Smt.intLit(BigInteger.valueOf(8))));
-    script.assertThat(Smt.eq(Smt.sym(valueValues.valueNames().get(2)), Smt.intLit(BigInteger.valueOf(9))));
+    script.assertThat(
+        Smt.eq(Smt.sym(valueValues.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(7))));
+    script.assertThat(
+        Smt.eq(Smt.sym(valueValues.valueNames().get(1)), Smt.intLit(BigInteger.valueOf(8))));
+    script.assertThat(
+        Smt.eq(Smt.sym(valueValues.valueNames().get(2)), Smt.intLit(BigInteger.valueOf(9))));
     script.assertThat(translated);
 
     assertEquals(SolverOutcome.SAT, solve(script).outcome());
@@ -255,7 +269,8 @@ public class IsUniqueTranslationTest {
     MClassInvariant inv = findInvariant(model, "uniqueValuesRow");
 
     SmtScript script = new SmtScript("QF_LIA");
-    ObjectSlots rows = ObjectSlotEncoder.encode(script, List.of(new ClassScope("Row", 1, 1))).get("Row");
+    ObjectSlots rows =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Row", 1, 1))).get("Row");
     ObjectSlots fields =
         ObjectSlotEncoder.encode(script, List.of(new ClassScope("Field", 3, 3))).get("Field");
     AssociationLinks rowFields =
@@ -267,7 +282,8 @@ public class IsUniqueTranslationTest {
             fields,
             new Multiplicity(0, -1),
             new AssociationScope("RowFields", 0, -1));
-    AttributeDomain valueDomain = new AttributeDomain("Field", "value", null, List.of(), null, null);
+    AttributeDomain valueDomain =
+        new AttributeDomain("Field", "value", null, List.of(), null, null);
     AttributeValues valueValues =
         AttributeEncoder.encode(script, fields, "value", AttributeType.INTEGER, valueDomain);
 
@@ -288,10 +304,13 @@ public class IsUniqueTranslationTest {
     // Slot 1 exists but is NOT linked into this row -- a decoy.
     script.assertThat(Smt.not(Smt.sym(rowFields.linkNames()[0][1])));
     script.assertThat(Smt.sym(rowFields.linkNames()[0][2]));
-    script.assertThat(Smt.eq(Smt.sym(valueValues.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(5))));
+    script.assertThat(
+        Smt.eq(Smt.sym(valueValues.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(5))));
     // Decoy's value duplicates slot 0's -- must NOT matter, since it is not a member.
-    script.assertThat(Smt.eq(Smt.sym(valueValues.valueNames().get(1)), Smt.intLit(BigInteger.valueOf(5))));
-    script.assertThat(Smt.eq(Smt.sym(valueValues.valueNames().get(2)), Smt.intLit(BigInteger.valueOf(9))));
+    script.assertThat(
+        Smt.eq(Smt.sym(valueValues.valueNames().get(1)), Smt.intLit(BigInteger.valueOf(5))));
+    script.assertThat(
+        Smt.eq(Smt.sym(valueValues.valueNames().get(2)), Smt.intLit(BigInteger.valueOf(9))));
     script.assertThat(translated);
 
     assertEquals(SolverOutcome.SAT, solve(script).outcome());
@@ -333,8 +352,7 @@ public class IsUniqueTranslationTest {
 
     assertEquals(FragmentBoundary.TIER_3, thrown.boundary());
     assertTrue(
-        thrown.getMessage(),
-        thrown.getMessage().contains("range other than X.allInstances()"));
+        thrown.getMessage(), thrown.getMessage().contains("range other than X.allInstances()"));
   }
 
   @Test

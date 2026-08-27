@@ -876,9 +876,113 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     throw unsupported(FragmentBoundary.TIER_2, "isTypeOf");
   }
 
+  /**
+   * {@code X.allInstances()->isUnique(body)} (Shape 1: {@code Column::columnIndexUnique}, {@code
+   * Row::rowIndexUnique}) and {@code self.<single-hop, collection-valued association
+   * end>->isUnique(body)} (Shape 2: {@code Row::uniqueValuesRow}, {@code
+   * Column::uniqueValuesColumn}, {@code Square::uniqueValuesSquare}) -- the two population sources
+   * confirmed to be the ONLY remaining refusal blocking Sudoku/Sudoku-UNSAT. Both reduce to the
+   * same abstraction, a finite existence/link-guarded population plus a pairwise-distinctness
+   * requirement, built once by {@link #isUniqueOver} and fed from {@link #populationOf}.
+   *
+   * <p>Real USE isUnique semantics, established by executing the real evaluator (not inferred, not
+   * read off the OCL spec): the result is ALWAYS a defined Boolean for these two source shapes --
+   * never undefined regardless of how many population members have an undefined body -- and
+   * duplicate detection is USE's own TOTAL equality rule, where two undefined body values collide
+   * with EACH OTHER (never with a defined value). {@code Set{}->isUnique(i | Undefined)} on a
+   * two-element undefined-body population is {@code false} (a genuine collision), while a SINGLE
+   * undefined body among otherwise-distinct members is {@code true} (nothing to collide with). That
+   * is exactly {@link #useEquality}, already used for {@code =}/{@code <>}, reused here rather than
+   * re-derived.
+   *
+   * <p>The implicit loop variable binds exactly like {@link #visitForAll}'s: USE's parser always
+   * hands {@link ExpIsUnique} exactly one {@code VarDecl} (explicit or internally generated for the
+   * unnamed-argument form Sudoku's real invariants use, e.g. {@code isUnique(value)}), never zero
+   * or more than one -- the size guard below documents that invariant rather than being reachable
+   * through the real parser.
+   */
   @Override
   public void visitIsUnique(ExpIsUnique e) {
-    throw unsupported(FragmentBoundary.TIER_3, "isUnique");
+    if (e.getVariableDeclarations().size() != 1) {
+      throw unsupported(FragmentBoundary.TIER_3, "isUnique with a variable count other than one");
+    }
+    String loopVariable = e.getVariableDeclarations().varDecl(0).name();
+    result =
+        isUniqueOver(populationOf(e.getRangeExpression()), loopVariable, e.getQueryExpression());
+  }
+
+  /**
+   * The finite, existence/link-guarded population {@code isUnique} ranges over, for exactly the two
+   * supported source shapes -- anything else (a filtered/derived collection such as {@code
+   * ->select(...)->isUnique(...)}, a chained multi-hop navigation, a set literal, ...) fails closed
+   * here, before a single body translation is even attempted.
+   */
+  private List<UniquePopulationMember> populationOf(Expression range) {
+    if (range instanceof ExpAllInstances all) {
+      List<UniquePopulationMember> population = new ArrayList<>();
+      for (PolymorphicRange.Slot slot : PolymorphicRange.slotsOf(all.getSourceType(), context)) {
+        population.add(new UniquePopulationMember(slot.binding(), Smt.sym(slot.existsName())));
+      }
+      return population;
+    }
+    if (range instanceof ExpNavigation navigation && navigation.getDestination().isCollection()) {
+      if (!(navigation.getObjectExpression() instanceof ExpVariable sourceVar)) {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            "isUnique over a collection-valued navigation with more than one hop is not yet"
+                + " supported");
+      }
+      String destClass = navigation.getDestination().cls().name();
+      AssociationLinks links = context.linksFor(navigation.getDestination().association().name());
+      ObjectSlots destSlots = context.slotsFor(destClass);
+      VariableBinding source = context.binding(sourceVar.getVarname());
+      List<UniquePopulationMember> population = new ArrayList<>();
+      for (int k = 0; k < destSlots.capacity(); k++) {
+        population.add(
+            new UniquePopulationMember(
+                new VariableBinding(destClass, k), linkTerm(links, source, k)));
+      }
+      return population;
+    }
+    throw unsupported(
+        FragmentBoundary.TIER_3,
+        "isUnique over a range other than X.allInstances() or a single-hop collection-valued"
+            + " association end is not yet supported");
+  }
+
+  /**
+   * One candidate member of {@code isUnique}'s population: its loop-variable binding, plus the SMT
+   * term guarding whether it is actually present -- an existence flag for {@link #populationOf}'s
+   * allInstances branch, a {@link #linkTerm} for its association-end branch.
+   */
+  private record UniquePopulationMember(VariableBinding binding, SmtTerm memberGuard) {}
+
+  /**
+   * Shared "population -> pairwise distinctness" core for BOTH supported {@code isUnique} source
+   * shapes: {@code isUnique} holds iff no two DISTINCT, actually-present population members have
+   * {@code useEquality}-equal body values. Pairs are unordered ({@code i < j} only) since {@code
+   * useEquality} is symmetric -- encoding both {@code (i,j)} and {@code (j,i)} would double the
+   * script size for no semantic gain. A population of size 0 or 1 has no pair at all, so {@link
+   * Smt#and} over an empty list correctly yields {@code true} (vacuously unique), matching the real
+   * evaluator's own empty/singleton-range behaviour.
+   */
+  private TranslatedExpression isUniqueOver(
+      List<UniquePopulationMember> population, String loopVariable, Expression body) {
+    List<TranslatedExpression> bodies = new ArrayList<>(population.size());
+    for (UniquePopulationMember member : population) {
+      TranslationContext extended = context.withBinding(loopVariable, member.binding());
+      bodies.add(translate(body, extended, mode, positivePolarity));
+    }
+    List<SmtTerm> distinctPairs = new ArrayList<>();
+    for (int i = 0; i < population.size(); i++) {
+      for (int j = i + 1; j < population.size(); j++) {
+        SmtTerm bothMembers =
+            Smt.and(List.of(population.get(i).memberGuard(), population.get(j).memberGuard()));
+        TranslatedExpression sameValue = useEquality(bodies.get(i), bodies.get(j));
+        distinctPairs.add(Smt.app("=>", bothMembers, Smt.not(sameValue.value())));
+      }
+    }
+    return defined(Smt.and(distinctPairs));
   }
 
   @Override
