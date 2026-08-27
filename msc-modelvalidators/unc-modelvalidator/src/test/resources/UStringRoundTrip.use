@@ -1,0 +1,6 @@
+model UStringRoundTrip
+
+class Camera
+attributes
+  id : UString
+end

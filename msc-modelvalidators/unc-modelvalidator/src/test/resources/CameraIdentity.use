@@ -1,0 +1,14 @@
+model CameraIdentity
+
+class Camera
+attributes
+  id : UString
+  witness : UString
+end
+
+constraints
+context self : Camera inv ConfidentIdentity:
+  (self.id = 'ALLY-7').toBooleanC(0.80)
+
+context self : Camera inv Corroborated:
+  (self.id = self.witness).toBooleanC(0.55)

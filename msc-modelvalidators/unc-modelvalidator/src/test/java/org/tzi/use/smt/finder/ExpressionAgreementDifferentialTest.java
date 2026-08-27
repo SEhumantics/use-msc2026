@@ -25,6 +25,7 @@ import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
 import org.tzi.use.uncertainty.datatypes.UBoolean;
 import org.tzi.use.uncertainty.datatypes.UReal;
+import org.tzi.use.uncertainty.datatypes.UString;
 
 /**
  * Correctness obligation 2 (expression agreement): "for a supported ground expression and fixed
@@ -105,12 +106,12 @@ public class ExpressionAgreementDifferentialTest {
     }
 
     boolean insideDocumentedBand() {
-      if (uType.equals("UBoolean")) {
-        // There is no numerical band for UBoolean, and that is a claim about the encoding, not a
-        // convenience: no normal CDF is involved and nothing is bisected. The composition is USE's
-        // own UBoolean arithmetic evaluated at translation time over finitely many configured
-        // probabilities, so the encoded value is bit-identical to the evaluator's and EVERY
-        // UBoolean point is an exact-agreement point.
+      if (uType.equals("UBoolean") || uType.equals("UString")) {
+        // There is no numerical band for UBoolean or UString, and that is a claim about the
+        // encoding, not a convenience: no normal CDF is involved and nothing is bisected. The
+        // composition is USE's own UBoolean/UString arithmetic evaluated at translation time over
+        // finitely many configured choices, so the encoded value is bit-identical to the
+        // evaluator's and EVERY point of those two families is an exact-agreement point.
         return false;
       }
       return Math.abs(offset()) <= sigma * 1.0e-8 + Math.pow(10, -SCALE);
@@ -143,10 +144,10 @@ public class ExpressionAgreementDifferentialTest {
   public void generatedGroundThresholdsAgreeWithTheUseEvaluatorOutsideTheDocumentedBand()
       throws Exception {
     List<Point> points = generate();
-    assertEquals("the generator must actually generate", 60 + 48 + 45, points.size());
+    assertEquals("the generator must actually generate", 60 + 48 + 45 + 27, points.size());
     assertEquals(
         "every translated U-type family must be generated",
-        Set.of("UReal", "UInteger", "UBoolean"),
+        Set.of("UReal", "UInteger", "UBoolean", "UString"),
         points.stream().map(Point::uType).collect(java.util.stream.Collectors.toSet()));
 
     List<String> mismatches = new ArrayList<>();
@@ -196,6 +197,22 @@ public class ExpressionAgreementDifferentialTest {
         points.stream()
             .filter(candidate -> candidate.uType().equals("UBoolean"))
             .noneMatch(Point::insideDocumentedBand));
+    assertTrue(
+        "no UString point may fall inside a numerical band either, for the same reason: the"
+            + " equality probability is USE's own UString arithmetic over the finitely many"
+            + " configured spellings and confidences, evaluated at translation time, so every"
+            + " UString point -- the at-theta ties included -- must agree EXACTLY",
+        points.stream()
+            .filter(candidate -> candidate.uType().equals("UString"))
+            .noneMatch(Point::insideDocumentedBand));
+    assertEquals(
+        "the UString generator must exercise the c_s * c_r rule, not only equality against an"
+            + " exact string -- the product is the one shape that could have escaped QF_LIRA",
+        9,
+        points.stream()
+            .filter(candidate -> candidate.uType().equals("UString"))
+            .filter(candidate -> candidate.expression().contains("self.witness"))
+            .count());
     assertEquals(
         "the UBoolean generator must exercise the PRODUCT rules, not only the bare projection --"
             + " and/or/implies are the three that could have escaped QF_LIRA",
@@ -231,20 +248,35 @@ public class ExpressionAgreementDifferentialTest {
 
   /**
    * The generator covers exactly the U-type families that are encodable. This is asserted against
-   * {@code AttributeType} itself rather than stated in a comment, so the day a third family lands
-   * this test fails and forces the generator to be widened instead of quietly under-covering the
-   * U-type core. {@code UInteger} is the family that landed second, and widening this pin -- not
-   * suppressing it -- is what that landing was required to do.
+   * {@code AttributeType} itself rather than stated in a comment, so a family that lands without
+   * being generated fails here instead of quietly under-covering the U-type core. It fired for
+   * {@code UInteger}, then {@code UBoolean}, then {@code UString}, and was widened each time rather
+   * than suppressed.
+   *
+   * <p>With {@code UString} landed, 7.2's U-type core is COVERED IN FULL: all four families it
+   * names are encodable and all four are generated here. The pin's remaining job is the converse
+   * one -- a fifth {@code AttributeType} cannot be added without either being generated or being
+   * declared here as deliberately outside the U-type core.
    */
   @Test
   public void theGeneratorsScopeIsBoundedByWhatIsActuallyTranslated() throws Exception {
     assertEquals(
-        "7.2's core names UReal, UInteger, UBoolean and UString; the first three are encodable"
-            + " today, UString is not",
-        List.of("STRING", "INTEGER", "REAL", "UREAL", "UINTEGER", "UBOOLEAN", "BOOLEAN"),
+        "7.2's core names UReal, UInteger, UBoolean and UString, and all four are encodable today;"
+            + " the remaining constants are the crisp attribute types, which are not U-types at"
+            + " all",
+        List.of("STRING", "INTEGER", "REAL", "UREAL", "UINTEGER", "UBOOLEAN", "USTRING", "BOOLEAN"),
         java.util.Arrays.stream(AttributeType.values()).map(Enum::name).toList());
+    assertEquals(
+        "every U-type AttributeType is uncertain and every crisp one is not, so the four generated"
+            + " families ARE the whole U-type core rather than a chosen subset of it",
+        List.of("UREAL", "UINTEGER", "UBOOLEAN", "USTRING"),
+        java.util.Arrays.stream(AttributeType.values())
+            .filter(AttributeType::isUncertain)
+            .map(Enum::name)
+            .toList());
     assertTrue(
-        "the remaining U-type is refused INSIDE the core, not excluded from it",
+        "a U-type shape outside the implemented fragment is refused INSIDE the core, not excluded"
+            + " from it",
         FragmentBoundary.UTYPE_CORE.isUTypeBoundary());
     assertFalse(
         "a U-type gap must never be reported as a crisp-tier gap",
@@ -255,7 +287,7 @@ public class ExpressionAgreementDifferentialTest {
     assertEquals(
         "the generator must cover every encodable U-type family, read off the points it actually"
             + " produced rather than off a hand-maintained list",
-        Set.of("UReal", "UInteger", "UBoolean"),
+        Set.of("UReal", "UInteger", "UBoolean", "UString"),
         generatedTypes);
   }
 
@@ -274,7 +306,145 @@ public class ExpressionAgreementDifferentialTest {
     }
     points.addAll(generateUInteger());
     points.addAll(generateUBoolean());
+    points.addAll(generateUString());
     return points;
+  }
+
+  /**
+   * The {@code UString} half, and the fourth and final family of 7.2's U-type core.
+   *
+   * <p>Nothing is bisected here either. The proposal's rules are exact algebra over confidences --
+   * {@code p = c_s} on a matching spelling against an exact string and {@code 1 - c_s} otherwise,
+   * and {@code b = c_s * c_r} between two UStrings -- so the evaluator's transition for {@code
+   * (equality).toBooleanC(theta)} IS {@code theta}, and the quantity crossing it is the equality
+   * probability USE's own {@code UString} computes. The generator fixes the stored spellings and
+   * confidences and slides {@code theta} just below, exactly onto, and just above that value.
+   *
+   * <p>All three supported shapes are generated. {@code self.id = self.witness} is the one that
+   * multiplies two confidences and therefore the one that could have escaped {@code QF_LIRA}; a
+   * generator that only ever compared against an exact string would leave that product untested
+   * against the real evaluator. The stored cases deliberately mix matching and differing spellings,
+   * so the {@code 1 - b} branch is exercised as well as the {@code b} one.
+   */
+  private static List<Point> generateUString() {
+    List<Point> points = new ArrayList<>();
+    for (String shape :
+        List.of("self.id = 'ALLY-7'", "self.id <> 'ALLY-7'", "self.id = self.witness")) {
+      for (Object[] stored :
+          new Object[][] {
+            {"ALLY-7", 0.7, "ALLY-7", 0.85},
+            {"ALLY-8", 0.9, "ALLY-7", 0.9},
+            {"ALLY-7", 0.5, "ALLY-8", 0.5}
+          }) {
+        double composed =
+            evaluatorEqualityProbability(
+                shape,
+                (String) stored[0],
+                (Double) stored[1],
+                (String) stored[2],
+                (Double) stored[3]);
+        for (double offset : new double[] {-1.0e-3, 0.0, 1.0e-3}) {
+          double confidence = composed - offset;
+          MModel model = compileUString(shape, confidence);
+          points.add(uStringPoint(model, shape, stored, confidence, composed));
+        }
+      }
+    }
+    return points;
+  }
+
+  /**
+   * The equality probability USE's OWN {@code UString} gives this shape. Deliberately not the
+   * translator's own lowering: an oracle computed by the code under test proves nothing, which is
+   * the rule the other three halves of this generator follow too.
+   *
+   * <p>The exact-string operand is lifted to confidence {@code 1.0} because that is what USE does
+   * -- {@code UStringValue.valueOf(StringValue)} constructs {@code new UStringValue(value, 1)} --
+   * which is what makes the exact-string rule the {@code c_s * 1} special case of the two-UString
+   * one rather than a second rule.
+   */
+  private static double evaluatorEqualityProbability(
+      String shape, String idSpelling, double idConfidence, String witness, double witnessC) {
+    UString id = new UString(idSpelling, idConfidence);
+    UBoolean equality =
+        shape.contains("self.witness")
+            ? id.uEquals(new UString(witness, witnessC))
+            : id.uEquals(new UString("ALLY-7", 1.0));
+    return shape.contains("<>") ? equality.not().getC() : equality.getC();
+  }
+
+  private static Point uStringPoint(
+      MModel model, String shape, Object[] stored, double confidence, double composed) {
+    try {
+      ModelFinderResult observed = SmtModelFinder.find(model, uStringConfiguration(stored, false));
+      assertTrue("the unconstrained point must always be reconstructible", observed.satisfiable());
+      InvariantOutcome useSaid = verdictOf(observed, "Ident::Threshold");
+      boolean encodingAdmits =
+          SmtModelFinder.find(model, uStringConfiguration(stored, true)).satisfiable();
+      return new Point(
+          "UString",
+          0.0,
+          "(" + shape + ")",
+          confidence,
+          composed,
+          confidence,
+          useSaid,
+          encodingAdmits);
+    } catch (Exception e) {
+      throw new AssertionError(
+          "generated point failed to run: " + shape + " at theta=" + confidence, e);
+    }
+  }
+
+  private static AnalysisConfiguration uStringConfiguration(Object[] stored, boolean active) {
+    return new AnalysisConfiguration(
+        List.of(new ClassScope("Ident", 1, 1)),
+        List.of(),
+        List.of(
+            new AttributeDomain("Ident", "id", "value", List.of((String) stored[0]), null, null),
+            new AttributeDomain(
+                "Ident",
+                "id",
+                "confidence",
+                List.of(BigDecimal.valueOf((Double) stored[1]).toPlainString()),
+                null,
+                null),
+            new AttributeDomain(
+                "Ident", "witness", "value", List.of((String) stored[2]), null, null),
+            new AttributeDomain(
+                "Ident",
+                "witness",
+                "confidence",
+                List.of(BigDecimal.valueOf((Double) stored[3]).toPlainString()),
+                null,
+                null)),
+        active ? Set.of("Ident::Threshold") : Set.of(),
+        QueryExpr.SATISFY,
+        Duration.ofSeconds(30),
+        1);
+  }
+
+  private static MModel compileUString(String shape, double confidence) {
+    String source =
+        """
+        model Ident
+        class Ident
+        attributes
+          id : UString
+          witness : UString
+        end
+        constraints
+        context self : Ident inv Threshold:
+          (%s).toBooleanC(%s)
+        """
+            .formatted(shape, BigDecimal.valueOf(confidence).toPlainString());
+    MModel model =
+        USECompiler.compileSpecification(
+            source, "Ident", new PrintWriter(System.err), new ModelFactory());
+    if (model == null) {
+      throw new AssertionError("generated model did not compile:\n" + source);
+    }
+    return model;
   }
 
   /**
