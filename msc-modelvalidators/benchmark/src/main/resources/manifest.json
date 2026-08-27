@@ -1330,6 +1330,186 @@
         "nominal-erasure-discrepancy",
         "fragile-witness"
       ]
+    },
+    {
+      "id": "ScenarioProfiles-ExistsOnly",
+      "directory": "ScenarioProfiles",
+      "useFile": "ScenarioProfiles.use",
+      "propertiesFile": "ScenarioProfiles.properties",
+      "section": "existsOnly",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Milestone 4.6 scenario-profile evidence, authored for this thesis. The model pairs a positive confidence demand with a NEGATED one on the same UReal slot so the satisfying window SHIFTS with the measurement uncertainty instead of nesting into itself; with nested windows COVER would trivially imply UNIFORM and the three profiles could not be told apart. Scenario-enumeration convention: one configured uncertainty per potentially live U-type slot, so Sigma_K is the cross product over those slots -- here one object slot and one two-valued _uncertainty domain, i.e. |Sigma_K| = 2. kk-modelvalidator SILENTLY IGNORES configuration keys it does not understand rather than rejecting them, so BOTH the `query = <profile> satisfy` key (absent from the incumbent's key vocabulary) and the UReal invariants themselves (TypeConverter cannot represent UReal, exactly as for examples/URealThreshold) are quietly dropped on the Kodkod side. Kodkod therefore reports TRIVIALLY_SATISFIABLE for this row no matter what it asks, which is NOT a comparison with the SMT answer and must not be read as backend agreement or disagreement. The recorded expectation below is the SMT-Z3 answer only.",
+      "provenanceCitation": null,
+      "features": [],
+      "question": "EXISTS(SATISFY): is there SOME scenario and SOME snapshot satisfying both confidence demands, when the only configured representative works at sigma=0.02 and fails at sigma=0.06?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "oracleCaveats": [
+        "Kodkod cannot state this question at all: the query key and the UReal invariants are both silently ignored, so its TRIVIALLY_SATISFIABLE cell is an artefact, not a second opinion.",
+        "The UNSATISFIABLE rows are qualified by the configured scopes, domains and scenario policy and rest on the SMT encoding alone -- this project has an independent USE-evaluator oracle only on the SAT side, so a refutation is not independently re-checked."
+      ],
+      "scenarioTags": [
+        "scenario-profile",
+        "exists",
+        "ureal-threshold",
+        "two-scenario"
+      ]
+    },
+    {
+      "id": "ScenarioProfiles-ExistsOnlyCover",
+      "directory": "ScenarioProfiles",
+      "useFile": "ScenarioProfiles.use",
+      "propertiesFile": "ScenarioProfiles.properties",
+      "section": "existsOnlyCover",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Milestone 4.6 scenario-profile evidence, authored for this thesis. The model pairs a positive confidence demand with a NEGATED one on the same UReal slot so the satisfying window SHIFTS with the measurement uncertainty instead of nesting into itself; with nested windows COVER would trivially imply UNIFORM and the three profiles could not be told apart. Scenario-enumeration convention: one configured uncertainty per potentially live U-type slot, so Sigma_K is the cross product over those slots -- here one object slot and one two-valued _uncertainty domain, i.e. |Sigma_K| = 2. kk-modelvalidator SILENTLY IGNORES configuration keys it does not understand rather than rejecting them, so BOTH the `query = <profile> satisfy` key (absent from the incumbent's key vocabulary) and the UReal invariants themselves (TypeConverter cannot represent UReal, exactly as for examples/URealThreshold) are quietly dropped on the Kodkod side. Kodkod therefore reports TRIVIALLY_SATISFIABLE for this row no matter what it asks, which is NOT a comparison with the SMT answer and must not be read as backend agreement or disagreement. The recorded expectation below is the SMT-Z3 answer only.",
+      "provenanceCitation": null,
+      "features": [],
+      "question": "COVER(SATISFY) over the SAME configuration: does EVERY configured scenario have a witness? It must not, because sigma=0.06 has no representative in its window -- so COVER is strictly stronger than the EXISTS row above.",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "oracleCaveats": [
+        "Kodkod cannot state this question at all: the query key and the UReal invariants are both silently ignored, so its TRIVIALLY_SATISFIABLE cell is an artefact, not a second opinion.",
+        "The UNSATISFIABLE rows are qualified by the configured scopes, domains and scenario policy and rest on the SMT encoding alone -- this project has an independent USE-evaluator oracle only on the SAT side, so a refutation is not independently re-checked."
+      ],
+      "scenarioTags": [
+        "scenario-profile",
+        "cover",
+        "negative-control",
+        "two-scenario"
+      ]
+    },
+    {
+      "id": "ScenarioProfiles-ExistsOnlyUniform",
+      "directory": "ScenarioProfiles",
+      "useFile": "ScenarioProfiles.use",
+      "propertiesFile": "ScenarioProfiles.properties",
+      "section": "existsOnlyUniform",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Milestone 4.6 scenario-profile evidence, authored for this thesis. The model pairs a positive confidence demand with a NEGATED one on the same UReal slot so the satisfying window SHIFTS with the measurement uncertainty instead of nesting into itself; with nested windows COVER would trivially imply UNIFORM and the three profiles could not be told apart. Scenario-enumeration convention: one configured uncertainty per potentially live U-type slot, so Sigma_K is the cross product over those slots -- here one object slot and one two-valued _uncertainty domain, i.e. |Sigma_K| = 2. kk-modelvalidator SILENTLY IGNORES configuration keys it does not understand rather than rejecting them, so BOTH the `query = <profile> satisfy` key (absent from the incumbent's key vocabulary) and the UReal invariants themselves (TypeConverter cannot represent UReal, exactly as for examples/URealThreshold) are quietly dropped on the Kodkod side. Kodkod therefore reports TRIVIALLY_SATISFIABLE for this row no matter what it asks, which is NOT a comparison with the SMT answer and must not be read as backend agreement or disagreement. The recorded expectation below is the SMT-Z3 answer only.",
+      "provenanceCitation": null,
+      "features": [],
+      "question": "UNIFORM(SATISFY) over the SAME configuration: is there ONE snapshot that works in every scenario? It must not, for the same reason COVER fails.",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "oracleCaveats": [
+        "Kodkod cannot state this question at all: the query key and the UReal invariants are both silently ignored, so its TRIVIALLY_SATISFIABLE cell is an artefact, not a second opinion.",
+        "The UNSATISFIABLE rows are qualified by the configured scopes, domains and scenario policy and rest on the SMT encoding alone -- this project has an independent USE-evaluator oracle only on the SAT side, so a refutation is not independently re-checked."
+      ],
+      "scenarioTags": [
+        "scenario-profile",
+        "uniform",
+        "negative-control",
+        "two-scenario"
+      ]
+    },
+    {
+      "id": "ScenarioProfiles-CoverNotUniformCover",
+      "directory": "ScenarioProfiles",
+      "useFile": "ScenarioProfiles.use",
+      "propertiesFile": "ScenarioProfiles.properties",
+      "section": "coverNotUniformCover",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Milestone 4.6 scenario-profile evidence, authored for this thesis. The model pairs a positive confidence demand with a NEGATED one on the same UReal slot so the satisfying window SHIFTS with the measurement uncertainty instead of nesting into itself; with nested windows COVER would trivially imply UNIFORM and the three profiles could not be told apart. Scenario-enumeration convention: one configured uncertainty per potentially live U-type slot, so Sigma_K is the cross product over those slots -- here one object slot and one two-valued _uncertainty domain, i.e. |Sigma_K| = 2. kk-modelvalidator SILENTLY IGNORES configuration keys it does not understand rather than rejecting them, so BOTH the `query = <profile> satisfy` key (absent from the incumbent's key vocabulary) and the UReal invariants themselves (TypeConverter cannot represent UReal, exactly as for examples/URealThreshold) are quietly dropped on the Kodkod side. Kodkod therefore reports TRIVIALLY_SATISFIABLE for this row no matter what it asks, which is NOT a comparison with the SMT answer and must not be read as backend agreement or disagreement. The recorded expectation below is the SMT-Z3 answer only.",
+      "provenanceCitation": null,
+      "features": [],
+      "question": "COVER(SATISFY) with two configured representatives: can every scenario be witnessed when sigma=0.02 needs mu=0.35 and sigma=0.06 needs mu=0.42, i.e. a DIFFERENT snapshot per scenario?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "oracleCaveats": [
+        "Kodkod cannot state this question at all: the query key and the UReal invariants are both silently ignored, so its TRIVIALLY_SATISFIABLE cell is an artefact, not a second opinion.",
+        "The UNSATISFIABLE rows are qualified by the configured scopes, domains and scenario policy and rest on the SMT encoding alone -- this project has an independent USE-evaluator oracle only on the SAT side, so a refutation is not independently re-checked."
+      ],
+      "scenarioTags": [
+        "scenario-profile",
+        "cover",
+        "different-snapshot-per-scenario",
+        "two-scenario"
+      ]
+    },
+    {
+      "id": "ScenarioProfiles-CoverNotUniformUniform",
+      "directory": "ScenarioProfiles",
+      "useFile": "ScenarioProfiles.use",
+      "propertiesFile": "ScenarioProfiles.properties",
+      "section": "coverNotUniformUniform",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Milestone 4.6 scenario-profile evidence, authored for this thesis. The model pairs a positive confidence demand with a NEGATED one on the same UReal slot so the satisfying window SHIFTS with the measurement uncertainty instead of nesting into itself; with nested windows COVER would trivially imply UNIFORM and the three profiles could not be told apart. Scenario-enumeration convention: one configured uncertainty per potentially live U-type slot, so Sigma_K is the cross product over those slots -- here one object slot and one two-valued _uncertainty domain, i.e. |Sigma_K| = 2. kk-modelvalidator SILENTLY IGNORES configuration keys it does not understand rather than rejecting them, so BOTH the `query = <profile> satisfy` key (absent from the incumbent's key vocabulary) and the UReal invariants themselves (TypeConverter cannot represent UReal, exactly as for examples/URealThreshold) are quietly dropped on the Kodkod side. Kodkod therefore reports TRIVIALLY_SATISFIABLE for this row no matter what it asks, which is NOT a comparison with the SMT answer and must not be read as backend agreement or disagreement. The recorded expectation below is the SMT-Z3 answer only.",
+      "provenanceCitation": null,
+      "features": [],
+      "question": "UNIFORM(SATISFY) over the SAME configuration COVER just satisfied: the two satisfying windows are disjoint, so no single shared representative exists and UNIFORM must be refuted. This is the row that separates COVER from UNIFORM.",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "oracleCaveats": [
+        "Kodkod cannot state this question at all: the query key and the UReal invariants are both silently ignored, so its TRIVIALLY_SATISFIABLE cell is an artefact, not a second opinion.",
+        "The UNSATISFIABLE rows are qualified by the configured scopes, domains and scenario policy and rest on the SMT encoding alone -- this project has an independent USE-evaluator oracle only on the SAT side, so a refutation is not independently re-checked."
+      ],
+      "scenarioTags": [
+        "scenario-profile",
+        "uniform",
+        "negative-control",
+        "cover-does-not-imply-uniform"
+      ]
+    },
+    {
+      "id": "ScenarioProfiles-UniformShared",
+      "directory": "ScenarioProfiles",
+      "useFile": "ScenarioProfiles.use",
+      "propertiesFile": "ScenarioProfiles.properties",
+      "section": "uniformShared",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Milestone 4.6 scenario-profile evidence, authored for this thesis. The model pairs a positive confidence demand with a NEGATED one on the same UReal slot so the satisfying window SHIFTS with the measurement uncertainty instead of nesting into itself; with nested windows COVER would trivially imply UNIFORM and the three profiles could not be told apart. Scenario-enumeration convention: one configured uncertainty per potentially live U-type slot, so Sigma_K is the cross product over those slots -- here one object slot and one two-valued _uncertainty domain, i.e. |Sigma_K| = 2. kk-modelvalidator SILENTLY IGNORES configuration keys it does not understand rather than rejecting them, so BOTH the `query = <profile> satisfy` key (absent from the incumbent's key vocabulary) and the UReal invariants themselves (TypeConverter cannot represent UReal, exactly as for examples/URealThreshold) are quietly dropped on the Kodkod side. Kodkod therefore reports TRIVIALLY_SATISFIABLE for this row no matter what it asks, which is NOT a comparison with the SMT answer and must not be read as backend agreement or disagreement. The recorded expectation below is the SMT-Z3 answer only.",
+      "provenanceCitation": null,
+      "features": [],
+      "question": "UNIFORM(SATISFY) with overlapping windows: does ONE snapshot (mu=0.37) hold in BOTH the sigma=0.02 and sigma=0.03 scenarios, each independently re-evaluated by USE with that scenario's uncertainty substituted into the reconstructed UReal?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "oracleCaveats": [
+        "Kodkod cannot state this question at all: the query key and the UReal invariants are both silently ignored, so its TRIVIALLY_SATISFIABLE cell is an artefact, not a second opinion.",
+        "The UNSATISFIABLE rows are qualified by the configured scopes, domains and scenario policy and rest on the SMT encoding alone -- this project has an independent USE-evaluator oracle only on the SAT side, so a refutation is not independently re-checked."
+      ],
+      "scenarioTags": [
+        "scenario-profile",
+        "uniform",
+        "shared-snapshot",
+        "two-scenario"
+      ]
     }
   ]
 }

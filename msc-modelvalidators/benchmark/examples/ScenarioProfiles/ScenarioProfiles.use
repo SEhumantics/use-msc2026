@@ -1,0 +1,28 @@
+model ScenarioProfiles
+
+-- A deliberately NON-MONOTONE pair of confidence demands over one UReal slot.
+--
+-- Every ordinary confidence threshold gets HARDER as the measurement uncertainty
+-- grows, so a family of scenarios that varies only sigma would give NESTED
+-- satisfying regions -- and with nested regions COVER trivially implies UNIFORM,
+-- which is exactly the collapse Milestone 4.6 has to be able to detect.
+--
+-- Negating the second threshold breaks that nesting: `not (speed > 0.36).toBooleanC(0.95)`
+-- gets EASIER as sigma grows. Together the two invariants carve out the window
+--
+--     mu in [0.30 + z*sigma, 0.36 + z*sigma)      with z = 1.6448535 (the 0.95 quantile)
+--
+-- which SHIFTS with sigma instead of shrinking into itself. Two scenarios whose
+-- windows are disjoint can then be covered only by two different snapshots, and
+-- two scenarios whose windows overlap admit a genuine shared UNIFORM witness.
+class UnidentifiedObject
+attributes
+  speed : UReal
+end
+
+constraints
+context self : UnidentifiedObject inv ConfidentlyFast:
+  (self.speed > 0.30).toBooleanC(0.95)
+
+context self : UnidentifiedObject inv NotConfidentlyVeryFast:
+  not ((self.speed > 0.36).toBooleanC(0.95))
