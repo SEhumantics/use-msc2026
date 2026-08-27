@@ -110,8 +110,7 @@ public class SupersessionDivergenceTest {
 	 */
 	@Test
 	public void kodkodRefutesTheIntegerModelEveryCandidateValueSatisfies() throws Exception {
-		ExampleEntry ex = entry(INTEGER_CASE);
-		assertEquals(Solution.Outcome.UNSATISFIABLE, kodkodOutcome(ex, false));
+		assertObservedKodkodOutcome(entry(INTEGER_CASE), Solution.Outcome.UNSATISFIABLE);
 	}
 
 	@Test
@@ -142,8 +141,7 @@ public class SupersessionDivergenceTest {
 	 */
 	@Test
 	public void kodkodRefutesTheRealModelItsOwnGridCannotWitness() throws Exception {
-		ExampleEntry ex = entry(REAL_CASE);
-		assertEquals(Solution.Outcome.TRIVIALLY_UNSATISFIABLE, kodkodOutcome(ex, false));
+		assertObservedKodkodOutcome(entry(REAL_CASE), Solution.Outcome.TRIVIALLY_UNSATISFIABLE);
 	}
 
 	@Test
@@ -182,6 +180,22 @@ public class SupersessionDivergenceTest {
 				kodkodOutcome(entry(INTEGER_CASE), false), kodkodOutcome(entry(INTEGER_CASE), true));
 		assertEquals("stripping the per-attribute domain keys must not change the real refutation",
 				kodkodOutcome(entry(REAL_CASE), false), kodkodOutcome(entry(REAL_CASE), true));
+	}
+
+	/**
+	 * Pins the incumbent's outcome twice over. Once against the literal written here, so a reader of
+	 * this test sees the claim without opening the manifest; and once against the row's OWN recorded
+	 * {@code supersession.kodkodOutcome} column, so that column is executable rather than decorative.
+	 * Adversarial check that motivated the second assertion: mislabelling the real case's column as
+	 * SATISFIABLE was caught by ManifestSchemaTest's internal-consistency rule but NOT by this class,
+	 * which is exactly the gap a Study B table generated from those columns would inherit.
+	 */
+	private static void assertObservedKodkodOutcome(ExampleEntry ex, Solution.Outcome documented) throws Exception {
+		Solution.Outcome observed = kodkodOutcome(ex, false);
+		assertEquals(ex.id + ": incumbent outcome", documented, observed);
+		assertNotNull(ex.id + ": a Study B row must carry its supersession columns", ex.supersession);
+		assertEquals(ex.id + ": the manifest's recorded kodkodOutcome must be what the incumbent ACTUALLY does",
+				observed.name(), ex.supersession.kodkodOutcome);
 	}
 
 	private static void assertVerdictsAllTrue(ModelFinderResult result) {
