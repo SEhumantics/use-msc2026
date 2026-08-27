@@ -1,5 +1,6 @@
 package org.tzi.msc.benchmark;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -64,6 +65,7 @@ public class ReportBuilderTest {
 		assertFalse("leftover soil-results placeholder", html.contains("__SOIL_RESULTS_JSON_PLACEHOLDER__"));
 		assertFalse("leftover run-metadata placeholder", html.contains("__RUN_METADATA_JSON_PLACEHOLDER__"));
 		assertFalse("leftover feature-matrix placeholder", html.contains("__FEATURE_MATRIX_JSON_PLACEHOLDER__"));
+		assertFalse("leftover parity placeholder", html.contains("__PARITY_JSON_PLACEHOLDER__"));
 
 		// The adversarial payload's literal, unescaped "</script>" must not survive into the rendered
 		// output at all -- checked against the FULL html, not a substring already cut at the first
@@ -87,6 +89,57 @@ public class ReportBuilderTest {
 				com.google.gson.JsonParser.parseString(extractScriptBlock(html, "run-metadata-json")).isJsonObject());
 		assertTrue("feature matrix data block must parse back to a JSON object",
 				com.google.gson.JsonParser.parseString(extractScriptBlock(html, "feature-matrix-json")).isJsonObject());
+		assertTrue("parity data block must parse back to a JSON object",
+				com.google.gson.JsonParser.parseString(extractScriptBlock(html, "parity-json")).isJsonObject());
+	}
+
+	/**
+	 * The parity table is the RQ1 evidence, and it is only evidence if it is COMPUTED from the run
+	 * embedded in the same file. Rendering the report must therefore embed the computed table, not a
+	 * copy of the raw results for the page to re-derive parity from in JavaScript -- a second,
+	 * untested implementation of the one calculation that must not overstate parity.
+	 */
+	@Test
+	public void embedsTheComputedParityTableRatherThanLeavingTheReportToReDeriveIt() throws Exception {
+		File tmpDir = Files.createTempDirectory("report-builder-parity-test").toFile();
+		File manifestFile = new File(tmpDir, "manifest.json");
+		File resultsFile = new File(tmpDir, "results.json");
+		File outputFile = new File(tmpDir, "report.html");
+
+		// One row where Kodkod's yes is vacuous and ours is searched: the case that must never be
+		// rendered as agreement.
+		try (FileWriter w = new FileWriter(manifestFile, StandardCharsets.UTF_8)) {
+			w.write("{\"examples\":[{\"id\":\"Vacuous\",\"directory\":\"v\",\"useFile\":\"v.use\","
+					+ "\"category\":\"expressiveness\",\"mode\":\"finding\",\"hasValidationTests\":false,"
+					+ "\"provenanceType\":\"authored-for-thesis\",\"features\":[\"f1\"]}]}");
+		}
+		try (FileWriter w = new FileWriter(resultsFile, StandardCharsets.UTF_8)) {
+			w.write("[{\"exampleId\":\"Vacuous\",\"solver\":\"DefaultSAT4J\","
+					+ "\"outcome\":\"TRIVIALLY_SATISFIABLE\"},"
+					+ "{\"exampleId\":\"Vacuous\",\"solver\":\"LightSAT4J\","
+					+ "\"outcome\":\"TRIVIALLY_SATISFIABLE\"},"
+					+ "{\"exampleId\":\"Vacuous\",\"solver\":\"MiniSat\","
+					+ "\"outcome\":\"TRIVIALLY_SATISFIABLE\"},"
+					+ "{\"exampleId\":\"Vacuous\",\"solver\":\"MiniSatProver\","
+					+ "\"outcome\":\"TRIVIALLY_SATISFIABLE\"},"
+					+ "{\"exampleId\":\"Vacuous\",\"solver\":\"Lingeling\","
+					+ "\"outcome\":\"TRIVIALLY_SATISFIABLE\"},"
+					+ "{\"exampleId\":\"Vacuous\",\"solver\":\"SMT-Z3\",\"outcome\":\"SATISFIABLE\","
+					+ "\"reconstructed\":true,\"useChecked\":true}]");
+		}
+
+		ReportBuilder.main(new String[] { manifestFile.getPath(), resultsFile.getPath(), outputFile.getPath() });
+
+		String html = Files.readString(outputFile.toPath(), StandardCharsets.UTF_8);
+		com.google.gson.JsonObject parity =
+				com.google.gson.JsonParser.parseString(extractScriptBlock(html, "parity-json")).getAsJsonObject();
+		com.google.gson.JsonObject summary = parity.getAsJsonObject("summary");
+
+		assertEquals("one corpus row", 1, summary.get("corpusRows").getAsInt());
+		assertEquals("a vacuous Kodkod yes is not a real verdict", 0, summary.get("kodkodRealVerdicts").getAsInt());
+		assertEquals("our verdict was searched", 1, summary.get("smtRealVerdicts").getAsInt());
+		assertEquals("nothing is claimable on this row", 0, summary.get("intersection").getAsInt());
+		assertEquals("and nothing may be reported as agreement", 0, summary.get("agreements").getAsInt());
 	}
 
 	private static String extractScriptBlock(String html, String id) {
