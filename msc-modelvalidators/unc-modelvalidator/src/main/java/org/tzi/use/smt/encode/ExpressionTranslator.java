@@ -212,6 +212,14 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     // The representative is an Int for UInteger and a Real for UReal, while the boundary is always
     // a Real -- so the arithmetic comparison lifts it. The DECLARED symbol stays an Int, which is
     // precisely what leaves the rounding to the solver's integer theory.
+    //
+    // The lift is a PORTABILITY measure, not a correctness one, and was measured rather than
+    // assumed: deleting it leaves every UInteger test green, because Z3 silently coerces an Int
+    // into mixed Int/Real arithmetic. SMT-LIB 2.6 does not oblige a solver to, and this project's
+    // standing constraint is that the solver stays swappable over portable SMT-LIB text, so the
+    // explicit to_real stays. What IS load-bearing is the Int SORT of the declared symbol:
+    // declaring it Real instead makes the free-range fixture come back with the boundary itself,
+    // 891857137/134217728 = 6.644853480160236, rather than 7.
     SmtTerm representative =
         values.type() == AttributeType.UINTEGER ? Smt.app("to_real", declared) : declared;
     SmtTerm uncertainty = Smt.sym(values.uncertaintyNames().get(binding.slotIndex()));

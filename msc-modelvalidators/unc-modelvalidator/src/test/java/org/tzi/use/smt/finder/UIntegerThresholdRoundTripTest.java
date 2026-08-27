@@ -8,12 +8,17 @@ import java.io.PrintWriter;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import org.junit.Test;
 import org.tzi.use.parser.use.USECompiler;
 import org.tzi.use.smt.config.AnalysisConfiguration;
+import org.tzi.use.smt.config.AttributeDomain;
+import org.tzi.use.smt.config.ClassScope;
 import org.tzi.use.smt.config.ConfigurationReader;
 import org.tzi.use.smt.config.ConfigurationVocabulary;
+import org.tzi.use.smt.config.QueryExpr;
 import org.tzi.use.smt.verify.InvariantVerdict;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
@@ -116,6 +121,77 @@ public class UIntegerThresholdRoundTripTest {
     assertEquals(new InvariantVerdict("Batch::ReliableCount", true), result.verdicts().get(0));
     UIntegerValue units = reconstructedUnits(model, result);
     assertEquals("both 6 and 7 were offered; only the Int sort rules 6 out", 7, units.value());
+  }
+
+  /**
+   * The sharpest form of the rounding claim, and the one an enumerated domain cannot make: the
+   * representative is left FREE over a whole integer range, so nothing but the Int sort stands
+   * between the solver and the non-integral boundary itself.
+   *
+   * <p>The linear constraint the encoding emits is satisfied by every real from {@code
+   * 6.6448534751573820} upward. A Real representative would be free to answer {@code 6.645}, which
+   * USE's evaluator would agree is true but which is not a UInteger at all. Declaring the symbol on
+   * the Int sort is what forces the solver to round -- and this test is the one that fails if that
+   * declaration ever regresses to a Real, which is precisely the off-by-one a boundary correct for
+   * reals invites.
+   */
+  @Test
+  public void aFreeIntegerRepresentativeIsRoundedByTheSolverRatherThanByTheDecoder()
+      throws Exception {
+    double boundary = evaluatorBoundary();
+    assertTrue(
+        "the boundary must be non-integral, or a Real representative could not differ from an"
+            + " integer one and this test would prove nothing: "
+            + boundary,
+        boundary != Math.rint(boundary));
+
+    MModel model = compile(resourcePath("ReliableCount.use"));
+    ModelFinderResult result = SmtModelFinder.find(model, freeRangeConfiguration());
+
+    assertTrue(result.satisfiable());
+    assertEquals(new InvariantVerdict("Batch::ReliableCount", true), result.verdicts().get(0));
+    UIntegerValue units = reconstructedUnits(model, result);
+    assertEquals(SIGMA, units.uncertainty(), 0.0);
+    assertTrue(
+        "the solver must return an integer at or above the least admissible one, not the"
+            + " real-valued boundary it also satisfies: got "
+            + units.value(),
+        units.value() >= (int) Math.ceil(boundary));
+    assertTrue(
+        "and USE's own evaluator must independently agree the returned integer clears the"
+            + " confidence demand",
+        probability(units.value()) >= CONFIDENCE);
+  }
+
+  /**
+   * A representative free over the whole integer range 0..20, with no enumerated candidates at all.
+   * Built in code rather than in the {@code .properties} corpus because the legacy key format
+   * carries no range syntax for a U-type COMPONENT -- only enumerated sets -- and an enumerated set
+   * would decide the rounding question before the solver ever saw it.
+   */
+  private static AnalysisConfiguration freeRangeConfiguration() {
+    return new AnalysisConfiguration(
+        List.of(new ClassScope("Batch", 1, 1)),
+        List.of(),
+        List.of(
+            new AttributeDomain(
+                "Batch",
+                "units",
+                "value",
+                List.of(),
+                java.math.BigDecimal.ZERO,
+                java.math.BigDecimal.valueOf(20)),
+            new AttributeDomain(
+                "Batch",
+                "units",
+                "uncertainty",
+                List.of(java.math.BigDecimal.valueOf(SIGMA).toPlainString()),
+                null,
+                null)),
+        Set.of("Batch::ReliableCount"),
+        QueryExpr.SATISFY,
+        java.time.Duration.ofSeconds(30),
+        1);
   }
 
   /**
