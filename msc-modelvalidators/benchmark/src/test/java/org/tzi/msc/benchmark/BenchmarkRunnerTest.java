@@ -118,4 +118,53 @@ public class BenchmarkRunnerTest {
 	public void negativeWarmupsAreRejected() {
 		BenchmarkRunner.validateIterationCounts(1, -1, "test");
 	}
+
+	/**
+	 * Study A (spec S9) needs "snapshot reconstructed" and "USE re-evaluation passed" as two SEPARATE
+	 * columns, so they must be two separate recorded facts. On the SMT side they genuinely differ: a
+	 * scenario can be witnessed (a snapshot exists) and still fail independent re-evaluation, which is
+	 * precisely the case the parity table must not be able to hide.
+	 */
+	@Test
+	public void reconstructionAndUseCheckAreRecordedIndependently() {
+		SolverResult result = new SolverResult();
+		result.outcome = "SATISFIABLE";
+
+		BenchmarkRunner.recordReconstruction(result, true, false);
+
+		assertEquals(Boolean.TRUE, result.reconstructed);
+		assertEquals(Boolean.FALSE, result.useChecked);
+	}
+
+	/**
+	 * The incumbent performs no independent USE re-evaluation of its own witnesses at all. Recording
+	 * that as {@code false} would read as "re-evaluated and failed"; it must stay null, i.e. "no such
+	 * claim is made", so the parity table can print it as not-applicable rather than as a failure.
+	 */
+	@Test
+	public void anUnperformedUseCheckIsNullNotFalse() {
+		SolverResult result = new SolverResult();
+		result.outcome = "SATISFIABLE";
+
+		BenchmarkRunner.recordReconstruction(result, true, null);
+
+		assertEquals(Boolean.TRUE, result.reconstructed);
+		assertNull("an unperformed check must not be recorded as a failed one", result.useChecked);
+	}
+
+	/**
+	 * Same discipline as {@link #errorAfterPartialSuccessClearsWitnessDigests}: an ERROR cell reached
+	 * no verdict, so it makes no reconstruction claim either, whatever a partially-completed repeat
+	 * managed to build before it threw.
+	 */
+	@Test
+	public void errorMakesNoReconstructionClaim() {
+		SolverResult result = new SolverResult();
+		result.outcome = "ERROR";
+
+		BenchmarkRunner.recordReconstruction(result, true, true);
+
+		assertNull("an ERROR cell must claim no reconstruction", result.reconstructed);
+		assertNull("an ERROR cell must claim no USE re-evaluation", result.useChecked);
+	}
 }
