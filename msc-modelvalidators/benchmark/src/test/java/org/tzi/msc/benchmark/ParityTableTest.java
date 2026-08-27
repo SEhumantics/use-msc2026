@@ -346,10 +346,21 @@ public class ParityTableTest {
 		String studyB = md.substring(md.indexOf("### Study B"));
 
 		assertTrue("the Study B table needs a direction column", studyB.contains("Divergence direction"));
-		assertTrue("false rejects must be labelled as such", studyB.contains("FALSE_REJECT"));
-		assertTrue("false accepts must be labelled as such", studyB.contains("FALSE_ACCEPT"));
 		assertTrue("the table must say why a false accept is the worse error for a verification tool",
 				studyB.contains("false ACCEPT"));
+		// Asserted on the CELLS, not on the section: an earlier version of this test looked only for
+		// the two words anywhere in the section, and the adversarial run that flattened both classes
+		// onto FALSE_REJECT still passed it, because the prose above the table names both directions
+		// regardless of what the rows say. A distinction that survives only in the surrounding prose
+		// is not a table column.
+		for (ParityTable.StudyBRow b : table.studyB) {
+			assertTrue(b.exampleId + ": the direction must be rendered in the row itself",
+					studyB.contains("| " + b.divergenceClass + " | " + b.divergenceDirection + " |"));
+		}
+		assertTrue("a false-unsat row must render as FALSE_REJECT",
+				studyB.contains("| false-unsat | FALSE_REJECT |"));
+		assertTrue("a false-sat row must render as FALSE_ACCEPT",
+				studyB.contains("| false-sat | FALSE_ACCEPT |"));
 		for (String id : List.of("IntegerBitwidth-DailyCap", "RealGrid-UnitInterval", "URealThreshold-Below",
 				"URealThreshold-NominalErasure")) {
 			assertTrue("missing Study B row " + id, studyB.contains("| " + id + " |"));
