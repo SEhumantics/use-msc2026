@@ -13,6 +13,13 @@ import org.tzi.use.smt.solver.SmtTerm;
 
 /**
  * Declares bounded candidate object slots with existence-count and symmetry-breaking constraints.
+ *
+ * <p>Each slot also carries the OBJECT NAME it stands for: the configured identity when the scope
+ * predefines one for that index, and otherwise the generated {@code ClassName + index} spelling.
+ * Predefined names are assigned to the LEADING slots in order, which is both what {@code
+ * ClassConfigurator.generateObjectsTuple} does in the incumbent and what makes the prefix-shaped
+ * existence constraint here line up with them: the first {@code min} slots always exist, so the
+ * first {@code min} configured identities are always realised.
  */
 public final class ObjectSlotEncoder {
   private ObjectSlotEncoder() {}
@@ -37,6 +44,7 @@ public final class ObjectSlotEncoder {
     }
     List<String> slotNames = new ArrayList<>();
     List<String> existsNames = new ArrayList<>();
+    List<String> objectNames = new ArrayList<>();
     List<SmtTerm> existsTerms = new ArrayList<>();
     for (int index = 0; index < scope.max(); index++) {
       String slotName = scope.className() + "_" + index;
@@ -45,11 +53,15 @@ public final class ObjectSlotEncoder {
       script.declareConst(existsName, SmtSort.BOOL);
       slotNames.add(slotName);
       existsNames.add(existsName);
+      objectNames.add(
+          index < scope.objectNames().size()
+              ? scope.objectNames().get(index)
+              : scope.className() + index);
       existsTerms.add(Smt.sym(existsName));
     }
     assertCount(script, existsTerms, scope.min(), scope.max());
     assertSymmetryBreaking(script, existsTerms);
-    return new ObjectSlots(scope.className(), slotNames, existsNames);
+    return new ObjectSlots(scope.className(), slotNames, existsNames, objectNames);
   }
 
   private static void assertCount(SmtScript script, List<SmtTerm> existsTerms, int min, int max) {

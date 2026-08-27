@@ -79,7 +79,12 @@ public final class SystemStateReconstructor {
       MClass cls = model.getClass(className);
       for (int i = 0; i < slots.capacity(); i++) {
         if (isTrue(modelValues, slots.existsNames().get(i))) {
-          MObject object = api.createObjectEx(cls, className + i);
+          // The slot's own name: the configured identity when the class predefined one, and
+          // otherwise the generated `ClassName + index` spelling this line has always produced,
+          // so a scenario that predefines nothing reconstructs exactly as before. Naming the
+          // object after the configured identity is the incumbent's behaviour too -- its
+          // ObjectStrategy.createElement strips the `ClassName_` prefix off the Kodkod atom.
+          MObject object = api.createObjectEx(cls, slots.objectNames().get(i));
           objectsBySlot.put(slotKey(className, i), object);
         }
       }

@@ -22,13 +22,16 @@ import org.tzi.use.smt.encode.AssociationLinks;
 import org.tzi.use.smt.encode.AttributeEncoder;
 import org.tzi.use.smt.encode.AttributeType;
 import org.tzi.use.smt.encode.AttributeValues;
+import org.tzi.use.smt.encode.FragmentBoundary;
 import org.tzi.use.smt.encode.FragmentChecker;
 import org.tzi.use.smt.encode.FragmentCoverageLedger;
 import org.tzi.use.smt.encode.Multiplicity;
 import org.tzi.use.smt.encode.ObjectSlotEncoder;
 import org.tzi.use.smt.encode.ObjectSlots;
+import org.tzi.use.smt.encode.PredefinedLinkEncoder;
 import org.tzi.use.smt.encode.QueryCompiler;
 import org.tzi.use.smt.encode.ScenarioSpace;
+import org.tzi.use.smt.encode.SmtTranslationException;
 import org.tzi.use.smt.encode.TranslationContext;
 import org.tzi.use.smt.reconstruct.SmtValueDecoder;
 import org.tzi.use.smt.reconstruct.SystemStateReconstructor;
@@ -529,6 +532,54 @@ public final class SmtModelFinder {
    *     link and representative symbols and differ only in their pinned uncertainty symbols and the
    *     {@code def}/{@code val} pair computed from them.
    */
+  /**
+   * Refuses an association whose link extent is not its own to search.
+   *
+   * <p>{@link org.tzi.use.smt.encode.AssociationLinkEncoder} gives every association an INDEPENDENT
+   * grid of link booleans, constrained only by its own two end multiplicities and its own
+   * configured link count. That is sound exactly while the association's extent is a free variable.
+   * A {@code union} end, a {@code subsets} end and a {@code redefines} end all break that: the
+   * association's links are then determined by -- or constrained against -- ANOTHER association's
+   * links, and an independent grid silently drops the relationship.
+   *
+   * <p>This gate exists because predefined links made those models reachable for the first time.
+   * {@code benchmark/examples/Subsets} is the concrete case: {@code ab}'s ends are {@code union},
+   * its extent is the union of {@code cd} and {@code ef}, and its configuration asks for {@code
+   * ab_min = ab_max = 2} while giving {@code A} and {@code B} zero objects of their own. An
+   * independent 0x0 grid cannot hold two links, so the encoding reported a confident UNSATISFIABLE
+   * against the incumbent's SATISFIABLE -- a wrong verdict, not a refusal. Refusing is the honest
+   * outcome until union/subsets/redefines are encoded (THESIS_SMT_MODEL_FINDER_PLAN.md 7.1 Tier 3).
+   *
+   * <p>DERIVED association ends are a DIFFERENT gap and are deliberately not covered here: no
+   * corpus row reaches one without first being refused at the invariant level, so gating them would
+   * move ledger attribution around without closing a reachable soundness hole. They remain recorded
+   * as unsupported in the feature matrix ({@code assoc.derived-binary}).
+   */
+  private static void requireIndependentlySearchableExtent(
+      MAssociation association, List<MAssociationEnd> ends) {
+    for (MAssociationEnd end : ends) {
+      String feature = null;
+      if (end.isUnion()) {
+        feature = "a 'union' end (" + end.name() + ")";
+      } else if (!end.getSubsettedEnds().isEmpty() || !end.getSubsettingEnds().isEmpty()) {
+        feature = "a 'subsets' relationship on end " + end.name();
+      } else if (!end.getRedefinedEnds().isEmpty() || !end.getRedefiningEnds().isEmpty()) {
+        feature = "a 'redefines' relationship on end " + end.name();
+      }
+      if (feature != null) {
+        throw new SmtTranslationException(
+            FragmentBoundary.TIER_3,
+            "association '"
+                + association.name()
+                + "' declares "
+                + feature
+                + ", so its link extent is tied to another association's; this translation gives"
+                + " every association an independent link grid and would silently drop that"
+                + " relationship, so it is refused rather than approximated");
+      }
+    }
+  }
+
   private static Solved solve(
       MModel model,
       AnalysisConfiguration config,
@@ -784,6 +835,7 @@ public final class SmtModelFinder {
                 + scope.associationName()
                 + "' does not have exactly two ends; not yet supported");
       }
+      requireIndependentlySearchableExtent(association, ends);
       ObjectSlots aEnd = slotsByClass.get(ends.get(0).cls().name());
       ObjectSlots bEnd = slotsByClass.get(ends.get(1).cls().name());
       if (aEnd == null || bEnd == null) {
@@ -801,6 +853,11 @@ public final class SmtModelFinder {
               bEnd,
               toMultiplicity(ends.get(1).multiplicity()),
               scope);
+      // The tuples a bare `AssociationName` key configured are FORCED links, so they are asserted
+      // straight after the grid they live in. The declared end classes travel with them: see
+      // PredefinedLinkEncoder for why the grid's own axes must not be assumed to match them.
+      PredefinedLinkEncoder.encode(
+          script, scope, links, List.of(ends.get(0).cls().name(), ends.get(1).cls().name()));
       linksByAssociation.put(scope.associationName(), links);
     }
 

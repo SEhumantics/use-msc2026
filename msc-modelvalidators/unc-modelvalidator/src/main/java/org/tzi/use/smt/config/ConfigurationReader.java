@@ -96,16 +96,36 @@ public final class ConfigurationReader {
       RawConfiguration raw, ConfigurationVocabulary vocabulary) {
     Map<String, List<String>> entries = raw.entries();
     List<ClassScope> classes = new ArrayList<>();
+    Map<String, List<String>> objectNamesByClass = new LinkedHashMap<>();
     for (String name : vocabulary.classNames().stream().sorted().toList()) {
-      classes.add(
-          new ClassScope(name, bound(entries, name + "_min", 1), bound(entries, name + "_max", 1)));
+      int max = bound(entries, name + "_max", 1);
+      List<String> objectNames =
+          entries.containsKey(name) ? objectNames(name, entries.get(name)) : List.of();
+      if (max != -1 && objectNames.size() > max) {
+        throw new ConfigurationReadException(
+            "class '"
+                + name
+                + "' predefines "
+                + objectNames.size()
+                + " object name(s) but its maximum is "
+                + max
+                + "; the incumbent silently truncates the list to the bound"
+                + " (ClassConfigurator.generateObjectsTuple), which would quietly shrink a"
+                + " configured population, so it is refused here instead");
+      }
+      objectNamesByClass.put(name, objectNames);
+      classes.add(new ClassScope(name, bound(entries, name + "_min", 1), max, objectNames));
     }
     List<AssociationScope> associations = new ArrayList<>();
     for (String name : vocabulary.associationNames().stream().sorted().toList()) {
       associations.add(
-          new AssociationScope(
-              name, bound(entries, name + "_min", 1), bound(entries, name + "_max", 1)));
+          associationScope(
+              name,
+              entries.containsKey(name) ? linkTuples(name, entries.get(name)) : List.of(),
+              bound(entries, name + "_min", 1),
+              bound(entries, name + "_max", 1)));
     }
+    requireLinkEndsArePredefined(associations, objectNamesByClass);
     validateScopes(
         classes.stream().map(s -> new Scope(s.className(), s.min(), s.max())).toList(), "class");
     validateScopes(
@@ -211,14 +231,6 @@ public final class ConfigurationReader {
               + " (\"String_string\" + i), which this encoding has no counterpart for, so it is"
               + " refused rather than reinterpreted as a domain");
     }
-    for (String association : vocabulary.associationNames()) {
-      deferredKeyDiagnostic(
-          entries,
-          diagnostics,
-          association,
-          "explicit association tuples are retained but link reconstruction is scheduled for Phase"
-              + " 3");
-    }
     for (String attribute : vocabulary.attributeNames()) {
       deferredKeyDiagnostic(
           entries,
@@ -279,6 +291,173 @@ public final class ConfigurationReader {
             max != null ? max : DEFAULT_TYPE_WIDE_MAX.get(typeName)));
   }
 
+  /**
+   * The PREDEFINED OBJECT NAMES of one bare {@code ClassName} key.
+   *
+   * <p>Identical in shape to {@link #setValues} but deliberately NOT routed through it: these are
+   * object identities, not an attribute domain, so the 2026-08-27 quote-stripping rule must not
+   * touch them. The incumbent draws the same line in the same place -- {@code
+   * PropertyConfigurationVisitor.visitClass} (lines 100-106) only {@code trim()}s each element,
+   * while {@code adjustElement} (line 616-618) strips quotes for String-typed attribute domains
+   * alone. {@code GraphColoring.properties} depends on exactly that distinction: {@code Region =
+   * Set&#123;r0,...&#125;} are unquoted object names and {@code Region_name =
+   * Set&#123;'R0',...&#125;} are quoted String candidates, in the same section.
+   */
+  private static List<String> objectNames(String key, List<String> values) {
+    List<String> names = setBody(key, values);
+    Set<String> seen = new LinkedHashSet<>();
+    for (String name : names) {
+      if (name.isEmpty()) {
+        throw new ConfigurationReadException("empty object name in '" + key + "'");
+      }
+      if (!seen.add(name)) {
+        throw new ConfigurationReadException(
+            "duplicate object name '" + name + "' in '" + key + "'");
+      }
+    }
+    return names;
+  }
+
+  /**
+   * The PREDEFINED LINKS of one bare {@code AssociationName} key, each tuple in the association's
+   * DECLARED end order.
+   *
+   * <p>Mirrors {@code PropertyConfigurationVisitor.readComplexElements} (lines 438-476): strip the
+   * {@code Set&#123;...&#125;} wrapper, split on {@code )}, take everything after the {@code (},
+   * and split the remainder on commas, trimming each element. Only binary tuples are accepted --
+   * the incumbent's three-element form prepends an association-CLASS link object (line 462-464),
+   * which the SMT link grid has no counterpart for, so it is refused rather than silently read as a
+   * binary link.
+   */
+  private static List<List<String>> linkTuples(String key, List<String> values) {
+    String body = String.join(",", setBody(key, values));
+    if (body.isEmpty()) {
+      return List.of();
+    }
+    List<List<String>> tuples = new ArrayList<>();
+    for (String part : body.split("\\)", -1)) {
+      int open = part.indexOf('(');
+      if (open < 0) {
+        if (!part.replace(",", "").trim().isEmpty()) {
+          throw new ConfigurationReadException(
+              "invalid link tuple list for '" + key + "': expected Set{(a,b),(c,d)}");
+        }
+        continue;
+      }
+      List<String> ends =
+          List.of(part.substring(open + 1).split(",", -1)).stream().map(String::trim).toList();
+      if (ends.size() != 2 || ends.stream().anyMatch(String::isEmpty)) {
+        throw new ConfigurationReadException(
+            "unsupported link tuple '("
+                + String.join(",", ends)
+                + ")' for '"
+                + key
+                + "': only binary association tuples are supported in this slice");
+      }
+      tuples.add(ends);
+    }
+    return tuples;
+  }
+
+  /** The comma-separated, trimmed elements inside a {@code Set{...}} literal, quotes untouched. */
+  private static List<String> setBody(String key, List<String> values) {
+    String value = String.join(",", values).trim();
+    if (!value.startsWith("Set{") || !value.endsWith("}")) {
+      throw new ConfigurationReadException(
+          "invalid enumerated set for '" + key + "': expected Set{...}");
+    }
+    String body = value.substring(4, value.length() - 1).trim();
+    return body.isEmpty()
+        ? List.of()
+        : List.of(body.split(",", -1)).stream().map(String::trim).toList();
+  }
+
+  /**
+   * Derives one association's link bounds exactly as {@code AssociationConfigurator} does, and
+   * refuses the one shape it cannot express consistently.
+   *
+   * <p>{@code PropertyConfigurationVisitor.setAssociationConfigurator} (lines 356-363) calls {@code
+   * setSpecificValues(tuples)} -- which sets min=max=k (lines 162-165) -- and only THEN {@code
+   * setLimits(Association_min, Association_max)}, whose error values are {@code
+   * DefaultConfigurationValues.linksPerAssocMin/Max} (1/1). {@code setLimits} (lines 173-192) is
+   * reproduced verbatim below, INCLUDING the detail that its {@code else} arm assigns the read
+   * MINIMUM to {@code max}. With no tuples at all ({@code k == 0}) nothing here fires and the plain
+   * bounds are returned unchanged, which is what keeps every scenario that predefines no links
+   * reading byte-identically to before.
+   *
+   * <p>The refusal covers {@code GraphColoring.properties}: 134 forced {@code Adjacent} tuples with
+   * no {@code Adjacent_min}/{@code Adjacent_max} yield min=134 and max=1, an unsatisfiable
+   * link-count constraint that Kodkod only clears because at {@code bitwidth := 8} both the count
+   * and the constant 134 wrap to -122. (That, and not "the Kodkod encoding needs headroom", is the
+   * real cause of the bitwidth table documented in that file's own header -- at bitwidth 4/5/6 the
+   * same wrap lands on 6 and the run is reported UNSATISFIABLE.) Reproducing the arithmetic
+   * accident is impossible on unbounded SMT integers and reproducing the literal bounds would emit
+   * a confident UNSAT the model does not support, so the contradiction is refused instead.
+   */
+  private static AssociationScope associationScope(
+      String name, List<List<String>> links, int readMin, int readMax) {
+    int k = links.size();
+    if (k == 0) {
+      return new AssociationScope(name, readMin, readMax, links);
+    }
+    int min = k;
+    int max = k;
+    if (readMin >= k) {
+      min = readMin;
+    }
+    if (readMax >= k && readMax >= readMin) {
+      max = readMax;
+    } else if (readMax <= readMin) {
+      max = readMax == -1 ? -1 : readMin;
+    }
+    if (max != -1 && max < min) {
+      throw new ConfigurationReadException(
+          "association '"
+              + name
+              + "' predefines "
+              + k
+              + " forced link(s) but its derived bounds are min="
+              + min
+              + ", max="
+              + max
+              + "; the incumbent's AssociationConfigurator.setLimits drives the maximum down to the"
+              + " READ minimum, which only Kodkod's fixed-bitwidth wraparound makes satisfiable, so"
+              + " the contradiction is refused rather than reported as UNSAT");
+    }
+    return new AssociationScope(name, min, max, links);
+  }
+
+  /**
+   * Every predefined link end must name a predefined object. Which CLASS each tuple position
+   * belongs to needs the model's association ends, which this reader does not have, so the exact
+   * per-end check lives in {@code PredefinedLinkEncoder}; what is checkable here -- and what
+   * catches a plain typo -- is that the name was predefined by some class at all.
+   *
+   * <p>Not reproduced: the incumbent additionally accepts generated {@code classname<n>} spellings
+   * for the slots between the name list and {@code Class_min} ({@code
+   * PropertyConfigurationVisitor.checkComplexElement}, lines 478-495). No corpus row uses that
+   * form, so it stays outside this slice rather than being reproduced untested.
+   */
+  private static void requireLinkEndsArePredefined(
+      List<AssociationScope> associations, Map<String, List<String>> objectNamesByClass) {
+    Set<String> predefined = new LinkedHashSet<>();
+    objectNamesByClass.values().forEach(predefined::addAll);
+    for (AssociationScope scope : associations) {
+      for (List<String> tuple : scope.links()) {
+        for (String end : tuple) {
+          if (!predefined.contains(end)) {
+            throw new ConfigurationReadException(
+                "predefined link of '"
+                    + scope.associationName()
+                    + "' names '"
+                    + end
+                    + "', which no class predefines as an object");
+          }
+        }
+      }
+    }
+  }
+
   private static Set<String> recognisedKeys(ConfigurationVocabulary vocabulary) {
     Set<String> keys =
         new LinkedHashSet<>(
@@ -292,6 +471,7 @@ public final class ConfigurationReader {
                 "satsolver",
                 "Real_step"));
     for (String name : vocabulary.classNames()) {
+      keys.add(name);
       keys.add(name + "_min");
       keys.add(name + "_max");
     }

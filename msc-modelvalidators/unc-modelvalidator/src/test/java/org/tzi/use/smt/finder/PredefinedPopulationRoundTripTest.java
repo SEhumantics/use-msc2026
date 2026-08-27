@@ -1,6 +1,7 @@
 package org.tzi.use.smt.finder;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
@@ -14,6 +15,8 @@ import org.tzi.use.smt.config.AnalysisConfiguration;
 import org.tzi.use.smt.config.ConfigurationReader;
 import org.tzi.use.smt.config.ConfigurationVocabulary;
 import org.tzi.use.smt.config.RawConfiguration;
+import org.tzi.use.smt.encode.FragmentBoundary;
+import org.tzi.use.smt.encode.SmtTranslationException;
 import org.tzi.use.uml.mm.MAssociation;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
@@ -74,6 +77,8 @@ public class PredefinedPopulationRoundTripTest {
             Crate = Set{c1,c2}
             Crate_code = Set{'X','Y'}
             Holds = Set{(s1,c1),(s1,c2)}
+            Holds_min = 2
+            Holds_max = 2
             Shelf_tagged = active
             """);
 
@@ -99,6 +104,42 @@ public class PredefinedPopulationRoundTripTest {
         "the witness must carry exactly the two configured links, in the configured direction",
         List.of("s1->c1", "s1->c2"),
         links);
+  }
+
+  /**
+   * The real {@code Subsets} corpus fixture, which predefined links made reachable for the first
+   * time -- and which must NOT reach a verdict.
+   *
+   * <p>{@code ab}'s ends are {@code union}, so its extent is the union of {@code cd} and {@code
+   * ef}; the configuration asks for {@code ab_min = ab_max = 2} while giving {@code A} and {@code
+   * B} zero objects of their own. An independent 2-D grid over those zero slots cannot hold two
+   * links, so without this refusal the encoding answered UNSATISFIABLE where the incumbent answers
+   * SATISFIABLE. A wrong verdict is worse than a refusal, so this pins the refusal.
+   */
+  @Test
+  public void theUnionAssociationOfTheRealSubsetsFixtureIsRefusedNotAnswered() throws Exception {
+    Path directory = examples().resolve("Subsets");
+    MModel model = compile(Files.readString(directory.resolve("Subsets.use")), "SimpleSubset");
+    AnalysisConfiguration config =
+        ConfigurationReader.normalize(
+                ConfigurationReader.read(directory.resolve("Subsets.properties"), "demo"),
+                ConfigurationVocabulary.fromModel(model))
+            .requireSupported();
+
+    SmtTranslationException thrown =
+        assertThrows(SmtTranslationException.class, () -> SmtModelFinder.find(model, config));
+
+    assertTrue(
+        "the refusal must name the union end: " + thrown.getMessage(),
+        thrown.getMessage().contains("union"));
+    assertEquals(FragmentBoundary.TIER_3, thrown.boundary());
+  }
+
+  private static Path examples() {
+    Path directory = Path.of("../benchmark/examples");
+    return Files.isDirectory(directory)
+        ? directory
+        : Path.of("msc-modelvalidators/benchmark/examples");
   }
 
   private static AnalysisConfiguration readConfig(MModel model, String body) throws Exception {

@@ -82,12 +82,14 @@ public class PredefinedPopulationTest {
   }
 
   /**
-   * The number of predefined link tuples is a LOWER BOUND on the link count that a missing (hence
-   * defaulted) {@code _min} cannot lower -- {@code AssociationConfigurator.setLimits} line 174 only
-   * assigns the read minimum when it is at least the number of specific values.
+   * The number of predefined link tuples is a LOWER BOUND on the link count that a smaller
+   * configured {@code _min} cannot lower -- {@code AssociationConfigurator.setLimits} line 174 only
+   * assigns the read minimum when it is at least the number of specific values, so {@code
+   * Parenthood_min = 0} against three forced tuples still reads as three.
    */
   @Test
-  public void predefinedLinkCountRaisesTheLinkMinimumOverTheDefaultedBound() throws Exception {
+  public void predefinedLinkCountRaisesTheLinkMinimumOverASmallerConfiguredBound()
+      throws Exception {
     Path file =
         temporaryConfiguration(
             """
@@ -95,6 +97,40 @@ public class PredefinedPopulationTest {
             Person_max = 4
             Person = Set{gp,pa,ch,gc}
             Parenthood = Set{(gp,pa),(pa,ch),(ch,gc)}
+            Parenthood_min = 0
+            Parenthood_max = -1
+            """);
+
+    AnalysisConfiguration configuration =
+        ConfigurationReader.normalize(ConfigurationReader.read(file, null), GENEALOGY)
+            .configuration();
+
+    AssociationScope parenthood =
+        configuration.associationScopes().stream()
+            .filter(scope -> scope.associationName().equals("Parenthood"))
+            .findFirst()
+            .orElseThrow();
+    assertEquals("three forced tuples must raise the configured minimum of 0", 3, parenthood.min());
+    assertEquals("an unbounded maximum stays unbounded", -1, parenthood.max());
+    assertEquals(
+        "the tuples are kept in the association's declared end order",
+        List.of(List.of("gp", "pa"), List.of("pa", "ch"), List.of("ch", "gc")),
+        parenthood.links());
+  }
+
+  /**
+   * A bare class-name key labels slots; it never resizes the population. {@code Person_min}/{@code
+   * Person_max} alone decide how many objects exist, exactly as in the incumbent.
+   */
+  @Test
+  public void predefinedObjectNamesLabelSlotsWithoutResizingThePopulation() throws Exception {
+    Path file =
+        temporaryConfiguration(
+            """
+            Person_min = 2
+            Person_max = 4
+            Person = Set{gp,pa}
+            Person_fName = Set{'Vito'}
             """);
 
     AnalysisConfiguration configuration =
@@ -102,10 +138,45 @@ public class PredefinedPopulationTest {
             .configuration();
 
     assertTrue(
-        "three forced tuples with no explicit bound must read as exactly three links, not the"
-            + " defaulted 1..1: "
-            + configuration.associationScopes(),
-        configuration.associationScopes().contains(new AssociationScope("Parenthood", 3, 3)));
+        "the bounds are the configured ones, not the name count: " + configuration.classScopes(),
+        configuration.classScopes().contains(new ClassScope("Person", 2, 4, List.of("gp", "pa"))));
+  }
+
+  /**
+   * Object names are NOT quote-stripped; String attribute domains in the same section still are.
+   * {@code GraphColoring.properties} depends on exactly this split -- {@code Region =
+   * Set&#123;r0,...&#125;} names objects while {@code Region_name = Set&#123;'R0',...&#125;}
+   * enumerates String candidates.
+   */
+  @Test
+  public void objectNamesKeepTheirTextWhileStringDomainsAreStillUnquoted() throws Exception {
+    Path file =
+        temporaryConfiguration(
+            """
+            Person_min = 1
+            Person_max = 1
+            Person = Set{p0}
+            Person_fName = Set{'P0'}
+            """);
+
+    AnalysisConfiguration configuration =
+        ConfigurationReader.normalize(ConfigurationReader.read(file, null), GENEALOGY)
+            .configuration();
+
+    assertEquals(
+        List.of("p0"),
+        configuration.classScopes().stream()
+            .filter(scope -> scope.className().equals("Person"))
+            .findFirst()
+            .orElseThrow()
+            .objectNames());
+    assertEquals(
+        List.of("P0"),
+        configuration.attributeDomains().stream()
+            .filter(domain -> domain.attributeName().equals("fName"))
+            .findFirst()
+            .orElseThrow()
+            .enumeratedValues());
   }
 
   /**
