@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedBy": "kk-feature-checklist workflow (7-agent: 6 capability-area source audits + 1 scenario-mapping pass), msc-4 session 2026-08-22; restructured to a plugin-keyed schema and deduped (3 true id-collisions merged) during the msc-4 feature-model rework session; independently re-verified against source by a 6-area + 14-scenario + 2-cross-check (22-agent) audit workflow, consolidating 15 further near-duplicate features (different ids, same underlying capability, found across areas) and correcting 1 support-status misclassification plus ~20 scenario-mapping errors; unc-modelvalidator support entries populated for the first time (0/126 -> 126/126) by a 6-area parallel evidence-gathering workflow, msc-4 session 2026-08-25, cross-referencing the real benchmark manifest/results.json and direct source citations, not guessed; Phase 5 UReal feature-matrix sync (Task D), msc-4 session 2026-08-26",
+  "generatedBy": "kk-feature-checklist workflow (7-agent: 6 capability-area source audits + 1 scenario-mapping pass), msc-4 session 2026-08-22; restructured to a plugin-keyed schema and deduped (3 true id-collisions merged) during the msc-4 feature-model rework session; independently re-verified against source by a 6-area + 14-scenario + 2-cross-check (22-agent) audit workflow, consolidating 15 further near-duplicate features (different ids, same underlying capability, found across areas) and correcting 1 support-status misclassification plus ~20 scenario-mapping errors; unc-modelvalidator support entries populated for the first time (0/126 -> 126/126) by a 6-area parallel evidence-gathering workflow, msc-4 session 2026-08-25, cross-referencing the real benchmark manifest/results.json and direct source citations, not guessed; Phase 5 UReal feature-matrix sync (Task D), msc-4 session 2026-08-26; query-algebra capability area (13 features: the `query` key and its recursive grammar, def/val classification, three-valued outcomes, NOMINAL/UNCERTAIN modes, the SATISFY, COUNTEREXAMPLE, invariant-independence and FRAGILE macros, Boolean connectives, all/others aggregates, EXISTS/COVER/UNIFORM profiles, and the nominal-erasure oracle) added at Milestone 4.7b / STOP GATE 4, together with corrections to the five invIndep.*/cmd.invIndep unc-modelvalidator entries Milestone 4.3's independenceSweep had made factually stale",
   "sourceAudited": "kk-modelvalidator/src/main (as of this session)",
   "scenarioManifest": "msc-modelvalidators/benchmark/src/main/resources/manifest.json (21 base scenarios + 16 paired UNSAT mutations)",
   "plugins": [
@@ -2859,12 +2859,14 @@
               "coverageNote": ""
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "useplugin.xml (src/main/resources/useplugin.xml:4-14) registers exactly ONE plugin action: 'SMT Validation' / SmtValidatePropertyAction. There is no invariant-independence action, command, or CLI entry point anywhere. A full-tree grep of unc-modelvalidator/src for 'invIndep', 'InvIndep', 'Independence', and 'independence' returns zero matches -- no InvariantIndepChecker-equivalent class exists at all.",
-              "notes": "unc-modelvalidator has no -invIndep command in any form (full sweep, targeted, or otherwise); the entire invariant-independence feature area kk-modelvalidator implements via org.tzi.kodkod.InvariantIndepChecker has no counterpart in this codebase.",
+              "status": "degraded",
+              "evidence": "Milestone 4.3 implemented the sweep itself: msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/finder/SmtModelFinder.java:104-152 (independenceSweep) and msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/QueryCompiler.java:227-231 solves one targeted counterexample(j) obligation per active invariant over one persistent solver process. Agreement with the incumbent is measured: msc-modelvalidators/benchmark/src/test/java/org/tzi/msc/benchmark/QueryMacroParityTest.java:148 -- 30/30 per-invariant obligations agree with the incumbent InvariantIndepChecker over Library, Library-UNSAT, Inheritance, Inheritance-UNSAT, MultipleInheritance and MultipleInheritance-UNSAT. What is still absent is the COMMAND surface: useplugin.xml (msc-modelvalidators/unc-modelvalidator/src/main/resources/useplugin.xml:3-14) registers exactly one action, 'SMT Validation' / SmtValidatePropertyAction, and there is no `mv -invIndep` alias -- the sweep is reachable only as the `query = invariant-independence` configuration term or the Java API.",
+              "notes": "Corrected in Milestone 4.7b. The previous entry ('unc-modelvalidator has no -invIndep command in any form ... has no counterpart in this codebase') was written before Milestone 4.3 and became false when independenceSweep landed. `degraded` rather than `supported` because the capability exists and agrees with the incumbent, but only through the query key/API, not through a USE shell command.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
-              "validationOracleScenarioIds": [],
+              "validationOracleScenarioIds": [
+                "Library"
+              ],
               "coverageNote": "zero coverage - no scenario can exercise this since no invariant-independence mechanism exists in unc-modelvalidator's source at all (confirmed by useplugin.xml's single registered action and a full-tree grep for invIndep/Independence)."
             }
           }
@@ -2887,12 +2889,14 @@
               "coverageNote": ""
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "Same as invIndep.full-model-sweep: useplugin.xml (src/main/resources/useplugin.xml:4-14) registers only the one 'SMT Validation' action; no invIndep-related class or command exists anywhere in unc-modelvalidator's source (confirmed by full-tree grep).",
-              "notes": "There is no per-invariant-name independence check of any kind -- the -invIndep <Class::Inv> targeted form kk implements via InvariantIndepChecker.validate(IModel, String, String) has no counterpart here.",
+              "status": "degraded",
+              "evidence": "The targeted form exists as the query term `counterexample(Class::Inv)` (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/QueryCompiler.java:220-226), which is strictly STRONGER than kk's targeted -invIndep: it requires the target to be DEFINED-false, not merely 'not true'. Verified against USE's own evaluator in msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/finder/CounterexampleQueryTest.java:35. As with the full sweep, there is no `mv -invIndep <Class::Inv>` command surface -- useplugin.xml registers only 'SMT Validation'.",
+              "notes": "Corrected in Milestone 4.7b; the previous entry predates Milestone 4.3 and claimed no per-invariant independence check of any kind exists.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
-              "validationOracleScenarioIds": [],
+              "validationOracleScenarioIds": [
+                "Library"
+              ],
               "coverageNote": "zero coverage - no invariant-independence mechanism exists in unc-modelvalidator at all."
             }
           }
@@ -2952,8 +2956,8 @@
             },
             "unc-modelvalidator": {
               "status": "unsupported",
-              "evidence": "Same absence as the other invIndep.* features: no invariant-independence sweep exists anywhere in unc-modelvalidator's source (useplugin.xml registers only 'SMT Validation'; zero matches for 'invIndep'/'Independence').",
-              "notes": "There is no activateAllInvariants()/resetInvariantStates()-equivalent logic, since there is no independence sweep to force-activate invariants for in the first place.",
+              "evidence": "A sweep now exists (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/finder/SmtModelFinder.java:104-152 (independenceSweep) and msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/QueryCompiler.java:227-231) but it deliberately does NOT reproduce this behaviour: it iterates config.activeInvariants(), so an invariant the .properties deactivated stays out of the sweep and out of the 'others are true' conjunct. kk's InvariantIndepChecker.activateAllInvariants (kk-modelvalidator/src/main/java/org/tzi/kodkod/InvariantIndepChecker.java:93-105) calls IInvariant.reset() on every invariant, and Invariant.reset() (org/tzi/kodkod/model/impl/Invariant.java:102-108) calls activate() -- so kk's sweep silently overrides the loaded configuration.",
+              "notes": "Corrected in Milestone 4.7b: still `unsupported`, but for the opposite reason the previous entry gave. It is not that no sweep exists (one does); it is that this divergence is deliberate. It does not affect the 30/30 parity figure because every model invariant is active in all 6 intersection rows.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -2980,8 +2984,8 @@
             },
             "unc-modelvalidator": {
               "status": "unsupported",
-              "evidence": "Same absence as the other invIndep.* features: no independence checker exists in unc-modelvalidator, and separately, unc's own SolverOutcome enum (solver/SolverOutcome.java:4-10) has no TRIVIALLY_UNSATISFIABLE/UNSATISFIABLE distinction at all -- see solve.trivial-sat-unsat-dispatch. Both the independence-check machinery AND the trivial-vs-searched distinction it would need to report on are absent.",
-              "notes": "This specific finding (a differentiated 'Dependent' vs 'Not independent for given properties' verdict driven by Kodkod's own trivially_unsatisfiable() vs unsatisfiable() distinction) cannot exist in unc for two independent reasons: no invariant-independence command exists at all, and even if one did, unc's Z3-backed solver has no equivalent bound-propagation short-circuit to distinguish trivial from searched unsatisfiability.",
+              "evidence": "A sweep now exists (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/finder/SmtModelFinder.java:104-152 (independenceSweep) and msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/QueryCompiler.java:227-231), but unc's SolverOutcome (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/solver/SolverOutcome.java:4-10) has no TRIVIALLY_UNSATISFIABLE vs UNSATISFIABLE distinction to report differently: a refuted obligation is one qualified REFUTED verdict carrying its scopes, domains and scenario/numerical policy (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/finder/BoundedCompletenessQualification.java), not two verdict strings split by how the translator happened to discharge it. QueryMacroParityTest.java:148 therefore maps kk's 'Dependent' and 'Not independent for given properties' onto the same not-independent verdict before comparing.",
+              "notes": "Corrected in Milestone 4.7b: the status is unchanged but the previous evidence ('no independence checker exists in unc-modelvalidator') is no longer true. The SolverOutcome half of that reasoning still holds and is now the whole reason.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -4003,8 +4007,8 @@
             },
             "unc-modelvalidator": {
               "status": "unsupported",
-              "evidence": "unc-modelvalidator/src/main/resources/useplugin.xml has no <commands> block at all (contrast kk's shellcmd=\"modelvalidator -invIndep\" alias=\"mv -invIndep\"); `find unc-modelvalidator/src/main/java -iname '*nvIndep*' -o -iname '*Cmd*.java'` returns zero files -- there is no InvariantIndepCmd/InvariantIndepChecker counterpart, nor any class anywhere in the codebase whose name or javadoc mentions invariant independence.",
-              "notes": "Structurally absent: no command, no checker class, no independence-checking algorithm of any kind exists in unc-modelvalidator's source.",
+              "evidence": "unc-modelvalidator/src/main/resources/useplugin.xml has no <commands> block at all (contrast kk's shellcmd=\"modelvalidator -invIndep\" alias=\"mv -invIndep\"), so there is no USE shell command. Note this is now a COMMAND-SURFACE gap only: the independence-checking algorithm itself exists (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/finder/SmtModelFinder.java:104-152 (independenceSweep) and msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/QueryCompiler.java:227-231) and agrees with the incumbent 30/30 (msc-modelvalidators/benchmark/src/test/java/org/tzi/msc/benchmark/QueryMacroParityTest.java:148 -- 30/30 per-invariant obligations agree with the incumbent InvariantIndepChecker over Library, Library-UNSAT, Inheritance, Inheritance-UNSAT, MultipleInheritance and MultipleInheritance-UNSAT); it is reached through the `query = invariant-independence` configuration term or the Java API instead.",
+              "notes": "Corrected in Milestone 4.7b. The previous entry's claim that 'no checker class, no independence-checking algorithm of any kind exists' predates Milestone 4.3 and is false; the status stays `unsupported` because this feature is specifically about the `mv -invIndep` command.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -4040,6 +4044,382 @@
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
               "coverageNote": "zero coverage - the manifest tags query.mv-vs-plain-ocl-agreement on Genealogy, CollectionSemantics, Redefines, none of which reach a real verdict in task-3.12-results.json's SMT-Z3 rows (all ERROR before solving), and the feature is unsupported structurally regardless since no query command exists to compare against plain OCL at all."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "key": "query-algebra",
+      "name": "Query algebra & translation modes",
+      "features": [
+        {
+          "id": "query.config-key",
+          "name": "`query` configuration key (one recursive witness-query term per section)",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "kk-modelvalidator has no `query` configuration key: PropertyConfigurationVisitor (kk-modelvalidator/src/main/java/org/tzi/kodkod/model/config/impl/PropertyConfigurationVisitor.java) reads only class/association/attribute/invariant keys and reports containErrors()==false for a file carrying `query`, so the key is silently DROPPED rather than refused. Directly verifiable by running the corpus: the six ScenarioProfiles-* rows spell `query = exists satisfy`, `cover satisfy` and `uniform satisfy` over the same model and Kodkod returns the SAME outcome, TRIVIALLY_SATISFIABLE, for all six under DefaultSAT4J/LightSAT4J/Lingeling/MiniSat/MiniSatProver alike. Pinned as a regression by msc-modelvalidators/benchmark/src/test/java/org/tzi/msc/benchmark/QueryMacroParityTest.java:180-192 (kodkodsScenarioProfileVerdictsAreSilentDropArtefactsNotASecondOpinion).",
+              "notes": "TRIVIALLY_SATISFIABLE here is the artefact of a dropped key, NOT a second opinion agreeing with anything: Kodkod answered the empty problem. It is excluded from every parity claim in this project.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "ConfigurationReader.java:211 passes the raw `query` value to query(entries, vocabulary) (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/config/ConfigurationReader.java:389-400), which restores the source text the legacy comma list-delimiter would otherwise have split (line 395) and hands it to QueryParser. ConfigurationReader.java:234 keeps `query` in the recognized-key set, so an unknown key still fails closed. A section with NO `query` key normalizes to QueryExpr.SATISFY by construction (AnalysisConfiguration.java:29: `this.query = query == null ? QueryExpr.SATISFY : query`), which is why all 37 non-ScenarioProfiles corpus rows are byte-for-byte unaffected.",
+              "notes": "Backward compatibility is the load-bearing property and it is measured, not asserted: msc-modelvalidators/benchmark/src/test/java/org/tzi/msc/benchmark/QueryMacroParityTest.java:117-135 drives the 6 rows on which both engines reach a real verdict through the key-free legacy path and gets 6/6 agreement with the incumbent's own -validate.",
+              "satScenarioIds": [
+                "ScenarioProfiles-ExistsOnly",
+                "ScenarioProfiles-CoverNotUniformCover",
+                "ScenarioProfiles-UniformShared"
+              ],
+              "unsatScenarioIds": [
+                "ScenarioProfiles-ExistsOnlyCover",
+                "ScenarioProfiles-ExistsOnlyUniform",
+                "ScenarioProfiles-CoverNotUniformUniform"
+              ],
+              "validationOracleScenarioIds": [
+                "ScenarioProfiles-ExistsOnly",
+                "ScenarioProfiles-CoverNotUniformCover",
+                "ScenarioProfiles-UniformShared",
+                "ScenarioProfiles-ExistsOnlyCover",
+                "ScenarioProfiles-ExistsOnlyUniform",
+                "ScenarioProfiles-CoverNotUniformUniform"
+              ],
+              "coverageNote": ""
+            }
+          }
+        },
+        {
+          "id": "query.recursive-grammar",
+          "name": "Recursive query grammar (atoms, connectives, aggregates, macros, profile prefix) with positioned diagnostics",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "kk-modelvalidator has no `query` configuration key: PropertyConfigurationVisitor (kk-modelvalidator/src/main/java/org/tzi/kodkod/model/config/impl/PropertyConfigurationVisitor.java) reads only class/association/attribute/invariant keys and reports containErrors()==false for a file carrying `query`, so the key is silently DROPPED rather than refused. Directly verifiable by running the corpus: the six ScenarioProfiles-* rows spell `query = exists satisfy`, `cover satisfy` and `uniform satisfy` over the same model and Kodkod returns the SAME outcome, TRIVIALLY_SATISFIABLE, for all six under DefaultSAT4J/LightSAT4J/Lingeling/MiniSat/MiniSatProver alike. Pinned as a regression by msc-modelvalidators/benchmark/src/test/java/org/tzi/msc/benchmark/QueryMacroParityTest.java:180-192 (kodkodsScenarioProfileVerdictsAreSilentDropArtefactsNotASecondOpinion).",
+              "notes": "TRIVIALLY_SATISFIABLE here is the artefact of a dropped key, NOT a second opinion agreeing with anything: Kodkod answered the empty problem. It is excluded from every parity claim in this project.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "QueryParser (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/config/QueryParser.java:1-261) is a recursive-descent parser over THESIS_SMT_MODEL_FINDER_PLAN.md 5.2's grammar: parseRoot() (lines 29-45) takes the optional exists/cover/uniform prefix, then parseOr() descends or -> and -> not -> atom. Invariant references resolve against the real loaded model through ConfigurationVocabulary. Every rejection carries a 1-based source position and the expected token: see the five diagnostic classes asserted in msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/config/QueryParserTest.java:79-93 -- missing 'is' (position 24), unknown invariant (position 11), `others` without exactly one target (position 80), a two-target counterexample(...) (position 28), and a scenario profile on invariant-independence (position 9).",
+              "notes": "Valid AND invalid terms are both covered, which is what spec section 9 Study E asks for: QueryParserTest.java:19-61 parses atoms, connectives, precedence, functional atoms, all three macros and all three profiles; :79-93 pins the diagnostic classes. Malformed input fails closed -- it never degrades to SATISFY.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No manifest scenario isolates this feature: the only corpus rows carrying a `query` key at all are the six ScenarioProfiles-* rows, which all spell `<profile> satisfy`. Evidence is source + unit-oracle, per the Task 3.13 discipline (a real file:line, never a guess)."
+            }
+          }
+        },
+        {
+          "id": "query.def-val-classification",
+          "name": "Reified `def[m,i]` / `val[m,i]` SMT symbol pair per invariant per mode",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "kk-modelvalidator has no definedness symbol at all. Its invariant translation produces ONE Kodkod Formula per invariant (org/tzi/use/kodkod/transform/ModelTransformator.java; org/tzi/kodkod/model/impl/Invariant.java), and undefinedness is encoded as 'neither booleanTrue nor booleanFalse' -- already recorded in this matrix under prim.boolean-undefined-strictness as a kk `degraded` row. There is no (defined, value) pair to name, reuse, or query.",
+              "notes": "Not a missing convenience: without a reified definedness bit there is nothing for a three-valued query atom to refer to, which is the structural reason the whole of this area is unsupported for kk rather than merely unimplemented.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "InvariantClassification (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/InvariantClassification.java:9-28) is the record holding the named pair, with trueTerm() = def and val, falseTerm() = def and not val, undefinedTerm() = not def. InvariantAssembler.reify(...) (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/InvariantAssembler.java:96,114-120) declares and binds that pair EXACTLY ONCE per (invariant, mode) so a query mentioning the same invariant repeatedly does not retranslate it -- measured directly by msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/encode/QueryCompilerAlgebraTest.java:57 (aQueryMentioningOneInvariantThreeTimesReifiesItOnce) and :105 (theSameInvariantInBothModesIsTwoLedgerEntriesAndTwoSymbolPairs). SmtModelFinder.java:745 lowers the query over those symbols via QueryCompiler.lowerCore.",
+              "notes": "The one-reification property is what makes the algebra compositional instead of quadratic, and it is asserted on symbol counts, not inferred.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No manifest scenario isolates this feature: the only corpus rows carrying a `query` key at all are the six ScenarioProfiles-* rows, which all spell `<profile> satisfy`. Evidence is source + unit-oracle, per the Task 3.13 discipline (a real file:line, never a guess)."
+            }
+          }
+        },
+        {
+          "id": "query.three-valued-outcomes",
+          "name": "Three-valued invariant outcome: true / false / undefined kept mutually exclusive (false is not `not true`)",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "kk-modelvalidator collapses undefined into false. This matrix already records the mechanism under prim.boolean-undefined-strictness (kk = degraded): because undefined is encoded as neither booleanTrue nor booleanFalse, both equality comparisons evaluate false whenever an operand is undefined, so `false` and `undefined` are indistinguishable in every Kodkod verdict. Nothing in kk-modelvalidator's output surface (SATISFIABLE / TRIVIALLY_SATISFIABLE / UNSATISFIABLE / TRIVIALLY_UNSATISFIABLE -- kodkod.engine.Solution.Outcome) can report a per-invariant outcome at all, let alone a three-valued one.",
+              "notes": "This is the distinction THESIS_SMT_MODEL_FINDER_PLAN.md 5.3's non-distributivity argument rests on, so its absence in kk is a genuine expressiveness gap, not a reporting detail.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "InvariantOutcome (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/config/InvariantOutcome.java:4-8) is the three-way enum TRUE/FALSE/UNDEFINED. That the three are genuinely distinct at the SMT level (not just in reporting) is proved in both modes by msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/encode/InvariantClassificationTest.java:33 (definedFalseAndUndefinedAreDistinctReifiedOutcomesInBothModes), and at end-to-end solve level by msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/finder/NonDistributiveQueryTest.java:67 (notFalseAdmitsADefinedTrueWitnessThatUndefWouldNeverAccept), :92 (theUndefinedAtomFindsAGenuinelyUndefinedWitness), :107 (notFalseAlsoAdmitsTheUndefinedReading) and :118 (theFalseAtomFindsADefinedFalseWitness).",
+              "notes": "NonDistributiveQueryTest is the executable form of 5.3's first separation argument: `not false(m,i)` admits BOTH a defined-true and an undefined witness, while `undef(m,i)` admits only the latter -- so one is demonstrably not a substitute for the other.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No manifest scenario isolates this feature: the only corpus rows carrying a `query` key at all are the six ScenarioProfiles-* rows, which all spell `<profile> satisfy`. Evidence is source + unit-oracle, per the Task 3.13 discipline (a real file:line, never a guess)."
+            }
+          }
+        },
+        {
+          "id": "query.translation-modes",
+          "name": "NOMINAL vs UNCERTAIN translation modes over one expression compiler",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "kk-modelvalidator has no uncertainty concept, so it has no erasure to perform and no second mode to select: it cannot load a U-typed model at all. Directly verifiable on the corpus -- the four URealThreshold-* rows configure `UnidentifiedObject_speed_value`/`_speed_uncertainty` and Kodkod returns TRIVIALLY_SATISFIABLE for all four (below/at/above/nominalErasure alike), having dropped both keys, where this project returns UNSAT/SAT/SAT/UNSAT respectively.",
+              "notes": "A single-mode translator cannot express the nominal-vs-uncertain discrepancy that FRAGILE is defined as, which is why query.macro-fragile is unsupported for kk for the same structural reason.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "TranslationMode (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/config/TranslationMode.java:4-7) is the NOMINAL/UNCERTAIN enum carried through the existing translator/context; InvariantAssembler.classify(invariant, baseContext, mode) (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/InvariantAssembler.java:34) is the ONE compiler both modes go through -- there is no forked second pipeline. The modes genuinely differ where uncertainty exists and genuinely coincide where it does not: msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/encode/InvariantClassificationTest.java:75 (nominalErasureAccepts031WhileUncertainThresholdRejectsIt) is the already-proven 0.31 > 0.30 erasure discrepancy, and msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/finder/BooleanQueryAlgebraTest.java:196 (nominalAtomsRunEndToEndAndCoincideWithUncertainOnACrispModel) is the crisp degenerate case.",
+              "notes": "Crisp-model coincidence is what keeps the 6-row incumbent parity intact while the second mode exists at all.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [
+                "URealThreshold-NominalErasure"
+              ],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No manifest scenario isolates this feature: the only corpus rows carrying a `query` key at all are the six ScenarioProfiles-* rows, which all spell `<profile> satisfy`. Evidence is source + unit-oracle, per the Task 3.13 discipline (a real file:line, never a guess)."
+            }
+          }
+        },
+        {
+          "id": "query.macro-satisfy",
+          "name": "SATISFY macro (`uncertain all are true`) as a derived, spellable query term",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "kk-modelvalidator has no `query` configuration key: PropertyConfigurationVisitor (kk-modelvalidator/src/main/java/org/tzi/kodkod/model/config/impl/PropertyConfigurationVisitor.java) reads only class/association/attribute/invariant keys and reports containErrors()==false for a file carrying `query`, so the key is silently DROPPED rather than refused. Directly verifiable by running the corpus: the six ScenarioProfiles-* rows spell `query = exists satisfy`, `cover satisfy` and `uniform satisfy` over the same model and Kodkod returns the SAME outcome, TRIVIALLY_SATISFIABLE, for all six under DefaultSAT4J/LightSAT4J/Lingeling/MiniSat/MiniSatProver alike. Pinned as a regression by msc-modelvalidators/benchmark/src/test/java/org/tzi/msc/benchmark/QueryMacroParityTest.java:180-192 (kodkodsScenarioProfileVerdictsAreSilentDropArtefactsNotASecondOpinion). kk-modelvalidator reaches the SATISFY OUTCOME by a different route -- `mv -validate` (KodkodValidateCmd, already scored kk = supported under cmd.validate) hardcodes 'every active invariant holds' -- but it is not a derived macro over an algebra: there is no term to spell, nothing it composes with, and no way to request any other witness predicate. Its outcome agreement is real and measured (6/6, see notes); its expressibility as a query term is absent.",
+              "notes": "Scored on the FEATURE (a derived, spellable, composable macro), not on the outcome. The outcome half is measured in msc-modelvalidators/benchmark/src/test/java/org/tzi/msc/benchmark/QueryMacroParityTest.java:117 (derivedSatisfyAgreesWithIncumbentValidateOnTheWholeIntersection): 6/6 agreement over Library, Library-UNSAT, Inheritance, Inheritance-UNSAT, MultipleInheritance, MultipleInheritance-UNSAT -- the complete intersection on which both engines reach a real verdict.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "QueryCompiler.desugar (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/QueryCompiler.java:219) lowers QueryExpr.Satisfy to allAreTrue(UNCERTAIN, activeInvariants) -- literally the same node an explicit `uncertain all are true` produces, asserted in msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/encode/QueryCompilerAlgebraTest.java:135 (everyMacroCompilesToExactlyItsSpelledOutForm) and end-to-end in msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/finder/BooleanQueryAlgebraTest.java:76 (theAllAggregateOutsideAMacroIsSatisfy). Incumbent agreement: msc-modelvalidators/benchmark/src/test/java/org/tzi/msc/benchmark/QueryMacroParityTest.java:117 gets 6/6 over the whole intersection.",
+              "notes": "Parity here is claimed on 6 rows and nowhere else. Of the 43 corpus rows Kodkod reaches a real verdict on 33 and this project on 16; the intersection is 6. The 27 rows this project fails closed on are excluded from numerator and denominator alike.",
+              "satScenarioIds": [
+                "Library",
+                "Inheritance",
+                "MultipleInheritance",
+                "ScenarioProfiles-ExistsOnly",
+                "ScenarioProfiles-CoverNotUniformCover",
+                "ScenarioProfiles-UniformShared"
+              ],
+              "unsatScenarioIds": [
+                "Library-UNSAT",
+                "Inheritance-UNSAT",
+                "MultipleInheritance-UNSAT",
+                "ScenarioProfiles-ExistsOnlyCover",
+                "ScenarioProfiles-ExistsOnlyUniform",
+                "ScenarioProfiles-CoverNotUniformUniform"
+              ],
+              "validationOracleScenarioIds": [
+                "Library",
+                "Inheritance",
+                "MultipleInheritance"
+              ],
+              "coverageNote": ""
+            }
+          }
+        },
+        {
+          "id": "query.macro-counterexample",
+          "name": "Targeted COUNTEREXAMPLE(j) macro: target defined-FALSE, every other active invariant true",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "kk-modelvalidator has no `query` configuration key: PropertyConfigurationVisitor (kk-modelvalidator/src/main/java/org/tzi/kodkod/model/config/impl/PropertyConfigurationVisitor.java) reads only class/association/attribute/invariant keys and reports containErrors()==false for a file carrying `query`, so the key is silently DROPPED rather than refused. Directly verifiable by running the corpus: the six ScenarioProfiles-* rows spell `query = exists satisfy`, `cover satisfy` and `uniform satisfy` over the same model and Kodkod returns the SAME outcome, TRIVIALLY_SATISFIABLE, for all six under DefaultSAT4J/LightSAT4J/Lingeling/MiniSat/MiniSatProver alike. Pinned as a regression by msc-modelvalidators/benchmark/src/test/java/org/tzi/msc/benchmark/QueryMacroParityTest.java:180-192 (kodkodsScenarioProfileVerdictsAreSilentDropArtefactsNotASecondOpinion). The nearest kk behaviour is IInvariant.negate() driven by InvariantIndepChecker (kk-modelvalidator/src/main/java/org/tzi/kodkod/InvariantIndepChecker.java:87-91), which negates one invariant at a time. That is 'not true', NOT 'defined false': because kk cannot separate false from undefined (see query.three-valued-outcomes), a negated invariant is satisfied by an undefined reading -- invalid navigation can masquerade as a violation. There is also no way to REQUEST one, since -invIndep only ever sweeps.",
+              "notes": "The distinction matters exactly as proposal 'Common core and complete query-mode semantics' says it does: COUNTEREXAMPLE requires defined-false or an undefined evaluation could be reported as a counterexample.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "QueryCompiler.desugar (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/QueryCompiler.java:220-226) lowers QueryExpr.Counterexample(j) to `false(UNCERTAIN, j) and all others true`, using InvariantClassification.falseTerm() = def and not val (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/InvariantClassification.java:22-24) so the target is a DEFINED violation. Verified against USE's own evaluator on the real unmodified Library.properties: msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/finder/CounterexampleQueryTest.java:35 (targetedCounterexampleIsolatesExactlyTheTargetAsDefinedFalse) asserts Book::titleIsKey comes back FALSE and each of the other 8 active invariants TRUE in the reconstructed witness.",
+              "notes": "Attribution is enforced, not hoped for: a false NON-target prevents the witness being attributed to the target (WitnessAttributionException, msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/verify/WitnessAttributionException.java), and an undefined target is rejected outright.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [
+                "Library"
+              ],
+              "coverageNote": "No manifest scenario isolates this feature: the only corpus rows carrying a `query` key at all are the six ScenarioProfiles-* rows, which all spell `<profile> satisfy`. Evidence is source + unit-oracle, per the Task 3.13 discipline (a real file:line, never a guess)."
+            }
+          }
+        },
+        {
+          "id": "query.macro-invariant-independence",
+          "name": "invariant-independence macro: COUNTEREXAMPLE(j) swept over every active invariant",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "supported",
+              "evidence": "InvariantIndepChecker (kk-modelvalidator/src/main/java/org/tzi/kodkod/InvariantIndepChecker.java:69-84) activates every invariant, negates one at a time and solves, reporting 'Independent' / 'Dependent' / 'Not independent for given properties' per invariant. This is the incumbent feature this project's sweep is measured against, and the agreement is real: msc-modelvalidators/benchmark/src/test/java/org/tzi/msc/benchmark/QueryMacroParityTest.java:148 (derivedCounterexampleSweepAgreesWithIncumbentInvIndepObligationForObligation) drives BOTH engines over the same unmodified files and gets 30/30 per-invariant obligations in agreement (9 + 9 Library, 3 + 3 Inheritance, 3 + 3 MultipleInheritance).",
+              "notes": "Scored `supported` for kk on the merits, not `unsupported` by association with the rest of this area: kk genuinely implements the sweep. What it does not have is the macro -- the sweep is a fixed command, not a term in an algebra, and it inherits the 'not true' vs 'defined false' weakness recorded under query.macro-counterexample.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "SmtModelFinder.independenceSweep (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/finder/SmtModelFinder.java:104-152) solves one targeted counterexample(j) obligation per active invariant over one persistent solver process, each witness attributed to its own target by the same oracle every other query result goes through; QueryCompiler.java:227-231 lowers QueryExpr.InvariantIndependence. Agreement with the incumbent is measured, not assumed: msc-modelvalidators/benchmark/src/test/java/org/tzi/msc/benchmark/QueryMacroParityTest.java:148 gets 30/30 obligations.",
+              "notes": "One real divergence, deliberate and recorded: kk's sweep force-activates every invariant including ones the .properties deactivated (Invariant.reset() calls activate(), kk-modelvalidator/src/main/java/org/tzi/kodkod/model/impl/Invariant.java:102-108, driven from InvariantIndepChecker.java:93-105), while this project's sweep respects config.activeInvariants(). It does not bite on the 6 intersection rows because every model invariant is active in all of them -- which is why the 30/30 figure is comparable at all.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [
+                "Library"
+              ],
+              "coverageNote": "No manifest scenario isolates this feature: the only corpus rows carrying a `query` key at all are the six ScenarioProfiles-* rows, which all spell `<profile> satisfy`. Evidence is source + unit-oracle, per the Task 3.13 discipline (a real file:line, never a guess)."
+            }
+          }
+        },
+        {
+          "id": "query.macro-fragile",
+          "name": "FRAGILE(j) macro: nominal target true AND U-aware target false AND others U-aware true",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "Structurally impossible for kk, not merely unimplemented: FRAGILE is defined as a DISCREPANCY BETWEEN TWO TRANSLATION MODES of the same invariant, and kk-modelvalidator has exactly one mode (see query.translation-modes) and no uncertainty representation to erase. kk-modelvalidator has no `query` configuration key: PropertyConfigurationVisitor (kk-modelvalidator/src/main/java/org/tzi/kodkod/model/config/impl/PropertyConfigurationVisitor.java) reads only class/association/attribute/invariant keys and reports containErrors()==false for a file carrying `query`, so the key is silently DROPPED rather than refused. Directly verifiable by running the corpus: the six ScenarioProfiles-* rows spell `query = exists satisfy`, `cover satisfy` and `uniform satisfy` over the same model and Kodkod returns the SAME outcome, TRIVIALLY_SATISFIABLE, for all six under DefaultSAT4J/LightSAT4J/Lingeling/MiniSat/MiniSatProver alike. Pinned as a regression by msc-modelvalidators/benchmark/src/test/java/org/tzi/msc/benchmark/QueryMacroParityTest.java:180-192 (kodkodsScenarioProfileVerdictsAreSilentDropArtefactsNotASecondOpinion).",
+              "notes": "TRIVIALLY_SATISFIABLE here is the artefact of a dropped key, NOT a second opinion agreeing with anything: Kodkod answered the empty problem. It is excluded from every parity claim in this project.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "QueryCompiler.desugar (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/QueryCompiler.java:232-241) lowers QueryExpr.Fragile(j) to `true(NOMINAL, j) and false(UNCERTAIN, j) and all others UNCERTAIN true`, asserted term-for-term in msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/encode/QueryCompilerAlgebraTest.java:149 (fragileCompilesToExactlyItsSpelledOutForm). End-to-end against the real ReliablyFast nominal-erasure witness: msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/finder/FragileQueryTest.java:65 (fragileFindsTheNominalErasureWitnessThatSatisfyCorrectlyRejects) -- the same 0.31/0.02 configuration the corpus row URealThreshold-NominalErasure reports UNSATISFIABLE for under plain `satisfy`.",
+              "notes": "The proposal's own oracle FRAGILE(j) => COUNTEREXAMPLE(j) is executable, not quoted: FragileQueryTest.java:98 (everyFragileWitnessIsAlsoACounterexample). Adversarial cases are covered too -- :202 a false non-target prevents attribution, :228 an undefined target is not fragility, :138/:163 the exact tie is fragile only under >=.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [
+                "URealThreshold-NominalErasure"
+              ],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No manifest scenario isolates this feature: the only corpus rows carrying a `query` key at all are the six ScenarioProfiles-* rows, which all spell `<profile> satisfy`. Evidence is source + unit-oracle, per the Task 3.13 discipline (a real file:line, never a guess)."
+            }
+          }
+        },
+        {
+          "id": "query.boolean-connectives",
+          "name": "Boolean connectives `and` / `or` / `not` over classification atoms",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "kk-modelvalidator has no `query` configuration key: PropertyConfigurationVisitor (kk-modelvalidator/src/main/java/org/tzi/kodkod/model/config/impl/PropertyConfigurationVisitor.java) reads only class/association/attribute/invariant keys and reports containErrors()==false for a file carrying `query`, so the key is silently DROPPED rather than refused. Directly verifiable by running the corpus: the six ScenarioProfiles-* rows spell `query = exists satisfy`, `cover satisfy` and `uniform satisfy` over the same model and Kodkod returns the SAME outcome, TRIVIALLY_SATISFIABLE, for all six under DefaultSAT4J/LightSAT4J/Lingeling/MiniSat/MiniSatProver alike. Pinned as a regression by msc-modelvalidators/benchmark/src/test/java/org/tzi/msc/benchmark/QueryMacroParityTest.java:180-192 (kodkodsScenarioProfileVerdictsAreSilentDropArtefactsNotASecondOpinion).",
+              "notes": "TRIVIALLY_SATISFIABLE here is the artefact of a dropped key, NOT a second opinion agreeing with anything: Kodkod answered the empty problem. It is excluded from every parity claim in this project.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "QueryCompiler.lower (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/QueryCompiler.java:259-261) maps And/Or/Not onto Smt.and/Smt.or/Smt.not over the ALREADY-REIFIED classification symbols, flattening nested nodes (:275-296) so no invariant is retranslated. End-to-end in msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/finder/BooleanQueryAlgebraTest.java:111 (negationOfATrueAtomIsSatisfiedByADefinedFalseWitness) and :133 (aDisjunctionIsSatisfiedByEitherDisjunctSoNoSingleOutcomeMapDescribesIt).",
+              "notes": "BooleanQueryAlgebraTest.java:133 is the executable form of THESIS_SMT_MODEL_FINDER_PLAN.md 5.3's expressiveness separation: a disjunctive query is satisfied by EITHER disjunct, so no single per-invariant outcome map -- and therefore no set of activation flags, which is exactly a product of per-invariant conditions -- describes its solution set. No .properties configuration can express it.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No manifest scenario isolates this feature: the only corpus rows carrying a `query` key at all are the six ScenarioProfiles-* rows, which all spell `<profile> satisfy`. Evidence is source + unit-oracle, per the Task 3.13 discipline (a real file:line, never a guess)."
+            }
+          }
+        },
+        {
+          "id": "query.aggregates-all-others",
+          "name": "`<mode> all are true` and `<mode> others are true` aggregates",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "kk-modelvalidator has no `query` configuration key: PropertyConfigurationVisitor (kk-modelvalidator/src/main/java/org/tzi/kodkod/model/config/impl/PropertyConfigurationVisitor.java) reads only class/association/attribute/invariant keys and reports containErrors()==false for a file carrying `query`, so the key is silently DROPPED rather than refused. Directly verifiable by running the corpus: the six ScenarioProfiles-* rows spell `query = exists satisfy`, `cover satisfy` and `uniform satisfy` over the same model and Kodkod returns the SAME outcome, TRIVIALLY_SATISFIABLE, for all six under DefaultSAT4J/LightSAT4J/Lingeling/MiniSat/MiniSatProver alike. Pinned as a regression by msc-modelvalidators/benchmark/src/test/java/org/tzi/msc/benchmark/QueryMacroParityTest.java:180-192 (kodkodsScenarioProfileVerdictsAreSilentDropArtefactsNotASecondOpinion).",
+              "notes": "TRIVIALLY_SATISFIABLE here is the artefact of a dropped key, NOT a second opinion agreeing with anything: Kodkod answered the empty problem. It is excluded from every parity claim in this project.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "QueryCompiler.desugar (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/QueryCompiler.java:215-217) expands QueryExpr.Aggregate over the active set: ALL via allAreTrue (:307-315), OTHERS via others(activeInvariants, target) (:316) -- the active set minus the ONE referenced target. `others` fails closed when the query does not reference exactly one target, with a source position: msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/config/QueryParserTest.java:83-86 (position 80, 'others requires exactly one target invariant') and msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/encode/QueryCompilerAlgebraTest.java:159 (othersWithoutExactlyOneTargetFailsClosed).",
+              "notes": "The empty aggregate is written down rather than silently dropped: QueryExpr.Constant (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/config/QueryExpr.java:29-35) denotes the empty conjunction as true, and the parser never produces one -- it exists only as a desugaring target.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No manifest scenario isolates this feature: the only corpus rows carrying a `query` key at all are the six ScenarioProfiles-* rows, which all spell `<profile> satisfy`. Evidence is source + unit-oracle, per the Task 3.13 discipline (a real file:line, never a guess)."
+            }
+          }
+        },
+        {
+          "id": "query.scenario-profiles",
+          "name": "EXISTS / COVER / UNIFORM scenario profiles over one shared witness predicate",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "kk-modelvalidator has no `query` configuration key: PropertyConfigurationVisitor (kk-modelvalidator/src/main/java/org/tzi/kodkod/model/config/impl/PropertyConfigurationVisitor.java) reads only class/association/attribute/invariant keys and reports containErrors()==false for a file carrying `query`, so the key is silently DROPPED rather than refused. Directly verifiable by running the corpus: the six ScenarioProfiles-* rows spell `query = exists satisfy`, `cover satisfy` and `uniform satisfy` over the same model and Kodkod returns the SAME outcome, TRIVIALLY_SATISFIABLE, for all six under DefaultSAT4J/LightSAT4J/Lingeling/MiniSat/MiniSatProver alike. Pinned as a regression by msc-modelvalidators/benchmark/src/test/java/org/tzi/msc/benchmark/QueryMacroParityTest.java:180-192 (kodkodsScenarioProfileVerdictsAreSilentDropArtefactsNotASecondOpinion). kk-modelvalidator has no scenario/measurement-alternative axis of any kind to quantify over, so the three profiles are not merely unselectable -- there is nothing for them to range over.",
+              "notes": "The six ScenarioProfiles-* cells are the sharpest available measurement of this: three DIFFERENT profiles over the same model, one constant Kodkod answer. TRIVIALLY_SATISFIABLE here is the artefact of a dropped key, NOT a second opinion agreeing with anything: Kodkod answered the empty problem. It is excluded from every parity claim in this project.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "SmtModelFinder.run (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/finder/SmtModelFinder.java:202-250) dispatches on the profile: EXISTS is one solve with the scenario decoded back out of the assignment (:206-224); COVER solves one obligation per configured scenario, each free to pick its own snapshot; UNIFORM (:227-250) is ONE solve carrying every scenario at once with object/link/representative symbols declared once and SHARED, each scenario getting its own pinned uncertainty symbols and its own def/val pair. The scenario space itself is enumerated by ScenarioSpace.enumerate (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/ScenarioSpace.java:48). Every scenario of a UNIFORM witness is reconstructed and independently USE-checked, not just the first (SmtModelFinder.java:243-250).",
+              "notes": "The three strengths are genuinely distinguished on real corpus rows, which is the only way to show no profile is being silently degraded to a weaker one: ScenarioProfiles-ExistsOnly SATISFIABLE while ScenarioProfiles-ExistsOnlyCover and -ExistsOnlyUniform are both UNSATISFIABLE; ScenarioProfiles-CoverNotUniformCover SATISFIABLE while -CoverNotUniformUniform is UNSATISFIABLE; ScenarioProfiles-UniformShared SATISFIABLE. Unit-level oracles in msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/finder/ScenarioProfileTest.java:56, :86, :129, :174. COVER over an untargeted disjunction (:229) and over a non-finite scenario space (:244) both fail closed.",
+              "satScenarioIds": [
+                "ScenarioProfiles-ExistsOnly",
+                "ScenarioProfiles-CoverNotUniformCover",
+                "ScenarioProfiles-UniformShared"
+              ],
+              "unsatScenarioIds": [
+                "ScenarioProfiles-ExistsOnlyCover",
+                "ScenarioProfiles-ExistsOnlyUniform",
+                "ScenarioProfiles-CoverNotUniformUniform"
+              ],
+              "validationOracleScenarioIds": [
+                "ScenarioProfiles-ExistsOnly",
+                "ScenarioProfiles-CoverNotUniformCover",
+                "ScenarioProfiles-UniformShared",
+                "ScenarioProfiles-ExistsOnlyCover",
+                "ScenarioProfiles-ExistsOnlyUniform",
+                "ScenarioProfiles-CoverNotUniformUniform"
+              ],
+              "coverageNote": ""
+            }
+          }
+        },
+        {
+          "id": "query.nominal-erasure-oracle",
+          "name": "Nominal-erasure oracle: independent USE re-evaluation of a reconstructed witness with uncertainty erased",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "No counterpart, and no need for one: kk-modelvalidator has a single translation mode and no uncertainty to erase (see query.translation-modes). Separately, this matrix already records that kk performs no independent re-evaluation of a reconstructed instance through USE's own evaluator in EITHER mode -- its reconstruction path is ObjectDiagramCreator (org/tzi/use/kodkod/solution/ObjectDiagramCreator.java), which builds the diagram and checks for diagram errors, not for invariant agreement.",
+              "notes": "TRIVIALLY_SATISFIABLE here is the artefact of a dropped key, NOT a second opinion agreeing with anything: Kodkod answered the empty problem. It is excluded from every parity claim in this project.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "NominalErasureEvaluator (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/verify/NominalErasureEvaluator.java:95-469) reads the SAME reconstructed snapshot with every uncertainty component erased to its representative and every confidence projection replaced by its crisp counterpart; InvariantReEvaluator.java:135 selects it for NOMINAL and ThreeValuedEvaluator for UNCERTAIN (see the dispatch comment at msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/verify/InvariantReEvaluator.java:63). Results carry both sets of verdicts separately -- ModelFinderResult.nominalVerdicts() (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/finder/ModelFinderResult.java:69-71) alongside verdicts(). The oracle is checked against the crisp comparison rather than the stored probability rule in msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/finder/FragileQueryTest.java:184 (nominalErasureUsesTheCrispComparisonNotTheStoredProbabilityRule).",
+              "notes": "This is what makes a FRAGILE verdict a claim rather than a translation artefact: the erased target being defined-true is re-established through USE's real evaluator on the reconstructed object diagram, not read back out of the SMT model. NominalErasureUnsupportedException (msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/verify/NominalErasureUnsupportedException.java) keeps it fail-closed.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [
+                "URealThreshold-NominalErasure"
+              ],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No manifest scenario isolates this feature: the only corpus rows carrying a `query` key at all are the six ScenarioProfiles-* rows, which all spell `<profile> satisfy`. Evidence is source + unit-oracle, per the Task 3.13 discipline (a real file:line, never a guess)."
             }
           }
         }
