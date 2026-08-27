@@ -1,0 +1,6 @@
+model UBooleanRoundTrip
+
+class Detection
+attributes
+  hitsTarget : UBoolean
+end

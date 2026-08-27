@@ -1,0 +1,11 @@
+model ReliableSignal
+
+class Detection
+attributes
+  hitsTarget : UBoolean
+  isClear : UBoolean
+end
+
+constraints
+context self : Detection inv ReliableSignal:
+  (self.hitsTarget and self.isClear).toBooleanC(0.81)
