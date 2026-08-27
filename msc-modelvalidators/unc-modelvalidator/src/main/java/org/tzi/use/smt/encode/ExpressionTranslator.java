@@ -86,12 +86,19 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   public void visitAttrOp(ExpAttrOp e) {
     VariableBinding b = context.binding(variableNameOf(e.objExp()));
     AttributeValues v = context.attributeValues(b.className(), e.attr().name());
-    if (v.type().isUType()) {
+    if (v.type().isUncertain()) {
       throw unsupported(
           FragmentBoundary.UTYPE_CORE,
           "bare "
-              + (v.type() == AttributeType.UREAL ? "UReal" : "UInteger")
-              + " attribute access outside a supported threshold comparison");
+              + switch (v.type()) {
+                case UREAL -> "UReal";
+                case UINTEGER -> "UInteger";
+                default -> "UBoolean";
+              }
+              + " attribute access outside a supported "
+              + (v.type() == AttributeType.UBOOLEAN
+                  ? "toBooleanC projection"
+                  : "threshold comparison"));
     }
     result = defined(Smt.sym(v.valueNames().get(b.slotIndex())));
   }
@@ -174,13 +181,16 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    */
   private TranslatedExpression uTypeThreshold(ExpStdOp projection) {
     Expression[] projectionArgs = projection.args();
-    if (projectionArgs.length != 2 || !(projectionArgs[0] instanceof ExpStdOp comparison)) {
-      throw unsupported(FragmentBoundary.UTYPE_CORE, "toBooleanC outside a direct comparison");
+    if (projectionArgs.length != 2) {
+      throw unsupported(FragmentBoundary.UTYPE_CORE, "toBooleanC with a non-binary argument list");
     }
-    if (!List.of(">", ">=", "<", "<=").contains(comparison.opname())) {
-      throw unsupported(
-          FragmentBoundary.UTYPE_CORE,
-          "toBooleanC over comparison operator '" + comparison.opname() + "'");
+    // Two disjoint families reach this operation, and the OPERAND decides which. A numeric
+    // comparison is UReal/UInteger's evaluator-derived normal-CDF threshold; anything else that is
+    // UBoolean-typed is the third family, whose probability is carried directly rather than
+    // derived from a comparison.
+    if (!(projectionArgs[0] instanceof ExpStdOp comparison)
+        || !List.of(">", ">=", "<", "<=").contains(comparison.opname())) {
+      return uBooleanThreshold(projectionArgs[0], projectionArgs[1]);
     }
     Expression[] comparisonArgs = comparison.args();
     if (comparisonArgs.length != 2 || !(comparisonArgs[0] instanceof ExpAttrOp attribute)) {
@@ -203,7 +213,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
     VariableBinding binding = context.binding(variableNameOf(attribute.objExp()));
     AttributeValues values = context.attributeValues(binding.className(), attribute.attr().name());
-    if (!values.type().isUType()) {
+    if (!values.type().isPairedUType()) {
       throw unsupported(
           FragmentBoundary.UTYPE_CORE,
           "U-type threshold without paired value/uncertainty SMT terms");
@@ -243,6 +253,59 @@ public final class ExpressionTranslator implements ExpressionVisitor {
             List.of(
                 Smt.and(List.of(Smt.eq(uncertainty, zero), exact)),
                 Smt.and(List.of(Smt.app(">", uncertainty, zero), uncertain)))));
+  }
+
+  /**
+   * Translates {@code <UBoolean expression>.toBooleanC(theta)}, the third U-type family's only
+   * projection.
+   *
+   * <p>All of the real work -- and the whole reason this family is not a two-line addition -- lives
+   * in {@link UBooleanProbability}: the source's {@code and}/{@code or}/{@code implies} rules are
+   * PRODUCTS of probabilities, which {@code QF_LIRA} cannot express over two solver variables, so
+   * the composition is enumerated over the finitely many configured choices at translation time and
+   * the solver is only ever asked WHICH choice was taken. See that class for the argument that the
+   * emitted script stays inside the pinned logic.
+   *
+   * <p>Definedness is a constant {@code true}: every operand is a stored attribute whose existence
+   * guard already forces it to carry one of its configured probabilities, and {@code toBooleanC}
+   * itself is total for a confidence inside {@code [0,1]}. A confidence outside {@code [0,1]} makes
+   * USE's own {@code Op_uBoolean_toBooleanC} yield {@code UndefinedValue}; rather than encode a
+   * whole invariant as undefined on a constant the modeller almost certainly mistyped, that fails
+   * closed.
+   */
+  private TranslatedExpression uBooleanThreshold(Expression operand, Expression confidenceArg) {
+    if (!operand.type().isTypeOfUBoolean()) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "toBooleanC over the non-UBoolean operand '" + operand + "'");
+    }
+    BigDecimal confidence =
+        decimalLiteral(confidenceArg, "confidence threshold", FragmentBoundary.UTYPE_CORE);
+    if (confidence.signum() < 0 || confidence.compareTo(BigDecimal.ONE) > 0) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "UBoolean confidence threshold outside [0,1] (USE yields UndefinedValue there), got "
+              + confidence);
+    }
+    if (mode == TranslationMode.NOMINAL) {
+      // The independent oracle's erasure is E(b.toBooleanC(theta)) = E_B(b), and
+      // NominalErasureEvaluator has exactly ONE UBoolean rule for E_B: "a STORED UBoolean
+      // probability uses the p >= 0.5 rule", throwing for any other UBoolean shape. The SMT
+      // nominal arm must refuse exactly where the oracle refuses, or a FRAGILE verdict could rest
+      // on a nominal reading nothing can independently confirm.
+      if (!(operand instanceof ExpAttrOp)) {
+        throw unsupported(
+            FragmentBoundary.UTYPE_CORE,
+            "nominal erasure of the composed UBoolean expression '"
+                + operand
+                + "': the proposal's erasure table defines E_B only for a STORED UBoolean"
+                + " probability (p >= 0.5), and NominalErasureEvaluator refuses the rest");
+      }
+      return defined(UBooleanProbability.select(UBooleanProbability.lower(operand, context), 0.5));
+    }
+    return defined(
+        UBooleanProbability.select(
+            UBooleanProbability.lower(operand, context), confidence.doubleValue()));
   }
 
   /**

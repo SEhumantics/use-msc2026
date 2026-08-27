@@ -32,9 +32,10 @@ public class CorpusConfigurationCompatibilityTest {
    * Study B supersession rows ({@code IntegerBitwidth-DailyCap}, {@code RealGrid-UnitInterval}),
    * which are ordinary satisfiability questions asked of both backends and so carry no query key
    * either, plus the four {@code UIntegerThreshold-*} rows that landed with the second U-type
-   * family -- ordinary satisfiability questions too, so they land on the query-less side as well.
+   * family and the four {@code UBooleanThreshold-*} rows that landed with the third -- ordinary
+   * satisfiability questions too, so they land on the query-less side as well.
    */
-  private static final int QUERYLESS_SCENARIOS = 43;
+  private static final int QUERYLESS_SCENARIOS = 47;
 
   /** The Milestone 4.6 scenario-profile rows, the first corpus entries to configure a query. */
   private static final int QUERY_CARRYING_SCENARIOS = 6;

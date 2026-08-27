@@ -23,6 +23,7 @@ import org.tzi.use.smt.encode.FragmentBoundary;
 import org.tzi.use.smt.verify.InvariantVerdict;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
+import org.tzi.use.uncertainty.datatypes.UBoolean;
 import org.tzi.use.uncertainty.datatypes.UReal;
 
 /**
@@ -39,12 +40,19 @@ import org.tzi.use.uncertainty.datatypes.UReal;
  * re-implements either side.
  *
  * <p><b>Scope, stated rather than fabricated.</b> 7.2's U-type core names {@code UReal}, {@code
- * UInteger}, {@code UBoolean} and {@code UString}. {@code UReal} and -- since the second U-type
- * family landed -- {@code UInteger} are translated; {@code UBoolean} and {@code UString} are not.
- * The generator therefore ranges over exactly those two, and {@link
+ * UInteger}, {@code UBoolean} and {@code UString}. The first three are translated; {@code UString}
+ * is not. The generator therefore ranges over exactly those three, and {@link
  * #theGeneratorsScopeIsBoundedByWhatIsActuallyTranslated} pins that restriction to {@code
- * AttributeType} itself rather than leaving it as a claim in a comment, so the day a third family
- * lands this test fails and forces the generator to be widened again.
+ * AttributeType} itself rather than leaving it as a claim in a comment, so the day the fourth
+ * family lands this test fails and forces the generator to be widened again. It has now fired twice
+ * and been widened twice, never suppressed.
+ *
+ * <p><b>Why the {@code UBoolean} points slide the CONFIDENCE rather than a representative.</b>
+ * {@code UBoolean} has no representative and no normal CDF: its rules are exact algebra over
+ * probabilities, so the evaluator's transition for {@code b.toBooleanC(theta)} is {@code theta}
+ * itself. The informative axis is therefore the confidence, slid just below / exactly onto / just
+ * above the composed probability USE's own {@code UBoolean} computes -- and the exactly-onto points
+ * are the {@code >=} tie the projection is defined by.
  *
  * <p><b>Why the {@code UInteger} points are integers and why that is the sharper test.</b> The
  * threshold mathematics is shared: USE's own {@code UInteger.gt} is defined as {@code
@@ -79,32 +87,42 @@ public class ExpressionAgreementDifferentialTest {
   private record Point(
       String uType,
       double sigma,
-      String operator,
-      double threshold,
+      String expression,
       double confidence,
       double representative,
       double evaluatorBoundary,
       InvariantOutcome useSaid,
       boolean encodingAdmits) {
 
-    /** Distance from the evaluator's own transition, in representative units. */
+    /**
+     * Distance from the evaluator's own transition. For the two paired families that is measured in
+     * REPRESENTATIVE units; for {@code UBoolean} it is measured in PROBABILITY units, since the
+     * transition there is the confidence itself and the quantity crossing it is the composed
+     * probability.
+     */
     double offset() {
       return representative - evaluatorBoundary;
     }
 
     boolean insideDocumentedBand() {
+      if (uType.equals("UBoolean")) {
+        // There is no numerical band for UBoolean, and that is a claim about the encoding, not a
+        // convenience: no normal CDF is involved and nothing is bisected. The composition is USE's
+        // own UBoolean arithmetic evaluated at translation time over finitely many configured
+        // probabilities, so the encoded value is bit-identical to the evaluator's and EVERY
+        // UBoolean point is an exact-agreement point.
+        return false;
+      }
       return Math.abs(offset()) <= sigma * 1.0e-8 + Math.pow(10, -SCALE);
     }
 
     @Override
     public String toString() {
       return String.format(
-          "%s: (self.%s %s %s).toBooleanC(%s) at mu=%.12f (sigma=%s, boundary %.12f,"
-              + " offset %.3e): USE=%s encoding=%s",
+          "%s: %s.toBooleanC(%s) at %.15f (sigma=%s, transition %.15f, offset %.3e):"
+              + " USE=%s encoding=%s",
           uType,
-          uType.equals("UReal") ? "speed" : "units",
-          operator,
-          threshold,
+          expression,
           confidence,
           representative,
           sigma,
@@ -125,10 +143,10 @@ public class ExpressionAgreementDifferentialTest {
   public void generatedGroundThresholdsAgreeWithTheUseEvaluatorOutsideTheDocumentedBand()
       throws Exception {
     List<Point> points = generate();
-    assertEquals("the generator must actually generate", 60 + 48, points.size());
+    assertEquals("the generator must actually generate", 60 + 48 + 45, points.size());
     assertEquals(
-        "both translated U-type families must be generated",
-        Set.of("UReal", "UInteger"),
+        "every translated U-type family must be generated",
+        Set.of("UReal", "UInteger", "UBoolean"),
         points.stream().map(Point::uType).collect(java.util.stream.Collectors.toSet()));
 
     List<String> mismatches = new ArrayList<>();
@@ -157,9 +175,10 @@ public class ExpressionAgreementDifferentialTest {
             .filter(candidate -> Math.abs(candidate.offset()) >= 1.0e-9)
             .noneMatch(Point::insideDocumentedBand));
     assertTrue(
-        "the at-the-transition points must sit INSIDE it",
+        "the at-the-transition points of the families that HAVE a numerical band must sit INSIDE"
+            + " it",
         points.stream()
-            .filter(candidate -> candidate.offset() == 0.0)
+            .filter(candidate -> candidate.sigma() > 0.0 && candidate.offset() == 0.0)
             .allMatch(Point::insideDocumentedBand));
     assertTrue("band mismatches are counted, never hidden: " + insideBand, insideBand >= 0);
     assertTrue(
@@ -168,6 +187,27 @@ public class ExpressionAgreementDifferentialTest {
         points.stream()
             .filter(candidate -> candidate.uType().equals("UInteger"))
             .noneMatch(Point::insideDocumentedBand));
+    assertTrue(
+        "no UBoolean point may fall inside the numerical band either, and for a stronger reason:"
+            + " there is no band at all. Nothing about the UBoolean encoding approximates -- the"
+            + " composition is USE's own arithmetic evaluated at translation time over the finitely"
+            + " many configured probabilities -- so every UBoolean point, the at-theta ties"
+            + " included, must agree EXACTLY",
+        points.stream()
+            .filter(candidate -> candidate.uType().equals("UBoolean"))
+            .noneMatch(Point::insideDocumentedBand));
+    assertEquals(
+        "the UBoolean generator must exercise the PRODUCT rules, not only the bare projection --"
+            + " and/or/implies are the three that could have escaped QF_LIRA",
+        27,
+        points.stream()
+            .filter(candidate -> candidate.uType().equals("UBoolean"))
+            .filter(
+                candidate ->
+                    candidate.expression().contains(" and ")
+                        || candidate.expression().contains(" or ")
+                        || candidate.expression().contains(" implies "))
+            .count());
   }
 
   /**
@@ -199,12 +239,12 @@ public class ExpressionAgreementDifferentialTest {
   @Test
   public void theGeneratorsScopeIsBoundedByWhatIsActuallyTranslated() throws Exception {
     assertEquals(
-        "7.2's core names UReal, UInteger, UBoolean and UString; UReal and UInteger are encodable"
-            + " today, UBoolean and UString are not",
-        List.of("STRING", "INTEGER", "REAL", "UREAL", "UINTEGER", "BOOLEAN"),
+        "7.2's core names UReal, UInteger, UBoolean and UString; the first three are encodable"
+            + " today, UString is not",
+        List.of("STRING", "INTEGER", "REAL", "UREAL", "UINTEGER", "UBOOLEAN", "BOOLEAN"),
         java.util.Arrays.stream(AttributeType.values()).map(Enum::name).toList());
     assertTrue(
-        "the remaining two U-types are refused INSIDE the core, not excluded from it",
+        "the remaining U-type is refused INSIDE the core, not excluded from it",
         FragmentBoundary.UTYPE_CORE.isUTypeBoundary());
     assertFalse(
         "a U-type gap must never be reported as a crisp-tier gap",
@@ -215,7 +255,7 @@ public class ExpressionAgreementDifferentialTest {
     assertEquals(
         "the generator must cover every encodable U-type family, read off the points it actually"
             + " produced rather than off a hand-maintained list",
-        Set.of("UReal", "UInteger"),
+        Set.of("UReal", "UInteger", "UBoolean"),
         generatedTypes);
   }
 
@@ -233,7 +273,134 @@ public class ExpressionAgreementDifferentialTest {
       }
     }
     points.addAll(generateUInteger());
+    points.addAll(generateUBoolean());
     return points;
+  }
+
+  /**
+   * The {@code UBoolean} half, and the one the third family exists to justify.
+   *
+   * <p>Nothing is bisected here because nothing needs to be: the source's rules are exact algebra
+   * over probabilities, so the evaluator's transition for {@code b.toBooleanC(theta)} IS {@code
+   * theta}, and the quantity crossing it is the composed probability USE's own {@code UBoolean}
+   * computes. The generator therefore fixes the stored probabilities and slides {@code theta} just
+   * below, exactly onto, and just above that composed value -- the at-theta point being the {@code
+   * >=} tie the projection is defined by.
+   *
+   * <p>All four connectives are generated, not only the bare projection, because three of them
+   * ({@code and}, {@code or}, {@code implies}) are PRODUCTS of two probabilities. They are the
+   * reason this family could have escaped {@code QF_LIRA} at all, and a point that never composes
+   * anything would leave the finite-domain expansion untested against the real evaluator.
+   */
+  private static List<Point> generateUBoolean() {
+    List<Point> points = new ArrayList<>();
+    for (String shape :
+        List.of(
+            "self.a",
+            "not self.a",
+            "self.a and self.b",
+            "self.a or self.b",
+            "self.a implies self.b")) {
+      for (double[] stored : new double[][] {{0.5, 0.4}, {0.9, 0.9}, {0.3, 0.8}}) {
+        double composed = evaluatorProbability(shape, stored[0], stored[1]);
+        for (double offset : new double[] {-1.0e-3, 0.0, 1.0e-3}) {
+          double confidence = composed - offset;
+          MModel model = compileUBoolean(shape, confidence);
+          points.add(uBooleanPoint(model, shape, stored, confidence, composed));
+        }
+      }
+    }
+    return points;
+  }
+
+  /**
+   * The composed probability USE's OWN {@code UBoolean} gives this shape. Deliberately not {@code
+   * UBooleanProbability}: an oracle computed by the code under test proves nothing, which is the
+   * same rule the {@code UReal} half follows by bisecting the real {@code UReal} rather than
+   * consulting {@code URealThresholdBoundary}.
+   */
+  private static double evaluatorProbability(String shape, double first, double second) {
+    UBoolean a = new UBoolean(true, first);
+    UBoolean b = new UBoolean(true, second);
+    return switch (shape) {
+      case "self.a" -> a.getC();
+      case "not self.a" -> a.not().getC();
+      case "self.a and self.b" -> a.and(b).getC();
+      case "self.a or self.b" -> a.or(b).getC();
+      case "self.a implies self.b" -> a.implies(b).getC();
+      default -> throw new AssertionError("unhandled shape " + shape);
+    };
+  }
+
+  private static Point uBooleanPoint(
+      MModel model, String shape, double[] stored, double confidence, double composed) {
+    try {
+      ModelFinderResult observed = SmtModelFinder.find(model, uBooleanConfiguration(stored, false));
+      assertTrue("the unconstrained point must always be reconstructible", observed.satisfiable());
+      InvariantOutcome useSaid = verdictOf(observed, "Signal::Threshold");
+      boolean encodingAdmits =
+          SmtModelFinder.find(model, uBooleanConfiguration(stored, true)).satisfiable();
+      return new Point(
+          "UBoolean",
+          0.0,
+          "(" + shape + ")",
+          confidence,
+          composed,
+          confidence,
+          useSaid,
+          encodingAdmits);
+    } catch (Exception e) {
+      throw new AssertionError(
+          "generated point failed to run: " + shape + " at theta=" + confidence, e);
+    }
+  }
+
+  private static AnalysisConfiguration uBooleanConfiguration(double[] stored, boolean active) {
+    return new AnalysisConfiguration(
+        List.of(new ClassScope("Signal", 1, 1)),
+        List.of(),
+        List.of(
+            new AttributeDomain(
+                "Signal",
+                "a",
+                "probability",
+                List.of(BigDecimal.valueOf(stored[0]).toPlainString()),
+                null,
+                null),
+            new AttributeDomain(
+                "Signal",
+                "b",
+                "probability",
+                List.of(BigDecimal.valueOf(stored[1]).toPlainString()),
+                null,
+                null)),
+        active ? Set.of("Signal::Threshold") : Set.of(),
+        QueryExpr.SATISFY,
+        Duration.ofSeconds(30),
+        1);
+  }
+
+  private static MModel compileUBoolean(String shape, double confidence) {
+    String source =
+        """
+        model Signal
+        class Signal
+        attributes
+          a : UBoolean
+          b : UBoolean
+        end
+        constraints
+        context self : Signal inv Threshold:
+          (%s).toBooleanC(%s)
+        """
+            .formatted(shape, BigDecimal.valueOf(confidence).toPlainString());
+    MModel model =
+        USECompiler.compileSpecification(
+            source, "Signal", new PrintWriter(System.err), new ModelFactory());
+    if (model == null) {
+      throw new AssertionError("generated model did not compile:\n" + source);
+    }
+    return model;
   }
 
   /**
@@ -312,8 +479,7 @@ public class ExpressionAgreementDifferentialTest {
       return new Point(
           "UReal",
           SIGMA,
-          operator,
-          threshold,
+          String.format("(self.speed %s %s)", operator, BigDecimal.valueOf(threshold)),
           confidence,
           representative,
           boundary,
@@ -341,8 +507,7 @@ public class ExpressionAgreementDifferentialTest {
       return new Point(
           "UInteger",
           INTEGER_SIGMA,
-          operator,
-          threshold,
+          String.format("(self.units %s %d)", operator, threshold),
           confidence,
           representative,
           boundary,

@@ -20,10 +20,10 @@ public record AttributeValues(
   public AttributeValues {
     valueNames = List.copyOf(valueNames);
     uncertaintyNames = List.copyOf(uncertaintyNames);
-    if (type.isUType() && valueNames.size() != uncertaintyNames.size()) {
+    if (type.isPairedUType() && valueNames.size() != uncertaintyNames.size()) {
       throw new IllegalArgumentException(type + " value/uncertainty symbol counts must match");
     }
-    if (!type.isUType() && !uncertaintyNames.isEmpty()) {
+    if (!type.isPairedUType() && !uncertaintyNames.isEmpty()) {
       throw new IllegalArgumentException("only U-typed attributes may have uncertainty symbols");
     }
   }

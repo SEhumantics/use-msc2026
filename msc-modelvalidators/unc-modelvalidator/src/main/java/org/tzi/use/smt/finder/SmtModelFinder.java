@@ -456,6 +456,23 @@ public final class SmtModelFinder {
     return owners;
   }
 
+  /**
+   * The declaring class plus every descendant that has a configured scope and does not redeclare
+   * the attribute -- the same inheritance walk the paired U-types and the crisp attributes already
+   * do, so a UBoolean attribute is reachable on a subclass instance exactly as they are.
+   */
+  private static List<String> uBooleanOwners(
+      MClass declaring, String attributeName, Set<String> explicitlyDeclaredAttributes) {
+    List<String> owners = new ArrayList<>();
+    owners.add(declaring.name());
+    for (MClassifier descendant : declaring.allChildren()) {
+      if (!explicitlyDeclaredAttributes.contains(descendant.name() + "." + attributeName)) {
+        owners.add(descendant.name());
+      }
+    }
+    return owners;
+  }
+
   private static int capacityOf(AnalysisConfiguration config, String className) {
     return config.classScopes().stream()
         .filter(scope -> scope.className().equals(className))
@@ -476,7 +493,7 @@ public final class SmtModelFinder {
       TranslationContext context, Map<String, SmtValue> modelValues) {
     List<Scenario.Binding> bindings = new ArrayList<>();
     for (AttributeValues values : context.attributes().values()) {
-      if (!values.type().isUType()) {
+      if (!values.type().isPairedUType()) {
         continue;
       }
       ObjectSlots slots = context.slotsFor(values.className());
@@ -599,9 +616,11 @@ public final class SmtModelFinder {
       String attributeName = representative.attributeName();
       MClass cls = model.getClass(className);
       MAttribute attribute = cls.attribute(attributeName, true);
-      if (!attribute.type().isTypeOfUReal() && !attribute.type().isTypeOfUInteger()) {
+      if (!attribute.type().isTypeOfUReal()
+          && !attribute.type().isTypeOfUInteger()
+          && !attribute.type().isTypeOfUBoolean()) {
         throw new IllegalArgumentException(
-            "component domains are only supported for UReal and UInteger attributes, got "
+            "component domains are only supported for UReal, UInteger and UBoolean attributes, got "
                 + className
                 + "."
                 + attributeName
@@ -609,6 +628,45 @@ public final class SmtModelFinder {
                 + attribute.type());
       }
       AttributeType uType = attributeTypeOf(attribute.type());
+      if (uType == AttributeType.UBOOLEAN) {
+        // The third family is canonicalised to ONE probability, so it has a single component and
+        // no measurement quality for a scenario profile to quantify over. Its probability belongs
+        // to the snapshot S, which is why it is registered once into attributeValuesByKey and
+        // therefore SHARED by every scenario copy rather than duplicated per copy.
+        if (!components.keySet().equals(Set.of("probability"))) {
+          throw new IllegalArgumentException(
+              "UBOOLEAN attribute '"
+                  + className
+                  + "."
+                  + attributeName
+                  + "' requires exactly a probability component domain, got "
+                  + components.keySet());
+        }
+        AttributeDomain probabilityDomain = components.get("probability");
+        for (String owningClass :
+            uBooleanOwners(cls, attributeName, explicitlyDeclaredAttributes)) {
+          ObjectSlots uBooleanOwner = slotsByClass.get(owningClass);
+          if (uBooleanOwner == null) {
+            if (owningClass.equals(className)) {
+              throw new IllegalArgumentException(
+                  "attribute domain '"
+                      + className
+                      + "."
+                      + attributeName
+                      + "' names a class with no configured scope");
+            }
+            continue;
+          }
+          String uBooleanKey = owningClass + "." + attributeName;
+          attributeValuesByKey.put(
+              uBooleanKey,
+              AttributeEncoder.encodeUBoolean(
+                  script, uBooleanOwner, attributeName, probabilityDomain));
+          attributeDomainByKey.put(uBooleanKey, probabilityDomain);
+          attributeDomainByKey.put(uBooleanKey + ".probability", probabilityDomain);
+        }
+        continue;
+      }
       if (!components.keySet().equals(Set.of("value", "uncertainty"))) {
         throw new IllegalArgumentException(
             uType
@@ -773,6 +831,9 @@ public final class SmtModelFinder {
     }
     if (type.isTypeOfUReal()) {
       return AttributeType.UREAL;
+    }
+    if (type.isTypeOfUBoolean()) {
+      return AttributeType.UBOOLEAN;
     }
     if (type.isTypeOfReal()) {
       return AttributeType.REAL;

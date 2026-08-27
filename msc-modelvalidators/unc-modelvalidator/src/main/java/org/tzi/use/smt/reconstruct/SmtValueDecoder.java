@@ -8,6 +8,7 @@ import org.tzi.use.uml.ocl.value.BooleanValue;
 import org.tzi.use.uml.ocl.value.IntegerValue;
 import org.tzi.use.uml.ocl.value.RealValue;
 import org.tzi.use.uml.ocl.value.StringValue;
+import org.tzi.use.uml.ocl.value.UBooleanValue;
 import org.tzi.use.uml.ocl.value.UIntegerValue;
 import org.tzi.use.uml.ocl.value.URealValue;
 import org.tzi.use.uml.ocl.value.Value;
@@ -58,6 +59,21 @@ public final class SmtValueDecoder {
     int value = intValue(rawValue).intValueExact();
     double uncertainty = rationalValue(rawUncertainty).asBigDecimal(10).doubleValue();
     return new UIntegerValue(value, uncertainty);
+  }
+
+  /**
+   * Decodes the single SMT Real that represents one {@code UBoolean} attribute value.
+   *
+   * <p>The proposal canonicalises a UBoolean to one truth probability and its solver-representation
+   * table says "no independent carried Boolean", so there is nothing else to read back: the value
+   * component is reconstructed as {@code true} and the probability carries the whole meaning.
+   * {@code UBooleanValue.valueOf(true, p)} is USE's own normalising factory, which is what returns
+   * the {@code TRUE}/{@code FALSE} singletons at the endpoints -- reconstructing those by hand
+   * would produce values USE considers unequal to its own.
+   */
+  public static UBooleanValue decodeUBoolean(SmtValue rawProbability) {
+    return UBooleanValue.valueOf(
+        true, rationalValue(rawProbability).asBigDecimal(10).doubleValue());
   }
 
   /**

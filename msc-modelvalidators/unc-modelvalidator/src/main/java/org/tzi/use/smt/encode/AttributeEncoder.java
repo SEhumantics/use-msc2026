@@ -41,6 +41,14 @@ public final class AttributeEncoder {
                     + "."
                     + attributeName
                     + "' requires paired value/uncertainty domains");
+        case UBOOLEAN ->
+            throw new IllegalArgumentException(
+                type
+                    + " attribute '"
+                    + owner.className()
+                    + "."
+                    + attributeName
+                    + "' requires a probability domain");
         case BOOLEAN -> {}
       }
     }
@@ -186,10 +194,58 @@ public final class AttributeEncoder {
     return uncertaintyNames;
   }
 
+  /**
+   * Encodes one {@code UBoolean} attribute as a SINGLE SMT Real per object slot: its canonical
+   * truth probability.
+   *
+   * <p>This is the whole representation, and it is the proposal's, not a simplification of it:
+   * "{@code UBoolean} is canonicalized to one probability of truth. {@code UBoolean(false,0.9)}
+   * becomes probability (0.1)", and its solver-representation table says "Real probability p, with
+   * 0 &lt;= p &lt;= 1 [...] <b>no independent carried Boolean</b>". Declaring the constructor's
+   * first argument as a free solver Boolean would be a mistranslation, not an extra degree of
+   * freedom -- the proposal spells that out at its {@code UBoolean(false,0.90)} worked example.
+   *
+   * <p>The {@code [0,1]} guard is asserted here rather than left to the configured domain because
+   * it is a property of the TYPE: {@code UBooleanValue}'s own constructor rejects a probability
+   * outside that interval, so a solver assignment outside it could not be reconstructed at all.
+   */
+  public static AttributeValues encodeUBoolean(
+      SmtScript script,
+      ObjectSlots owner,
+      String attributeName,
+      AttributeDomain probabilityDomain) {
+    requireComponent(probabilityDomain, owner.className(), attributeName, "probability");
+    List<String> names = new ArrayList<>();
+    for (int i = 0; i < owner.capacity(); i++) {
+      String name = owner.className() + "_" + i + "_" + attributeName + "_probability";
+      script.declareConst(name, SmtSort.REAL);
+      names.add(name);
+      SmtTerm exists = Smt.sym(owner.existsNames().get(i));
+      SmtTerm probability = Smt.sym(name);
+      guardReal(
+          script,
+          exists,
+          probability,
+          probabilityDomain,
+          owner.className(),
+          attributeName + ".probability");
+      script.assertThat(
+          Smt.app(
+              "=>",
+              exists,
+              Smt.and(
+                  List.of(
+                      Smt.app(">=", probability, Smt.realLit(BigDecimal.ZERO)),
+                      Smt.app("<=", probability, Smt.realLit(BigDecimal.ONE))))));
+    }
+    return new AttributeValues(
+        owner.className(), attributeName, AttributeType.UBOOLEAN, names, List.of());
+  }
+
   private static SmtSort sort(AttributeType type) {
     return switch (type) {
       case STRING, INTEGER, UINTEGER -> SmtSort.INT;
-      case REAL, UREAL -> SmtSort.REAL;
+      case REAL, UREAL, UBOOLEAN -> SmtSort.REAL;
       case BOOLEAN -> SmtSort.BOOL;
     };
   }
@@ -221,7 +277,7 @@ public final class AttributeEncoder {
   }
 
   private static void requireUType(AttributeType type) {
-    if (!type.isUType()) {
+    if (!type.isPairedUType()) {
       throw new IllegalArgumentException(
           "paired representative/uncertainty encoding is only defined for U-types, got " + type);
     }

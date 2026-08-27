@@ -1587,6 +1587,148 @@
           }
         },
         {
+          "id": "utype.uboolean-canonical-probability",
+          "name": "UBoolean canonicalised to one truth probability (no independent carried Boolean)",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/TypeConverter.java:63-80 convert() has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UBoolean, so a UBoolean attribute type reaches LOG.error(LogMessages.typeConvertError(...)) at TypeConverter.java:78 and returns null; msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/ocl/SimpleExpressionVisitor.java:334-336 visitConstUBoolean throws \"UBoolean not supported\". Observed directly on examples/UBooleanThreshold/ReliableSignal.use: the attribute type reports shortName=UBoolean with isTypeOfBoolean()=false, then \"ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UBoolean\" twice (once per attribute) followed by \"ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Detection::ReliableSignal'\", with the transformed class arriving as attributes=[] invariants=[], PropertyConfigurationVisitor reporting containErrors()=false and an empty warning string, and both resolvable SAT4J backends answering TRIVIALLY_SATISFIABLE with Detection#count=1;Detection.objects=[Detection{hitsTarget=null,isClear=null}].",
+              "notes": "KK-ModelValidator has no UBoolean value representation at all, canonical or otherwise; the attribute does not exist on its transformed model.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No KK scenario evidence; the four UBooleanThreshold scenarios exercise only unc-modelvalidator."
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/AttributeEncoder.java:212-243 encodeUBoolean declares ONE SmtSort.REAL term per slot and asserts an existence-guarded 0 <= p <= 1, with no Boolean symbol anywhere; msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/reconstruct/SmtValueDecoder.java:74-76 decodeUBoolean rebuilds the value through USE's own UBooleanValue.valueOf(true, p) normalising factory. The rule is USE's: use-core/src/main/java/org/tzi/use/uncertainty/datatypes/UBoolean.java:46-49 setNormalForm rewrites (false,c) to (true,1-c), and getC() calls it before returning, so UBoolean(false,0.9) really does read back as probability 0.1. The nominal-erasure half is msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/verify/NominalErasureEvaluator.java:281-285 (p >= 0.5), reachable for the first time now that a stored UBoolean can exist, and exercised by msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/verify/NominalErasureUBooleanTest.java:54-101,115-147.",
+              "notes": "One Real per slot carries the whole meaning; the constructor's first argument is NOT encoded as a free solver Boolean, which the proposal's UBoolean(false,0.90) worked example calls out as an outright mistranslation. The p = 0.5 tie maps to true, measured against USE's own toBoolean() rather than quoted: UBoolean.java:212-215 is literally (c >= 0.5), and NominalErasureUBooleanTest.onlyTheExactTieIsSensitiveToTheStrictAlternative runs the strict p > 0.5 alternative alongside and shows the tie is the only verdict the convention moves.",
+              "satScenarioIds": [
+                "UBooleanThreshold-At",
+                "UBooleanThreshold-Above",
+                "UBooleanThreshold-Composition"
+              ],
+              "unsatScenarioIds": [
+                "UBooleanThreshold-Below"
+              ],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "The four manifest scenarios all carry stored probabilities; the tie sweep and the strict-alternative sensitivity check live in NominalErasureUBooleanTest, since the .properties format cannot express a per-run erasure convention."
+            }
+          }
+        },
+        {
+          "id": "utype.uboolean-attribute-roundtrip",
+          "name": "UBoolean attribute encoding/reconstruction (single Real probability)",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/TypeConverter.java:63-80 convert() has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UBoolean, so a UBoolean attribute type reaches LOG.error(LogMessages.typeConvertError(...)) at TypeConverter.java:78 and returns null; msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/ocl/SimpleExpressionVisitor.java:334-336 visitConstUBoolean throws \"UBoolean not supported\". Observed directly on examples/UBooleanThreshold/ReliableSignal.use: the attribute type reports shortName=UBoolean with isTypeOfBoolean()=false, then \"ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UBoolean\" twice (once per attribute) followed by \"ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Detection::ReliableSignal'\", with the transformed class arriving as attributes=[] invariants=[], PropertyConfigurationVisitor reporting containErrors()=false and an empty warning string, and both resolvable SAT4J backends answering TRIVIALLY_SATISFIABLE with Detection#count=1;Detection.objects=[Detection{hitsTarget=null,isClear=null}].",
+              "notes": "The attribute does not exist on KK-ModelValidator's transformed model, so there is nothing to encode or reconstruct.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No KK scenario evidence; the four UBooleanThreshold scenarios exercise only unc-modelvalidator."
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/AttributeType.java:9,23-25,32-34 adds UBOOLEAN and splits the old isUType() predicate into isPairedUType() (UReal/UInteger only) and isUncertain() (all three), so the paired representative+uncertainty shape is not silently claimed for a family that has one component; AttributeEncoder.java:212-243 encodeUBoolean and :248 map UBOOLEAN onto SmtSort.REAL; SmtModelFinder.java:618-668,835-837 accepts the _probability component domain, walks the inheritance owners at :464-478 and maps the OCL type through attributeTypeOf; SmtValueDecoder.java:74-76 and SystemStateReconstructor.java:117 set a genuine UBooleanValue. msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/finder/UBooleanAttributeRoundTripTest.java:35-55 verifies the real round trip (UBoolean(true, 0.9)).",
+              "notes": "The configured component is Class_attr_probability, which the ConfigurationReader has parsed since Phase 2 (ConfigurationReader.java:107) and nothing consumed until now. Because that reader only admits Set{...} for a component, every configured UBoolean probability is a finite configured choice by construction -- which is exactly the discipline the composition rules need.",
+              "satScenarioIds": [
+                "UBooleanThreshold-At",
+                "UBooleanThreshold-Above",
+                "UBooleanThreshold-Composition"
+              ],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "The manifest scenarios have validation disabled, so the oracle list is empty; UBooleanAttributeRoundTripTest independently checks the reconstructed USE value."
+            }
+          }
+        },
+        {
+          "id": "utype.uboolean-confidence-threshold",
+          "name": "(UBoolean expression).toBooleanC(constant confidence), i.e. p >= theta",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/TypeConverter.java:63-80 convert() has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UBoolean, so a UBoolean attribute type reaches LOG.error(LogMessages.typeConvertError(...)) at TypeConverter.java:78 and returns null; msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/ocl/SimpleExpressionVisitor.java:334-336 visitConstUBoolean throws \"UBoolean not supported\". Observed directly on examples/UBooleanThreshold/ReliableSignal.use: the attribute type reports shortName=UBoolean with isTypeOfBoolean()=false, then \"ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UBoolean\" twice (once per attribute) followed by \"ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Detection::ReliableSignal'\", with the transformed class arriving as attributes=[] invariants=[], PropertyConfigurationVisitor reporting containErrors()=false and an empty warning string, and both resolvable SAT4J backends answering TRIVIALLY_SATISFIABLE with Detection#count=1;Detection.objects=[Detection{hitsTarget=null,isClear=null}].",
+              "notes": "The invariant that reads the UBoolean attributes fails to transform and is swallowed before the incumbent's solver runs, so the threshold is never evaluated.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No KK scenario evidence; the four UBooleanThreshold scenarios are unc-modelvalidator-only."
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/ExpressionTranslator.java:182-194 routes a toBooleanC whose operand is not a numeric comparison to :276-309 uBooleanThreshold, which validates the confidence literal and delegates to msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/UBooleanProbability.java:85-102 select, whose comparison is the evaluator's own (use-core StandardOperationsUBoolean.java Op_uBoolean_toBooleanC evaluates left.probability() >= confidence on doubles, and so does this). msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/finder/UBooleanThresholdRoundTripTest.java:41-94 exercises at/above/below with USE's evaluator confirming each SAT witness; msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/finder/ExpressionAgreementDifferentialTest.java generates 45 UBoolean ground points across all four connectives, sliding theta just below / exactly onto / just above the composed probability, and requires EXACT agreement with the evaluator at every one -- there is no numerical band for this family.",
+              "notes": "toBooleanC is defined with >=, and the corpus At row lands on the tie bit-for-bit: 0.9 * 0.9 and the literal 0.81 are the same IEEE754 double (0x1.9eb851eb851ecp-1, observed). A confidence outside [0,1] makes USE's own operation yield UndefinedValue; ExpressionTranslator.java:284-289 fails closed there rather than encoding a whole invariant as undefined on a mistyped constant.",
+              "satScenarioIds": [
+                "UBooleanThreshold-At",
+                "UBooleanThreshold-Above",
+                "UBooleanThreshold-Composition"
+              ],
+              "unsatScenarioIds": [
+                "UBooleanThreshold-Below"
+              ],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "The four manifest scenario verdicts exercise the conjunction shape at 0.81 confidence. The bare projection and the not/or/implies connectives are exercised by the 45 generated differential points and by UBooleanFragmentTest, NOT by separate corpus rows, and no scenario claims otherwise."
+            }
+          }
+        },
+        {
+          "id": "utype.uboolean-finite-domain-composition",
+          "name": "UBoolean not/and/or/implies composed over finite configured probabilities, inside QF_LIRA",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/TypeConverter.java:63-80 convert() has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UBoolean, so a UBoolean attribute type reaches LOG.error(LogMessages.typeConvertError(...)) at TypeConverter.java:78 and returns null; msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/ocl/SimpleExpressionVisitor.java:334-336 visitConstUBoolean throws \"UBoolean not supported\". Observed directly on examples/UBooleanThreshold/ReliableSignal.use: the attribute type reports shortName=UBoolean with isTypeOfBoolean()=false, then \"ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UBoolean\" twice (once per attribute) followed by \"ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Detection::ReliableSignal'\", with the transformed class arriving as attributes=[] invariants=[], PropertyConfigurationVisitor reporting containErrors()=false and an empty warning string, and both resolvable SAT4J backends answering TRIVIALLY_SATISFIABLE with Detection#count=1;Detection.objects=[Detection{hitsTarget=null,isClear=null}].",
+              "notes": "Not applicable: no UBoolean attribute reaches the incumbent's solver, so there is no composition to perform.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "No KK scenario evidence."
+            },
+            "unc-modelvalidator": {
+              "status": "supported",
+              "evidence": "msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/UBooleanProbability.java:71-73,108-124,140-240 lowers a UBoolean expression to a finite set of (guard, probability) cases: a stored attribute contributes one case per configured candidate (:140-179), and not/and/or/implies cross-multiply those cases with the probability computed at TRANSLATION time by USE's own org.tzi.use.uncertainty.datatypes.UBoolean (:252-279), reproducing the short-circuits of StandardOperationsUBoolean and not merely its algebra. What is emitted is only (= <Real symbol> <rational literal>) combined with and/or/not -- no arithmetic operator at all -- asserted structurally by msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/encode/UBooleanFragmentTest.java:55-83 and empirically by :85-98, which hands the complete script to the pinned solver under a literal (set-logic QF_LIRA). The search this buys is exercised end to end by UBooleanThresholdRoundTripTest.java:102-116 and by corpus row UBooleanThreshold-Composition.",
+              "notes": "This is the proposal's own Version 1 mitigation -- \"base confidence values constants or finite configured choices to control nonlinear search\" -- and it is the reason the pinned QF_LIRA logic string did not have to change. and/or/implies are products of two probabilities; a symbolic product of two solver-chosen variables is outside QF_LIRA, so it is never emitted. Anything that would require one fails closed instead (see utype.uboolean-other-expressions). The expansion is capped at 256 combinations, above which it also fails closed.",
+              "satScenarioIds": [
+                "UBooleanThreshold-Composition",
+                "UBooleanThreshold-At",
+                "UBooleanThreshold-Above"
+              ],
+              "unsatScenarioIds": [
+                "UBooleanThreshold-Below"
+              ],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "UBooleanThreshold-Composition is the row that states the finite search directly: four combinations offered, one clears, observed witness Detection{hitsTarget=UBoolean(true, 0.9),isClear=UBoolean(true, 0.9)}. Only the `and` connective is exercised by a corpus row; not/or/implies are covered by the 45 generated differential points and no scenario claims otherwise."
+            }
+          }
+        },
+        {
+          "id": "utype.uboolean-other-expressions",
+          "name": "Other UBoolean expression shapes (xor, equivalent, literals, comparison-derived operands, aliased operands, non-finite probabilities)",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/TypeConverter.java:63-80 convert() has arms for Void, String/Boolean/Integer/Real, enums, classes, OclAny and collections and NO arm for UBoolean, so a UBoolean attribute type reaches LOG.error(LogMessages.typeConvertError(...)) at TypeConverter.java:78 and returns null; msc-modelvalidators/kk-modelvalidator/src/main/java/org/tzi/use/kodkod/transform/ocl/SimpleExpressionVisitor.java:334-336 visitConstUBoolean throws \"UBoolean not supported\". Observed directly on examples/UBooleanThreshold/ReliableSignal.use: the attribute type reports shortName=UBoolean with isTypeOfBoolean()=false, then \"ERROR org.tzi.use.kodkod.transform.TypeConverter - Cannot convert type UBoolean\" twice (once per attribute) followed by \"ERROR org.tzi.use.kodkod.transform.InvariantTransformator - Cannot transform invariant `Detection::ReliableSignal'\", with the transformed class arriving as attributes=[] invariants=[], PropertyConfigurationVisitor reporting containErrors()=false and an empty warning string, and both resolvable SAT4J backends answering TRIVIALLY_SATISFIABLE with Detection#count=1;Detection.objects=[Detection{hitsTarget=null,isClear=null}].",
+              "notes": "UBoolean literals, xor, equivalent and every other UBoolean shape are not translated by KK-ModelValidator; SimpleExpressionVisitor.visitConstUBoolean throws outright.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "Source-only unsupported boundary; no manifest scenario covers these broader shapes."
+            },
+            "unc-modelvalidator": {
+              "status": "unsupported",
+              "evidence": "msc-modelvalidators/unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/UBooleanProbability.java:221-229 refuses xor and equivalent (FragmentBoundary.UTYPE_CORE), :230-238 refuses a comparison-derived UBoolean operand and :281-289 a probability with no finite configured domain (both UTYPE_NONLINEAR_OR_TRANSCENDENTAL), :159-166 refuses reading one slot twice, and :196-209 refuses an expansion above the 256-combination cap; ExpressionTranslator.java:89-102 refuses a bare UBoolean attribute access outside its projection, :284-289 a confidence outside [0,1], :290-305 a composed UBoolean expression in NOMINAL mode, and :599-601 rejects ExpConstUBoolean. Each refusal is exercised by a named test in msc-modelvalidators/unc-modelvalidator/src/test/java/org/tzi/use/smt/encode/UBooleanFragmentTest.java:107-293.",
+              "notes": "Two of these boundaries are worth naming individually. xor is refused because USE computes it as abs(p1 - p2) (use-core UBoolean.java:159-164), which is NOT derivable from the proposal's four rules -- p1(1-p2)+p2(1-p1) would be a different function -- and equivalent is defined as xor().not(). Reading one slot twice is refused because UBoolean.and carries a reference-identity fast path returning p rather than p*p, measured directly: (self.f and self.f).toBooleanC(0.26) answers true at p = 0.5 where the independent product rule would answer false. The NOMINAL refusal is deliberately aligned with NominalErasureEvaluator, whose only UBoolean rule is the stored p >= 0.5 one, so the SMT nominal arm cannot claim a reading nothing can independently confirm.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "Source-only fail-closed boundary; no manifest scenario claims broader UBoolean expression support."
+            }
+          }
+        },
+        {
           "id": "prim.real-type-relation-unpopulated",
           "name": "RealType as a distinct type (oclIsTypeOf(Real), allInstances-style Real casts)",
           "support": {
