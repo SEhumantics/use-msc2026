@@ -8,6 +8,8 @@ import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.TranslationMode;
 import org.tzi.use.smt.solver.Smt;
 import org.tzi.use.smt.solver.SmtTerm;
+import org.tzi.use.uml.mm.MAttribute;
+import org.tzi.use.uml.mm.MNavigableElement;
 import org.tzi.use.uml.ocl.expr.*;
 
 /** Translates the verified leaf-level Library OCL fragment and fails closed on everything else. */
@@ -84,8 +86,128 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
   @Override
   public void visitAttrOp(ExpAttrOp e) {
+    // The receiver is either a bare context variable (the ordinary case, below) or exactly one
+    // single-valued navigation hop -- e.g. Sudoku's `self.row.index` (a plain ExpNavigation) or
+    // AssociationClass's `e.employer.budget` (an ExpNavigationClassifierSource, OCL's OTHER
+    // navigation-shaped node, used when the navigation starts at an association/association-class
+    // instance rather than an ordinary object). Both expose the same (object expression,
+    // destination) shape, so both route through the same navigatedAttribute helper; anything
+    // beyond that -- a second hop, a collection destination -- fails closed inside it rather than
+    // being handled here.
+    if (e.objExp() instanceof ExpNavigation navigation) {
+      result =
+          navigatedAttribute(
+              navigation.getObjectExpression(), navigation.getDestination(), e.attr());
+      return;
+    }
+    if (e.objExp() instanceof ExpNavigationClassifierSource navigation) {
+      result =
+          navigatedAttribute(
+              navigation.getObjectExpression(), navigation.getDestination(), e.attr());
+      return;
+    }
     VariableBinding b = context.binding(variableNameOf(e.objExp()));
     AttributeValues v = context.attributeValues(b.className(), e.attr().name());
+    guardAgainstUncertainAttribute(v);
+    result = defined(Smt.sym(v.valueNames().get(b.slotIndex())));
+  }
+
+  /**
+   * Attribute access at the far end of exactly one single-valued navigation hop -- {@code
+   * <var>.<role>.<attr>}, e.g. Sudoku's {@code self.row.index} or AssociationClass's {@code
+   * e.employer.budget}. There is no standalone {@link SmtTerm} for the intermediate navigated
+   * object (see {@link #definednessOf}), so the attribute's value is built directly: for each
+   * destination slot k, "if the source links there ({@link #linkTerm}), the value is that slot's
+   * attribute symbol" ({@link TranslationContext#attributeValues}) -- the same per-slot disjunction
+   * {@link #singleValuedNavigationDefined} and {@link #navigationEquals} already build for "is
+   * there a link at all" and "do two navigations share a target", reused rather than reinvented.
+   *
+   * <p>Deliberately ONE hop: {@code objectExpression} must itself be a bare variable, not another
+   * navigation (a chained {@code self.a.b.c} is refused rather than silently generalized into a
+   * recursive evaluator -- neither real corpus invariant needs more than one hop), and {@code
+   * destination} must be single-valued (a collection-valued destination needs {@code collect}
+   * semantics; unreachable through USE's own OCL front end today, since {@code x.attr} on a
+   * collection-typed x is desugared into {@code x->collect($e|$e.attr)} before an {@link ExpAttrOp}
+   * is ever built -- see {@code ASTOperationExpression} cases {@code SRC_COLLECTION_TYPE + DOT} --
+   * but guarded here anyway in case that ever changes).
+   */
+  private TranslatedExpression navigatedAttribute(
+      Expression objectExpression, MNavigableElement destination, MAttribute attribute) {
+    if (destination.isCollection()) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "attribute access after a collection-valued navigation is not yet supported");
+    }
+    if (!(objectExpression instanceof ExpVariable sourceVar)) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "attribute access after more than one navigation hop is not yet supported");
+    }
+    String destClass = destination.cls().name();
+    AssociationLinks links = context.linksFor(destination.association().name());
+    ObjectSlots destSlots = context.slotsFor(destClass);
+    VariableBinding source = context.binding(sourceVar.getVarname());
+    AttributeValues v = context.attributeValues(destClass, attribute.name());
+    guardAgainstUncertainAttribute(v);
+
+    List<SmtTerm> targets = new ArrayList<>();
+    for (int k = 0; k < destSlots.capacity(); k++) {
+      targets.add(linkTerm(links, source, k));
+    }
+    return new TranslatedExpression(
+        Smt.or(targets), selectLinkedValue(links, source, destSlots, v));
+  }
+
+  /**
+   * The value at whichever destination slot {@code source} links to, as a nested {@code ite} chain
+   * over {@link #linkTerm} -- the same primitive {@link #singleValuedNavigationDefined} and {@link
+   * #navigationEquals} use, applied here to SELECT a value rather than just test existence. Exactly
+   * one linked slot is possible per Task 3.2's degree constraint on the navigated association, so
+   * which of the (mutually exclusive, in a well-formed instance) conditions is "the" true one does
+   * not matter to the chain's correctness.
+   *
+   * <p>An empty destination population (capacity 0) has no slot to select and is therefore
+   * correctly undefined -- {@link #navigatedAttribute}'s own {@code Smt.or(targets)} over zero
+   * targets is already {@code false} -- but the VALUE half still has to be a well-sorted term
+   * regardless (SMT-LIB sort-checks every emitted term, guard or not), hence the type-derived
+   * placeholder.
+   */
+  private SmtTerm selectLinkedValue(
+      AssociationLinks links, VariableBinding source, ObjectSlots destSlots, AttributeValues v) {
+    int capacity = destSlots.capacity();
+    if (capacity == 0) {
+      return placeholderOfSort(v.type());
+    }
+    SmtTerm value = Smt.sym(v.valueNames().get(capacity - 1));
+    for (int k = capacity - 2; k >= 0; k--) {
+      value = Smt.ite(linkTerm(links, source, k), Smt.sym(v.valueNames().get(k)), value);
+    }
+    return value;
+  }
+
+  /**
+   * A well-sorted, never-actually-selected filler for {@link #selectLinkedValue}'s capacity-0
+   * corner. Only crisp sorts reach here: {@link #guardAgainstUncertainAttribute} already refused
+   * every uncertain {@link AttributeType} before this is called.
+   */
+  private static SmtTerm placeholderOfSort(AttributeType type) {
+    return switch (type) {
+      case REAL -> Smt.realLit(BigDecimal.ZERO);
+      case BOOLEAN -> Smt.bool(false);
+      case STRING, INTEGER -> Smt.intLit(BigInteger.ZERO);
+      default ->
+          throw new IllegalStateException(
+              "uncertain attribute type reached a crisp placeholder: " + type);
+    };
+  }
+
+  /**
+   * The bare-U-type refusal shared by a direct attribute access ({@code x.attr}) and one reached
+   * through a single navigation hop ({@code x.role.attr}) -- the reason is identical either way: a
+   * bare uncertain value outside a supported projection, regardless of how the source object was
+   * reached.
+   */
+  private static void guardAgainstUncertainAttribute(AttributeValues v) {
     if (v.type().isUncertain()) {
       throw unsupported(
           FragmentBoundary.UTYPE_CORE,
@@ -106,7 +228,6 @@ public final class ExpressionTranslator implements ExpressionVisitor {
                 default -> "threshold comparison";
               });
     }
-    result = defined(Smt.sym(v.valueNames().get(b.slotIndex())));
   }
 
   @Override
