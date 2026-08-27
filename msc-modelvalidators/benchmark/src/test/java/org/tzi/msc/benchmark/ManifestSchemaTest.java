@@ -121,6 +121,46 @@ public class ManifestSchemaTest {
 		}
 	}
 
+	/**
+	 * Study B supersession rows are the corpus's strongest and most falsifiable claims -- "the
+	 * incumbent gives a WRONG answer here and we give the right one" -- so a half-filled one must not
+	 * be possible. Every column is required, the incumbent's outcome must be a real Kodkod outcome
+	 * name, the SMT column must agree with the row's own expected oracle, and the divergence class
+	 * must come from the fixed vocabulary in which "false-unsat"/"false-sat" are the STRONG claims
+	 * and "silent-drop"/"cannot-configure"/"error" are the weaker ones. Two rows carry this block
+	 * today; the count is pinned so a third cannot appear without a deliberate update here.
+	 */
+	@Test
+	public void everySupersessionRowFillsAllFiveStudyBColumnsConsistently() {
+		Set<String> kodkodOutcomes = Set.of("SATISFIABLE", "TRIVIALLY_SATISFIABLE", "UNSATISFIABLE",
+				"TRIVIALLY_UNSATISFIABLE");
+		Set<String> divergenceClasses = Set.of("false-unsat", "false-sat", "silent-drop", "cannot-configure", "error");
+		int rows = 0;
+		for (ExampleEntry ex : manifest.examples) {
+			if (ex.supersession == null) {
+				continue;
+			}
+			rows++;
+			assertEquals(ex.id + ": supersession columns are Study B's", "B", ex.supersession.study);
+			assertTrue(ex.id + ": unsupported kodkodOutcome " + ex.supersession.kodkodOutcome,
+					kodkodOutcomes.contains(ex.supersession.kodkodOutcome));
+			assertTrue(ex.id + ": unsupported divergenceClass " + ex.supersession.divergenceClass,
+					divergenceClasses.contains(ex.supersession.divergenceClass));
+			assertNotNull(ex.id + ": kodkodReason", ex.supersession.kodkodReason);
+			assertFalse(ex.id + ": kodkodReason must say WHY, not just restate the outcome",
+					ex.supersession.kodkodReason.isBlank());
+			assertNotNull(ex.id + ": groundTruth", ex.supersession.groundTruth);
+			assertFalse(ex.id + ": groundTruth must be independently establishable, so it must be stated",
+					ex.supersession.groundTruth.isBlank());
+			assertNotNull(ex.id + ": a supersession row still needs its own expected oracle", ex.expected);
+			assertEquals(ex.id + ": smtOutcome must agree with this row's expected oracle", ex.expected.outcome,
+					ex.supersession.smtOutcome);
+			assertFalse(ex.id + ": a supersession row must actually diverge from the incumbent",
+					ex.supersession.kodkodOutcome.equals(ex.supersession.smtOutcome));
+		}
+		assertEquals("Study B supersession rows in the corpus", 2, rows);
+	}
+
 	@Test
 	public void soilKnownOutOfScopeInvariantsOnlyDeclaredWhenValidationTestsExist() {
 		for (ExampleEntry ex : manifest.examples) {

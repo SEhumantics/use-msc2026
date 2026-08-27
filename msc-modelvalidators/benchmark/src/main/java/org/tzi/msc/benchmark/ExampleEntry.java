@@ -74,6 +74,51 @@ public class ExampleEntry {
 	public List<String> oracleCaveats;
 
 	/**
+	 * Study B (spec S9, RQ2) supersession columns, present ONLY on the rows that are supersession
+	 * evidence and null everywhere else. A supersession row is one where the two backends should and
+	 * do differ, so a single {@link Expected} outcome cannot describe it: the table the thesis prints
+	 * needs the incumbent's outcome, WHY it reached that outcome, this project's outcome, the ground
+	 * truth that depends on neither of them, and how the divergence is classified. Recording those as
+	 * data rather than prose is what lets the table be generated from the corpus instead of asserted
+	 * next to it -- and what lets {@code ManifestSchemaTest} refuse a half-filled claim.
+	 */
+	public Supersession supersession;
+
+	/** The five Study B table columns for one supersession row. */
+	public static class Supersession {
+		/** Which evaluation study this row belongs to; "B" is the only one that uses this block. */
+		public String study;
+
+		/**
+		 * The incumbent's REAL observed outcome on this exact example at this row's bitwidth, one of
+		 * Kodkod's four {@code Solution.Outcome} names. Never an assumption: {@code
+		 * SupersessionDivergenceTest} runs the incumbent on the same unmodified files and pins it.
+		 */
+		public String kodkodOutcome;
+
+		/** Why the incumbent reached {@link #kodkodOutcome}, in mechanism terms, with its evidence. */
+		public String kodkodReason;
+
+		/** This project's outcome; must agree with {@link Expected#outcome} on the same row. */
+		public String smtOutcome;
+
+		/**
+		 * The answer that depends on neither tool, and how a reader can establish it unaided. A
+		 * supersession claim with no independently establishable ground truth is an assertion, not
+		 * evidence.
+		 */
+		public String groundTruth;
+
+		/**
+		 * How the divergence is classified. "false-unsat"/"false-sat" are the strong claims (the
+		 * incumbent gives a WRONG answer); "silent-drop" and "cannot-configure" are the weaker
+		 * "cannot state the question" claims; "error" is weaker still. Labelling a weaker divergence
+		 * as a stronger one is the specific dishonesty this field exists to prevent.
+		 */
+		public String divergenceClass;
+	}
+
+	/**
 	 * The outcome a finding-mode example is expected to reach. Populated from this benchmark's own
 	 * observed ground truth (see benchmark/src/main/resources/latest-results.json) at the time each
 	 * entry was added -- not independently re-derived from the model/solver here, so it is a
