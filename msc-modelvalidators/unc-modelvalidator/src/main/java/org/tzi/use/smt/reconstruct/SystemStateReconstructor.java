@@ -109,6 +109,10 @@ public final class SystemStateReconstructor {
           SmtValue rawUncertainty = modelValues.get(values.uncertaintyNames().get(i));
           api.setAttributeValueEx(
               object, attribute, SmtValueDecoder.decodeUReal(raw, rawUncertainty));
+        } else if (values.type() == AttributeType.UINTEGER) {
+          SmtValue rawUncertainty = modelValues.get(values.uncertaintyNames().get(i));
+          api.setAttributeValueEx(
+              object, attribute, SmtValueDecoder.decodeUInteger(raw, rawUncertainty));
         } else {
           api.setAttributeValueEx(
               object, attribute, SmtValueDecoder.decode(raw, attribute.type(), domain));

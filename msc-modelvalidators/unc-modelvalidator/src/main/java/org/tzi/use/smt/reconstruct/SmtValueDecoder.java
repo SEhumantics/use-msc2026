@@ -8,6 +8,7 @@ import org.tzi.use.uml.ocl.value.BooleanValue;
 import org.tzi.use.uml.ocl.value.IntegerValue;
 import org.tzi.use.uml.ocl.value.RealValue;
 import org.tzi.use.uml.ocl.value.StringValue;
+import org.tzi.use.uml.ocl.value.UIntegerValue;
 import org.tzi.use.uml.ocl.value.URealValue;
 import org.tzi.use.uml.ocl.value.Value;
 
@@ -42,6 +43,21 @@ public final class SmtValueDecoder {
     double value = rationalValue(rawValue).asBigDecimal(10).doubleValue();
     double uncertainty = rationalValue(rawUncertainty).asBigDecimal(10).doubleValue();
     return new URealValue(value, uncertainty);
+  }
+
+  /**
+   * Decodes the SMT Int representative and SMT Real uncertainty that jointly represent one UInteger
+   * attribute value.
+   *
+   * <p>The representative is read with {@link #intValue}, NOT by rounding a decimal: the solver
+   * assigned it on the Int sort, so a non-integral model value would mean the encoding declared the
+   * wrong sort, and that must surface as a failure rather than be quietly rounded away here. The
+   * rounding this slice relies on is the SOLVER's, performed while searching, not the decoder's.
+   */
+  public static UIntegerValue decodeUInteger(SmtValue rawValue, SmtValue rawUncertainty) {
+    int value = intValue(rawValue).intValueExact();
+    double uncertainty = rationalValue(rawUncertainty).asBigDecimal(10).doubleValue();
+    return new UIntegerValue(value, uncertainty);
   }
 
   /**

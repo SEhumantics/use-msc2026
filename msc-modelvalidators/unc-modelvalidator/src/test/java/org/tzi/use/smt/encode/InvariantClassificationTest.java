@@ -85,7 +85,8 @@ public class InvariantClassificationTest {
         new AttributeDomain(
             "UnidentifiedObject", "speed", "uncertainty", List.of("0.02"), null, null);
     AttributeValues values =
-        AttributeEncoder.encodeUReal(script, slots, "speed", valueDomain, uncertaintyDomain);
+        AttributeEncoder.encodeUType(
+            script, slots, "speed", AttributeType.UREAL, valueDomain, uncertaintyDomain);
     TranslationContext context =
         new TranslationContext(
             Map.of(),

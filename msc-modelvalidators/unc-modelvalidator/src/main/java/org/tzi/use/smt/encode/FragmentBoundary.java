@@ -58,10 +58,13 @@ public enum FragmentBoundary {
    * Inside 7.2's U-type core, but not in the shape this translation slice implements. 7.2 bounds
    * the core to {@code UReal} (representative plus fixed/finite uncertainty, affine arithmetic,
    * comparison against ONE exact operand, {@code toBooleanC} thresholds), {@code UInteger}, {@code
-   * UBoolean} and {@code UString}. Only the {@code UReal} threshold family is implemented today, so
-   * a bare {@code UReal} access or a {@code UInteger}/{@code UBoolean}/{@code UString} literal is a
-   * gap INSIDE the core, not an exclusion from it -- a distinction that matters, because the two
-   * have opposite implications for whether the gap will ever close.
+   * UBoolean} and {@code UString}. The {@code UReal} and {@code UInteger} threshold families are
+   * implemented -- {@code UInteger} being the second family, landed by widening the shared
+   * evaluator-derived boundary onto an Int representative rather than by deriving a second one --
+   * so a bare U-typed attribute access, a {@code UReal}/{@code UInteger} LITERAL, or anything
+   * touching {@code UBoolean}/{@code UString} is a gap INSIDE the core, not an exclusion from it --
+   * a distinction that matters, because the two have opposite implications for whether the gap will
+   * ever close.
    */
   UTYPE_CORE("THESIS_SMT_MODEL_FINDER_PLAN.md 7.2 U-type core, shape not yet implemented"),
 

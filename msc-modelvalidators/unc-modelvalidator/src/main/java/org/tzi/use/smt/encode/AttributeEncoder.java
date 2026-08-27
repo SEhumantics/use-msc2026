@@ -33,9 +33,10 @@ public final class AttributeEncoder {
         case INTEGER ->
             guardInteger(script, exists, value, domain, owner.className(), attributeName);
         case REAL -> guardReal(script, exists, value, domain, owner.className(), attributeName);
-        case UREAL ->
+        case UREAL, UINTEGER ->
             throw new IllegalArgumentException(
-                "UReal attribute '"
+                type
+                    + " attribute '"
                     + owner.className()
                     + "."
                     + attributeName
@@ -47,18 +48,25 @@ public final class AttributeEncoder {
   }
 
   /**
-   * Encodes the nominal and uncertainty components of one UReal as a same-slot SMT pair -- the
-   * single-scenario form, whose emitted declaration and assertion ORDER is deliberately left
-   * byte-identical to every pre-4.6 run so an existing witness cannot shift underneath the
-   * benchmark corpus. The two halves are also available separately, for the multi-scenario UNIFORM
-   * encoding that has to share one and copy the other.
+   * Encodes the representative and uncertainty components of one U-typed attribute as a same-slot
+   * SMT pair -- the single-scenario form, whose emitted declaration and assertion ORDER is
+   * deliberately left byte-identical to every pre-4.6 run so an existing witness cannot shift
+   * underneath the benchmark corpus. The two halves are also available separately, for the
+   * multi-scenario UNIFORM encoding that has to share one and copy the other.
+   *
+   * <p>{@code UREAL} and {@code UINTEGER} share this method whole. The only difference between the
+   * families is the representative's sort and the domain guard that goes with it; the uncertainty
+   * is a non-negative Real either way, which is exactly why the threshold boundary is shared too
+   * (USE's own {@code UInteger.gt} is defined as {@code toUReal().gt(...)}).
    */
-  public static AttributeValues encodeUReal(
+  public static AttributeValues encodeUType(
       SmtScript script,
       ObjectSlots owner,
       String attributeName,
+      AttributeType type,
       AttributeDomain valueDomain,
       AttributeDomain uncertaintyDomain) {
+    requireUType(type);
     requireComponent(valueDomain, owner.className(), attributeName, "value");
     requireComponent(uncertaintyDomain, owner.className(), attributeName, "uncertainty");
     List<String> valueNames = new ArrayList<>();
@@ -67,15 +75,16 @@ public final class AttributeEncoder {
       String stem = owner.className() + "_" + i + "_" + attributeName;
       String valueName = stem + "_value";
       String uncertaintyName = stem + "_uncertainty";
-      script.declareConst(valueName, SmtSort.REAL);
+      script.declareConst(valueName, representativeSort(type));
       script.declareConst(uncertaintyName, SmtSort.REAL);
       valueNames.add(valueName);
       uncertaintyNames.add(uncertaintyName);
       SmtTerm exists = Smt.sym(owner.existsNames().get(i));
-      guardReal(
+      guardRepresentative(
           script,
           exists,
           Smt.sym(valueName),
+          type,
           valueDomain,
           owner.className(),
           attributeName + ".value");
@@ -91,27 +100,34 @@ public final class AttributeEncoder {
               "=>", exists, Smt.app(">=", Smt.sym(uncertaintyName), Smt.realLit(BigDecimal.ZERO))));
     }
     return new AttributeValues(
-        owner.className(), attributeName, AttributeType.UREAL, valueNames, uncertaintyNames);
+        owner.className(), attributeName, type, valueNames, uncertaintyNames);
   }
 
   /**
-   * The REPRESENTATIVE half of a UReal attribute -- the part that belongs to the snapshot {@code S}
-   * and is therefore declared exactly ONCE even when several scenario copies are encoded into the
-   * same script. Sharing these symbols across scenario obligations is precisely what makes UNIFORM
-   * stronger than COVER; giving each scenario its own copy would silently turn one into the other.
+   * The REPRESENTATIVE half of a U-typed attribute -- the part that belongs to the snapshot {@code
+   * S} and is therefore declared exactly ONCE even when several scenario copies are encoded into
+   * the same script. Sharing these symbols across scenario obligations is precisely what makes
+   * UNIFORM stronger than COVER; giving each scenario its own copy would silently turn one into the
+   * other.
    */
-  public static List<String> encodeURealRepresentatives(
-      SmtScript script, ObjectSlots owner, String attributeName, AttributeDomain valueDomain) {
+  public static List<String> encodeUTypeRepresentatives(
+      SmtScript script,
+      ObjectSlots owner,
+      String attributeName,
+      AttributeType type,
+      AttributeDomain valueDomain) {
+    requireUType(type);
     requireComponent(valueDomain, owner.className(), attributeName, "value");
     List<String> valueNames = new ArrayList<>();
     for (int i = 0; i < owner.capacity(); i++) {
       String valueName = owner.className() + "_" + i + "_" + attributeName + "_value";
-      script.declareConst(valueName, SmtSort.REAL);
+      script.declareConst(valueName, representativeSort(type));
       valueNames.add(valueName);
-      guardReal(
+      guardRepresentative(
           script,
           Smt.sym(owner.existsNames().get(i)),
           Smt.sym(valueName),
+          type,
           valueDomain,
           owner.className(),
           attributeName + ".value");
@@ -129,7 +145,7 @@ public final class AttributeEncoder {
    *     null to leave the component free within its configured domain -- which is what EXISTS
    *     wants, since {@code exists s exists S} lets the solver choose the scenario too.
    */
-  public static List<String> encodeURealUncertainties(
+  public static List<String> encodeUTypeUncertainties(
       SmtScript script,
       ObjectSlots owner,
       String attributeName,
@@ -172,10 +188,43 @@ public final class AttributeEncoder {
 
   private static SmtSort sort(AttributeType type) {
     return switch (type) {
-      case STRING, INTEGER -> SmtSort.INT;
+      case STRING, INTEGER, UINTEGER -> SmtSort.INT;
       case REAL, UREAL -> SmtSort.REAL;
       case BOOLEAN -> SmtSort.BOOL;
     };
+  }
+
+  /**
+   * The sort of a U-type's REPRESENTATIVE half. This is the whole of what separates the two
+   * families: {@code UReal(mu, sigma)} puts {@code mu} on Real, {@code UInteger(n, sigma)} puts
+   * {@code n} on Int -- and it is the Int sort, not any second boundary computation, that makes the
+   * solver's own integer theory round a real-valued threshold up to the least admissible integer.
+   * The uncertainty half is a Real in both families.
+   */
+  private static SmtSort representativeSort(AttributeType type) {
+    return type == AttributeType.UINTEGER ? SmtSort.INT : SmtSort.REAL;
+  }
+
+  private static void guardRepresentative(
+      SmtScript script,
+      SmtTerm exists,
+      SmtTerm value,
+      AttributeType type,
+      AttributeDomain domain,
+      String className,
+      String attributeName) {
+    if (type == AttributeType.UINTEGER) {
+      guardInteger(script, exists, value, domain, className, attributeName);
+    } else {
+      guardReal(script, exists, value, domain, className, attributeName);
+    }
+  }
+
+  private static void requireUType(AttributeType type) {
+    if (!type.isUType()) {
+      throw new IllegalArgumentException(
+          "paired representative/uncertainty encoding is only defined for U-types, got " + type);
+    }
   }
 
   private static void guardString(

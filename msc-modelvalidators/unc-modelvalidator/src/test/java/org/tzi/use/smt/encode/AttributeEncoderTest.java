@@ -30,7 +30,8 @@ public class AttributeEncoderTest {
         new AttributeDomain("Reading", "measurement", "uncertainty", List.of("0.02"), null, null);
 
     AttributeValues values =
-        AttributeEncoder.encodeUReal(s, reading, "measurement", valueDomain, uncertaintyDomain);
+        AttributeEncoder.encodeUType(
+            s, reading, "measurement", AttributeType.UREAL, valueDomain, uncertaintyDomain);
 
     assertEquals(List.of("Reading_0_measurement_value"), values.valueNames());
     assertEquals(List.of("Reading_0_measurement_uncertainty"), values.uncertaintyNames());

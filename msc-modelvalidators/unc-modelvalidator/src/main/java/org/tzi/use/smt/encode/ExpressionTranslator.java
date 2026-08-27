@@ -86,10 +86,12 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   public void visitAttrOp(ExpAttrOp e) {
     VariableBinding b = context.binding(variableNameOf(e.objExp()));
     AttributeValues v = context.attributeValues(b.className(), e.attr().name());
-    if (v.type() == AttributeType.UREAL) {
+    if (v.type().isUType()) {
       throw unsupported(
           FragmentBoundary.UTYPE_CORE,
-          "bare UReal attribute access outside a supported threshold comparison");
+          "bare "
+              + (v.type() == AttributeType.UREAL ? "UReal" : "UInteger")
+              + " attribute access outside a supported threshold comparison");
     }
     result = defined(Smt.sym(v.valueNames().get(b.slotIndex())));
   }
@@ -98,7 +100,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   public void visitStdOp(ExpStdOp e) {
     Expression[] a = e.args();
     if ("toBooleanC".equals(e.opname())) {
-      result = uRealThreshold(e);
+      result = uTypeThreshold(e);
       return;
     }
     result =
@@ -153,13 +155,24 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   }
 
   /**
-   * Translates exactly {@code (object.urealAttr op crispLiteral).toBooleanC(confidence)}.
+   * Translates exactly {@code (object.uTypedAttr op crispLiteral).toBooleanC(confidence)}, for
+   * either U-type family.
    *
    * <p>For nonzero uncertainty this is a linear boundary over the representative and uncertainty
    * terms. Zero uncertainty follows USE's ordinary strict/non-strict comparator instead. General
    * uncertain comparisons and nonconstant confidence remain deliberately unsupported.
+   *
+   * <p><b>Why {@code UInteger} needs no second boundary.</b> USE's own {@code UInteger.gt} is
+   * literally {@code toUReal().gt(number.toUReal())}, and OCL's {@code Op_number_greater} widens
+   * through {@code URealValue.valueOf} before comparing at all, so the uncertain reading of a
+   * UInteger comparison IS its UReal widening -- the same normal-CDF threshold, bisected once in
+   * {@link URealThresholdBoundary}. The only difference reaching the solver is that the
+   * representative is an Int, so the emitted inequality lifts it with {@code to_real} and the
+   * solver's integer theory then rounds the real-valued boundary to the least admissible integer by
+   * itself. Deriving a separate integer boundary here would be duplicating verified arithmetic and
+   * inviting the two copies to drift.
    */
-  private TranslatedExpression uRealThreshold(ExpStdOp projection) {
+  private TranslatedExpression uTypeThreshold(ExpStdOp projection) {
     Expression[] projectionArgs = projection.args();
     if (projectionArgs.length != 2 || !(projectionArgs[0] instanceof ExpStdOp comparison)) {
       throw unsupported(FragmentBoundary.UTYPE_CORE, "toBooleanC outside a direct comparison");
@@ -175,9 +188,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           FragmentBoundary.UTYPE_CORE,
           "UReal threshold whose left operand is not an attribute access");
     }
-    if (!attribute.type().isTypeOfUReal()) {
+    if (!attribute.type().isTypeOfUReal() && !attribute.type().isTypeOfUInteger()) {
       throw unsupported(
-          FragmentBoundary.UTYPE_CORE, "toBooleanC comparison over a non-UReal attribute");
+          FragmentBoundary.UTYPE_CORE, "toBooleanC comparison over a non-U-typed attribute");
     }
 
     BigDecimal literal =
@@ -190,12 +203,17 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
     VariableBinding binding = context.binding(variableNameOf(attribute.objExp()));
     AttributeValues values = context.attributeValues(binding.className(), attribute.attr().name());
-    if (values.type() != AttributeType.UREAL) {
+    if (!values.type().isUType()) {
       throw unsupported(
           FragmentBoundary.UTYPE_CORE,
-          "UReal threshold without paired value/uncertainty SMT terms");
+          "U-type threshold without paired value/uncertainty SMT terms");
     }
-    SmtTerm representative = Smt.sym(values.valueNames().get(binding.slotIndex()));
+    SmtTerm declared = Smt.sym(values.valueNames().get(binding.slotIndex()));
+    // The representative is an Int for UInteger and a Real for UReal, while the boundary is always
+    // a Real -- so the arithmetic comparison lifts it. The DECLARED symbol stays an Int, which is
+    // precisely what leaves the rounding to the solver's integer theory.
+    SmtTerm representative =
+        values.type() == AttributeType.UINTEGER ? Smt.app("to_real", declared) : declared;
     SmtTerm uncertainty = Smt.sym(values.uncertaintyNames().get(binding.slotIndex()));
     SmtTerm zero = Smt.realLit(BigDecimal.ZERO);
     SmtTerm exact = Smt.app(comparison.opname(), representative, Smt.realLit(literal));

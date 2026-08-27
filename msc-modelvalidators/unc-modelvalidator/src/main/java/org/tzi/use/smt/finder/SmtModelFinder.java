@@ -421,7 +421,7 @@ public final class SmtModelFinder {
 
   /**
    * Every concrete class whose slots actually carry this attribute -- the declaring class plus each
-   * descendant with a configured scope of its own. This mirrors {@link #registerURealAttribute}'s
+   * descendant with a configured scope of its own. This mirrors {@link #registerUTypeAttribute}'s
    * own inheritance walk exactly, because a scenario must bind precisely the slots that were
    * encoded: one axis too few leaves an uncertainty symbol free inside a universally quantified
    * profile, and one too many pins a symbol that does not exist.
@@ -476,7 +476,7 @@ public final class SmtModelFinder {
       TranslationContext context, Map<String, SmtValue> modelValues) {
     List<Scenario.Binding> bindings = new ArrayList<>();
     for (AttributeValues values : context.attributes().values()) {
-      if (values.type() != AttributeType.UREAL) {
+      if (!values.type().isUType()) {
         continue;
       }
       ObjectSlots slots = context.slotsFor(values.className());
@@ -599,18 +599,20 @@ public final class SmtModelFinder {
       String attributeName = representative.attributeName();
       MClass cls = model.getClass(className);
       MAttribute attribute = cls.attribute(attributeName, true);
-      if (!attribute.type().isTypeOfUReal()) {
+      if (!attribute.type().isTypeOfUReal() && !attribute.type().isTypeOfUInteger()) {
         throw new IllegalArgumentException(
-            "component domains are only supported for UReal attributes, got "
+            "component domains are only supported for UReal and UInteger attributes, got "
                 + className
                 + "."
                 + attributeName
                 + " : "
                 + attribute.type());
       }
+      AttributeType uType = attributeTypeOf(attribute.type());
       if (!components.keySet().equals(Set.of("value", "uncertainty"))) {
         throw new IllegalArgumentException(
-            "UReal attribute '"
+            uType
+                + " attribute '"
                 + className
                 + "."
                 + attributeName
@@ -628,10 +630,11 @@ public final class SmtModelFinder {
                 + attributeName
                 + "' names a class with no configured scope");
       }
-      registerURealAttribute(
+      registerUTypeAttribute(
           script,
           owner,
           attributeName,
+          uType,
           valueDomain,
           uncertaintyDomain,
           attributeValuesByKey,
@@ -648,10 +651,11 @@ public final class SmtModelFinder {
         if (descendantOwner == null) {
           continue;
         }
-        registerURealAttribute(
+        registerUTypeAttribute(
             script,
             descendantOwner,
             attributeName,
+            uType,
             valueDomain,
             uncertaintyDomain,
             attributeValuesByKey,
@@ -764,6 +768,9 @@ public final class SmtModelFinder {
     if (type.isTypeOfInteger()) {
       return AttributeType.INTEGER;
     }
+    if (type.isTypeOfUInteger()) {
+      return AttributeType.UINTEGER;
+    }
     if (type.isTypeOfUReal()) {
       return AttributeType.UREAL;
     }
@@ -777,18 +784,23 @@ public final class SmtModelFinder {
   }
 
   /**
-   * Registers one UReal attribute's symbols.
+   * Registers one U-typed attribute's symbols, for either family.
    *
    * <p>Without scenario copies this is the pre-4.6 encoding, unchanged. With them the split is the
    * whole point of the milestone: the REPRESENTATIVE symbols are declared ONCE and shared by every
    * copy (they belong to the snapshot {@code S}), while each copy gets its own pinned uncertainty
    * symbols (they belong to the scenario {@code s}). Letting each copy allocate its own
    * representatives would quietly turn UNIFORM into COVER.
+   *
+   * <p>{@code UINTEGER} rides the same path as {@code UREAL} rather than a parallel one: the
+   * scenario machinery quantifies over the UNCERTAINTY half, which is a Real in both families, so
+   * only the representative's sort differs and {@code AttributeEncoder} already handles that.
    */
-  private static void registerURealAttribute(
+  private static void registerUTypeAttribute(
       SmtScript script,
       ObjectSlots owner,
       String attributeName,
+      AttributeType type,
       AttributeDomain valueDomain,
       AttributeDomain uncertaintyDomain,
       Map<String, AttributeValues> attributeValuesByKey,
@@ -802,16 +814,17 @@ public final class SmtModelFinder {
     if (scenarios == null) {
       attributeValuesByKey.put(
           key,
-          AttributeEncoder.encodeUReal(
-              script, owner, attributeName, valueDomain, uncertaintyDomain));
+          AttributeEncoder.encodeUType(
+              script, owner, attributeName, type, valueDomain, uncertaintyDomain));
       return;
     }
     List<String> representatives =
-        AttributeEncoder.encodeURealRepresentatives(script, owner, attributeName, valueDomain);
+        AttributeEncoder.encodeUTypeRepresentatives(
+            script, owner, attributeName, type, valueDomain);
     for (int i = 0; i < scenarios.size(); i++) {
       Scenario scenario = scenarios.get(i);
       List<String> uncertainties =
-          AttributeEncoder.encodeURealUncertainties(
+          AttributeEncoder.encodeUTypeUncertainties(
               script,
               owner,
               attributeName,
@@ -823,11 +836,7 @@ public final class SmtModelFinder {
           .put(
               key,
               new AttributeValues(
-                  owner.className(),
-                  attributeName,
-                  AttributeType.UREAL,
-                  representatives,
-                  uncertainties));
+                  owner.className(), attributeName, type, representatives, uncertainties));
     }
   }
 

@@ -239,7 +239,8 @@ public class FragmentLedgerBoundaryTest {
     AttributeDomain uncertainty =
         new AttributeDomain(
             "Sample", name, "uncertainty", List.of(), BigDecimal.ZERO, BigDecimal.ONE);
-    return AttributeEncoder.encodeUReal(script, slots, name, value, uncertainty);
+    return AttributeEncoder.encodeUType(
+        script, slots, name, AttributeType.UREAL, value, uncertainty);
   }
 
   private static MClassInvariant invariant(MModel model, String qualifiedName) {
