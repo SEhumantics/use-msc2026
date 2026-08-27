@@ -13,6 +13,7 @@ import java.util.Objects;
 import org.junit.Test;
 import org.tzi.use.parser.use.USECompiler;
 import org.tzi.use.smt.config.AnalysisConfiguration;
+import org.tzi.use.smt.config.ConfigurationReadException;
 import org.tzi.use.smt.config.ConfigurationReader;
 import org.tzi.use.smt.config.ConfigurationVocabulary;
 import org.tzi.use.smt.config.RawConfiguration;
@@ -38,12 +39,14 @@ import org.tzi.use.uml.sys.MSystemState;
  * and {@link #anExplicitPerAttributeDomainWinsOverTheTypeWideOne} and {@link
  * #explicitPerAttributeBoundsAreNotIntersectedWithTheTypeWideRange} pin both halves of it.
  *
- * <p>The String half is deliberately NOT implemented and {@link
- * #aStringAttributeWithOnlyTypeWideKeysStillFailsClosed} holds it closed: {@code
- * StringConfigurator} reads only {@code ranges.get(0).getUpper()} and uses it as a COUNT of string
- * atoms, padding the universe with GENERATED placeholder spellings ({@code type.name() + "_string"
- * + i}, lines 38-44 and 77-87). That is a cardinality, not a domain of values, and this encoder has
- * no generated-spelling notion to match it with.
+ * <p>The String half is deliberately NOT implemented, and two tests hold it closed from both ends
+ * -- {@link #theStringTypeWideKeysAreRefusedRatherThanReinterpretedAsADomain} at the configuration
+ * level and {@link #aStringAttributeIsNeverGivenAFallbackDomainByTheIntegerRange} at the encoding
+ * level. {@code StringConfigurator} reads only {@code ranges.get(0).getUpper()} and uses it as a
+ * COUNT of string atoms, padding the universe with GENERATED placeholder spellings ({@code
+ * type.name() + "_string" + i}, lines 38-44, 57-60 and 77-87), and never reads {@code String_min}
+ * at all. That is a cardinality, not a domain of values, and this encoder has no generated-spelling
+ * notion to match it with.
  */
 public class PrimitiveTypeWideFallbackDomainTest {
 
@@ -111,10 +114,29 @@ public class PrimitiveTypeWideFallbackDomainTest {
   }
 
   @Test
-  public void aStringAttributeWithOnlyTypeWideKeysStillFailsClosed() throws Exception {
+  public void theStringTypeWideKeysAreRefusedRatherThanReinterpretedAsADomain() throws Exception {
     try {
       find("TypeWideFallbackString", null);
       fail("String_min/String_max are a COUNT of string atoms and must not be read as a domain");
+    } catch (ConfigurationReadException expected) {
+      assertTrue(
+          "the refusal must name both keys, got: " + expected.getMessage(),
+          expected.getMessage().contains("String_max")
+              && expected.getMessage().contains("String_min"));
+    }
+  }
+
+  /**
+   * The fail-closed half stated at the ENCODING level rather than the configuration one: with no
+   * String key at all there is nothing to misread, and an unconfigured String attribute still gets
+   * no symbol and still refuses every invariant that reads it. Without this, dropping the String
+   * exclusion from {@link SmtModelFinder} could go unnoticed.
+   */
+  @Test
+  public void aStringAttributeIsNeverGivenAFallbackDomainByTheIntegerRange() throws Exception {
+    try {
+      find("TypeWideFallbackStringUnconfigured", null);
+      fail("a String attribute has no primitive-type-wide fallback and must keep failing closed");
     } catch (SmtTranslationException expected) {
       assertTrue(
           "the refusal must stay an encoding-scope refusal, got: " + expected.getMessage(),

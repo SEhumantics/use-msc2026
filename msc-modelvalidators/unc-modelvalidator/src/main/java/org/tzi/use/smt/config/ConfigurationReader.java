@@ -26,6 +26,27 @@ public final class ConfigurationReader {
   private static final Pattern BLOCK_COMMENT = Pattern.compile("/\\*.*?\\*/", Pattern.DOTALL);
   private static final Pattern LINE_COMMENT = Pattern.compile("(?m)--[^\\r\\n]*");
 
+  /**
+   * {@code DefaultConfigurationValues.integerMin/stringMin/realMin} from kk-modelvalidator, used to
+   * complete a one-sided type-wide range exactly as {@code
+   * PropertyConfigurationVisitor.visitConfigurableType} lines 203-253 do.
+   */
+  private static final Map<String, BigDecimal> DEFAULT_TYPE_WIDE_MIN =
+      Map.of(
+          "Integer", BigDecimal.valueOf(-10),
+          "String", BigDecimal.ZERO,
+          "Real", BigDecimal.valueOf(-2));
+
+  /**
+   * {@code DefaultConfigurationValues.integerMax/stringMax/realMax}; see {@link
+   * #DEFAULT_TYPE_WIDE_MIN}.
+   */
+  private static final Map<String, BigDecimal> DEFAULT_TYPE_WIDE_MAX =
+      Map.of(
+          "Integer", BigDecimal.valueOf(10),
+          "String", BigDecimal.valueOf(10),
+          "Real", BigDecimal.valueOf(2));
+
   private ConfigurationReader() {}
 
   /**
@@ -180,6 +201,16 @@ public final class ConfigurationReader {
         diagnostics,
         "Real_step",
         "accepted for Kodkod compatibility and ignored because SMT Reals are not discretised");
+    for (String key : List.of("String_min", "String_max")) {
+      deferredKeyDiagnostic(
+          entries,
+          diagnostics,
+          key,
+          "not a String value bound: the incumbent's StringConfigurator reads it as a COUNT of"
+              + " string atoms and pads the universe with generated placeholder spellings"
+              + " (\"String_string\" + i), which this encoding has no counterpart for, so it is"
+              + " refused rather than reinterpreted as a domain");
+    }
     for (String association : vocabulary.associationNames()) {
       deferredKeyDiagnostic(
           entries,
@@ -214,13 +245,38 @@ public final class ConfigurationReader {
     return new NormalizedConfiguration(configuration, diagnostics);
   }
 
+  /**
+   * The PRIMITIVE-TYPE-WIDE domain, recorded with an empty {@code className()} so it can never be
+   * confused with a per-attribute one. Two details are the incumbent's, not this reader's choice.
+   *
+   * <p>First, the unset sentinel differs from the per-attribute keys'. {@code
+   * PropertyConfigurationVisitor.visitConfigurableType} reads these with {@code readSize(name,
+   * Integer.MIN_VALUE, /* allowNegative *&#47; true)} (lines 200-201, 243-244, 249-250), so a
+   * configured {@code -1} is an ordinary negative bound here. The per-attribute keys are read with
+   * {@code DefaultConfigurationValues.attributesPerClassMin} (= -1) as the error value and {@code
+   * allowNegative} false (line 346), which is why {@link #decimal} treats {@code -1} as "unset"
+   * there and must not do so here -- widening a configured domain silently is exactly the defect
+   * that conflation would introduce.
+   *
+   * <p>Second, a range is created as soon as EITHER side is configured, and the missing side is
+   * completed from {@code DefaultConfigurationValues} rather than left open (lines 260-266). With
+   * neither side configured the incumbent sets no range at all, so neither does this.
+   */
   private static void addPrimitiveDomain(
       List<AttributeDomain> domains, Map<String, List<String>> entries, String typeName) {
-    BigDecimal min = decimal(entries, typeName + "_min");
-    BigDecimal max = decimal(entries, typeName + "_max");
-    if (min != null || max != null) {
-      domains.add(new AttributeDomain("", typeName, null, List.of(), min, max));
+    BigDecimal min = typeWideDecimal(entries, typeName + "_min");
+    BigDecimal max = typeWideDecimal(entries, typeName + "_max");
+    if (min == null && max == null) {
+      return;
     }
+    domains.add(
+        new AttributeDomain(
+            "",
+            typeName,
+            null,
+            List.of(),
+            min != null ? min : DEFAULT_TYPE_WIDE_MIN.get(typeName),
+            max != null ? max : DEFAULT_TYPE_WIDE_MAX.get(typeName)));
   }
 
   private static Set<String> recognisedKeys(ConfigurationVocabulary vocabulary) {
@@ -296,6 +352,23 @@ public final class ConfigurationReader {
                 + ", max="
                 + scope.max);
       }
+    }
+  }
+
+  /**
+   * {@link #decimal} without its {@code -1}-means-unset rule; see {@link #addPrimitiveDomain} for
+   * why the type-wide keys must not share it.
+   */
+  private static BigDecimal typeWideDecimal(Map<String, List<String>> entries, String key) {
+    String text = one(entries, key);
+    if (text == null) {
+      return null;
+    }
+    try {
+      return new BigDecimal(text);
+    } catch (NumberFormatException ex) {
+      throw new ConfigurationReadException(
+          "invalid decimal bound for '" + key + "': '" + text + "'");
     }
   }
 

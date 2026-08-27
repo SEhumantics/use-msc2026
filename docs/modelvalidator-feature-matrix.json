@@ -3919,6 +3919,40 @@
               "coverageNote": "zero coverage - no scenario exercises configuration persistence across sessions; this status rests on a full-tree source search finding no persistence mechanism at all."
             }
           }
+        },
+        {
+          "id": "config.primitive-type-wide-value-domain",
+          "name": "Primitive-type-wide value domain (Integer_min/max, Real_min/max, String_min/max) as the fallback domain for attributes with no per-attribute domain",
+          "support": {
+            "kk-modelvalidator": {
+              "status": "supported",
+              "evidence": "PropertyConfigurationVisitor.visitConfigurableType() (org/tzi/kodkod/model/config/impl/PropertyConfigurationVisitor.java:186-279) reads '<Type>_min'/'<Type>_max' via readSize/readSizeDouble with Integer.MIN_VALUE as the absent sentinel (lines 200-201, 243-244, 249-250), sets a Range as soon as EITHER side is configured and fills the missing side from DefaultConfigurationValues (lines 260-275; integerMin/Max -10/10, stringMin/Max 0/10, realMin/Max -2/2 at DefaultConfigurationValues.java:23-33). IntegerConfigurator.atoms() (IntegerConfigurator.java:42-46) materialises the range as Integer atoms; RealConfigurator.atoms() (RealConfigurator.java:59-63) walks it by Real_step; StringConfigurator (StringConfigurator.java:24-28, 38-44, 57-60, 77-87) instead treats the range's UPPER bound as a COUNT of string atoms and pads the universe with generated 'String_string<i>' spellings, never reading String_min at all. AttributeConfigurator.upperBound() (AttributeConfigurator.java:117-182) is where it becomes an attribute's domain: with no per-attribute domainValues it takes the type's own upper bound (for Integer, filtered to the configured range plus the type's specific values, lines 129-164); with domainValues present it uses those ALONE (lines 168-181) and never consults the type range.",
+              "notes": "Confirmed live on scenarios whose .properties really does leave an Integer attribute with no per-attribute key, so the fallback is the only thing bounding it: EmployeeInvariants (Employee.salary, only Integer_min/Integer_max = 0/3 in the section) reaches SATISFIABLE and EmployeeInvariants-UNSAT (Integer_min/Integer_max = -3/0) reaches UNSATISFIABLE under DefaultSAT4J; ZebraPuzzle (House.position, Integer_min/max = 0/6) reaches SATISFIABLE and ZebraPuzzle-UNSAT UNSATISFIABLE; GraphColoring (Region.color) and Sudoku (Row.index, Column.index, Square.index, Field.value) likewise, in both their SAT and UNSAT sections. The paired EmployeeInvariants sections are the sharpest evidence that the range is a real constraint and not just a registration: the two sections differ ONLY in Integer_min/Integer_max and flip the verdict.",
+              "satScenarioIds": [
+                "EmployeeInvariants",
+                "ZebraPuzzle",
+                "GraphColoring",
+                "Sudoku"
+              ],
+              "unsatScenarioIds": [
+                "EmployeeInvariants-UNSAT",
+                "ZebraPuzzle-UNSAT",
+                "GraphColoring-UNSAT",
+                "Sudoku-UNSAT"
+              ],
+              "validationOracleScenarioIds": [],
+              "coverageNote": ""
+            },
+            "unc-modelvalidator": {
+              "status": "degraded",
+              "evidence": "The Integer and Real halves ARE supported: ConfigurationReader.addPrimitiveDomain() (config/ConfigurationReader.java:248-280) reads '<Type>_min'/'<Type>_max' into an AttributeDomain with an EMPTY className, using a separate typeWideDecimal() reader (ConfigurationReader.java:358-373) so that -1 stays an ordinary bound here while remaining the 'unset' sentinel for the per-attribute keys, and completing a one-sided range from the incumbent's own DEFAULT_TYPE_WIDE_MIN/MAX (ConfigurationReader.java:29-51). SmtModelFinder.registerTypeWideFallbackAttributes() (finder/SmtModelFinder.java:873-962) then encodes exactly those attributes of each scoped class that no per-attribute domain already registered, via AttributeEncoder.encode()'s ordinary range guard (encode/AttributeEncoder.java:421-427). Precedence matches the incumbent's AttributeConfigurator.upperBound:117/:168 branch: an explicit per-attribute domain wins outright and is never intersected with the type-wide range. The String half is NOT supported: String_min/String_max are refused as configuration diagnostics (ConfigurationReader.java:204-212) because the incumbent reads them as a COUNT of string atoms padded with generated placeholder spellings, which this encoding has no counterpart for; an unconfigured String attribute therefore still gets no symbol and its invariants are refused with ENCODING_SCOPE. Enum-typed attributes are likewise excluded (fallbackTypeOf(), SmtModelFinder.java:964-978) since no type-wide key exists for them and attributeTypeOf() cannot encode an enum at all.",
+              "notes": "No scenario that currently reaches an SMT-Z3 verdict exercises the fallback path, so this entry cites no scenario rather than a misleading one: every corpus row that both carries a type-wide key and reaches an SMT verdict (Inheritance, Inheritance-UNSAT, MultipleInheritance, MultipleInheritance-UNSAT, IntegerBitwidth-DailyCap, RealGrid-UnitInterval) gives every one of its Integer/Real attributes an explicit per-attribute domain, so the fallback never fires there -- verified by the corpus regression run, in which all 58 SMT-Z3 rows kept both their outcome and their witnessDigest. What the change does move is the fail-closed ledger: ENCODING_SCOPE refusals drop from 7 rows / 32 invariants to 5 rows / 27 invariants (Employee.salary in EmployeeInvariants and EmployeeInvariants-UNSAT, House.position in ZebraPuzzle). EmployeeInvariants and EmployeeInvariants-UNSAT stop being blocked by configuration at all and are now blocked solely by a genuine OCL gap the ENCODING_SCOPE refusal had been masking -- TIER_2 'operator -' for 'self.salary > -1'.",
+              "satScenarioIds": [],
+              "unsatScenarioIds": [],
+              "validationOracleScenarioIds": [],
+              "coverageNote": "Verified by unit fixture rather than by a corpus scenario: PrimitiveTypeWideFallbackDomainTest (src/test/java/org/tzi/use/smt/finder/PrimitiveTypeWideFallbackDomainTest.java) drives a type-wide-only Integer configuration end to end to a USE-confirmed SAT witness inside [0,3], flips the same model to UNSAT by moving only Integer_min/Integer_max, and pins both halves of the precedence rule plus the String fail-closed boundary."
+            }
+          }
         }
       ]
     },

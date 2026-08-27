@@ -771,6 +771,9 @@ public final class SmtModelFinder {
       }
     }
 
+    registerTypeWideFallbackAttributes(
+        script, model, config, slotsByClass, attributeValuesByKey, attributeDomainByKey);
+
     Map<String, AssociationLinks> linksByAssociation = new LinkedHashMap<>();
     for (AssociationScope scope : config.associationScopes()) {
       MAssociation association = model.getAssociation(scope.associationName());
@@ -865,6 +868,113 @@ public final class SmtModelFinder {
       return new Solved(result.outcome(), ledger, copies, Map.of());
     }
     return new Solved(SolverOutcome.SAT, ledger, copies, SmtModelParser.parse(result.modelText()));
+  }
+
+  /**
+   * Applies the PRIMITIVE-TYPE-WIDE fallback domain: {@code Integer_min}/{@code Integer_max} and
+   * {@code Real_min}/{@code Real_max} bound every attribute of that type the configuration gives no
+   * per-attribute domain of its own. This is the other half of the domain records the reader has
+   * produced since Phase 2 (the U-type component half was consumed in Phase 5), and it is a
+   * CONFIGURATION-defaults gap, not an OCL-fragment one: without it, an attribute bounded the way
+   * the incumbent ordinarily bounds one gets no SMT symbol at all and every invariant reading it is
+   * refused with {@code ENCODING_SCOPE}.
+   *
+   * <p>PRECEDENCE is the incumbent's, verified rather than assumed. {@code kk-modelvalidator}'s
+   * {@code AttributeConfigurator.upperBound} branches on {@code domainValues.isEmpty()} (line 117):
+   * with a per-attribute domain it uses those values ALONE (lines 168-181) and never consults the
+   * type's range; only without one does it fall back to the type's own bound, filtered to the
+   * type's configured range for Integer (lines 129-164). So the per-attribute domain WINS OUTRIGHT
+   * and is never intersected with the type-wide range -- which is why this method skips every
+   * attribute already registered above, rather than merging bounds into it.
+   *
+   * <p>Deliberately NOT applied, each still failing closed:
+   *
+   * <ul>
+   *   <li><b>String.</b> {@code String_min}/{@code String_max} are not string bounds. {@code
+   *       StringConfigurator} reads only {@code ranges.get(0).getUpper()} and uses it as a COUNT of
+   *       string atoms, padding the universe with GENERATED placeholder spellings ({@code
+   *       type.name() + "_string" + i}, lines 38-44, 57-60 and 77-87); {@code String_min} is never
+   *       read at all. There is no counterpart to a generated spelling here, so the reader refuses
+   *       those two keys outright instead of reinterpreting them as a domain.
+   *   <li><b>Enumerations and Boolean.</b> Neither has a type-wide configuration key in the shared
+   *       format, so there is nothing here to consume; an enum-typed attribute is not encodable at
+   *       all yet ({@link #attributeTypeOf} refuses it) and keeps its {@code ENCODING_SCOPE}
+   *       refusal.
+   *   <li><b>U-types.</b> Their components are registered above from explicit {@code _value}/{@code
+   *       _uncertainty}/{@code _probability}/{@code _confidence} keys; a type-wide primitive range
+   *       says nothing about a measurement quality and must not be substituted for one.
+   * </ul>
+   *
+   * <p>A class whose configured scope has capacity 0 yields no symbols and no assertions here, so
+   * an attribute on it stays exactly as absent from the script as before.
+   */
+  private static void registerTypeWideFallbackAttributes(
+      SmtScript script,
+      MModel model,
+      AnalysisConfiguration config,
+      Map<String, ObjectSlots> slotsByClass,
+      Map<String, AttributeValues> attributeValuesByKey,
+      Map<String, AttributeDomain> attributeDomainByKey) {
+    Map<String, AttributeDomain> typeWide = new LinkedHashMap<>();
+    for (AttributeDomain domain : config.attributeDomains()) {
+      if (domain.className().isEmpty() && domain.component() == null) {
+        typeWide.put(domain.attributeName(), domain);
+      }
+    }
+    if (typeWide.isEmpty()) {
+      return;
+    }
+    for (Map.Entry<String, ObjectSlots> entry : slotsByClass.entrySet()) {
+      String className = entry.getKey();
+      MClass cls = model.getClass(className);
+      if (cls == null) {
+        continue;
+      }
+      List<MAttribute> attributes = new ArrayList<>(cls.allAttributes());
+      attributes.sort(java.util.Comparator.comparing(MAttribute::name));
+      for (MAttribute attribute : attributes) {
+        String key = className + "." + attribute.name();
+        if (attributeValuesByKey.containsKey(key)) {
+          continue;
+        }
+        AttributeType type = fallbackTypeOf(attribute.type());
+        if (type == null) {
+          continue;
+        }
+        AttributeDomain source = typeWide.get(type == AttributeType.INTEGER ? "Integer" : "Real");
+        if (source == null) {
+          continue;
+        }
+        AttributeDomain fallback =
+            new AttributeDomain(
+                className,
+                attribute.name(),
+                null,
+                List.of(),
+                source.lowerBound(),
+                source.upperBound());
+        attributeValuesByKey.put(
+            key,
+            AttributeEncoder.encode(script, entry.getValue(), attribute.name(), type, fallback));
+        attributeDomainByKey.put(key, fallback);
+      }
+    }
+  }
+
+  /**
+   * The attribute types a primitive-type-wide range can bound, or null for every type that keeps
+   * failing closed. Only plain {@code Integer} and {@code Real} qualify; see {@link
+   * #registerTypeWideFallbackAttributes} for why String, enumerations, Boolean and the U-types do
+   * not.
+   */
+  private static AttributeType fallbackTypeOf(Type type) {
+    if (type.isTypeOfInteger()) {
+      return AttributeType.INTEGER;
+    }
+    if (type.isTypeOfReal()) {
+      return AttributeType.REAL;
+    }
+    return null;
   }
 
   private static AttributeType attributeTypeOf(Type type) {

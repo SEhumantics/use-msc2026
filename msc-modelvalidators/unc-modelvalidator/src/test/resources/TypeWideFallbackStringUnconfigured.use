@@ -1,0 +1,17 @@
+-- The same String attribute as TypeWideFallbackString.use, but its .properties
+-- configures only the INTEGER type-wide range. A String attribute must not pick
+-- up an Integer fallback, so Person.name stays without a symbol and every
+-- invariant reading it keeps its ENCODING_SCOPE refusal.
+model TypeWideFallbackStringUnconfigured
+
+class Person
+attributes
+  name : String
+  age : Integer
+end
+
+constraints
+
+context Person inv NameIsItself: self.name = self.name
+
+context Person inv AgeIsPositive: self.age > 0
