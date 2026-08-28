@@ -62,7 +62,7 @@ public class FragmentLedgerBoundaryTest {
       context self : Sample inv Tier2ExistsOneVariable:
         Sample.allInstances()->exists(x | x.n > 0)
       context self : Sample inv Tier2TypeTest:
-        self.oclIsTypeOf(Sample)
+        self.oclAsType(Sample).oclIsTypeOf(Sample)
       context self : Sample inv Tier3Enumeration:
         Color::red = Color::green
       context self : Sample inv Tier3SetLiteral:
@@ -147,7 +147,14 @@ public class FragmentLedgerBoundaryTest {
     assertTrue(message, message.contains("Sample::Tier3SetLiteral"));
     assertTrue(message, message.contains("[UNCERTAIN]"));
     assertTrue("the construct must still be named", message.contains("Set literal"));
-    assertTrue("the construct must still be named", message.contains("isTypeOf"));
+    // Tier2TypeTest's body changed from `self.oclIsTypeOf(Sample)` (now genuinely supported --
+    // see isTypeCheck's own javadoc) to `self.oclAsType(Sample).oclIsTypeOf(Sample)`, refused by
+    // variableNameOf because the receiver is no longer a bare variable, not by isTypeCheck's own
+    // logic -- so its message no longer says "isTypeOf" by name; it says why the RECEIVER is
+    // unsupported instead, which is now the real, accurate reason.
+    assertTrue(
+        "the construct must still be named",
+        message.contains("attribute access on a non-variable receiver"));
     // The message text changed since this assertion was first written: `self.speed > self.other`
     // now reaches uTypeSymmetricThreshold (both operands are UReal attributes), which names the
     // REAL reason for the refusal (uncertainty not provably equal) instead of the old, less

@@ -1,0 +1,32 @@
+model TypeTestScope
+
+abstract class Vehicle
+attributes
+  wheels : Integer
+end
+
+class Car < Vehicle
+end
+
+class Truck < Vehicle
+end
+
+class Bicycle
+end
+
+constraints
+
+context c : Car inv isExactlyCar:
+  c.oclIsTypeOf(Car)
+
+context c : Car inv isNotExactlyVehicle:
+  not c.oclIsTypeOf(Vehicle)
+
+context c : Car inv isKindOfVehicle:
+  c.oclIsKindOf(Vehicle)
+
+context c : Car inv isKindOfCar:
+  c.oclIsKindOf(Car)
+
+context c : Car inv isNotKindOfTruck:
+  not c.oclIsKindOf(Truck)

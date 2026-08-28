@@ -1227,12 +1227,51 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
   @Override
   public void visitIsKindOf(ExpIsKindOf e) {
-    throw unsupported(FragmentBoundary.TIER_2, "isKindOf");
+    result = isTypeCheck(e.getSourceExpr(), e.getTargetType(), true);
   }
 
   @Override
   public void visitIsTypeOf(ExpIsTypeOf e) {
-    throw unsupported(FragmentBoundary.TIER_2, "isTypeOf");
+    result = isTypeCheck(e.getSourceExpr(), e.getTargetType(), false);
+  }
+
+  /**
+   * {@code oclIsTypeOf}/{@code oclIsKindOf} against a class target, resolved at TRANSLATION time
+   * rather than emitted as a solver-side formula -- possible because every object reference this
+   * translator can resolve at all goes through a bare quantifier/context {@link ExpVariable},
+   * which {@link #context}'s {@link VariableBinding} already tags with its own CONCRETE class name
+   * (see {@link PolymorphicRange}: each candidate slot in a polymorphic range keeps its own
+   * concrete class, exactly so an inherited invariant's context variable resolves attributes
+   * against the right subclass). So "which class is this object" is not something the solver needs
+   * to be asked; it is already known, in Java, the moment the binding is resolved.
+   *
+   * <p>Confirmed directly against {@code ExpIsTypeOf#eval}/{@code ExpIsKindOf#eval} (use-core), not
+   * assumed: both are TOTAL functions over their source's RUNTIME TYPE -- "the value may be
+   * undefined, still the type test is valid!" (the evaluator's own comment) -- so unlike every
+   * other operator in this translator, the result here is unconditionally defined; the source
+   * expression's own definedness is never consulted at all.
+   *
+   * <p>Narrowly scoped, same as everywhere else that resolves an object reference in this class:
+   * {@link #variableNameOf} throws for anything other than a bare variable, so a navigation chain
+   * (e.g. {@code self.owner.oclIsTypeOf(X)}) is refused rather than attempted -- this project has
+   * no general mechanism to resolve an arbitrary navigation's concrete dynamic type, only a bound
+   * variable's.
+   */
+  private TranslatedExpression isTypeCheck(
+      Expression sourceExpr, org.tzi.use.uml.ocl.type.Type targetType, boolean includeSubtypes) {
+    if (!targetType.isTypeOfClass()) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "isTypeOf/isKindOf against a non-class target type " + targetType);
+    }
+    org.tzi.use.uml.mm.MClassifier targetClass = (org.tzi.use.uml.mm.MClassifier) targetType;
+    VariableBinding binding = context.binding(variableNameOf(sourceExpr));
+    boolean matches =
+        binding.className().equals(targetClass.name())
+            || (includeSubtypes
+                && targetClass.allChildren().stream()
+                    .anyMatch(child -> child.name().equals(binding.className())));
+    return defined(Smt.bool(matches));
   }
 
   /**
