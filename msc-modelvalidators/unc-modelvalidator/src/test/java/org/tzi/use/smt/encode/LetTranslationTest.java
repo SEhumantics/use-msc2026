@@ -22,6 +22,7 @@ import org.tzi.use.smt.solver.SmtTerm;
 import org.tzi.use.smt.solver.SolverBinary;
 import org.tzi.use.smt.solver.SolverOutcome;
 import org.tzi.use.smt.solver.SolverProcess;
+import org.tzi.use.smt.solver.SolverResult;
 import org.tzi.use.uml.mm.MClassInvariant;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
@@ -200,7 +201,8 @@ public class LetTranslationTest {
             invariant.bodyExpression(), context, TranslationMode.UNCERTAIN);
     script.assertThat(translated.trueTerm());
 
-    assertEquals(SolverOutcome.SAT, solve(script));
+    SolverResult result = solveResult(script);
+    assertEquals(result.rawOutput(), SolverOutcome.SAT, result.outcome());
   }
 
   private static ObjectAnyCase encodeObjectAnyLet(
@@ -268,9 +270,11 @@ public class LetTranslationTest {
   }
 
   private static SolverOutcome solve(SmtScript script) {
-    return new SolverProcess(SolverBinary.resolve(), Duration.ofSeconds(30))
-        .run(script.toSmtLib())
-        .outcome();
+    return solveResult(script).outcome();
+  }
+
+  private static SolverResult solveResult(SmtScript script) {
+    return new SolverProcess(SolverBinary.resolve(), Duration.ofSeconds(30)).run(script.toSmtLib());
   }
 
   private record ObjectAnyCase(SmtScript script, TranslatedExpression expression) {}

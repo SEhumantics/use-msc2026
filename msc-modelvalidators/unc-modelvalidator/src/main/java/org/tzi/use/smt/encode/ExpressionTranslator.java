@@ -274,6 +274,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           case "<>" -> negate(comparison(a[0], a[1]));
           case ">=", "<=", ">", "<" -> orderedComparison(e.opname(), a[0], a[1]);
           case "size" -> collectionSize(a[0]);
+          case "div" -> integerDivision(a);
           case "+", "-", "*" -> arithmetic(e.opname(), a);
           default ->
               throw unsupported(boundaryOfOperator(e.opname()), "operator '" + e.opname() + "'");
@@ -387,6 +388,58 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     throw unsupported(
         boundaryOfOperator(opname), "operator '" + opname + "' with " + a.length + " argument(s)");
+  }
+
+  /**
+   * USE's Java-backed Integer {@code div} for the exact CompanyER denominator shape: a filtered
+   * allInstances cardinality. That count is itself a non-constant SMT term (it depends on which
+   * candidate slots satisfy the select predicate), and SMT-LIB {@code div} with a non-numeral
+   * second argument is nonlinear arithmetic -- confirmed directly against the pinned Z3 5.1.0
+   * binary: {@code (declare-const n Int) (declare-const d Int) (assert (= d 2)) (assert (= (div n
+   * d) 3))} is accepted (numeral-shaped {@code d} after propagation is NOT enough; Z3 requires the
+   * term itself to be a numeral), but the analogous term built from a non-constant count via {@code
+   * sizeTerm} is rejected with {@code "logic does not support nonlinear arithmetic"}, exactly the
+   * same restriction {@link #requireLinearProduct} already documents for {@code *}.
+   *
+   * <p>The fix is the same shape as {@code *}'s own literal-coefficient restriction, generalized:
+   * the divisor here is not an arbitrary variable, it is {@code sizeTerm} of a population whose
+   * Java-side candidate-slot count ({@code population.size()}) is known at translation time, so
+   * the true count is provably one of finitely many literal values {@code 0..population.size()}.
+   * Case-splitting over that exhaustive, closed range turns one nonlinear {@code div} into a chain
+   * of linear ones, each against a compile-time numeral -- sound because {@code sizeTerm} sums
+   * exactly {@code population.size()} zero/one indicators, so it cannot take any value outside that
+   * range. Divisor 0 (an empty matching population) makes the result undefined, matching Java's own
+   * {@code ArithmeticException}-to-{@code Undefined} conversion this project already relies on
+   * elsewhere (see {@code Op_integer_idiv}/{@code Op_uInteger_div} in use-core).
+   */
+  private TranslatedExpression integerDivision(Expression[] arguments) {
+    if (arguments.length != 2
+        || !(arguments[1] instanceof ExpStdOp size)
+        || !"size".equals(size.opname())
+        || size.args().length != 1
+        || !(size.args()[0] instanceof ExpSelect select)) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "operator 'div' outside the verified Integer / filtered-allInstances-size shape");
+    }
+    requireCrispInteger(arguments[0], "div");
+    requireCrispInteger(arguments[1], "div");
+    TranslatedExpression numerator = argResult(arguments[0]);
+    List<PopulationMember> population = selectedAllInstancesPopulation(select);
+    SmtTerm count = sizeTerm(population);
+    SmtTerm zero = Smt.intLit(BigInteger.ZERO);
+    SmtTerm quotient = zero;
+    for (int k = population.size(); k >= 1; k--) {
+      SmtTerm literalK = Smt.intLit(BigInteger.valueOf(k));
+      SmtTerm positiveQuotient = Smt.app("div", numerator.value(), literalK);
+      SmtTerm negativeQuotient =
+          Smt.app("-", Smt.app("div", Smt.app("-", numerator.value()), literalK));
+      SmtTerm divByK =
+          Smt.ite(Smt.app(">=", numerator.value(), zero), positiveQuotient, negativeQuotient);
+      quotient = Smt.ite(Smt.eq(count, literalK), divByK, quotient);
+    }
+    return new TranslatedExpression(
+        Smt.and(List.of(numerator.defined(), Smt.not(Smt.eq(count, zero)))), quotient);
   }
 
   /**
@@ -1168,22 +1221,60 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * consulted. {@code X.allInstances()->size()} is a different shape, not evidenced by the real
    * corpus and out of this slice's scope, so it is refused with a {@code size()}-specific message
    * rather than silently falling into {@link #populationOf}'s allInstances branch. The same refusal
-   * covers a filtered/derived collection ({@code ->select(...)->size()}, not an {@link
-   * ExpNavigation}), a single-valued 0..1 navigation coerced to a set via OCL's own {@code ->op}
-   * "uniform syntax" rule ({@link ExpObjAsSet}, not an {@link ExpNavigation} either -- e.g. {@code
-   * AssociationClass}'s {@code p.employer->size()}, {@code employer} being a 0..1 end), and {@code
+   * covers a single-valued 0..1 navigation coerced to a set via OCL's own {@code ->op} "uniform
+   * syntax" rule ({@link ExpObjAsSet}, not an {@link ExpNavigation} either -- e.g. {@code
+   * AssociationClass}'s {@code p.employer->size()}, {@code employer} being a 0..1 end), {@code
    * size()} on a String -- which never reaches this method with an {@link ExpNavigation} receiver
-   * at all, since a String operand is never navigation-shaped.
+   * at all, since a String operand is never navigation-shaped -- and a filtered/derived collection
+   * whose OWN source is not {@code X.allInstances()} (e.g. {@code self.assoc->select(...)->size()});
+   * only {@code X.allInstances()->select(...)->size()} is the supported {@link ExpSelect} shape
+   * (see {@link #selectedAllInstancesPopulation}), checked as part of this method's own branch
+   * condition so every other {@link ExpSelect} source falls through to this shared message instead
+   * of a select-specific one.
    */
   private TranslatedExpression collectionSize(Expression receiver) {
-    if (!(receiver instanceof ExpNavigation navigation)
-        || !navigation.getDestination().isCollection()) {
+    if (receiver instanceof ExpNavigation navigation
+        && navigation.getDestination().isCollection()) {
+      return defined(sizeTerm(populationOf(navigation, "size()")));
+    }
+    if (receiver instanceof ExpSelect select
+        && select.getRangeExpression() instanceof ExpAllInstances) {
+      return defined(sizeTerm(selectedAllInstancesPopulation(select)));
+    }
+    throw unsupported(
+        FragmentBoundary.TIER_3,
+        "size() over anything other than a single-hop, collection-valued association navigation"
+            + " or select over X.allInstances() is not yet supported");
+  }
+
+  /**
+   * The selected, existence-guarded allInstances population needed by CompanyER's let body.
+   * Callers must already have confirmed {@code select.getRangeExpression()} is {@link
+   * ExpAllInstances} (see {@link #collectionSize}); the check below is defense-in-depth, not the
+   * primary guard, so a future second caller cannot silently bypass it.
+   */
+  private List<PopulationMember> selectedAllInstancesPopulation(ExpSelect select) {
+    if (!(select.getRangeExpression() instanceof ExpAllInstances all)
+        || select.getVariableDeclarations().size() != 1) {
       throw unsupported(
           FragmentBoundary.TIER_3,
-          "size() over anything other than a single-hop, collection-valued association navigation"
-              + " is not yet supported");
+          "size() over select whose source is not X.allInstances() with one iterator");
     }
-    return defined(sizeTerm(populationOf(navigation, "size()")));
+    String iterator = select.getVariableDeclarations().varDecl(0).name();
+    List<PopulationMember> population = new ArrayList<>();
+    for (PolymorphicRange.Slot slot : PolymorphicRange.slotsOf(all.getSourceType(), context)) {
+      TranslatedExpression predicate =
+          translate(
+              select.getQueryExpression(),
+              context.withBinding(iterator, slot.binding()),
+              mode,
+              positivePolarity,
+              localBindings);
+      population.add(
+          new PopulationMember(
+              slot.binding(), Smt.and(List.of(Smt.sym(slot.existsName()), predicate.trueTerm()))));
+    }
+    return population;
   }
 
   /**
