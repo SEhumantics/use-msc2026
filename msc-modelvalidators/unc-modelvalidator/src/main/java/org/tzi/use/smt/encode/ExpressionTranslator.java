@@ -1000,6 +1000,35 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       TranslatedExpression other = argResult(l);
       return useEquality(other, defined(resolve(en, l)));
     }
+    if (l instanceof ExpAttrOp la
+        && la.objExp() instanceof ExpVariable lv
+        && !localBindings.containsKey(lv.getVarname())
+        && r instanceof ExpAttrOp ra
+        && ra.objExp() instanceof ExpVariable rv
+        && !localBindings.containsKey(rv.getVarname())) {
+      TranslatedExpression crossDomain = crossDomainStringOrEnumEquality(la, lv, ra, rv);
+      if (crossDomain != null) return crossDomain;
+    }
+    if (l instanceof ExpAttrOp la2
+        && la2.objExp() instanceof ExpNavigation lnav
+        && !lnav.getDestination().isCollection()
+        && r instanceof ExpAttrOp ra2
+        && ra2.objExp() instanceof ExpVariable rv2
+        && !localBindings.containsKey(rv2.getVarname())) {
+      TranslatedExpression crossDomain =
+          crossDomainNavigatedAttributeEquality(lnav, la2.attr(), ra2, rv2);
+      if (crossDomain != null) return crossDomain;
+    }
+    if (r instanceof ExpAttrOp ra3
+        && ra3.objExp() instanceof ExpNavigation rnav
+        && !rnav.getDestination().isCollection()
+        && l instanceof ExpAttrOp la3
+        && la3.objExp() instanceof ExpVariable lv3
+        && !localBindings.containsKey(lv3.getVarname())) {
+      TranslatedExpression crossDomain =
+          crossDomainNavigatedAttributeEquality(rnav, ra3.attr(), la3, lv3);
+      if (crossDomain != null) return crossDomain;
+    }
     if (l instanceof ExpNavigation ln
         && r instanceof ExpNavigation rn
         && !ln.getDestination().isCollection()
@@ -1013,6 +1042,149 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && l instanceof ExpVariable lv
         && !localBindings.containsKey(lv.getVarname())) return navigationEqualsVariable(rn, lv);
     return useEquality(argResult(l), argResult(r));
+  }
+
+  /**
+   * {@code a.attr1 = b.attr2}-shaped equality between two BARE attribute accesses, string/enum-typed
+   * on at least one side. Returns {@code null} (defers to the caller's ordinary {@link #useEquality}
+   * path) whenever either side is not String/Enum-typed -- Integer/Real/Boolean attribute values ARE
+   * the literal value itself ({@link AttributeEncoder}'s {@code guardInteger}/{@code guardReal}
+   * assert the SMT symbol equal to the actual configured number), so raw {@code Smt.eq} is already
+   * correct for them.
+   *
+   * <p>String and Enum are different: {@code guardString} assigns each attribute's value an index
+   * that is POSITIONAL WITHIN THAT ONE ATTRIBUTE'S OWN configured candidate list ({@code
+   * AttributeDomain#enumeratedValues}), with no global identity tying the same literal to the same
+   * integer across two independently-configured domains. The generic {@link #useEquality} path
+   * (comparing {@code left.value() = right.value()} as raw SMT terms) therefore silently equates two
+   * DIFFERENT literals whenever they happen to occupy the same position in their own attribute's
+   * list -- e.g. both attributes' first configured candidate. Discovered via a {@code
+   * WitnessAttributionException} on a derived-association {@code any()}-match predicate comparing a
+   * String attribute of one class against a String attribute of another with disjoint, differently-
+   * ordered domains (the solver reported a match the reconstructed witness's real string values did
+   * not have), reproduced in isolation with a single class's two String attributes ({@code C.s1 =
+   * C.s2}, domains {@code {'Zulu','Yankee'}} vs {@code {'Yankee','Zulu'}}).
+   *
+   * <p>The fix compares by CONTENT: a disjunction over every (i, j) index pair whose configured
+   * literals actually match, each conjunct pinning both sides to that pair's index. When the two
+   * domains are identical in content and order this is logically equivalent to the raw {@code i = j}
+   * the old path emitted (no behavior change for same-domain corpus scenarios, e.g. comparing one
+   * attribute across two objects of the same class); it only differs where the old path was unsound.
+   *
+   * <p>Deliberately narrow, matching this method's one proven shape: both operands must be a bare
+   * {@code <var>.<attr>} access. {@link #crossDomainNavigatedAttributeEquality} covers the sibling
+   * shape with one operand a single-hop navigated attribute ({@code a.role.attr}) -- both were
+   * needed together: {@code DerivedAssociationEncoder}'s {@code any()}-match predicate is this
+   * bare-vs-bare shape, but the invariant that CONSUMES its result ({@code g.widget.wname =
+   * g.targetname} in the discovering scenario) is the navigated-vs-bare shape, and fixing only one
+   * of the two made them disagree with EACH OTHER at the SMT level (the selection formula correctly
+   * requiring content equality while the consuming comparison still compared raw indices),
+   * regressing a previously-passing test with a manufactured UNSAT. A let-bound variable on either
+   * side is not yet covered (still routes through the ordinary, unsound {@link #useEquality} path),
+   * left as an explicitly open extension of this same finding rather than silently assumed safe.
+   */
+  private TranslatedExpression crossDomainStringOrEnumEquality(
+      ExpAttrOp l, ExpVariable lv, ExpAttrOp r, ExpVariable rv) {
+    VariableBinding lb = context.binding(lv.getVarname());
+    VariableBinding rb = context.binding(rv.getVarname());
+    AttributeValues lav = context.attributeValues(lb.className(), l.attr().name());
+    AttributeValues rav = context.attributeValues(rb.className(), r.attr().name());
+    if ((lav.type() != AttributeType.STRING && lav.type() != AttributeType.ENUM)
+        || (rav.type() != AttributeType.STRING && rav.type() != AttributeType.ENUM)) {
+      return null;
+    }
+    guardAgainstUncertainAttribute(lav);
+    guardAgainstUncertainAttribute(rav);
+    AttributeDomain ld = context.attributeDomain(lb.className(), l.attr().name());
+    AttributeDomain rd = context.attributeDomain(rb.className(), r.attr().name());
+    SmtTerm lValue = Smt.sym(lav.valueNames().get(lb.slotIndex()));
+    SmtTerm rValue = Smt.sym(rav.valueNames().get(rb.slotIndex()));
+    List<SmtTerm> matches = new ArrayList<>();
+    for (int i = 0; i < ld.enumeratedValues().size(); i++) {
+      for (int j = 0; j < rd.enumeratedValues().size(); j++) {
+        if (ld.enumeratedValues().get(i).equals(rd.enumeratedValues().get(j))) {
+          matches.add(
+              Smt.and(
+                  List.of(
+                      Smt.eq(lValue, Smt.intLit(BigInteger.valueOf(i))),
+                      Smt.eq(rValue, Smt.intLit(BigInteger.valueOf(j))))));
+        }
+      }
+    }
+    return defined(Smt.or(matches));
+  }
+
+  /**
+   * The sibling of {@link #crossDomainStringOrEnumEquality} for {@code a.role.attr = b.attr2}
+   * (single-hop navigated attribute compared to a bare attribute), String/Enum-typed on at least
+   * one side. Same root cause, same fix shape: per-destination-slot, the true condition is "{@code
+   * source} links to this slot AND that slot's configured literal actually equals the bare side's
+   * configured literal" -- built as a content-correct disjunction over (destination-domain-index,
+   * bare-domain-index) pairs, exactly {@link #crossDomainStringOrEnumEquality}'s per-pair matching
+   * applied once per destination slot instead of once overall, then OR'd with that slot's {@link
+   * #linkTerm}. The link disjunction ALSO becomes the equality's definedness half (an unlinked
+   * navigation makes the whole comparison definitely-false against a defined bare attribute, via
+   * {@link #useEquality}'s existing total-equality rule -- unchanged from before this fix).
+   *
+   * <p>One hop only, matching {@link #navigatedAttribute}'s own restriction: {@code
+   * navigation.getObjectExpression()} must be a bare variable, not another navigation. Returns
+   * {@code null} (defers to the caller's ordinary path) whenever that restriction fails, the
+   * destination sits on an association class (a different, index-pointer-based mechanism {@link
+   * #associationClassNavigatedAttribute} owns, not touched here), or either attribute is not
+   * String/Enum-typed.
+   */
+  private TranslatedExpression crossDomainNavigatedAttributeEquality(
+      ExpNavigation navigation, MAttribute navAttribute, ExpAttrOp bare, ExpVariable bareVar) {
+    if (!(navigation.getObjectExpression() instanceof ExpVariable navSourceVar)) {
+      return null;
+    }
+    VariableBinding source = context.binding(navSourceVar.getVarname());
+    MNavigableElement destination = resolveRedefinedDestination(navigation.getDestination(), source);
+    if (destination.association() instanceof MAssociationClass) {
+      return null;
+    }
+    String destClass = destination.cls().name();
+    AttributeValues destAttrValues = context.attributeValues(destClass, navAttribute.name());
+    VariableBinding bareBinding = context.binding(bareVar.getVarname());
+    AttributeValues bareAttrValues =
+        context.attributeValues(bareBinding.className(), bare.attr().name());
+    if ((destAttrValues.type() != AttributeType.STRING && destAttrValues.type() != AttributeType.ENUM)
+        || (bareAttrValues.type() != AttributeType.STRING
+            && bareAttrValues.type() != AttributeType.ENUM)) {
+      return null;
+    }
+    guardAgainstUncertainAttribute(destAttrValues);
+    guardAgainstUncertainAttribute(bareAttrValues);
+    AttributeDomain destDomain = context.attributeDomain(destClass, navAttribute.name());
+    AttributeDomain bareDomain =
+        context.attributeDomain(bareBinding.className(), bare.attr().name());
+    AssociationLinks links = context.linksFor(destination.association().name());
+    ObjectSlots destSlots = context.slotsFor(destClass);
+    SmtTerm bareValue = Smt.sym(bareAttrValues.valueNames().get(bareBinding.slotIndex()));
+
+    List<SmtTerm> targets = new ArrayList<>();
+    List<SmtTerm> matches = new ArrayList<>();
+    for (int k = 0; k < destSlots.capacity(); k++) {
+      SmtTerm link = linkTerm(links, destination, source, k);
+      targets.add(link);
+      SmtTerm destValue = Smt.sym(destAttrValues.valueNames().get(k));
+      List<SmtTerm> contentMatches = new ArrayList<>();
+      for (int di = 0; di < destDomain.enumeratedValues().size(); di++) {
+        for (int bi = 0; bi < bareDomain.enumeratedValues().size(); bi++) {
+          if (destDomain.enumeratedValues().get(di).equals(bareDomain.enumeratedValues().get(bi))) {
+            contentMatches.add(
+                Smt.and(
+                    List.of(
+                        Smt.eq(destValue, Smt.intLit(BigInteger.valueOf(di))),
+                        Smt.eq(bareValue, Smt.intLit(BigInteger.valueOf(bi))))));
+          }
+        }
+      }
+      matches.add(Smt.and(List.of(link, Smt.or(contentMatches))));
+    }
+    TranslatedExpression navigatedSide = new TranslatedExpression(Smt.or(targets), Smt.bool(false));
+    TranslatedExpression bareSide = defined(bareValue);
+    return useEquality(navigatedSide, bareSide, Smt.or(matches));
   }
 
   /**

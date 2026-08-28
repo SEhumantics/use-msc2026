@@ -128,6 +128,49 @@ public class DerivedAssociationAnyMatchTest {
         result.allActiveInvariantsHold());
   }
 
+  /**
+   * Regression for a genuine soundness bug found while probing a candidate corpus scenario for
+   * this same encoder: the {@code any()} selection formula's own predicate ({@code w.wname =
+   * self.targetname}, a bare String-attribute-to-bare-String-attribute equality) used to compare
+   * raw per-attribute-local domain INDICES rather than actual string content ({@code
+   * ExpressionTranslator#crossDomainStringOrEnumEquality} is the fix). Neither existing test above
+   * combines "no Widget matches any configured targetname" with "{@code WidgetNameMatches} is
+   * ACTIVE" -- the first test only asserts the invariant when a match genuinely exists, the second
+   * only asserts {@code NoMatchIsUndefined} (a different invariant) when none does. That untested
+   * combination is exactly where the bug surfaced: before the fix, this configuration made the
+   * solver claim a match existed (index collision between {@code Widget_wname}'s domain and {@code
+   * Gadget_targetname}'s domain) that {@code InvariantReEvaluator}'s real USE evaluator then denied,
+   * crashing with {@code WitnessAttributionException} instead of either finding a correct witness or
+   * refusing cleanly. With no Widget named 'gamma', {@code g.widget} is genuinely undefined for
+   * every Gadget, so the active equality can never hold -- the correct answer is a clean
+   * UNSATISFIABLE, not a crash.
+   */
+  @Test
+  public void activeWidgetNameMatchesWithNoMatchingCandidateIsGenuinelyUnsatisfiable()
+      throws Exception {
+    MModel model = compileFixture();
+    AnalysisConfiguration config =
+        readConfig(
+            model,
+            """
+            Widget_min = 2
+            Widget_max = 2
+            Widget_wname = Set{'alpha', 'beta'}
+            Gadget_min = 1
+            Gadget_max = 1
+            Gadget_targetname = Set{'gamma'}
+            Gadget_WidgetNameMatches = active
+            Gadget_NoMatchIsUndefined = inactive
+            """);
+
+    ModelFinderResult result = SmtModelFinder.find(model, config);
+
+    assertFalse(
+        "no Widget named 'gamma' exists, so the active WidgetNameMatches constraint is genuinely"
+            + " unsatisfiable -- not a translation crash",
+        result.satisfiable());
+  }
+
   @Test
   public void deriveExpressionOutsideTheAnyMatchShapeStillRefusesCleanly() throws Exception {
     // select(...) instead of any(...) -- the encoder must return empty and fall through to the
