@@ -287,6 +287,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           // isUndefined never propagate that as their OWN definedness, they report it as a value.
           case "isDefined" -> defined(definednessOf(a[0]));
           case "isUndefined" -> defined(Smt.not(definednessOf(a[0])));
+          case "excludes" -> membershipTest(a[0], a[1], false);
+          case "includes" -> membershipTest(a[0], a[1], true);
           default ->
               throw unsupported(boundaryOfOperator(e.opname()), "operator '" + e.opname() + "'");
         };
@@ -1865,6 +1867,128 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   @Override
   public void visitClosure(ExpClosure e) {
     throw unsupported(FragmentBoundary.TIER_3, "closure");
+  }
+
+  /**
+   * {@code collection->excludes(x)}/{@code collection->includes(x)}, narrowly scoped to the ONE
+   * shape this translation slice can represent without needing collections as first-class SMT
+   * values at all: {@code role->closure(role)}, e.g. Genealogy's {@code
+   * p.parent->closure(parent)->excludes(p)} and RecursiveTree's {@code
+   * self.child->closure(child)->excludes(self)} -- both the "is this object its own ancestor via
+   * repeated navigation of a single association end" acyclicity idiom. Anything else {@code
+   * excludes}/{@code includes} could receive (a set literal, a filtered collection, a general
+   * {@code closure()} whose body does not simply re-navigate the same end, ...) is refused at the
+   * same {@code TIER_3} {@link #boundaryOfOperator} would already have classified it at.
+   */
+  private TranslatedExpression membershipTest(
+      Expression collectionExpr, Expression elementExpr, boolean wantIncludes) {
+    if (!(collectionExpr instanceof ExpClosure closure)) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          (wantIncludes ? "includes" : "excludes")
+              + " over anything other than closure(role) is not yet supported");
+    }
+    SmtTerm reachable = closureReachability(closure, elementExpr);
+    return defined(wantIncludes ? reachable : Smt.not(reachable));
+  }
+
+  /**
+   * Bounded, greater-or-equal-to-one-hop reachability of {@code elementExpr} from {@code
+   * closure}'s own starting navigation, over the SAME association end {@code closure}'s body
+   * re-navigates -- confirmed against the real semantics ({@code ExpClosure.evalClosureAux},
+   * use-core) before this was written, not assumed: starting from the range expression's own
+   * value (the DIRECT, one-hop set), repeatedly re-navigate the SAME role from each newly
+   * reached object and union in whatever is newly reached, until nothing new is added. For a
+   * bounded object universe that is exactly bounded graph reachability over the association's
+   * own link-boolean grid ({@link AssociationLinks}, the SAME grid {@link #linkTerm} already
+   * reads elsewhere) -- not a general "collections as first-class SMT values" question at all,
+   * which is why this stays narrowly scoped to feeding {@link #membershipTest} rather than
+   * becoming a general {@code visitClosure}.
+   *
+   * <p>Computed via the standard "extend the reachable set by one more hop, N times" fixed-point
+   * construction (N = the destination class's own capacity; any node reachable at all is
+   * reachable within N hops, since a simple path visits at most N nodes). Each hop's N candidate
+   * cells are bound to FRESH, NAMED SMT-LIB {@code let} symbols via {@link Smt#let}, one {@code
+   * let} per hop NESTED inside the previous hop's body -- required for correctness, not just
+   * size: SMT-LIB {@code let} bindings within ONE {@code let} are SIMULTANEOUS ({@link
+   * SmtTerm.Let}'s own class javadoc), so a later hop's formula can only see an earlier hop's
+   * symbols if its binding sits inside that earlier hop's nested body, never flattened into one
+   * binding list. The naming is load-bearing for a second reason too: without it, each hop would
+   * re-embed every earlier hop's full formula inline, growing the emitted term EXPONENTIALLY in
+   * hop count (hand-derived before choosing this construction, not discovered empirically) --
+   * exactly the failure mode named-{@code let} sharing exists to avoid.
+   */
+  private SmtTerm closureReachability(ExpClosure closure, Expression elementExpr) {
+    if (!(closure.getRangeExpression() instanceof ExpNavigation rangeNav)
+        || !rangeNav.getDestination().isCollection()) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "closure() over a range other than a collection-valued navigation is not yet"
+              + " supported");
+    }
+    String loopVariable = closure.getVariableDeclarations().varDecl(0).name();
+    if (!(closure.getQueryExpression() instanceof ExpNavigation queryNav)
+        || !(queryNav.getObjectExpression() instanceof ExpVariable queryVar)
+        || !queryVar.getVarname().equals(loopVariable)
+        || !queryNav.getDestination().equals(rangeNav.getDestination())) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "closure() whose body does not directly re-navigate the exact same association end is"
+              + " not yet supported");
+    }
+    VariableBinding elementBinding = context.binding(variableNameOf(elementExpr));
+    String destClass = rangeNav.getDestination().cls().name();
+    if (!elementBinding.className().equals(destClass)) {
+      // Structurally a different class entirely: can never be a member of this closure.
+      return Smt.bool(false);
+    }
+    int capacity = context.slotsFor(destClass).capacity();
+    if (capacity == 0) {
+      return Smt.bool(false);
+    }
+    AssociationLinks links = context.linksFor(rangeNav.getDestination().association().name());
+    List<PopulationMember> seed = populationOf(rangeNav, "closure");
+    String stem =
+        "|closure-"
+            + rangeNav.getDestination().association().name()
+            + "-"
+            + rangeNav.getDestination().nameAsRolename()
+            + "-";
+
+    List<List<SmtTerm.Binding>> hopBindings = new ArrayList<>();
+    String[] previousSymbols = new String[capacity];
+    List<SmtTerm.Binding> firstHop = new ArrayList<>(capacity);
+    for (int k = 0; k < capacity; k++) {
+      String symbol = stem + "1-" + k + "|";
+      previousSymbols[k] = symbol;
+      firstHop.add(new SmtTerm.Binding(symbol, seed.get(k).memberGuard()));
+    }
+    hopBindings.add(firstHop);
+    for (int hop = 2; hop <= capacity; hop++) {
+      String[] currentSymbols = new String[capacity];
+      List<SmtTerm.Binding> bindings = new ArrayList<>(capacity);
+      for (int k = 0; k < capacity; k++) {
+        List<SmtTerm> viaAnyIntermediate = new ArrayList<>();
+        for (int m = 0; m < capacity; m++) {
+          SmtTerm link =
+              linkTerm(links, rangeNav.getDestination(), new VariableBinding(destClass, m), k);
+          viaAnyIntermediate.add(Smt.and(List.of(Smt.sym(previousSymbols[m]), link)));
+        }
+        String name = stem + hop + "-" + k + "|";
+        currentSymbols[k] = name;
+        bindings.add(
+            new SmtTerm.Binding(
+                name, Smt.or(List.of(Smt.sym(previousSymbols[k]), Smt.or(viaAnyIntermediate)))));
+      }
+      hopBindings.add(bindings);
+      previousSymbols = currentSymbols;
+    }
+
+    SmtTerm result = Smt.sym(previousSymbols[elementBinding.slotIndex()]);
+    for (int i = hopBindings.size() - 1; i >= 0; i--) {
+      result = Smt.let(hopBindings.get(i), result);
+    }
+    return result;
   }
 
   @Override
