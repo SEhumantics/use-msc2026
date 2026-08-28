@@ -560,42 +560,17 @@ public final class SmtModelFinder {
    * move ledger attribution around without closing a reachable soundness hole. They remain recorded
    * as unsupported in the feature matrix ({@code assoc.derived-binary}).
    */
-  /**
-   * {@code union} is handled by the caller's own earlier skip (see the association-scope loop),
-   * before this method is ever reached -- that branch's own comment explains why a union-declared
-   * association needs no independent link grid at all, unlike this refusal's remaining concern.
-   * Plain {@code subsets} (without also being {@code union}) needs NO special handling here either:
-   * the SUBSETTING association's own link grid (e.g. {@code cd} in {@code Subsets.use}) is a
-   * perfectly ordinary, independently encodable extent on its own account -- {@code subsets} only
-   * implies an ADDITIONAL containment constraint into whatever it subsets, which only matters if
-   * something actually navigates the superset role, and {@link ExpressionTranslator}'s own {@code
-   * context.linksFor(...)} lookup already fails closed with a clear, located error for that case
-   * (nothing is registered for a skipped union association), rather than silently mistranslating.
-   *
-   * <p>{@code redefines} is a genuinely different, harder problem than either of the above -- unlike
-   * a plain subsetting association, {@code Redefines.use}'s own {@code RedefinedRoleTagCheck}
-   * invariant DOES navigate through the redefined (superclass) role name directly ({@code c.b}),
-   * needing this translation to REDIRECT that navigation to the redefining association for
-   * redefining-typed sources rather than reading the (unpopulated, for them) redefined
-   * association's own grid -- out of scope for this pass, so it stays refused.
-   */
-  private static void requireIndependentlySearchableExtent(
-      MAssociation association, List<MAssociationEnd> ends) {
-    for (MAssociationEnd end : ends) {
-      if (end.getRedefinedEnds().isEmpty() && end.getRedefiningEnds().isEmpty()) {
-        continue;
-      }
-      throw new SmtTranslationException(
-          FragmentBoundary.TIER_3,
-          "association '"
-              + association.name()
-              + "' declares a 'redefines' relationship on end "
-              + end.name()
-              + ", so its link extent is tied to another association's; this translation gives"
-              + " every association an independent link grid and would silently drop that"
-              + " relationship, so it is refused rather than approximated");
-    }
-  }
+  // Both `union` (handled by the association-scope loop's own earlier skip, before this point is
+  // ever reached) and `subsets`/`redefines` no longer need a refusal here. A subsetting or
+  // redefining association's own link grid (e.g. Subsets.use's `cd`, Redefines.use's `CD`) is a
+  // perfectly ordinary, independently encodable extent on its own account -- what those keywords
+  // additionally imply (containment into a superset role, or navigation redirection for a
+  // redefined role) is handled at the point something actually navigates through the
+  // superclass-declared role name: ExpressionTranslator#resolveRedefinedDestination redirects a
+  // redefined-role navigation to the redefining association for a source whose declared class
+  // matches, and its own context.linksFor(...) lookup already fails closed with a clear, located
+  // error for any subsetting/union shape this translation does not yet resolve, rather than
+  // silently mistranslating.
 
   private static Solved solve(
       MModel model,
@@ -884,7 +859,6 @@ public final class SmtModelFinder {
         // compatibility-only configuration keys.
         continue;
       }
-      requireIndependentlySearchableExtent(association, ends);
       ObjectSlots aEnd = slotsByClass.get(ends.get(0).cls().name());
       ObjectSlots bEnd = slotsByClass.get(ends.get(1).cls().name());
       if (aEnd == null || bEnd == null) {

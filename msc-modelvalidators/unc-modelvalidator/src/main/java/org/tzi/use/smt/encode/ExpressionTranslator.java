@@ -11,6 +11,7 @@ import org.tzi.use.smt.config.TranslationMode;
 import org.tzi.use.smt.solver.Smt;
 import org.tzi.use.smt.solver.SmtTerm;
 import org.tzi.use.uml.mm.MAssociationClass;
+import org.tzi.use.uml.mm.MAssociationEnd;
 import org.tzi.use.uml.mm.MAttribute;
 import org.tzi.use.uml.mm.MNavigableElement;
 import org.tzi.use.uml.ocl.expr.*;
@@ -1098,6 +1099,38 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   }
 
   /**
+   * {@code c.b}-shaped: navigating via {@code destination}'s role name (declared on the
+   * SUPERCLASS-typed association, e.g. {@code AB}) from a source whose OWN declared class is a
+   * narrower type that REDEFINES this role (e.g. {@code C < A}, {@code CD}'s {@code c redefines
+   * a}, {@code d redefines b}). USE/UML redefinition semantics -- confirmed directly against the
+   * real evaluator, not assumed -- mean the redefining association COMPLETELY REPLACES the
+   * redefined one for instances of the narrower type, not merely adds to it: reading {@code
+   * destination}'s own (redefined) association's grid for such a source would silently see it as
+   * structurally disconnected (a {@code C}-typed source has no direct link registered in {@code
+   * AB}'s grid at all, since {@code C} draws from its own, separate slot pool), reading back
+   * "always empty" -- exactly the false-vacuous-truth defect {@code Redefines.use}'s own header
+   * comment documents against Kodkod's translator. This redirect is load-bearing for soundness,
+   * not an optimisation.
+   *
+   * <p>Resolved STATICALLY from {@code source}'s own declared class. That is complete, not merely
+   * a common case: a {@link VariableBinding} carries exactly one fixed class for its whole
+   * lifetime throughout this encoder (there is no "a variable declared {@code A} that happens to
+   * hold a {@code C} at solve time" case to additionally handle) -- quantifying over a superclass
+   * already iterates each concrete descendant through its OWN separately-bound slots ({@link
+   * PolymorphicRange}), so by the time a bare variable is bound at all, its declared class already
+   * IS the most specific one in play.
+   */
+  private static MNavigableElement resolveRedefinedDestination(
+      MNavigableElement destination, VariableBinding source) {
+    for (MAssociationEnd redefining : destination.getRedefiningEnds()) {
+      if (oppositeEnd(redefining).cls().name().equals(source.className())) {
+        return redefining;
+      }
+    }
+    return destination;
+  }
+
+  /**
    * Single-valued navigation has no standalone SmtTerm (it names a linked object, not a value), so
    * equality between two of them ("c1.book = c2.book") is resolved as its own shape: there exists a
    * target slot both sides link to. The target association's own multiplicity (e.g. BelongsTo's
@@ -1579,16 +1612,16 @@ public final class ExpressionTranslator implements ExpressionVisitor {
                 + " over a collection-valued navigation with more than one hop is not yet"
                 + " supported");
       }
-      String destClass = navigation.getDestination().cls().name();
-      AssociationLinks links = context.linksFor(navigation.getDestination().association().name());
-      ObjectSlots destSlots = context.slotsFor(destClass);
       VariableBinding source = context.binding(sourceVar.getVarname());
+      MNavigableElement destination = resolveRedefinedDestination(navigation.getDestination(), source);
+      String destClass = destination.cls().name();
+      AssociationLinks links = context.linksFor(destination.association().name());
+      ObjectSlots destSlots = context.slotsFor(destClass);
       List<PopulationMember> population = new ArrayList<>();
       for (int k = 0; k < destSlots.capacity(); k++) {
         population.add(
             new PopulationMember(
-                new VariableBinding(destClass, k),
-                linkTerm(links, navigation.getDestination(), source, k)));
+                new VariableBinding(destClass, k), linkTerm(links, destination, source, k)));
       }
       return population;
     }

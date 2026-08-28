@@ -333,6 +333,99 @@ public class ForAllTranslationTest {
     return solve(script).outcome();
   }
 
+  /**
+   * {@link ExpressionTranslator#resolveRedefinedDestination}'s redirect must be scoped EXACTLY to
+   * a source whose own declared class matches a redefining end's opposite class -- not applied
+   * universally to every navigation through a redefined role name. Proven directly with a
+   * hand-built extension of the real {@code Redefines.use} shape (same {@code A}/{@code B}/{@code
+   * C}/{@code D}/{@code AB}/{@code CD} structure, ported verbatim -- {@code Redefines.use} itself
+   * is left untouched) plus one extra invariant navigating the SAME redefined role ({@code b})
+   * from a DIRECT {@code A}-typed source: that navigation must still read {@code AB}'s OWN grid,
+   * exactly as if {@code CD}/{@code redefines} did not exist at all. Deliberately does not
+   * register {@code C}/{@code D} slots in this test's own {@link TranslationContext} -- the
+   * redirect check itself is purely model-level ({@code getRedefiningEnds()}/class-name
+   * comparison), so if it ever incorrectly redirected here, the missing slots would surface as a
+   * clear translation-time failure rather than a silently wrong answer.
+   */
+  @Test
+  public void aDirectSuperclassTypedSourceNavigatingARedefinedRoleReadsTheOriginalGrid()
+      throws Exception {
+    MModel model = compileRedefinesWithDirectNavigationInvariant();
+    MClassInvariant inv = findInvariant(model, "DirectNavigation");
+
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots as = ObjectSlotEncoder.encode(script, List.of(new ClassScope("A", 1, 1))).get("A");
+    ObjectSlots bs = ObjectSlotEncoder.encode(script, List.of(new ClassScope("B", 1, 1))).get("B");
+    AssociationLinks ab =
+        AssociationLinkEncoder.encode(
+            script,
+            "AB",
+            as,
+            new Multiplicity(0, -1),
+            bs,
+            new Multiplicity(0, -1),
+            new AssociationScope("AB", 0, -1));
+
+    TranslationContext ctx =
+        new TranslationContext(
+            Map.of("a", new VariableBinding("A", 0)),
+            Map.of(),
+            Map.of(),
+            Map.of("A", as, "B", bs),
+            Map.of("AB", ab));
+    var translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx);
+
+    script.assertThat(Smt.sym("A_0_exists"));
+    script.assertThat(Smt.sym("B_0_exists"));
+    script.assertThat(Smt.sym(ab.linkNames()[0][0]));
+    script.assertThat(translated);
+
+    assertEquals(SolverOutcome.SAT, solve(script).outcome());
+  }
+
+  private static MModel compileRedefinesWithDirectNavigationInvariant() {
+    String source =
+        """
+        model RedefinesDirectNavigation
+        class A
+        attributes
+          tagA : String
+        end
+        class B
+        attributes
+          tagB : String
+        end
+        class C < A
+        attributes
+          tagC : String
+        end
+        class D < B
+        attributes
+          tagD : String
+        end
+        association AB between
+          A[*] role a
+          B[*] role b
+        end
+        association CD between
+          C[*] role c redefines a
+          D[*] role d redefines b
+        end
+        constraints
+        context a: A inv DirectNavigation:
+          a.b->size() = 1
+        """;
+    ModelFactory factory = new ModelFactory();
+    PrintWriter err = new PrintWriter(System.err);
+    MModel model =
+        USECompiler.compileSpecification(source, "RedefinesDirectNavigation", err, factory);
+    err.flush();
+    if (model == null) {
+      throw new AssertionError("RedefinesDirectNavigation fixture model did not compile");
+    }
+    return model;
+  }
+
   private static MModel compileLibrary() throws Exception {
     Path file = Path.of("../benchmark/examples/Library/Library.use");
     if (!Files.isRegularFile(file)) {
