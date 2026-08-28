@@ -1309,7 +1309,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   @Override
   public void visitAllInstances(ExpAllInstances e) {
     throw unsupported(
-        FragmentBoundary.TIER_2, "allInstances outside a forAll range is not yet supported");
+        FragmentBoundary.TIER_2,
+        "allInstances as a bare/standalone value (outside the range/receiver of forAll, exists,"
+            + " isUnique, size(), includesAll, isEmpty, notEmpty, one, closure, or as the source"
+            + " of select()/reject()) is not yet supported");
   }
 
   @Override
