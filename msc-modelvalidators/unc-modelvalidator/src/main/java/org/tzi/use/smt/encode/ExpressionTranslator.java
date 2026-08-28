@@ -1417,14 +1417,19 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   }
 
   /**
-   * {@code X.allInstances()->forAll(body)} or {@code source.role->forAll(body)} (a single-hop,
-   * collection-valued association navigation) -- reuses {@link #populationOf} for both range
-   * shapes, the exact same population-building code {@code isUnique}/{@link #collectionSize}
-   * already trust, rather than re-deriving a second, navigation-specific loop here. Was
-   * {@code X.allInstances()}-only until this change; the real corpus motivation is Genealogy's
-   * {@code p.child->forAll(c | p.yearB+15<=c.yearB)} and {@code
-   * gp.child.child->forAll(gc|...)}-shaped invariants (the second is a two-hop navigation,
-   * still refused by {@link #populationOf}'s own "more than one hop" guard -- not attempted here).
+   * {@code X.allInstances()->forAll(body)} or {@code source.role->forAll(body)} (including a
+   * CHAINED, multi-hop association navigation -- see {@link #populationOf}'s {@link
+   * #navigationHop}) -- reuses {@link #populationOf} for every range shape, the exact same
+   * population-building code {@code isUnique}/{@link #collectionSize} already trust, rather than
+   * re-deriving a second, navigation-specific loop here. Was {@code X.allInstances()}-only until
+   * this change; the real corpus motivation is Genealogy's {@code p.child->forAll(c |
+   * p.yearB+15<=c.yearB)}. Its sibling {@code gp.child.child->forAll(gc|...)} looks superficially
+   * similar but is a DIFFERENT shape underneath -- {@code child} is collection-valued on BOTH
+   * association ends, so USE's own parser desugars it into {@code
+   * gp.child->collect($e|$e.child)->forAll(...)} (confirmed directly by inspecting the compiled
+   * AST), an {@code ExpCollect} range {@link #populationOf} does not recognize -- still refused,
+   * correctly (a {@code collect()}-based flatten, {@code ocl.collect}, is a separate, larger,
+   * unattempted feature), not silently mistranslated.
    */
   @Override
   public void visitForAll(ExpForAll e) {
@@ -1610,18 +1615,16 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   }
 
   /**
-   * The finite, existence/link-guarded population BOTH {@code isUnique} and {@link #collectionSize}
-   * range over, for exactly the two supported source shapes -- anything else (a filtered/derived
-   * collection such as {@code ->select(...)->isUnique(...)}, a chained multi-hop navigation, a set
-   * literal, ...) fails closed here, before a single body translation (or, for {@code size()}, the
-   * summation) is even attempted.
+   * The finite, existence/link-guarded population {@code isUnique}, {@link #collectionSize},
+   * {@code forAll}/{@code exists}, and {@link #collectionIncludesAll} all range over, for
+   * {@code X.allInstances()}, a {@code select()}-filtered range, or a CHAINED (possibly multi-hop)
+   * association navigation ({@link #navigationHop}) -- anything else (a {@code collect()}-based
+   * flatten, a set literal, ...) fails closed here, before a single body translation (or, for
+   * {@code size()}, the summation) is even attempted.
    *
-   * @param construct the calling construct's own name, spliced into both refusal messages so a
+   * @param construct the calling construct's own name, spliced into the refusal message so a
    *     {@code size()} refusal reads as a {@code size()} refusal and not a leftover {@code
-   *     isUnique} one -- {@link #collectionSize} additionally pre-filters to the {@code
-   *     ExpNavigation} shape before ever reaching here, so only the "more than one hop" message is
-   *     reachable through it in practice; the second message stays parameterized too rather than
-   *     silently keeping its original wording as a trap for the next caller.
+   *     isUnique} one, rather than silently keeping a fixed wording as a trap for the next caller.
    */
   private List<PopulationMember> populationOf(Expression range, String construct) {
     if (range instanceof ExpAllInstances all) {
@@ -1640,31 +1643,94 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       return selectedAllInstancesPopulation(select);
     }
     if (range instanceof ExpNavigation navigation && navigation.getDestination().isCollection()) {
-      if (!(navigation.getObjectExpression() instanceof ExpVariable sourceVar)) {
-        throw unsupported(
-            FragmentBoundary.TIER_3,
-            construct
-                + " over a collection-valued navigation with more than one hop is not yet"
-                + " supported");
+      if (navigation.getObjectExpression() instanceof ExpVariable sourceVar) {
+        VariableBinding source = context.binding(sourceVar.getVarname());
+        MNavigableElement destination =
+            resolveRedefinedDestination(navigation.getDestination(), source);
+        String destClass = destination.cls().name();
+        AssociationLinks links = context.linksFor(destination.association().name());
+        ObjectSlots destSlots = context.slotsFor(destClass);
+        List<PopulationMember> population = new ArrayList<>();
+        for (int k = 0; k < destSlots.capacity(); k++) {
+          population.add(
+              new PopulationMember(
+                  new VariableBinding(destClass, k), linkTerm(links, destination, source, k)));
+        }
+        return population;
       }
-      VariableBinding source = context.binding(sourceVar.getVarname());
-      MNavigableElement destination = resolveRedefinedDestination(navigation.getDestination(), source);
-      String destClass = destination.cls().name();
-      AssociationLinks links = context.linksFor(destination.association().name());
-      ObjectSlots destSlots = context.slotsFor(destClass);
-      List<PopulationMember> population = new ArrayList<>();
-      for (int k = 0; k < destSlots.capacity(); k++) {
-        population.add(
-            new PopulationMember(
-                new VariableBinding(destClass, k), linkTerm(links, destination, source, k)));
+      if (navigation.getObjectExpression() instanceof ExpNavigation) {
+        return navigationHop(navigation).population();
       }
-      return population;
     }
     throw unsupported(
         FragmentBoundary.TIER_3,
         construct
-            + " over a range other than X.allInstances() or a single-hop collection-valued"
-            + " association end is not yet supported");
+            + " over a range other than X.allInstances() or a collection-valued association"
+            + " navigation is not yet supported");
+  }
+
+  /**
+   * One resolved navigation hop: the population it reaches, tagged with that population's own
+   * (uniform) class -- needed so a FURTHER outer hop can resolve redefinition off it, even when the
+   * population itself is empty (a zero-capacity destination class has no member to read a class
+   * name off of, so the class travels alongside the members rather than being inferred from one).
+   */
+  private record NavigationHop(String destClass, List<PopulationMember> population) {}
+
+  /**
+   * Resolves one navigation hop's own population, recursing on its source when that source is
+   * ITSELF a navigation -- the general form behind {@link #populationOf}'s multi-hop case, e.g.
+   * Demo.use's real {@code self.department.employee} ({@code Controls}: {@code Department[1]},
+   * single-valued; {@code WorksIn}: {@code Employee[*]}, collection-valued -- chaining works
+   * uniformly regardless of either hop's own multiplicity, since uniform structural link-membership
+   * is exactly the same SMT shape either way: {@link #linkTerm} per candidate slot).
+   *
+   * <p>Base case (a bare variable source) intentionally mirrors, rather than reuses,
+   * populationOf's own single-hop branch: that branch's output stays byte-identical (a bare {@code
+   * linkTerm}, no wrapping {@code and}) for the pre-existing one-hop shape, while THIS method's own
+   * base case feeds only the new chained path, where each candidate's guard is legitimately an
+   * AND of "source itself reachable" with "source links to this candidate".
+   */
+  private NavigationHop navigationHop(ExpNavigation navigation) {
+    VariableBinding sourceClassWitness;
+    List<PopulationMember> sourcePopulation;
+    if (navigation.getObjectExpression() instanceof ExpVariable sourceVar) {
+      sourceClassWitness = context.binding(sourceVar.getVarname());
+      sourcePopulation = null;
+    } else if (navigation.getObjectExpression() instanceof ExpNavigation innerNavigation) {
+      NavigationHop inner = navigationHop(innerNavigation);
+      sourceClassWitness = new VariableBinding(inner.destClass(), 0);
+      sourcePopulation = inner.population();
+    } else {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "navigation over a source other than a variable or another navigation is not yet"
+              + " supported");
+    }
+    MNavigableElement destination =
+        resolveRedefinedDestination(navigation.getDestination(), sourceClassWitness);
+    String destClass = destination.cls().name();
+    AssociationLinks links = context.linksFor(destination.association().name());
+    ObjectSlots destSlots = context.slotsFor(destClass);
+    List<PopulationMember> population = new ArrayList<>();
+    for (int k = 0; k < destSlots.capacity(); k++) {
+      SmtTerm reachable;
+      if (sourcePopulation == null) {
+        reachable = linkTerm(links, destination, sourceClassWitness, k);
+      } else {
+        List<SmtTerm> reachableVia = new ArrayList<>();
+        for (PopulationMember sourceMember : sourcePopulation) {
+          reachableVia.add(
+              Smt.and(
+                  List.of(
+                      sourceMember.memberGuard(),
+                      linkTerm(links, destination, sourceMember.binding(), k))));
+        }
+        reachable = Smt.or(reachableVia);
+      }
+      population.add(new PopulationMember(new VariableBinding(destClass, k), reachable));
+    }
+    return new NavigationHop(destClass, population);
   }
 
   /**
@@ -1763,18 +1829,20 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     throw unsupported(
         FragmentBoundary.TIER_3,
-        "size() over anything other than a single-hop, collection-valued association navigation"
+        "size() over anything other than a chained, collection-valued association navigation"
             + " or select over X.allInstances() is not yet supported");
   }
 
   /**
-   * {@code X->includesAll(Y)} for two single-hop, collection-valued navigations reaching the SAME
-   * destination class -- confirmed as a real, recurring shape by sweeping unc-modelvalidator
-   * against USE's own bundled example models (not our own curated benchmark corpus): {@code
-   * self.department.employee->includesAll(self.employee)} (Demo.use, ex.use, Project.use, all
-   * three the identical shape modulo the outer navigation hop -- {@code
-   * self.department.employee} itself is a second, separate, still-unsupported multi-hop
-   * limitation these three don't fully close on their own).
+   * {@code X->includesAll(Y)} for two (possibly chained, multi-hop) collection-valued navigations
+   * reaching the SAME destination class -- confirmed as a real, recurring shape by sweeping
+   * unc-modelvalidator against USE's own bundled example models (not our own curated benchmark
+   * corpus): {@code self.department.employee->includesAll(self.employee)} (Demo.use, ex.use,
+   * Project.use, all three the identical shape modulo the outer navigation hop). {@code
+   * self.department.employee} is itself two hops -- originally a separate, unsupported limitation
+   * these three didn't fully close on their own; closed once {@link #populationOf} gained the
+   * general multi-hop form ({@link #navigationHop}), see {@code
+   * IncludesAllTranslationTest#includesAllOverAMultiHopNavigationDiscriminatesOnARealCorpusShape}.
    *
    * <p>Reduces to {@link #populationOf} directly rather than a new membership primitive: both
    * navigations, reaching the SAME class, draw from that class's ONE shared {@link ObjectSlots}
@@ -1792,14 +1860,14 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         || !collectionNav.getDestination().isCollection()) {
       throw unsupported(
           FragmentBoundary.TIER_3,
-          "includesAll over anything other than a single-hop, collection-valued association"
-              + " navigation is not yet supported");
+          "includesAll over anything other than a (possibly chained) collection-valued"
+              + " association navigation is not yet supported");
     }
     if (!(otherExpr instanceof ExpNavigation otherNav) || !otherNav.getDestination().isCollection()) {
       throw unsupported(
           FragmentBoundary.TIER_3,
-          "includesAll's argument, over anything other than a single-hop, collection-valued"
-              + " association navigation, is not yet supported");
+          "includesAll's argument, over anything other than a (possibly chained)"
+              + " collection-valued association navigation, is not yet supported");
     }
     String collectionDestClass = collectionNav.getDestination().cls().name();
     String otherDestClass = otherNav.getDestination().cls().name();

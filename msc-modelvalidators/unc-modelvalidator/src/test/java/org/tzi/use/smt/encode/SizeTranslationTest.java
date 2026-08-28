@@ -20,15 +20,14 @@ import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
 
 /**
- * {@code self.<one-hop, collection-valued association end>->size()} -- the single population source
- * named by THESIS_SMT_MODEL_FINDER_PLAN.md 7.1's Tier 3 list and confirmed as the sole refusal
- * blocking {@code CollectionSemantics}/{@code CollectionSemantics-UNSAT} (real invariant {@code
+ * {@code self.<role>->size()} (including a chained, multi-hop navigation -- see {@code
+ * ExpressionTranslator#navigationHop}) -- the population source named by
+ * THESIS_SMT_MODEL_FINDER_PLAN.md 7.1's Tier 3 list and confirmed as the sole refusal blocking
+ * {@code CollectionSemantics}/{@code CollectionSemantics-UNSAT} (real invariant {@code
  * Playlist::hasThreeSongs}, {@code self.songs->size() = 3}).
  *
- * <p>Deliberately narrower than {@code isUnique}'s two supported population sources: only the
- * {@code self.<role>} association-end shape is supported for {@code size()}. {@code
- * X.allInstances()->size()} is a different shape the real corpus does not evidence, so it is
- * refused rather than silently generalized -- see {@link #allInstancesSourceFailsClosed}.
+ * <p>{@code X.allInstances()->size()} is a different shape the real corpus does not evidence, so
+ * it is refused rather than silently generalized -- see {@link #allInstancesSourceFailsClosed}.
  */
 public class SizeTranslationTest {
 
@@ -321,21 +320,62 @@ public class SizeTranslationTest {
   // Scope boundary: fail closed on anything other than self.<role>->size()
   // ---------------------------------------------------------------------
 
+  /**
+   * {@code a.linkedB.cs->size() = 1}: {@code a.linkedB} is single-valued (AB's {@code A[1] role
+   * owner -- B[1] role linkedB}), {@code .cs} is collection-valued (BC's {@code B[1] role ownerB
+   * -- C[*] role cs}) -- the same chained-navigation shape as {@code Demo.use}'s real {@code
+   * self.department.employee}. Previously refused outright by {@code populationOf}'s single-hop-
+   * only restriction; now resolved via {@link ExpressionTranslator#navigationHop}'s general
+   * recursive form, reached through {@link ExpressionTranslator#collectionSize}'s own unconditional
+   * delegation to {@code populationOf}. Full pipeline through real Z3, discriminating a genuine
+   * SAT/UNSAT pair on how many C's are actually linked.
+   */
   @Test
-  public void chainedTwoHopNavigationFailsClosed() throws Exception {
+  public void chainedTwoHopNavigationDiscriminatesOnTheRealLinkedCount() throws Exception {
+    assertEquals(SolverOutcome.SAT, solveChainedSize(true));
+    assertEquals(SolverOutcome.UNSAT, solveChainedSize(false));
+  }
+
+  private static SolverOutcome solveChainedSize(boolean onlyOneCLinked) throws Exception {
     MModel model = compileSizeScope();
     MClassInvariant inv = findInvariant(model, "chainedTooDeep");
 
-    SmtTranslationException thrown =
-        assertThrows(
-            SmtTranslationException.class,
-            () ->
-                ExpressionTranslator.translate(
-                    inv.bodyExpression(),
-                    new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of(), Map.of())));
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots as = ObjectSlotEncoder.encode(script, List.of(new ClassScope("A", 1, 1))).get("A");
+    ObjectSlots bs = ObjectSlotEncoder.encode(script, List.of(new ClassScope("B", 1, 1))).get("B");
+    ObjectSlots cs = ObjectSlotEncoder.encode(script, List.of(new ClassScope("C", 2, 2))).get("C");
+    AssociationLinks ab =
+        AssociationLinkEncoder.encode(
+            script, "AB", as, new Multiplicity(1, 1), bs, new Multiplicity(1, 1),
+            new AssociationScope("AB", 0, -1));
+    AssociationLinks bc =
+        AssociationLinkEncoder.encode(
+            script, "BC", bs, new Multiplicity(0, -1), cs, new Multiplicity(0, -1),
+            new AssociationScope("BC", 0, -1));
 
-    assertEquals(FragmentBoundary.TIER_3, thrown.boundary());
-    assertTrue(thrown.getMessage(), thrown.getMessage().contains("more than one hop"));
+    TranslationContext ctx =
+        new TranslationContext(
+            Map.of("a", new VariableBinding("A", 0)),
+            Map.of(),
+            Map.of(),
+            Map.of("A", as, "B", bs, "C", cs),
+            Map.of("AB", ab, "BC", bc));
+    SmtTerm translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx);
+
+    script.assertThat(Smt.sym("A_0_exists"));
+    script.assertThat(Smt.sym("B_0_exists"));
+    script.assertThat(Smt.sym("C_0_exists"));
+    script.assertThat(Smt.sym("C_1_exists"));
+    script.assertThat(Smt.sym(ab.linkNames()[0][0]));
+    script.assertThat(Smt.sym(bc.linkNames()[0][0]));
+    if (onlyOneCLinked) {
+      script.assertThat(Smt.not(Smt.sym(bc.linkNames()[0][1])));
+    } else {
+      script.assertThat(Smt.sym(bc.linkNames()[0][1]));
+    }
+    script.assertThat(translated);
+
+    return solve(script).outcome();
   }
 
   @Test
@@ -354,7 +394,7 @@ public class SizeTranslationTest {
     assertEquals(FragmentBoundary.TIER_3, thrown.boundary());
     assertTrue(
         thrown.getMessage(),
-        thrown.getMessage().contains("single-hop, collection-valued association navigation"));
+        thrown.getMessage().contains("chained, collection-valued association navigation"));
   }
 
   /**
@@ -378,7 +418,7 @@ public class SizeTranslationTest {
     assertEquals(FragmentBoundary.TIER_3, thrown.boundary());
     assertTrue(
         thrown.getMessage(),
-        thrown.getMessage().contains("single-hop, collection-valued association navigation"));
+        thrown.getMessage().contains("chained, collection-valued association navigation"));
   }
 
   /**
@@ -402,7 +442,7 @@ public class SizeTranslationTest {
     assertEquals(FragmentBoundary.TIER_3, thrown.boundary());
     assertTrue(
         thrown.getMessage(),
-        thrown.getMessage().contains("single-hop, collection-valued association navigation"));
+        thrown.getMessage().contains("chained, collection-valued association navigation"));
   }
 
   /**
@@ -427,7 +467,7 @@ public class SizeTranslationTest {
     assertEquals(FragmentBoundary.TIER_3, thrown.boundary());
     assertTrue(
         thrown.getMessage(),
-        thrown.getMessage().contains("single-hop, collection-valued association navigation"));
+        thrown.getMessage().contains("chained, collection-valued association navigation"));
   }
 
   private static MModel compileCollectionSemantics() throws Exception {

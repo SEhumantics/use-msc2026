@@ -18,15 +18,17 @@ import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
 
 /**
- * {@code X->includesAll(Y)} over two single-hop, collection-valued navigations reaching the same
- * destination class -- found while sweeping unc-modelvalidator against USE's own bundled example
- * models (not our own curated benchmark corpus): {@code
- * self.department.employee->includesAll(self.employee)} appears, verbatim or near-verbatim, in
- * three of them ({@code Documentation/Demo/Demo.use}, {@code Others/Ex/ex.use}, {@code
- * Others/Project/Project.use}). That exact shape's OUTER navigation ({@code
- * self.department.employee}) is itself two hops and stays refused -- a separate, still-unsupported
- * limitation -- so this fixture isolates the single-hop shape actually implemented, matching
- * {@link ExpressionTranslator#collectionIncludesAll}'s own scope precisely.
+ * {@code X->includesAll(Y)} over collection-valued navigations reaching the same destination
+ * class -- found while sweeping unc-modelvalidator against USE's own bundled example models (not
+ * our own curated benchmark corpus): {@code self.department.employee->includesAll(self.employee)}
+ * appears, verbatim or near-verbatim, in three of them ({@code Documentation/Demo/Demo.use},
+ * {@code Others/Ex/ex.use}, {@code Others/Project/Project.use}). That exact shape's OUTER
+ * navigation ({@code self.department.employee}) is itself two hops -- originally a separate,
+ * unsupported limitation, closed once {@link ExpressionTranslator#populationOf} gained the general
+ * multi-hop form ({@link ExpressionTranslator#navigationHop}); {@link
+ * #includesAllOverAMultiHopNavigationDiscriminatesOnARealCorpusShape} now exercises the real
+ * corpus shape directly, matching {@link ExpressionTranslator#collectionIncludesAll}'s own
+ * (now-widened) scope precisely.
  */
 public class IncludesAllTranslationTest {
 
@@ -95,10 +97,24 @@ public class IncludesAllTranslationTest {
     assertEquals(SolverOutcome.SAT, solve(script).outcome());
   }
 
+  /**
+   * The real corpus shape (verbatim from {@code Documentation/Demo/Demo.use}'s {@code
+   * EmployeesInControllingDepartment}: {@code self.department.employee->
+   * includesAll(self.employee)}) has a multi-hop LEFT operand -- {@code p.department} (single-
+   * valued, {@code Controls}) then {@code .employee} (collection-valued, {@code WorksIn}).
+   * Previously refused outright by {@link ExpressionTranslator#populationOf}'s own single-hop-only
+   * restriction; now resolved via {@link ExpressionTranslator#navigationHop}'s general recursive
+   * form, full pipeline confirmed through real Z3, discriminating a genuine SAT/UNSAT pair rather
+   * than just "no longer throws".
+   */
   @Test
-  public void includesAllOverAMultiHopNavigationFailsClosed() throws Exception {
-    // The real corpus shape (self.department.employee->includesAll(self.employee)) has a
-    // multi-hop LEFT operand -- confirmed still refused, not silently mistranslated.
+  public void includesAllOverAMultiHopNavigationDiscriminatesOnARealCorpusShape() throws Exception {
+    assertEquals(SolverOutcome.SAT, solveMultiHop(true));
+    assertEquals(SolverOutcome.UNSAT, solveMultiHop(false));
+  }
+
+  private static SolverOutcome solveMultiHop(boolean everyDirectEmployeeAlsoWorksInDept)
+      throws Exception {
     MModel model =
         compileModel(
             """
@@ -109,17 +125,17 @@ public class IncludesAllTranslationTest {
             end
             class Employee
             end
-            association ProjectDept between
+            association Controls between
+              Department[1] role department
               Project[*] role itsProjects
-              Department[0..1] role department
             end
-            association DeptEmployees between
-              Department[1] role dept
+            association WorksIn between
               Employee[*] role employee
+              Department[1..*] role dept
             end
-            association ProjectEmployees between
-              Project[0..1] role owner
+            association WorksOn between
               Employee[*] role employee2
+              Project[*] role owner
             end
             constraints
             context p: Project inv MultiHop:
@@ -128,16 +144,73 @@ public class IncludesAllTranslationTest {
             "MultiHopIncludesAll");
     MClassInvariant inv = findInvariant(model, "MultiHop");
 
-    SmtTranslationException thrown =
-        assertThrows(
-            SmtTranslationException.class,
-            () ->
-                ExpressionTranslator.translate(
-                    inv.bodyExpression(),
-                    new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of(), Map.of())));
+    SmtScript script = new SmtScript("QF_LIA");
+    Map<String, ObjectSlots> slots =
+        ObjectSlotEncoder.encode(
+            script,
+            List.of(
+                new ClassScope("Project", 1, 1),
+                new ClassScope("Department", 1, 1),
+                new ClassScope("Employee", 2, 2)));
+    AssociationLinks controls =
+        AssociationLinkEncoder.encode(
+            script,
+            "Controls",
+            slots.get("Department"),
+            new Multiplicity(1, 1),
+            slots.get("Project"),
+            new Multiplicity(0, -1),
+            new AssociationScope("Controls", 0, -1));
+    AssociationLinks worksIn =
+        AssociationLinkEncoder.encode(
+            script,
+            "WorksIn",
+            slots.get("Employee"),
+            new Multiplicity(0, -1),
+            slots.get("Department"),
+            new Multiplicity(1, -1),
+            new AssociationScope("WorksIn", 0, -1));
+    AssociationLinks worksOn =
+        AssociationLinkEncoder.encode(
+            script,
+            "WorksOn",
+            slots.get("Employee"),
+            new Multiplicity(0, -1),
+            slots.get("Project"),
+            new Multiplicity(0, -1),
+            new AssociationScope("WorksOn", 0, -1));
 
-    assertEquals(FragmentBoundary.TIER_3, thrown.boundary());
-    assertTrue(thrown.getMessage(), thrown.getMessage().contains("includesAll"));
+    TranslationContext ctx =
+        new TranslationContext(
+            Map.of("p", new VariableBinding("Project", 0)),
+            Map.of(),
+            Map.of(),
+            slots,
+            Map.of("Controls", controls, "WorksIn", worksIn, "WorksOn", worksOn));
+    SmtTerm translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx);
+
+    script.assertThat(Smt.sym("Project_0_exists"));
+    script.assertThat(Smt.sym("Department_0_exists"));
+    script.assertThat(Smt.sym("Employee_0_exists"));
+    script.assertThat(Smt.sym("Employee_1_exists"));
+    // The one Department controls the one Project.
+    script.assertThat(Smt.sym(controls.linkNames()[0][0]));
+    // Both Employees work on the Project (WorksOn) -- these are the "direct" employees
+    // includesAll's argument (p.employee2) draws from.
+    script.assertThat(Smt.sym(worksOn.linkNames()[0][0]));
+    script.assertThat(Smt.sym(worksOn.linkNames()[1][0]));
+    // Employee 0 always works in the controlling Department (the department.employee side).
+    script.assertThat(Smt.sym(worksIn.linkNames()[0][0]));
+    if (everyDirectEmployeeAlsoWorksInDept) {
+      script.assertThat(Smt.sym(worksIn.linkNames()[1][0]));
+    } else {
+      // Employee 1 works ON the project but NOT in its controlling department -- a genuine
+      // counterexample to EmployeesInControllingDepartment.
+      script.assertThat(Smt.not(Smt.sym(worksIn.linkNames()[1][0])));
+    }
+    script.assertThat(translated);
+
+    return solve(script).outcome();
   }
 
   @Test

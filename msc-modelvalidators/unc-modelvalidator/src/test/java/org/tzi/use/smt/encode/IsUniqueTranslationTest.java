@@ -320,21 +320,62 @@ public class IsUniqueTranslationTest {
   // Scope boundary: fail closed on anything outside the two named shapes
   // ---------------------------------------------------------------------
 
+  /**
+   * {@code a.linkedB.cs->isUnique(val)}: {@code a.linkedB} is single-valued (AB's {@code A[1]
+   * role owner -- B[1] role linkedB}), {@code .cs} is collection-valued (BC's {@code B[1] role
+   * ownerB -- C[*] role cs}) -- the same chained-navigation shape as {@code Demo.use}'s real
+   * {@code self.department.employee}. Previously refused outright by {@code populationOf}'s
+   * single-hop-only restriction; now resolved via {@link ExpressionTranslator#navigationHop}'s
+   * general recursive form. Full pipeline through real Z3, discriminating a genuine SAT/UNSAT pair.
+   */
   @Test
-  public void isUniqueOverAChainedTwoHopNavigationFailsClosed() throws Exception {
+  public void isUniqueOverAChainedTwoHopNavigationDiscriminatesOnARealDuplicate() throws Exception {
+    assertEquals(SolverOutcome.SAT, solveChainedIsUnique(9));
+    assertEquals(SolverOutcome.UNSAT, solveChainedIsUnique(5));
+  }
+
+  private static SolverOutcome solveChainedIsUnique(int secondCValue) throws Exception {
     MModel model = compileScopeFixture();
     MClassInvariant inv = findInvariant(model, "chainedTooDeep");
 
-    SmtTranslationException thrown =
-        assertThrows(
-            SmtTranslationException.class,
-            () ->
-                ExpressionTranslator.translate(
-                    inv.bodyExpression(),
-                    new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of(), Map.of())));
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots as = ObjectSlotEncoder.encode(script, List.of(new ClassScope("A", 1, 1))).get("A");
+    ObjectSlots bs = ObjectSlotEncoder.encode(script, List.of(new ClassScope("B", 1, 1))).get("B");
+    ObjectSlots cs = ObjectSlotEncoder.encode(script, List.of(new ClassScope("C", 2, 2))).get("C");
+    AssociationLinks ab =
+        AssociationLinkEncoder.encode(
+            script, "AB", as, new Multiplicity(1, 1), bs, new Multiplicity(1, 1),
+            new AssociationScope("AB", 0, -1));
+    AssociationLinks bc =
+        AssociationLinkEncoder.encode(
+            script, "BC", bs, new Multiplicity(1, 1), cs, new Multiplicity(0, -1),
+            new AssociationScope("BC", 0, -1));
+    AttributeDomain valDomain = new AttributeDomain("C", "val", null, List.of(), null, null);
+    AttributeValues valValues = AttributeEncoder.encode(script, cs, "val", AttributeType.INTEGER, valDomain);
 
-    assertEquals(FragmentBoundary.TIER_3, thrown.boundary());
-    assertTrue(thrown.getMessage(), thrown.getMessage().contains("more than one hop"));
+    TranslationContext ctx =
+        new TranslationContext(
+            Map.of("a", new VariableBinding("A", 0)),
+            Map.of("C.val", valValues),
+            Map.of("C.val", valDomain),
+            Map.of("A", as, "B", bs, "C", cs),
+            Map.of("AB", ab, "BC", bc));
+    var translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx);
+
+    script.assertThat(Smt.sym("A_0_exists"));
+    script.assertThat(Smt.sym("B_0_exists"));
+    script.assertThat(Smt.sym("C_0_exists"));
+    script.assertThat(Smt.sym("C_1_exists"));
+    script.assertThat(Smt.sym(ab.linkNames()[0][0]));
+    script.assertThat(Smt.sym(bc.linkNames()[0][0]));
+    script.assertThat(Smt.sym(bc.linkNames()[0][1]));
+    script.assertThat(
+        Smt.eq(Smt.sym(valValues.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(5))));
+    script.assertThat(
+        Smt.eq(Smt.sym(valValues.valueNames().get(1)), Smt.intLit(BigInteger.valueOf(secondCValue))));
+    script.assertThat(translated);
+
+    return solve(script).outcome();
   }
 
   @Test
