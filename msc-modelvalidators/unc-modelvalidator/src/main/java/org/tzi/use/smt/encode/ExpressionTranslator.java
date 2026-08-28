@@ -542,6 +542,12 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       throw unsupported(
           FragmentBoundary.UTYPE_CORE, "toBooleanC comparison over a non-U-typed attribute");
     }
+    if (comparisonArgs[1] instanceof ExpAttrOp rightAttribute
+        && attribute.type().isTypeOfUReal()
+        && rightAttribute.type().isTypeOfUReal()
+        && List.of("<", ">").contains(comparison.opname())) {
+      return uTypeSymmetricThreshold(comparison, attribute, rightAttribute, projectionArgs[1]);
+    }
 
     BigDecimal literal =
         decimalLiteral(
@@ -593,6 +599,117 @@ public final class ExpressionTranslator implements ExpressionVisitor {
             List.of(
                 Smt.and(List.of(Smt.eq(uncertainty, zero), exact)),
                 Smt.and(List.of(Smt.app(">", uncertainty, zero), uncertain)))));
+  }
+
+  /**
+   * Translates {@code (leftAttr < rightAttr).toBooleanC(confidence)} / {@code (leftAttr >
+   * rightAttr)...} between two UReal attributes -- the one narrow slice of "uncertain versus
+   * uncertain" this translation supports, not the general case (see
+   * FragmentBoundary#UTYPE_UNCERTAIN_VERSUS_UNCERTAIN for everything else, still refused).
+   *
+   * <p>USE's live evaluator ({@code UReal#calculate}, the equal-uncertainty branch) computes {@code
+   * P(A<B)} via a crossing-point method, NOT the naive "difference of two independent Gaussians is
+   * positive" formula a reasonable first guess would assume -- confirmed by direct probe against the
+   * compiled evaluator, not read off the source alone: {@code P(A<B)} is exactly 0 whenever {@code
+   * mean(A) > mean(B)}, however close the means are, not a small positive tail probability. That
+   * reduces, uniformly across both branches (no case-split needed in the encoding -- verified
+   * numerically, not assumed) to {@code P(A<B) >= confidence <=> meanB - meanA >=
+   * 2*sigma*inverseCNDF((confidence+1)/2)}, and the mirror image for {@code >}. {@link
+   * URealThresholdBoundary#encloseSymmetric} bisects that standardized constant the same way {@link
+   * URealThresholdBoundary#enclose} already does for the single-sided case -- against the live
+   * evaluator itself, not a hand-derived {@code erf} formula.
+   *
+   * <p>The one precondition that makes this SOUND rather than merely convenient: both attributes'
+   * uncertainty must be a PROVEN SINGLETON -- their configured {@code uncertainty}-component {@link
+   * AttributeDomain} forces exactly one value, at translation time, via real emitted bounds (not
+   * assumed from config text). Uncertainty in this encoder is an ordinary free SMT symbol per
+   * object slot (see {@link AttributeEncoder}), not necessarily a constant; asserting the two
+   * symbols equal as a solver-level constraint instead of verifying this statically would silently
+   * shrink the search space to a scenario the original OCL invariant never asked for. Anything short
+   * of two proven-equal singleton domains stays refused under
+   * {@code UTYPE_UNCERTAIN_VERSUS_UNCERTAIN} -- including UInteger operands (its widen-through-UReal
+   * comparison story is a different, unverified derivation, deliberately not attempted here) and
+   * {@code <=}/{@code >=} (the "eq" probability mass this crossing-point model assigns needs its own
+   * derivation this task did not attempt).
+   */
+  private TranslatedExpression uTypeSymmetricThreshold(
+      ExpStdOp comparison, ExpAttrOp leftAttribute, ExpAttrOp rightAttribute, Expression confidenceArg) {
+    BigDecimal confidence =
+        decimalLiteral(confidenceArg, "confidence threshold", FragmentBoundary.UTYPE_CORE);
+
+    VariableBinding leftBinding = context.binding(variableNameOf(leftAttribute.objExp()));
+    AttributeValues leftValues =
+        context.attributeValues(leftBinding.className(), leftAttribute.attr().name());
+    VariableBinding rightBinding = context.binding(variableNameOf(rightAttribute.objExp()));
+    AttributeValues rightValues =
+        context.attributeValues(rightBinding.className(), rightAttribute.attr().name());
+    if (leftValues.type() != AttributeType.UREAL || rightValues.type() != AttributeType.UREAL) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_UNCERTAIN_VERSUS_UNCERTAIN,
+          "uncertain-vs-uncertain comparison outside the verified UReal/UReal shape");
+    }
+
+    BigDecimal leftUncertainty =
+        singletonValue(
+            context.attributeDomain(leftBinding.className(), leftAttribute.attr().name(), "uncertainty"));
+    BigDecimal rightUncertainty =
+        singletonValue(
+            context.attributeDomain(
+                rightBinding.className(), rightAttribute.attr().name(), "uncertainty"));
+    if (leftUncertainty == null || rightUncertainty == null || leftUncertainty.compareTo(rightUncertainty) != 0) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_UNCERTAIN_VERSUS_UNCERTAIN,
+          "uncertain-vs-uncertain comparison whose two operands' uncertainty is not a proven-equal"
+              + " configured constant (left="
+              + (leftUncertainty == null ? "not a singleton domain" : leftUncertainty)
+              + ", right="
+              + (rightUncertainty == null ? "not a singleton domain" : rightUncertainty)
+              + ") -- the general unequal-uncertainty case needs its own, unverified derivation");
+    }
+
+    SmtTerm leftValue = Smt.sym(leftValues.valueNames().get(leftBinding.slotIndex()));
+    SmtTerm rightValue = Smt.sym(rightValues.valueNames().get(rightBinding.slotIndex()));
+    boolean lessThan = "<".equals(comparison.opname());
+    SmtTerm exact = Smt.app(comparison.opname(), leftValue, rightValue);
+    if (mode == TranslationMode.NOMINAL) {
+      return defined(exact);
+    }
+    if (leftUncertainty.signum() == 0) {
+      // Both sides proven crisp: the crossing-point model degenerates to an ordinary strict
+      // comparison (confirmed against calculate()'s own s1==0&&s2==0 branch), not the boundary
+      // formula below, which divides conceptually by a zero sigma.
+      return defined(exact);
+    }
+    URealThresholdBoundary.Enclosure enclosure = URealThresholdBoundary.encloseSymmetric(confidence);
+    BigDecimal standardizedBoundary = positivePolarity ? enclosure.upper() : enclosure.lower();
+    // encloseSymmetric bisects P(UReal(0,1) < UReal(midpoint,1)) directly against `confidence`
+    // (not (confidence+1)/2), so `midpoint` at the boundary already equals 2*inverseCNDF((confidence
+    // +1)/2) -- the factor of 2 from the derivation is already baked into this constant. Multiplying
+    // sigma by 2 again here double-counted it (found live: emitted offset was ~4*sigma*inverseCNDF
+    // instead of 2*sigma*inverseCNDF, confirmed against Z3 turning a should-be-SAT case UNSAT).
+    SmtTerm offset = Smt.app("*", Smt.realLit(leftUncertainty), Smt.realLit(standardizedBoundary));
+    SmtTerm difference =
+        lessThan
+            ? Smt.app("-", rightValue, leftValue)
+            : Smt.app("-", leftValue, rightValue);
+    return defined(Smt.app(">=", difference, offset));
+  }
+
+  /** The single configured value an {@link AttributeDomain} is proven to force, or null. */
+  private static BigDecimal singletonValue(AttributeDomain domain) {
+    if (domain.enumeratedValues().size() == 1) {
+      try {
+        return new BigDecimal(domain.enumeratedValues().get(0));
+      } catch (NumberFormatException notNumeric) {
+        return null;
+      }
+    }
+    if (domain.lowerBound() != null
+        && domain.upperBound() != null
+        && domain.lowerBound().compareTo(domain.upperBound()) == 0) {
+      return domain.lowerBound();
+    }
+    return null;
   }
 
   /**

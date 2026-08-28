@@ -142,9 +142,14 @@ public class FragmentLedgerBoundaryTest {
     assertTrue(message, message.contains("[UNCERTAIN]"));
     assertTrue("the construct must still be named", message.contains("Set literal"));
     assertTrue("the construct must still be named", message.contains("isTypeOf"));
+    // The message text changed since this assertion was first written: `self.speed > self.other`
+    // now reaches uTypeSymmetricThreshold (both operands are UReal attributes), which names the
+    // REAL reason for the refusal (uncertainty not provably equal) instead of the old, less
+    // precise "not a crisp numeric literal" -- a genuine improvement in the located reason, not a
+    // weakened assertion; the boundary itself (asserted below) is unchanged.
     assertTrue(
         "the located reason must survive",
-        message.contains("comparison threshold is not a crisp numeric literal"));
+        message.contains("uncertain-vs-uncertain comparison whose two operands' uncertainty"));
     assertTrue(message, message.contains(FragmentBoundary.TIER_3.name()));
     assertTrue(message, message.contains(FragmentBoundary.UTYPE_UNCERTAIN_VERSUS_UNCERTAIN.name()));
   }
@@ -223,22 +228,32 @@ public class FragmentLedgerBoundaryTest {
         new AttributeDomain("Sample", "n", null, List.of(), BigDecimal.ZERO, BigDecimal.valueOf(4));
     AttributeValues nValues =
         AttributeEncoder.encode(script, slots, "n", AttributeType.INTEGER, nDomain);
-    AttributeValues speed = uReal(script, slots, "speed");
-    AttributeValues other = uReal(script, slots, "other");
+    // Both speed and other get a RANGE (not a singleton) uncertainty domain deliberately: this is
+    // what keeps UTypeUncertainVersusUncertain (self.speed > self.other) refused under
+    // UTYPE_UNCERTAIN_VERSUS_UNCERTAIN rather than translated by uTypeSymmetricThreshold's
+    // equal-proven-singleton-uncertainty shape -- a range can't be proven equal to another range,
+    // so this fixture still genuinely exercises the general refusal it is named for.
+    Map<String, AttributeDomain> domains = new LinkedHashMap<>();
+    domains.put("Sample.n", nDomain);
+    AttributeValues speed = uReal(script, slots, "speed", domains);
+    AttributeValues other = uReal(script, slots, "other", domains);
     return new TranslationContext(
         Map.of(),
         Map.of("Sample.n", nValues, "Sample.speed", speed, "Sample.other", other),
-        Map.of("Sample.n", nDomain),
+        domains,
         Map.of("Sample", slots),
         Map.of());
   }
 
-  private static AttributeValues uReal(SmtScript script, ObjectSlots slots, String name) {
+  private static AttributeValues uReal(
+      SmtScript script, ObjectSlots slots, String name, Map<String, AttributeDomain> domains) {
     AttributeDomain value =
         new AttributeDomain("Sample", name, "value", List.of(), BigDecimal.ZERO, BigDecimal.ONE);
     AttributeDomain uncertainty =
         new AttributeDomain(
             "Sample", name, "uncertainty", List.of(), BigDecimal.ZERO, BigDecimal.ONE);
+    domains.put("Sample." + name + ".value", value);
+    domains.put("Sample." + name + ".uncertainty", uncertainty);
     return AttributeEncoder.encodeUType(
         script, slots, name, AttributeType.UREAL, value, uncertainty);
   }

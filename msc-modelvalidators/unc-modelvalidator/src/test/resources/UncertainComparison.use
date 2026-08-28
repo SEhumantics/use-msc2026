@@ -1,0 +1,15 @@
+model UncertainComparison
+
+class Sensor
+attributes
+  speedA : UReal
+  speedB : UReal
+end
+
+constraints
+
+context s : Sensor inv fasterThanSelf:
+  (s.speedA < s.speedB).toBooleanC(0.95)
+
+context s : Sensor inv fasterThanSelfUnequalUncertainty:
+  (s.speedA > s.speedB).toBooleanC(0.9)
