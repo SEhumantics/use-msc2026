@@ -2232,36 +2232,36 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   }
 
   /**
-   * {@code X.allInstances()->one(body)}: true exactly when precisely one candidate both exists and
-   * satisfies {@code body}. Follows {@link #visitForAll}'s established shape exactly (single loop
-   * variable, {@link ExpAllInstances} range only, {@link PolymorphicRange#slotsOf} for the
-   * candidates) with a different aggregation: a running count of matches, each an {@code ite} over
-   * {@code exists AND body}'s {@link TranslatedExpression#trueTerm()} -- which already folds an
-   * undefined body into "does not count", matching {@code ExpOne#eval}'s own "undefined query
-   * values default to false" (confirmed directly from that method, not assumed). The result is
-   * unconditionally defined: {@code found == 1} is a crisp comparison over a crisp count built
-   * entirely from {@code ite}s, with no propagated undefinedness of its own to carry -- the same
-   * total-result shape confirmed for {@code X.allInstances()} elsewhere in this translator (it is
-   * never itself undefined).
+   * {@code X->one(body)}: true exactly when precisely one candidate both exists (or, for a
+   * navigation/select-filtered range, is actually a member -- see {@link #populationOf}) and
+   * satisfies {@code body}. Reuses {@link #populationOf} for every range shape {@code isUnique}/
+   * {@link #collectionSize}/{@code forAll}/{@code exists} already trust -- was {@code
+   * X.allInstances()}-only until this change, hand-rolling its own {@link PolymorphicRange#slotsOf}
+   * loop instead of going through the shared population primitive, the exact same generalization
+   * every OTHER quantifier construct in this translator already received. Aggregation: a running
+   * count of matches, each an {@code ite} over the member's own guard AND {@code body}'s {@link
+   * TranslatedExpression#trueTerm()} -- which already folds an undefined body into "does not
+   * count", matching {@code ExpOne#eval}'s own "undefined query values default to false" (confirmed
+   * directly from that method, not assumed). The result is unconditionally defined: {@code found ==
+   * 1} is a crisp comparison over a crisp count built entirely from {@code ite}s, with no propagated
+   * undefinedness of its own to carry -- the same total-result shape confirmed for {@code
+   * X.allInstances()} elsewhere in this translator (it is never itself undefined).
    */
   @Override
   public void visitOne(ExpOne e) {
     if (e.getVariableDeclarations().size() != 1) {
       throw unsupported(FragmentBoundary.TIER_3, "one with more than one loop variable");
     }
-    if (!(e.getRangeExpression() instanceof ExpAllInstances all)) {
-      throw unsupported(FragmentBoundary.TIER_3, "one over a range other than X.allInstances");
-    }
+    List<PopulationMember> population = populationOf(e.getRangeExpression(), "one");
     String loopVariable = e.getVariableDeclarations().varDecl(0).name();
     SmtTerm zero = Smt.intLit(BigInteger.ZERO);
     SmtTerm one = Smt.intLit(BigInteger.ONE);
     SmtTerm count = zero;
-    for (PolymorphicRange.Slot slot : PolymorphicRange.slotsOf(all.getSourceType(), context)) {
-      TranslationContext extended = context.withBinding(loopVariable, slot.binding());
-      SmtTerm exists = Smt.sym(slot.existsName());
+    for (PopulationMember member : population) {
+      TranslationContext extended = context.withBinding(loopVariable, member.binding());
       TranslatedExpression body =
           translate(e.getQueryExpression(), extended, mode, positivePolarity, localBindings);
-      SmtTerm matched = Smt.and(List.of(exists, body.trueTerm()));
+      SmtTerm matched = Smt.and(List.of(member.memberGuard(), body.trueTerm()));
       count = Smt.app("+", count, Smt.ite(matched, one, zero));
     }
     result = defined(Smt.eq(count, one));
