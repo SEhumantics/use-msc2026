@@ -1,0 +1,41 @@
+model DerivedFK
+
+-- Authored to give unc-modelvalidator's DerivedAssociationEncoder (the
+-- "foreign-key lookup" idiom, T.allInstances()->any(x | predicate), the
+-- same shape CompanyERSchema builds all twelve of its own associations
+-- out of) a real, wired corpus scenario -- it already had dedicated unit
+-- fixtures (DerivedAssociationAnyMatchTest) but no corpus scenario
+-- exercised it until now, exactly PriceCalc's own precedent for
+-- config.class-bounds/config.association-bounds.
+--
+-- Also the exact scenario that surfaced a genuine soundness bug in
+-- String/Enum attribute-to-attribute equality (ExpressionTranslator
+-- .comparison(), fixed the same day this scenario was authored --
+-- see MASTER_PLAN_SMT_MODEL_FINDER.md's "Seventeenth turn"): the
+-- WidgetNameMatches invariant below compares two bare String attributes
+-- of different classes directly, and the derived end's own any()-match
+-- predicate does too.
+
+class Widget
+attributes
+  wname : String
+end
+
+class Gadget
+attributes
+  targetname : String
+end
+
+association FK_Gadget_Widget between
+  Gadget [*] role gadget
+  Widget [1] role widget derived =
+    Widget.allInstances()->any(w | w.wname = self.targetname)
+end
+
+constraints
+
+context g : Gadget inv WidgetNameMatches:
+  g.widget.wname = g.targetname
+
+context g : Gadget inv NoMatchIsUndefined:
+  not g.widget.isDefined

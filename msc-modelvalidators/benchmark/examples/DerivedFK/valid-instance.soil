@@ -1,0 +1,26 @@
+-- Hand-built, deliberately VALID instance of DerivedFK (regular USE SOIL
+-- statements, not a Kodkod/SMT search). Two Widgets and two Gadgets,
+-- every Gadget's targetname genuinely matching a distinct Widget's
+-- wname, so WidgetNameMatches holds for both. No link is inserted into
+-- FK_Gadget_Widget -- `widget' is a derived end, recomputed dynamically
+-- by USE's own evaluator from the any()-match predicate, never a
+-- materialized link a SOIL script could insert into.
+--
+-- NoMatchIsUndefined is EXPECTED to fail here (documented via
+-- soilKnownOutOfScopeInvariants in manifest.json): it demands every
+-- Gadget's derived widget be UNDEFINED, which is structurally impossible
+-- whenever WidgetNameMatches also holds across a non-empty population --
+-- the two invariants are near-complementary per Gadget, not independent
+-- checks the way PriceCalc's own pair are.
+
+!create widgetA : Widget
+!set widgetA.wname := 'alpha'
+
+!create widgetB : Widget
+!set widgetB.wname := 'beta'
+
+!create gadget1 : Gadget
+!set gadget1.targetname := 'alpha'
+
+!create gadget2 : Gadget
+!set gadget2.targetname := 'beta'

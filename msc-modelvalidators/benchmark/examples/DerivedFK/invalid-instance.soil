@@ -1,0 +1,25 @@
+-- Hand-built instance of DerivedFK that deliberately breaks
+-- WidgetNameMatches: gadget2's targetname ('gamma') matches no Widget's
+-- wname at all, so its derived widget is undefined and
+-- g.widget.wname = g.targetname is FALSE for it (undefined never equals
+-- a defined value under OCL's total equality) -- WidgetNameMatches
+-- reports FAILED. gadget1 still genuinely matches widgetA, so
+-- NoMatchIsUndefined ALSO reports FAILED overall (it demands EVERY
+-- Gadget's widget be undefined, and gadget1's is not) -- both invariants
+-- fail here, unlike PriceCalc's "exactly one" design, because this
+-- model's two invariants are near-complementary rather than independent
+-- (see valid-instance.soil's own header comment). The validation runner
+-- only requires >=1 failure for an "invalid" fixture, so this is still a
+-- clean, correctly-classified counterexample.
+
+!create widgetA : Widget
+!set widgetA.wname := 'alpha'
+
+!create widgetB : Widget
+!set widgetB.wname := 'beta'
+
+!create gadget1 : Gadget
+!set gadget1.targetname := 'alpha'
+
+!create gadget2 : Gadget
+!set gadget2.targetname := 'gamma'

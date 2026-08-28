@@ -2248,6 +2248,64 @@
         "predefined-links",
         "paired-unsat-mutation"
       ]
+    },
+    {
+      "id": "DerivedFK",
+      "directory": "DerivedFK",
+      "useFile": "DerivedFK.use",
+      "propertiesFile": "DerivedFK.properties",
+      "section": "main",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding+validating",
+      "hasValidationTests": true,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Authored for this thesis project (msc-4, Trong-Nghia Be) to give unc-modelvalidator's DerivedAssociationEncoder -- the 'foreign-key lookup' idiom, T.allInstances()->any(x | predicate), the same shape CompanyERSchema builds all twelve of its own associations out of -- a real, wired corpus scenario. It already had a dedicated unit fixture (DerivedAssociationAnyMatchTest) but no corpus scenario exercised it until now. Also the exact scenario that surfaced and drove the fix of a genuine soundness bug in String/Enum attribute-to-attribute equality (ExpressionTranslator.comparison(), see MASTER_PLAN_SMT_MODEL_FINDER.md's 'Seventeenth turn'): the WidgetNameMatches invariant compares two bare String attributes of different classes directly, and the derived end's own any()-match predicate does too.",
+      "provenanceCitation": null,
+      "features": [
+        "assoc.derived-binary",
+        "ocl.navigation-derived-assoc"
+      ],
+      "question": "Does the derived 'widget' end resolve each Gadget to the Widget whose wname genuinely matches its targetname (WidgetNameMatches), when every configured targetname has a real match among the configured wnames?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "soilKnownOutOfScopeInvariants": [
+        "Gadget::NoMatchIsUndefined"
+      ],
+      "scenarioTags": [
+        "derived-association",
+        "any-match-selection"
+      ]
+    },
+    {
+      "id": "DerivedFK-UNSAT",
+      "directory": "DerivedFK",
+      "useFile": "DerivedFK.use",
+      "propertiesFile": "DerivedFK.properties",
+      "section": "mismatched",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Paired UNSAT mutation of DerivedFK, authored for this thesis project (msc-4, Trong-Nghia Be) alongside it. Same .use model, same 2 Widgets, but Gadget_targetname's domain shifted to share NO literal at all with Widget_wname's domain, so no Widget can match any Gadget's targetname for any candidate assignment -- a genuine domain contradiction against the ACTIVE WidgetNameMatches invariant, rather than an empty-universe trick.",
+      "provenanceCitation": null,
+      "features": [
+        "assoc.derived-binary",
+        "ocl.navigation-derived-assoc"
+      ],
+      "question": "With Gadget_targetname's domain shifted so no candidate equals any Widget_wname candidate, does the solver correctly report UNSATISFIABLE for the active WidgetNameMatches invariant rather than a spurious match or a translation error?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "scenarioTags": [
+        "derived-association",
+        "any-match-selection",
+        "paired-unsat-mutation"
+      ]
     }
   ]
 }

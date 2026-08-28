@@ -1018,10 +1018,16 @@
               "status": "degraded",
               "evidence": "Corrected 2026-08-28 -- the 'zero derive/isDerived handling anywhere' claim is now false. DerivedAssociationEncoder (new) detects the specific derive-expression shape T.allInstances()->any(x | predicate) -- the exact 'foreign-key lookup' idiom CompanyER.use's own twelve associations are ALL declared with -- and builds an ordinary AssociationLinks grid whose cells are ASSERTED equal to the per-(source,candidate)-pair 'first matching slot in stable order' selection formula (the same finite-disjunction logic ExpressionTranslator's own objectAnyLet already implements for the analogous let-binding shape), rather than left free for the solver or refused outright. SmtModelFinder's association-scope loop tries this narrow encoder first for any derived end; anything outside the shape (a different derivation formula entirely, e.g. select()/collect()/an arbitrary expression) still falls through to a clean TIER_3 refusal.",
               "notes": "Narrower than kk-modelvalidator's own 'degraded' finding in the opposite direction: kk's live evaluation covers ANY OCL derive expression but never enforces the declared end multiplicity; this encoder covers only the any()-match idiom (not general derivation) but is genuinely SOUND within that scope -- it does not attempt to enforce the declared multiplicity either (confirmed deliberate, not an oversight: a derived end's real population is whatever the formula computes, and USE core itself does not structurally reject a `[1]` derived end that computes zero matches, per DerivedAssociationAnyMatchTest's own no-match case, independently confirmed via the real USE evaluator). DerivedAssociationAnyMatchTest (4 tests, real Z3, full SmtModelFinder.find() pipeline including reconstruction and USE-evaluator re-check) locks this in: a genuine match resolves correctly, no match leaves the end undefined, two sources with different predicates resolve to genuinely distinct targets (not just two independently-plausible per-cell checks), and the select()-shaped case still refuses cleanly. Real corpus impact: CompanyERSchema/-UNSAT no longer ERROR on this refusal specifically -- they now ERROR later, on an unrelated, pre-existing config gap (no attribute values registered for Component.containedname) -- so this closes the FIRST of several known CompanyERSchema blockers, not the scenario as a whole.",
-              "satScenarioIds": [],
-              "unsatScenarioIds": [],
-              "validationOracleScenarioIds": [],
-              "coverageNote": "CompanyERSchema tags this feature but still does not reach a real SMT-Z3 verdict overall (a different, later, unrelated gap now blocks it) -- coverage rests on DerivedAssociationAnyMatchTest's own dedicated fixture, not the real corpus scenario, exactly like several other recent closures (e.g. Boolean xor) whose corpus scenario tags a feature without itself reaching a verdict."
+              "satScenarioIds": [
+                "DerivedFK"
+              ],
+              "unsatScenarioIds": [
+                "DerivedFK-UNSAT"
+              ],
+              "validationOracleScenarioIds": [
+                "DerivedFK"
+              ],
+              "coverageNote": "2026-08-29: DerivedFK, authored specifically to close this gap, now gives this feature its first real corpus verdicts -- DerivedFK reaches clean SATISFIABLE with WidgetNameMatches genuinely holding (a real match resolves correctly across the whole corpus pipeline: encoding, SMT solve, reconstruction, USE-evaluator re-check), DerivedFK-UNSAT reaches clean UNSATISFIABLE when no Widget can match any Gadget's targetname (a genuine domain contradiction against the active WidgetNameMatches invariant, not a translation error). CompanyERSchema still tags this feature but does not itself reach a verdict (a different, later, unrelated gap still blocks it, per Milestone 4.7-era investigation) -- DerivedFK is deliberately a smaller, purpose-built scenario isolating just this feature, the same pattern PriceCalc used for prim.integer-arithmetic/config.class-bounds/config.association-bounds. Authoring it also surfaced and drove the fix of a genuine soundness bug in String/Enum attribute-to-attribute equality (ExpressionTranslator.comparison(), see MASTER_PLAN_SMT_MODEL_FINDER.md's 'Seventeenth turn') -- the any()-match predicate's own w.wname = self.targetname is exactly that shape."
             }
           }
         },
@@ -2417,10 +2423,16 @@
               "status": "degraded",
               "evidence": "Corrected 2026-08-28 -- no longer accurate. DerivedAssociationEncoder now populates an ordinary AssociationLinks grid for a derived end whose derive expression is exactly T.allInstances()->any(x | predicate) (see assoc.derived-binary), with its cells ASSERTED to the correct selection formula rather than left unregistered. Because this reuses the SAME AssociationLinks type every other association produces, navigation through it needs ZERO special-casing in ExpressionTranslator itself -- navigatedAttribute/linkTerm/populationOf all read it exactly as they would any ordinary association's grid, confirmed directly: DerivedAssociationAnyMatchTest's own `g.widget.wname = g.targetname` invariant (single-valued attribute access THROUGH the derived end) translates, solves, reconstructs, and is independently re-confirmed by USE's own evaluator.",
               "notes": "Scoped to the same any()-match idiom as assoc.derived-binary -- not general derived-association navigation the way kk-modelvalidator's handleDerivedAssociationNavigation() attempts for any OCL derive expression. Backward navigation (from the derived end's own class back to the source) is untested and not specifically claimed here.",
-              "satScenarioIds": [],
-              "unsatScenarioIds": [],
-              "validationOracleScenarioIds": [],
-              "coverageNote": "No real corpus scenario reaches a verdict that exercises this specifically (CompanyERSchema still ERRORs, on a later, unrelated gap) -- coverage rests on DerivedAssociationAnyMatchTest's own dedicated fixture."
+              "satScenarioIds": [
+                "DerivedFK"
+              ],
+              "unsatScenarioIds": [
+                "DerivedFK-UNSAT"
+              ],
+              "validationOracleScenarioIds": [
+                "DerivedFK"
+              ],
+              "coverageNote": "2026-08-29: DerivedFK now exercises this in the real corpus pipeline, not just the dedicated fixture -- its WidgetNameMatches invariant is exactly `g.widget.wname = g.targetname`, single-valued attribute access through the derived end, reaching a genuine SMT-Z3 SATISFIABLE (main) and UNSATISFIABLE (mismatched) verdict, both independently re-confirmed by USE's own evaluator. CompanyERSchema still ERRORs on a later, unrelated gap."
             }
           }
         },
