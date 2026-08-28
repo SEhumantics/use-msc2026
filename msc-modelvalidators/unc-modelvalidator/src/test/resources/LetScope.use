@@ -1,0 +1,14 @@
+model LetScope
+
+class A
+attributes
+  i : Integer
+  j : Integer
+end
+
+constraints
+
+context a : A inv primitiveLet:
+  let threshold : Integer = a.i + 1 in
+    threshold > a.j
+
