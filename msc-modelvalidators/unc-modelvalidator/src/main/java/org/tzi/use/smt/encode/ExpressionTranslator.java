@@ -281,8 +281,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           // SPECIAL) -- the operand's own definedness is exactly this translator's existing
           // TranslatedExpression#defined() for it, already computed by argResult; isDefined/
           // isUndefined never propagate that as their OWN definedness, they report it as a value.
-          case "isDefined" -> defined(argResult(a[0]).defined());
-          case "isUndefined" -> defined(Smt.not(argResult(a[0]).defined()));
+          case "isDefined" -> defined(definednessOf(a[0]));
+          case "isUndefined" -> defined(Smt.not(definednessOf(a[0])));
           default ->
               throw unsupported(boundaryOfOperator(e.opname()), "operator '" + e.opname() + "'");
         };
