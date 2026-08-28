@@ -1008,6 +1008,7 @@
       "provenanceCitation": null,
       "features": [
         "attr.declaration-typing-multiplicity",
+        "class.abstract",
         "class.basic-and-instantiation",
         "cmd.validate",
         "config.attribute-bounds",
