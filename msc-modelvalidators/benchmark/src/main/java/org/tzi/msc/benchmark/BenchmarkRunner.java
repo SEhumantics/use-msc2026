@@ -32,6 +32,7 @@ import org.tzi.use.smt.finder.ModelFinderResult;
 import org.tzi.use.smt.finder.SmtModelFinder;
 import org.tzi.use.smt.solver.SolverBinary;
 import org.tzi.use.smt.solver.SolverProcess;
+import org.tzi.use.smt.verify.InvariantVerdict;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
 import org.tzi.use.uml.sys.MSystem;
@@ -266,7 +267,21 @@ public class BenchmarkRunner {
 					wallMs.add((t1 - t0) / 1_000_000.0);
 				}
 
-				boolean sat = finderResult.allActiveInvariantsHold();
+				// ModelFinderResult#allActiveInvariantsHold() checks EVERY invariant declared in
+				// the model, not merely the ones this scenario's own .properties section marked
+				// active -- its own javadoc says "all hold" without the "active" qualifier its
+				// name implies. An inactive invariant is never solver-enforced, so a found witness
+				// is free to leave one false without that being a genuine UNSAT; using the blanket
+				// check here mislabelled Genealogy/RecursiveTree as UNSATISFIABLE the moment they
+				// first reached a real witness (both have an inactive invariant that happens not
+				// to hold for it), even though Kodkod -- and this same witness's own ACTIVE
+				// invariants -- agree it is SATISFIABLE. Filtering verdicts to config's own active
+				// set reproduces the SAME independent-oracle check, scoped to what was actually
+				// requested.
+				boolean sat = finderResult.satisfiable()
+						&& finderResult.verdicts().stream()
+								.filter(v -> config.activeInvariants().contains(v.invariantName()))
+								.allMatch(InvariantVerdict::holds);
 				outcome = sat ? "SATISFIABLE" : "UNSATISFIABLE";
 				// Two independent facts, read off two independent accessors -- see
 				// SolverResult#reconstructed. system() is non-null exactly when a scenario was
