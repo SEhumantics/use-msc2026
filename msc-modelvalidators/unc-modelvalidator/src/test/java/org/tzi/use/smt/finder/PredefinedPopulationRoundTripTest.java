@@ -1,7 +1,7 @@
 package org.tzi.use.smt.finder;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
@@ -15,8 +15,6 @@ import org.tzi.use.smt.config.AnalysisConfiguration;
 import org.tzi.use.smt.config.ConfigurationReader;
 import org.tzi.use.smt.config.ConfigurationVocabulary;
 import org.tzi.use.smt.config.RawConfiguration;
-import org.tzi.use.smt.encode.FragmentBoundary;
-import org.tzi.use.smt.encode.SmtTranslationException;
 import org.tzi.use.uml.mm.MAssociation;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
@@ -108,16 +106,25 @@ public class PredefinedPopulationRoundTripTest {
 
   /**
    * The real {@code Subsets} corpus fixture, which predefined links made reachable for the first
-   * time -- and which must NOT reach a verdict.
+   * time.
    *
-   * <p>{@code ab}'s ends are {@code union}, so its extent is the union of {@code cd} and {@code
-   * ef}; the configuration asks for {@code ab_min = ab_max = 2} while giving {@code A} and {@code
-   * B} zero objects of their own. An independent 2-D grid over those zero slots cannot hold two
-   * links, so without this refusal the encoding answered UNSATISFIABLE where the incumbent answers
-   * SATISFIABLE. A wrong verdict is worse than a refusal, so this pins the refusal.
+   * <p>{@code ab}'s ends are {@code union}, so its own extent is entirely DERIVED from {@code cd}
+   * and {@code ef} -- it is not an independently choosable association at all, per UML/OCL
+   * semantics and per this fixture's own extensively-documented finding that even Kodkod's own
+   * bound on a union association has zero effect on its actual OCL-visible content. {@code
+   * SmtModelFinder} therefore skips {@code ab} entirely rather than giving it an independent 2-D
+   * grid over {@code A}/{@code B}'s own (deliberately zero-capacity) slots -- which is exactly what
+   * an earlier, narrower version of this test pinned as a REFUSAL, reasoning that such a grid could
+   * never hold the configured {@code ab_min = ab_max = 2}. That reasoning no longer applies: {@code
+   * ab} is never given an independent grid to fail in the first place. {@code Subsets.use} has no
+   * OCL invariant that navigates the union role at all, so nothing needs {@code ab}'s derived
+   * content to be actually computed for this fixture -- the fixture's own predefined {@code
+   * cd}/{@code ef} links are what this test confirms survive reconstruction unchanged, matching the
+   * manifest's own expected SATISFIABLE classification for this scenario.
    */
   @Test
-  public void theUnionAssociationOfTheRealSubsetsFixtureIsRefusedNotAnswered() throws Exception {
+  public void theUnionAssociationOfTheRealSubsetsFixtureIsSkippedNotGivenAnIndependentGrid()
+      throws Exception {
     Path directory = examples().resolve("Subsets");
     MModel model = compile(Files.readString(directory.resolve("Subsets.use")), "SimpleSubset");
     AnalysisConfiguration config =
@@ -126,13 +133,64 @@ public class PredefinedPopulationRoundTripTest {
                 ConfigurationVocabulary.fromModel(model))
             .requireSupported();
 
-    SmtTranslationException thrown =
-        assertThrows(SmtTranslationException.class, () -> SmtModelFinder.find(model, config));
+    ModelFinderResult result = SmtModelFinder.find(model, config);
 
-    assertTrue(
-        "the refusal must name the union end: " + thrown.getMessage(),
-        thrown.getMessage().contains("union"));
-    assertEquals(FragmentBoundary.TIER_3, thrown.boundary());
+    assertTrue("expected SAT, matching the manifest's own expected classification", result.satisfiable());
+    MSystemState state = result.system().state();
+    assertEquals(0, state.objectsOfClass(model.getClass("A")).size());
+    assertEquals(0, state.objectsOfClass(model.getClass("B")).size());
+    assertEquals(1, state.objectsOfClass(model.getClass("C")).size());
+    assertEquals(1, state.objectsOfClass(model.getClass("D")).size());
+    assertEquals(1, state.objectsOfClass(model.getClass("E")).size());
+    assertEquals(1, state.objectsOfClass(model.getClass("F")).size());
+
+    assertEquals(
+        "cd's own predefined link must survive reconstruction unchanged",
+        List.of("c1->d1"),
+        linkedObjectNames(state, model.getAssociation("cd")));
+    assertEquals(
+        "ef's own predefined link must survive reconstruction unchanged",
+        List.of("e1->f1"),
+        linkedObjectNames(state, model.getAssociation("ef")));
+  }
+
+  /**
+   * The paired UNSAT scenario ({@code Subsets-UNSAT} in the manifest, section {@code cdOverflow}):
+   * with only 2 {@code C} and 2 {@code D} objects, {@code cd} (a perfectly ordinary association --
+   * only {@code ab}, the union end, needed this pass's fix) can hold at most 2*2 = 4 distinct
+   * (c,d) tuples, but {@code cd_min = cd_max = 5} demands one more than that structural ceiling --
+   * a genuine pigeonhole contradiction with nothing to do with {@code union}/{@code subsets}
+   * semantics at all (confirmed directly against the properties file's own header comment for this
+   * section, authored specifically to isolate this from the union-translation gap that used to
+   * block the WHOLE scenario before this pass).
+   */
+  @Test
+  public void theCdOverflowSectionOfTheRealSubsetsFixtureIsGenuinelyUnsatisfiable()
+      throws Exception {
+    Path directory = examples().resolve("Subsets");
+    MModel model = compile(Files.readString(directory.resolve("Subsets.use")), "SimpleSubset");
+    AnalysisConfiguration config =
+        ConfigurationReader.normalize(
+                ConfigurationReader.read(directory.resolve("Subsets.properties"), "cdOverflow"),
+                ConfigurationVocabulary.fromModel(model))
+            .requireSupported();
+
+    assertFalse(
+        "cd cannot hold 5 distinct tuples over only 2 C's and 2 D's, independent of ab/ef",
+        SmtModelFinder.find(model, config).satisfiable());
+  }
+
+  private static List<String> linkedObjectNames(MSystemState state, MAssociation association) {
+    List<String> links = new ArrayList<>();
+    for (MLink link : state.linksOfAssociation(association).links()) {
+      List<String> ends = new ArrayList<>();
+      for (MObject object : link.linkedObjects()) {
+        ends.add(object.name());
+      }
+      links.add(String.join("->", ends));
+    }
+    links.sort(String::compareTo);
+    return links;
   }
 
   private static Path examples() {

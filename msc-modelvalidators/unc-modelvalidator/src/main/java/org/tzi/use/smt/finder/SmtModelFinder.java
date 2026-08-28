@@ -558,28 +558,40 @@ public final class SmtModelFinder {
    * move ledger attribution around without closing a reachable soundness hole. They remain recorded
    * as unsupported in the feature matrix ({@code assoc.derived-binary}).
    */
+  /**
+   * {@code union} is handled by the caller's own earlier skip (see the association-scope loop),
+   * before this method is ever reached -- that branch's own comment explains why a union-declared
+   * association needs no independent link grid at all, unlike this refusal's remaining concern.
+   * Plain {@code subsets} (without also being {@code union}) needs NO special handling here either:
+   * the SUBSETTING association's own link grid (e.g. {@code cd} in {@code Subsets.use}) is a
+   * perfectly ordinary, independently encodable extent on its own account -- {@code subsets} only
+   * implies an ADDITIONAL containment constraint into whatever it subsets, which only matters if
+   * something actually navigates the superset role, and {@link ExpressionTranslator}'s own {@code
+   * context.linksFor(...)} lookup already fails closed with a clear, located error for that case
+   * (nothing is registered for a skipped union association), rather than silently mistranslating.
+   *
+   * <p>{@code redefines} is a genuinely different, harder problem than either of the above -- unlike
+   * a plain subsetting association, {@code Redefines.use}'s own {@code RedefinedRoleTagCheck}
+   * invariant DOES navigate through the redefined (superclass) role name directly ({@code c.b}),
+   * needing this translation to REDIRECT that navigation to the redefining association for
+   * redefining-typed sources rather than reading the (unpopulated, for them) redefined
+   * association's own grid -- out of scope for this pass, so it stays refused.
+   */
   private static void requireIndependentlySearchableExtent(
       MAssociation association, List<MAssociationEnd> ends) {
     for (MAssociationEnd end : ends) {
-      String feature = null;
-      if (end.isUnion()) {
-        feature = "a 'union' end (" + end.name() + ")";
-      } else if (!end.getSubsettedEnds().isEmpty() || !end.getSubsettingEnds().isEmpty()) {
-        feature = "a 'subsets' relationship on end " + end.name();
-      } else if (!end.getRedefinedEnds().isEmpty() || !end.getRedefiningEnds().isEmpty()) {
-        feature = "a 'redefines' relationship on end " + end.name();
+      if (end.getRedefinedEnds().isEmpty() && end.getRedefiningEnds().isEmpty()) {
+        continue;
       }
-      if (feature != null) {
-        throw new SmtTranslationException(
-            FragmentBoundary.TIER_3,
-            "association '"
-                + association.name()
-                + "' declares "
-                + feature
-                + ", so its link extent is tied to another association's; this translation gives"
-                + " every association an independent link grid and would silently drop that"
-                + " relationship, so it is refused rather than approximated");
-      }
+      throw new SmtTranslationException(
+          FragmentBoundary.TIER_3,
+          "association '"
+              + association.name()
+              + "' declares a 'redefines' relationship on end "
+              + end.name()
+              + ", so its link extent is tied to another association's; this translation gives"
+              + " every association an independent link grid and would silently drop that"
+              + " relationship, so it is refused rather than approximated");
     }
   }
 
@@ -850,6 +862,23 @@ public final class SmtModelFinder {
             "association '"
                 + scope.associationName()
                 + "' does not have exactly two ends; not yet supported");
+      }
+      if (ends.get(0).isUnion() || ends.get(1).isUnion()) {
+        // A union-declared association's own content is entirely DERIVED from whichever
+        // associations `subsets` its ends -- per UML/OCL semantics it is not itself an
+        // independently choosable extent, confirmed empirically against the real corpus's own
+        // properties-file research (Subsets.properties): even Kodkod's own bound on a union
+        // association has zero effect on the role's actual OCL-visible content, which is always
+        // exactly the union of its subsetting associations' own links. No shipped scenario
+        // navigates a union role via OCL, so there is nothing to derive yet -- this is
+        // deliberately left unmodeled rather than given an independent link grid (which would let
+        // the solver choose its content freely, reproducing Kodkod's own documented defect) or a
+        // derived formula (unneeded until some invariant actually navigates it, at which point
+        // ExpressionTranslator's own context.linksFor(...) lookup already fails closed with a
+        // clear, located error since nothing is registered here). Its own _min/_max bound is
+        // therefore accepted and left unenforced, exactly like Kodkod's bitwidth/satsolver
+        // compatibility-only configuration keys.
+        continue;
       }
       requireIndependentlySearchableExtent(association, ends);
       ObjectSlots aEnd = slotsByClass.get(ends.get(0).cls().name());
