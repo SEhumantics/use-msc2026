@@ -859,6 +859,28 @@ public final class SmtModelFinder {
         // compatibility-only configuration keys.
         continue;
       }
+      if (ends.get(0).isDerived() || ends.get(1).isDerived()) {
+        // A derived association end's content is ALWAYS computed (e.g. `derived =
+        // self.allBs->select(...)`), never independently choosable -- giving it an ordinary,
+        // independent link grid the solver is free to populate however it likes would silently
+        // reproduce whatever the solver happened to pick, unrelated to the declared derivation
+        // formula. Confirmed directly, not assumed: USE core's own MSystem#createLink
+        // unconditionally refuses ANY link creation for such an association
+        // ("MSystemException: Cannot create link for association with derived end"), so an
+        // independent grid does not even fail cleanly -- it reaches SmtModelFinder.witness()
+        // successfully (translation and solving both succeed) and only then crashes
+        // ungracefully during reconstruction. Refused here instead, at the same point every
+        // other structurally-unsupported association shape is refused, with a clear, located
+        // reason rather than a confusing low-level API exception two layers downstream.
+        throw new SmtTranslationException(
+            FragmentBoundary.TIER_3,
+            "association '"
+                + scope.associationName()
+                + "' declares a 'derived' end; its content is always computed from the declared"
+                + " derivation expression and is not yet supported -- giving it an independent"
+                + " link grid would let the solver choose content unrelated to that formula, so"
+                + " it is refused rather than approximated");
+      }
       ObjectSlots aEnd = slotsByClass.get(ends.get(0).cls().name());
       ObjectSlots bEnd = slotsByClass.get(ends.get(1).cls().name());
       if (aEnd == null || bEnd == null) {

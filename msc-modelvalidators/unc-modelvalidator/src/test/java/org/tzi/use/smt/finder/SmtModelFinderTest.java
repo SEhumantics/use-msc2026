@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
@@ -24,6 +25,8 @@ import org.tzi.use.smt.config.ConfigurationVocabulary;
 import org.tzi.use.smt.config.QueryExpr;
 import org.tzi.use.smt.config.RawConfiguration;
 import org.tzi.use.smt.config.ScenarioProfile;
+import org.tzi.use.smt.encode.FragmentBoundary;
+import org.tzi.use.smt.encode.SmtTranslationException;
 import org.tzi.use.smt.solver.SolverBinary;
 import org.tzi.use.smt.solver.SolverProcess;
 import org.tzi.use.uml.mm.MModel;
@@ -159,6 +162,60 @@ public class SmtModelFinderTest {
         "one Copy cannot legally have two Users (User[0..1] per Copy); two forced Borrows links"
             + " into a single Copy must be UNSAT",
         result.satisfiable());
+  }
+
+  /**
+   * A `derived` association end's content is always computed, never independently choosable --
+   * confirmed by an external model, not invented: {@code use-core}'s own bundled {@code
+   * examples/Others/DerivedProperties/derived.use} ({@code SmallBs} between {@code A}/{@code B},
+   * {@code smallBs} declared {@code subsets allBs derived = self.allBs->select(b | b.value <
+   * 10)}). Before this refusal existed, giving it an ordinary independent link grid did not fail
+   * cleanly at translation time -- it reached a real SAT witness and only then crashed
+   * ungracefully during reconstruction ({@code UseApiException: Link creation failed! / caused
+   * by: MSystemException: Cannot create link for association with derived end}, confirmed
+   * directly against the real exception chain). This test locks in the clean, located refusal
+   * instead of that confusing two-layers-downstream crash.
+   */
+  @Test
+  public void aDerivedAssociationEndIsRefusedCleanlyNotWithAConfusingReconstructionCrash()
+      throws Exception {
+    MModel model =
+        compileModel(
+            """
+            model Derived
+            class A end
+            class B
+            attributes
+              value : Integer
+            end
+            association AllLinks between
+              A[0..*] role allAs
+              B[*] role allBs
+            end
+            association SmallBs between
+              A[0..1] role aOfSmallB subsets allAs
+              B[*] role smallBs subsets allBs derived = self.allBs->select(b | b.value < 10)
+            end
+            """,
+            "Derived");
+    AnalysisConfiguration config =
+        new AnalysisConfiguration(
+            List.of(new ClassScope("A", 1, 1), new ClassScope("B", 1, 1)),
+            List.of(
+                new AssociationScope("AllLinks", 0, -1), new AssociationScope("SmallBs", 0, -1)),
+            List.of(),
+            Set.of(),
+            QueryExpr.SATISFY,
+            Duration.ofSeconds(30),
+            1);
+
+    SmtTranslationException thrown =
+        assertThrows(SmtTranslationException.class, () -> SmtModelFinder.find(model, config));
+
+    assertEquals(FragmentBoundary.TIER_3, thrown.boundary());
+    assertTrue(
+        thrown.getMessage(),
+        thrown.getMessage().contains("SmallBs") && thrown.getMessage().contains("derived"));
   }
 
   /**
@@ -316,6 +373,17 @@ public class SmtModelFinderTest {
     PrintWriter err = new PrintWriter(System.err);
     MModel model = USECompiler.compileSpecification(source, "Library", err, factory);
     err.flush();
+    return model;
+  }
+
+  private static MModel compileModel(String source, String name) {
+    ModelFactory factory = new ModelFactory();
+    PrintWriter err = new PrintWriter(System.err);
+    MModel model = USECompiler.compileSpecification(source, name, err, factory);
+    err.flush();
+    if (model == null) {
+      throw new AssertionError(name + " fixture model did not compile:\n" + source);
+    }
     return model;
   }
 }
