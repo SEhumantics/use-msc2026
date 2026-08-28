@@ -3,8 +3,10 @@ package org.tzi.use.smt.reconstruct;
 import java.math.BigInteger;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.solver.SmtValue;
+import org.tzi.use.uml.ocl.type.EnumType;
 import org.tzi.use.uml.ocl.type.Type;
 import org.tzi.use.uml.ocl.value.BooleanValue;
+import org.tzi.use.uml.ocl.value.EnumValue;
 import org.tzi.use.uml.ocl.value.IntegerValue;
 import org.tzi.use.uml.ocl.value.RealValue;
 import org.tzi.use.uml.ocl.value.StringValue;
@@ -36,6 +38,10 @@ public final class SmtValueDecoder {
     }
     if (attributeType.isTypeOfBoolean()) {
       return BooleanValue.get(boolValue(raw));
+    }
+    if (attributeType.isTypeOfEnum()) {
+      int index = intValue(raw).intValueExact();
+      return new EnumValue((EnumType) attributeType, domain.enumeratedValues().get(index));
     }
     throw new IllegalArgumentException("unsupported attribute type for decoding: " + attributeType);
   }

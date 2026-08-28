@@ -29,7 +29,8 @@ public final class AttributeEncoder {
       names.add(name);
       SmtTerm exists = Smt.sym(owner.existsNames().get(i)), value = Smt.sym(name);
       switch (type) {
-        case STRING -> guardString(script, exists, value, domain, owner.className(), attributeName);
+        case STRING, ENUM ->
+            guardString(script, exists, value, domain, owner.className(), attributeName);
         case INTEGER ->
             guardInteger(script, exists, value, domain, owner.className(), attributeName);
         case REAL -> guardReal(script, exists, value, domain, owner.className(), attributeName);
@@ -344,7 +345,7 @@ public final class AttributeEncoder {
 
   private static SmtSort sort(AttributeType type) {
     return switch (type) {
-      case STRING, INTEGER, UINTEGER, USTRING -> SmtSort.INT;
+      case STRING, ENUM, INTEGER, UINTEGER, USTRING -> SmtSort.INT;
       case REAL, UREAL, UBOOLEAN -> SmtSort.REAL;
       case BOOLEAN -> SmtSort.BOOL;
     };

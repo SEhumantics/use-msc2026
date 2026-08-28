@@ -905,6 +905,14 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       TranslatedExpression other = argResult(l);
       return useEquality(other, defined(resolve(s, l)));
     }
+    if (l instanceof ExpConstEnum en) {
+      TranslatedExpression other = argResult(r);
+      return useEquality(defined(resolve(en, r)), other);
+    }
+    if (r instanceof ExpConstEnum en) {
+      TranslatedExpression other = argResult(l);
+      return useEquality(other, defined(resolve(en, l)));
+    }
     if (l instanceof ExpNavigation ln
         && r instanceof ExpNavigation rn
         && !ln.getDestination().isCollection()
@@ -1025,6 +1033,23 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     return Smt.intLit(i >= 0 ? BigInteger.valueOf(i) : UNDEFINED_STRING_SENTINEL);
   }
 
+  /**
+   * Resolves an enum literal (e.g. {@code #single}) the same way {@link #resolve(ExpConstString,
+   * Expression)} resolves a String literal: as an index into the COMPARED attribute's own
+   * registered domain, never a domain-free absolute value -- an enum literal has no standalone SMT
+   * encoding, only a meaning relative to whichever attribute's candidate ordering it is compared
+   * against ({@link #visitConstEnum} refuses it outside that context for exactly this reason).
+   */
+  private SmtTerm resolve(ExpConstEnum literal, Expression other) {
+    if (!(other instanceof ExpAttrOp a))
+      throw unsupported(
+          FragmentBoundary.TIER_2, "enum literal compared against a non-attribute expression");
+    VariableBinding b = context.binding(variableNameOf(a.objExp()));
+    AttributeDomain d = context.attributeDomain(b.className(), a.attr().name());
+    int i = d.enumeratedValues().indexOf(literal.value());
+    return Smt.intLit(i >= 0 ? BigInteger.valueOf(i) : UNDEFINED_STRING_SENTINEL);
+  }
+
   private TranslatedExpression argResult(Expression e) {
     return argResult(e, positivePolarity);
   }
@@ -1084,7 +1109,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
   @Override
   public void visitConstEnum(ExpConstEnum e) {
-    throw unsupported(FragmentBoundary.TIER_3, "enum literal");
+    throw unsupported(
+        FragmentBoundary.TIER_2,
+        "free-standing enum literal ('" + e.value() + "') outside an attribute comparison");
   }
 
   @Override

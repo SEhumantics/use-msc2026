@@ -264,7 +264,9 @@ public class ExpressionAgreementDifferentialTest {
         "7.2's core names UReal, UInteger, UBoolean and UString, and all four are encodable today;"
             + " the remaining constants are the crisp attribute types, which are not U-types at"
             + " all",
-        List.of("STRING", "INTEGER", "REAL", "UREAL", "UINTEGER", "UBOOLEAN", "USTRING", "BOOLEAN"),
+        List.of(
+            "STRING", "INTEGER", "REAL", "UREAL", "UINTEGER", "UBOOLEAN", "USTRING", "BOOLEAN",
+            "ENUM"),
         java.util.Arrays.stream(AttributeType.values()).map(Enum::name).toList());
     assertEquals(
         "every U-type AttributeType is uncertain and every crisp one is not, so the four generated"

@@ -8,7 +8,8 @@ public enum AttributeType {
   UINTEGER,
   UBOOLEAN,
   USTRING,
-  BOOLEAN;
+  BOOLEAN,
+  ENUM;
 
   /**
    * True for a U-type family encoded as a REPRESENTATIVE plus an UNCERTAINTY, per {@code

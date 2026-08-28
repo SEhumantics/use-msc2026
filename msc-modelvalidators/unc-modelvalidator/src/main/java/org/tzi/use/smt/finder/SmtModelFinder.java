@@ -53,6 +53,7 @@ import org.tzi.use.uml.mm.MClassInvariant;
 import org.tzi.use.uml.mm.MClassifier;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.MMultiplicity;
+import org.tzi.use.uml.ocl.type.EnumType;
 import org.tzi.use.uml.ocl.type.Type;
 import org.tzi.use.uml.sys.MSystem;
 
@@ -824,6 +825,8 @@ public final class SmtModelFinder {
 
     registerTypeWideFallbackAttributes(
         script, model, config, slotsByClass, attributeValuesByKey, attributeDomainByKey);
+    registerDeclarationBoundedAttributes(
+        script, model, slotsByClass, attributeValuesByKey, attributeDomainByKey);
 
     Map<String, AssociationLinks> linksByAssociation = new LinkedHashMap<>();
     for (AssociationScope scope : config.associationScopes()) {
@@ -954,9 +957,10 @@ public final class SmtModelFinder {
    *       read at all. There is no counterpart to a generated spelling here, so the reader refuses
    *       those two keys outright instead of reinterpreting them as a domain.
    *   <li><b>Enumerations and Boolean.</b> Neither has a type-wide configuration key in the shared
-   *       format, so there is nothing here to consume; an enum-typed attribute is not encodable at
-   *       all yet ({@link #attributeTypeOf} refuses it) and keeps its {@code ENCODING_SCOPE}
-   *       refusal.
+   *       format, so there is nothing here to consume -- but neither needs one either, since both
+   *       types are ALREADY closed by declaration alone (an enum's own literal list; Boolean's
+   *       {@code true}/{@code false}). See {@link #registerDeclarationBoundedAttributes} for that
+   *       separate, unconditional fallback.
    *   <li><b>U-types.</b> Their components are registered above from explicit {@code _value}/{@code
    *       _uncertainty}/{@code _probability}/{@code _confidence} keys; a type-wide primitive range
    *       says nothing about a measurement quality and must not be substituted for one.
@@ -1019,6 +1023,70 @@ public final class SmtModelFinder {
   }
 
   /**
+   * Registers every Boolean- or enum-typed attribute the configuration gives no per-attribute
+   * domain of its own, DECLARATION-bounded rather than configuration-bounded: a Boolean attribute's
+   * domain is {@code true}/{@code false} and an enum attribute's domain is its declared literal
+   * list, in BOTH cases unconditionally, with no {@code .properties} key able to widen it (only an
+   * explicit {@code ClassName_attr = Set{...}} can narrow it, which registers the attribute above
+   * and makes this method skip it).
+   *
+   * <p>This is {@code kk-modelvalidator}'s own behaviour, verified rather than assumed: {@code
+   * EnumType.upperBound()} literally returns {@code lowerBound()}, both equal to exactly the
+   * literal set (kk {@code model/type/EnumType.java:27-39}), and {@code BooleanType} generates its
+   * fixed 2-atom domain the same unconditional way. {@code CivilStatus.properties}'s own comment
+   * relies on precisely this: "civstat/gender/alive are enum/Boolean-typed and already tightly
+   * bounded by declaration...not narrowed further" -- true against the incumbent, and false against
+   * this translation before this method existed (confirmed directly: {@code Person.civstat} and
+   * {@code Person.gender} both failed translation with "no attribute values registered", and so,
+   * independently, did an isolated unconfigured Boolean attribute probed the same way).
+   *
+   * <p>A Boolean attribute needs no domain VALUES at all -- {@link AttributeEncoder#encode} asserts
+   * nothing extra for {@code BOOLEAN} because the SMT {@code Bool} sort is already exactly
+   * two-valued -- so its registered {@link AttributeDomain} carries empty candidates and null
+   * bounds; only the registration itself (a declared symbol) was ever missing.
+   */
+  private static void registerDeclarationBoundedAttributes(
+      SmtScript script,
+      MModel model,
+      Map<String, ObjectSlots> slotsByClass,
+      Map<String, AttributeValues> attributeValuesByKey,
+      Map<String, AttributeDomain> attributeDomainByKey) {
+    for (Map.Entry<String, ObjectSlots> entry : slotsByClass.entrySet()) {
+      String className = entry.getKey();
+      MClass cls = model.getClass(className);
+      if (cls == null) {
+        continue;
+      }
+      List<MAttribute> attributes = new ArrayList<>(cls.allAttributes());
+      attributes.sort(java.util.Comparator.comparing(MAttribute::name));
+      for (MAttribute attribute : attributes) {
+        String key = className + "." + attribute.name();
+        if (attributeValuesByKey.containsKey(key)) {
+          continue;
+        }
+        Type type = attribute.type();
+        AttributeDomain domain;
+        AttributeType encoded;
+        if (type.isTypeOfBoolean()) {
+          encoded = AttributeType.BOOLEAN;
+          domain = new AttributeDomain(className, attribute.name(), null, List.of(), null, null);
+        } else if (type.isTypeOfEnum()) {
+          encoded = AttributeType.ENUM;
+          domain =
+              new AttributeDomain(
+                  className, attribute.name(), null, ((EnumType) type).getLiterals(), null, null);
+        } else {
+          continue;
+        }
+        attributeValuesByKey.put(
+            key,
+            AttributeEncoder.encode(script, entry.getValue(), attribute.name(), encoded, domain));
+        attributeDomainByKey.put(key, domain);
+      }
+    }
+  }
+
+  /**
    * The attribute types a primitive-type-wide range can bound, or null for every type that keeps
    * failing closed. Only plain {@code Integer} and {@code Real} qualify; see {@link
    * #registerTypeWideFallbackAttributes} for why String, enumerations, Boolean and the U-types do
@@ -1037,6 +1105,9 @@ public final class SmtModelFinder {
   private static AttributeType attributeTypeOf(Type type) {
     if (type.isTypeOfString()) {
       return AttributeType.STRING;
+    }
+    if (type.isTypeOfEnum()) {
+      return AttributeType.ENUM;
     }
     if (type.isTypeOfInteger()) {
       return AttributeType.INTEGER;

@@ -63,7 +63,7 @@ public class FragmentLedgerBoundaryTest {
         Sample.allInstances()->exists(x | x.n > 0)
       context self : Sample inv Tier2TypeTest:
         self.oclAsType(Sample).oclIsTypeOf(Sample)
-      context self : Sample inv Tier3Enumeration:
+      context self : Sample inv Tier2EnumLiteralVersusEnumLiteral:
         Color::red = Color::green
       context self : Sample inv Tier3SetLiteral:
         Set{1,2} = Set{1}
@@ -85,7 +85,7 @@ public class FragmentLedgerBoundaryTest {
     expected.put("Sample::Tier1ForAllTwoVariables", FragmentBoundary.TIER_1);
     expected.put("Sample::Tier2ExistsOneVariable", FragmentBoundary.TIER_2);
     expected.put("Sample::Tier2TypeTest", FragmentBoundary.TIER_2);
-    expected.put("Sample::Tier3Enumeration", FragmentBoundary.TIER_3);
+    expected.put("Sample::Tier2EnumLiteralVersusEnumLiteral", FragmentBoundary.TIER_2);
     expected.put("Sample::Tier3SetLiteral", FragmentBoundary.TIER_3);
     expected.put("Sample::BeyondFirstFragmentConditional", FragmentBoundary.BEYOND_FIRST_FRAGMENT);
     expected.put("Sample::UTypeCoreLiteral", FragmentBoundary.UTYPE_CORE);
