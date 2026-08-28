@@ -2070,7 +2070,7 @@
               "validationOracleScenarioIds": [
                 "Library"
               ],
-              "coverageNote": ""
+              "coverageNote": "2026-08-29: checked whether the remaining gap (an object-typed oclUndefined(SomeClass) literal) has real corpus evidence before considering implementation. It does not: Library.use's own oclUndefined(Copy)/oclUndefined(Book)/oclUndefined(User) usages (aCopy<>oclUndefined(Copy) etc.) all sit inside operation pre/post-condition contracts, and the ENTIRE block containing them (lines 75-133, User::init through Book::init) is commented out (/* ... */) in the shipped file -- never parsed by USE's compiler, let alone reachable by this translator. Zero live usage anywhere in the corpus. Implementing this now would be speculative, not evidence-driven, matching this session's own established bar for declining similarly-unevidenced candidates elsewhere (ocl.navigation-regular-assoc's general case, selectByKind/selectByType, oclIsTypeOf/oclAsType)."
             }
           }
         },
