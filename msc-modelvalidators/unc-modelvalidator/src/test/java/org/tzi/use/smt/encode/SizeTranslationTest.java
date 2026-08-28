@@ -178,6 +178,56 @@ public class SizeTranslationTest {
     assertEquals(SolverOutcome.UNSAT, solve(script).outcome());
   }
 
+  /**
+   * The empty-collection edge case: EVERY candidate link forced false, so the true count is
+   * genuinely 0. Directly proves {@code sizeTerm} does not accidentally satisfy {@code size() = 3}
+   * for an empty population -- a bug that let it "cheat" to a nonzero value would flip this UNSAT
+   * to SAT, whereas the {@code size() < 4} shape tested elsewhere (e.g. {@code
+   * csSizeLessThanFourOnTheRealAstIsSatWith...}) cannot distinguish size=0 from any other value
+   * below 4, so it alone would not have caught that class of bug.
+   */
+  @Test
+  public void hasThreeSongsOnTheRealAstIsUnsatWhenNoCandidateSongsAreLinkedAtAll()
+      throws Exception {
+    MModel model = compileCollectionSemantics();
+    MClassInvariant inv = findInvariant(model, "hasThreeSongs");
+
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots playlists =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Playlist", 1, 1))).get("Playlist");
+    ObjectSlots songs =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Song", 3, 3))).get("Song");
+    AssociationLinks contains =
+        AssociationLinkEncoder.encode(
+            script,
+            "Contains",
+            playlists,
+            new Multiplicity(0, -1),
+            songs,
+            new Multiplicity(0, -1),
+            new AssociationScope("Contains", 0, -1));
+
+    TranslationContext ctx =
+        new TranslationContext(
+            Map.of("self", new VariableBinding("Playlist", 0)),
+            Map.of(),
+            Map.of(),
+            Map.of("Playlist", playlists, "Song", songs),
+            Map.of("Contains", contains));
+    SmtTerm translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx);
+
+    script.assertThat(Smt.sym("Playlist_0_exists"));
+    script.assertThat(Smt.sym("Song_0_exists"));
+    script.assertThat(Smt.sym("Song_1_exists"));
+    script.assertThat(Smt.sym("Song_2_exists"));
+    script.assertThat(Smt.not(Smt.sym(contains.linkNames()[0][0])));
+    script.assertThat(Smt.not(Smt.sym(contains.linkNames()[0][1])));
+    script.assertThat(Smt.not(Smt.sym(contains.linkNames()[0][2])));
+    script.assertThat(translated);
+
+    assertEquals(SolverOutcome.UNSAT, solve(script).outcome());
+  }
+
   // ---------------------------------------------------------------------
   // A second comparator, end to end: self.<role>->size() < N (SizeScope::csSizeLessThanFour)
   // ---------------------------------------------------------------------

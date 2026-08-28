@@ -240,6 +240,62 @@ public class SmtModelFinderTest {
         result.system().state().allObjects().isEmpty());
   }
 
+  /**
+   * {@link ScenarioOutcome} and {@link ProfileOutcome} are already three-valued by design
+   * (WITNESSED/REFUTED/UNRESOLVED, SATISFIED/REFUTED/PARTIAL -- see their own class javadocs, and
+   * {@link SmtModelFinder}'s private {@code scenarioOutcomeOf}, which maps anything other than a
+   * genuine {@code UNSAT} to UNRESOLVED, never REFUTED) -- but nothing exercised a genuine solver
+   * TIMEOUT through THIS
+   * integration layer before now; every prior TIMEOUT/UNKNOWN test reached only {@code
+   * SolverProcess} directly. {@code NQueens.properties[large]} (N=17) is a REAL corpus scenario
+   * independently measured at roughly 31s for SMT-Z3 (this session's own full benchmark run) --
+   * capping the timeout to 50ms is not a synthetic, hand-tuned-to-be-flaky race; it is a real
+   * problem given a budget about 600x too small, so it deterministically times out.
+   */
+  @Test
+  public void aGenuineSolverTimeoutIsReportedAsPartialNeverAsRefuted() throws Exception {
+    MModel model = compileNQueens();
+    Path file = Path.of("../benchmark/examples/NQueens/NQueens.properties");
+    if (!Files.isRegularFile(file)) {
+      file = Path.of("msc-modelvalidators/benchmark/examples/NQueens/NQueens.properties");
+    }
+    RawConfiguration raw = ConfigurationReader.read(file, "large");
+    AnalysisConfiguration legacy =
+        ConfigurationReader.normalize(raw, ConfigurationVocabulary.fromModel(model))
+            .requireSupported();
+    AnalysisConfiguration impatient =
+        new AnalysisConfiguration(
+            legacy.classScopes(),
+            legacy.associationScopes(),
+            legacy.attributeDomains(),
+            legacy.activeInvariants(),
+            legacy.query(),
+            Duration.ofMillis(50),
+            legacy.modelLimit());
+
+    ModelFinderResult result = SmtModelFinder.find(model, impatient);
+
+    assertFalse("a timeout must not be reported as satisfiable", result.satisfiable());
+    assertEquals(
+        "a timeout must be reported as PARTIAL (unresolved), never REFUTED (a false claim of"
+            + " proven UNSAT)",
+        ProfileOutcome.PARTIAL,
+        result.outcome());
+  }
+
+  private static MModel compileNQueens() throws Exception {
+    Path file = Path.of("../benchmark/examples/NQueens/NQueens.use");
+    if (!Files.isRegularFile(file)) {
+      file = Path.of("msc-modelvalidators/benchmark/examples/NQueens/NQueens.use");
+    }
+    String source = Files.readString(file);
+    ModelFactory factory = new ModelFactory();
+    PrintWriter err = new PrintWriter(System.err);
+    MModel model = USECompiler.compileSpecification(source, "NQueens", err, factory);
+    err.flush();
+    return model;
+  }
+
   private static AnalysisConfiguration readConfig(MModel model, String section) throws Exception {
     Path file = Path.of("../benchmark/examples/Library/Library.properties");
     if (!Files.isRegularFile(file)) {

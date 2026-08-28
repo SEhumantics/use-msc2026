@@ -161,6 +161,56 @@ public class InvariantClassificationTest {
     }
   }
 
+  /**
+   * The counterpart to {@link
+   * #booleanOperatorsUseUseStyleDominanceInsteadOfStrictUndefinedPropagation} for arithmetic and
+   * ordered comparison: unlike {@code and}/{@code or}/{@code implies}, which use USE's own
+   * dominance rules (a defined-false/-true operand can settle the result without the other operand
+   * ever needing to be defined), {@code +}/unary {@code -} and {@code >}/{@code <}/{@code >=}/
+   * {@code <=} are unconditionally STRICT: {@link ExpressionTranslator#arithmetic} and {@link
+   * ExpressionTranslator#orderedComparison} both compose definedness as a plain {@code AND} of
+   * every operand's own definedness, with no dominance shortcut. Confirmed directly against the
+   * translator's own source, but until now nothing drove either shape with a genuinely undefined
+   * operand -- every prior arithmetic/comparison test used only defined Integer operands.
+   */
+  @Test
+  public void arithmeticAndComparisonOperatorsStrictlyPropagateUndefinedOperands()
+      throws Exception {
+    MModel model =
+        compile(
+            """
+            model IntegerDefinedness
+            class Sample
+            end
+            constraints
+            context self : Sample inv BinaryPlusUndefined: (1 + oclUndefined(Integer)) > 0
+            context self : Sample inv UnaryMinusUndefined: -oclUndefined(Integer) > 0
+            context self : Sample inv OrderedComparisonUndefined: 1 > oclUndefined(Integer)
+            """,
+            "IntegerDefinedness");
+
+    for (TranslationMode mode : TranslationMode.values()) {
+      SmtScript script = new SmtScript("QF_LIA");
+      ObjectSlots slots =
+          ObjectSlotEncoder.encode(script, List.of(new ClassScope("Sample", 1, 1))).get("Sample");
+      TranslationContext context =
+          new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of("Sample", slots), Map.of());
+      script.assertThat(Smt.sym("Sample_0_exists"));
+      script.assertThat(
+          InvariantAssembler.reify(script, invariant(model, "BinaryPlusUndefined"), context, mode)
+              .undefinedTerm());
+      script.assertThat(
+          InvariantAssembler.reify(script, invariant(model, "UnaryMinusUndefined"), context, mode)
+              .undefinedTerm());
+      script.assertThat(
+          InvariantAssembler.reify(
+                  script, invariant(model, "OrderedComparisonUndefined"), context, mode)
+              .undefinedTerm());
+
+      assertEquals(mode.toString(), SolverOutcome.SAT, solve(script));
+    }
+  }
+
   private static void assertThreeOutcomesAreMutuallyExclusive(
       InvariantClassification classification) {
     List<org.tzi.use.smt.solver.SmtTerm> outcomes =
