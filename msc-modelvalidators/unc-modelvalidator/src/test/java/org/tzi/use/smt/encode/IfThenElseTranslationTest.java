@@ -33,32 +33,47 @@ import org.tzi.use.uml.mm.ModelFactory;
  */
 public class IfThenElseTranslationTest {
 
+  /**
+   * The invariant body is {@code (if...) = a.i}, so this pins the WHOLE composed string, not just
+   * the if-then-else sub-term -- the top-level {@code =} already implements OCL's own equality
+   * semantics for possibly-undefined operands (both undefined -&gt; true; both defined -&gt;
+   * compare values; anything else -&gt; false), pre-existing logic this if-then-else's {@link
+   * TranslatedExpression} composes into for free, exactly the way every other operator in this
+   * translator already does. The if-then-else's own contribution is the inner {@code (ite
+   * A_0_flag A_0_i A_0_j)} and its own defined term nested inside the composed whole.
+   */
   @Test
   public void trueConditionSelectsTheThenBranch() throws Exception {
     TranslatedExpression translated = translateInvariant("trueBranch");
     assertEquals(
-        "(= (ite A_0_flag A_0_i A_0_j) A_0_i)", translated.value().toSmtLib());
-    assertEquals(
-        "(and (and true true) (ite A_0_flag true true))", translated.defined().toSmtLib());
+        "(or (and (not (and true (ite A_0_flag true true))) (not true))"
+            + " (and (and true (ite A_0_flag true true)) true"
+            + " (= (ite A_0_flag A_0_i A_0_j) A_0_i)))",
+        translated.value().toSmtLib());
   }
 
   @Test
   public void falseConditionSelectsTheElseBranch() throws Exception {
     TranslatedExpression translated = translateInvariant("falseBranch");
     assertEquals(
-        "(= (ite A_0_flag A_0_i A_0_j) A_0_j)", translated.value().toSmtLib());
+        "(or (and (not (and true (ite A_0_flag true true))) (not true))"
+            + " (and (and true (ite A_0_flag true true)) true"
+            + " (= (ite A_0_flag A_0_i A_0_j) A_0_j)))",
+        translated.value().toSmtLib());
   }
 
   @Test
   public void undefinedConditionMakesTheWholeIfUndefinedNotEitherBranch() throws Exception {
     TranslatedExpression translated = translateInvariant("undefinedConditionIsUndefined");
-    // The condition's own definedness (false, from oclUndefined(Boolean)) is conjoined directly --
-    // confirming the WHOLE expression is undefined regardless of which branch an ite would have
-    // picked, not "false but only because a branch happened to be false too".
-    assertTrue(
-        "must gate on the condition's own definedness, not fall through to a branch: "
-            + translated.defined().toSmtLib(),
-        translated.defined().toSmtLib().startsWith("(and false "));
+    // The invariant body is `(if...) > 0`, so the outer `and` is orderedComparison's own
+    // l.defined()/r.defined() conjunction -- `(and <if-defined> true)`, since the literal 0 is
+    // always defined. <if-defined> is `(and false (ite false true true))`: the LEADING `false` is
+    // the condition's own definedness (from oclUndefined(Boolean)) conjoined directly, confirming
+    // the whole expression is undefined regardless of which branch an ite would have picked, not
+    // "false but only because a branch happened to be false too" (both branches here are trivially
+    // defined attribute accesses, so the ite alone would say true either way).
+    assertEquals(
+        "(and (and false (ite false true true)) true)", translated.defined().toSmtLib());
   }
 
   @Test
@@ -72,6 +87,23 @@ public class IfThenElseTranslationTest {
     assertTrue(thrown.getMessage(), thrown.getMessage().contains("different types"));
   }
 
+  /**
+   * {@code allActiveInvariantsHold()} checks every invariant in the model's independent verdict
+   * list, active or not (confirmed by reading {@code ModelFinderResult.allActiveInvariantsHold()}
+   * directly, not assumed from its name) -- unusable here since this fixture deliberately carries
+   * invariants meant to read FALSE/UNDEFINED (falseBranch, undefinedConditionIsUndefined). Checks
+   * the specific verdict instead, the same pattern {@code URealThresholdRoundTripTest} already
+   * uses.
+   *
+   * <p>Verified directly, not just via this one assertion: a probe of the full verdict list for
+   * this exact configuration showed EVERY invariant landing exactly where expected --
+   * {@code trueBranch=TRUE}, {@code falseBranch=FALSE} (flag=true selects i=7, not j=-3),
+   * {@code undefinedConditionIsUndefined=UNDEFINED} (confirming the load-bearing semantic
+   * property from an entirely independent evaluator, not just this translator's own SMT
+   * encoding), and {@code mismatchedBranchTypes=TRUE} (USE's own interpreter can still evaluate a
+   * shape this translator refuses to translate -- the refusal is about SMT-LIB representability,
+   * not OCL well-formedness).
+   */
   @Test
   public void fullRoundTripReconstructsAndUseEvaluatorConfirmsTheTrueBranch() throws Exception {
     MModel model = compileFixture();
@@ -93,7 +125,12 @@ public class IfThenElseTranslationTest {
         org.tzi.use.smt.finder.SmtModelFinder.find(model, config);
 
     assertTrue("expected SAT", result.satisfiable());
-    assertTrue("expected the invariant to hold per USE's own evaluator", result.allActiveInvariantsHold());
+    assertEquals(
+        new org.tzi.use.smt.verify.InvariantVerdict("A::trueBranch", true),
+        result.verdicts().stream()
+            .filter(v -> v.invariantName().equals("A::trueBranch"))
+            .findFirst()
+            .orElseThrow());
   }
 
   private static AnalysisConfiguration readConfig(MModel model, String body) throws Exception {

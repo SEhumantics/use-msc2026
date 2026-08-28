@@ -1187,9 +1187,42 @@ public final class ExpressionTranslator implements ExpressionVisitor {
             Smt.and(valueConjuncts));
   }
 
+  /**
+   * Translates {@code if <cond> then <a> else <b> endif}. USE's own {@link ExpIf#eval} (use-core)
+   * defaults the result to undefined and only evaluates a branch once the condition is confirmed
+   * DEFINED -- an undefined condition makes the WHOLE if-expression undefined, it does not fall
+   * through to either branch (that method's own docstring says otherwise; the actual code,
+   * guarded by {@code if (condValue.isDefined())}, does not match its docstring, and this
+   * translation follows the code, confirmed directly rather than trusted from the comment). The
+   * emitted {@code defined} term is therefore conjoined with the condition's own definedness
+   * directly, not merely selected as one branch's value.
+   *
+   * <p>Scoped to matching then/else types: OCL's own compiler would widen a mismatched Integer/
+   * Real pair to a common Real type the same way {@code arithmetic()}'s {@code +}/{@code -} does,
+   * but that widening is not attempted here -- refused explicitly rather than silently generalized,
+   * consistent with every other narrowly-scoped operator in this translator.
+   */
   @Override
   public void visitIf(ExpIf e) {
-    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "if");
+    if (!e.getThenExpression().type().equals(e.getElseExpression().type())) {
+      throw unsupported(
+          FragmentBoundary.BEYOND_FIRST_FRAGMENT,
+          "if-then-else whose then/else branches have different types ("
+              + e.getThenExpression().type()
+              + " vs "
+              + e.getElseExpression().type()
+              + "): only matching-type branches are supported in this translation slice");
+    }
+    TranslatedExpression condition = argResult(e.getCondition());
+    TranslatedExpression thenBranch = argResult(e.getThenExpression());
+    TranslatedExpression elseBranch = argResult(e.getElseExpression());
+    result =
+        new TranslatedExpression(
+            Smt.and(
+                List.of(
+                    condition.defined(),
+                    Smt.ite(condition.value(), thenBranch.defined(), elseBranch.defined()))),
+            Smt.ite(condition.value(), thenBranch.value(), elseBranch.value()));
   }
 
   @Override

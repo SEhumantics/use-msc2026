@@ -216,7 +216,7 @@ public class FragmentCheckerTest {
             class Sample
             end
             constraints
-            context self : Sample inv Conditional: if true then true else false endif
+            context self : Sample inv Conditional: (if true then 1 else 1.5 endif) > 0
             """,
             "Unsupported");
     MClassInvariant invariant = model.classInvariants().iterator().next();

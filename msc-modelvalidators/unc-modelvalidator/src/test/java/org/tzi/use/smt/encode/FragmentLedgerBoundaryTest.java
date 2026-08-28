@@ -39,6 +39,12 @@ public class FragmentLedgerBoundaryTest {
    * invariant whose static type is {@code UBoolean} (7.3), so {@code self.speed = self.other} does
    * not compile at all and the translator's bare-UReal-access refusal is unreachable from a parsed
    * model. The {@code UReal} literal comparison is the reachable U-type-core shape.
+   *
+   * <p>{@code BeyondFirstFragmentConditional} was originally a plain {@code if true then true
+   * else false endif} -- once visitIf() started supporting matching-type branches, that exact
+   * shape stopped refusing at all, so it was changed to a type-mismatched if-then-else (Integer
+   * vs Real), which still hits {@code BEYOND_FIRST_FRAGMENT} via visitIf()'s own type guard,
+   * preserving this fixture's role without depending on if-then-else staying wholly unsupported.
    */
   private static final String BOUNDARY_MODEL =
       """
@@ -62,7 +68,7 @@ public class FragmentLedgerBoundaryTest {
       context self : Sample inv Tier3SetLiteral:
         Set{1,2} = Set{1}
       context self : Sample inv BeyondFirstFragmentConditional:
-        if true then true else false endif
+        (if true then 1 else 1.5 endif) > 0
       context self : Sample inv UTypeCoreLiteral:
         (UReal(0.5, 0.1) > 0.30).toBooleanC(0.95)
       context self : Sample inv UTypeUncertainVersusUncertain:
