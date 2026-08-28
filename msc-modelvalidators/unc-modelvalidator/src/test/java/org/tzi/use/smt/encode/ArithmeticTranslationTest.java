@@ -18,6 +18,7 @@ import org.tzi.use.smt.config.AnalysisConfiguration;
 import org.tzi.use.smt.config.AssociationScope;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.ClassScope;
+import org.tzi.use.smt.config.TranslationMode;
 import org.tzi.use.smt.finder.ModelFinderResult;
 import org.tzi.use.smt.finder.SmtModelFinder;
 import org.tzi.use.smt.solver.*;
@@ -36,8 +37,11 @@ import org.tzi.use.uml.mm.ModelFactory;
  * (q1.row.idx+q1.col.idx <> q2.row.idx+q2.col.idx and q1.row.idx-q1.col.idx <>
  * q2.row.idx-q2.col.idx)}). Binary {@code *} and unary {@code +} complete the remaining two of the
  * ten {@code prim.integer-arithmetic} operations that need no dedicated undefinedness handling
- * (unlike {@code /}, {@code div}, {@code mod}, {@code abs}, {@code min}, {@code max}, which stay
- * unconditionally refused); the {@code ArithmeticScope} fixture below constructs a real, compiled
+ * (unlike {@code /}, {@code mod}, {@code abs}, {@code min}, {@code max}, which stay unconditionally
+ * refused, and {@code div}, which is supported only for the single narrow shape {@link
+ * ExpressionTranslator#integerDivision} documents -- {@code N div X.allInstances()->select(...)
+ * ->size()} -- with its own zero-divisor-is-undefined guard, exercised below); the {@code
+ * ArithmeticScope} fixture below constructs a real, compiled
  * invariant for each rather than reusing an existing corpus scenario, since no scenario in the
  * benchmark corpus happens to use {@code *} or unary {@code +}.
  *
@@ -491,6 +495,85 @@ public class ArithmeticTranslationTest {
     assertTrue(
         "expected the USE evaluator to independently confirm the witness",
         verdictFor(result, "A::unaryPlusIsIdentity").holds());
+  }
+
+  // ---------------------------------------------------------------------
+  // div -- zero-divisor-is-undefined guard (never exercised by any test before this one)
+  // ---------------------------------------------------------------------
+
+  /**
+   * {@link ExpressionTranslator#integerDivision}'s own javadoc documents that a divisor of zero
+   * (an empty {@code select}-filtered population) makes the whole {@code div} expression
+   * UNDEFINED, mirroring USE core's own {@code ArithmeticException}-to-{@code Undefined}
+   * conversion -- but until now that guard existed purely as an unexercised assertion in the
+   * translated formula: no test in the suite ever drove {@code integerDivision} with a genuinely
+   * empty matching population. {@code Employee} is given capacity 0 here, so {@code
+   * Employee.allInstances()->select(...)->size()} is deterministically 0 regardless of the select
+   * predicate's own content, forcing the divisor to zero unconditionally rather than depending on
+   * the solver happening to pick an empty population among several choices.
+   *
+   * <p>Asserting {@code translated.defined()} directly (rather than the whole invariant's truth
+   * value) isolates exactly the claim under test: this must be UNSAT, because the {@code div}
+   * guard's own {@code count != 0} conjunct is unsatisfiable once {@code count} is forced to 0 by
+   * construction -- so the solver can never make this expression DEFINED, only ever UNDEFINED.
+   */
+  @Test
+  public void divisionByAnEmptyMatchingPopulationIsUndefinedNotACrash() throws Exception {
+    MModel model = compileDivScope();
+    MClassInvariant inv = findInvariant(model, "budgetPerEmployee");
+
+    SmtScript script = new SmtScript("QF_LIA");
+    Map<String, ObjectSlots> slotsByClass =
+        ObjectSlotEncoder.encode(
+            script, List.of(new ClassScope("Department", 1, 1), new ClassScope("Employee", 0, 0)));
+    ObjectSlots department = slotsByClass.get("Department");
+    AttributeDomain budgetDomain =
+        new AttributeDomain("Department", "budget", null, List.of(), null, null);
+    AttributeValues budgetValues =
+        AttributeEncoder.encode(script, department, "budget", AttributeType.INTEGER, budgetDomain);
+    TranslationContext ctx =
+        new TranslationContext(
+            Map.of("d", new VariableBinding("Department", 0)),
+            Map.of("Department.budget", budgetValues),
+            Map.of("Department.budget", budgetDomain),
+            slotsByClass,
+            Map.of());
+
+    TranslatedExpression translated =
+        ExpressionTranslator.translate(inv.bodyExpression(), ctx, TranslationMode.NOMINAL);
+
+    script.assertThat(Smt.sym("Department_0_exists"));
+    script.assertThat(
+        Smt.eq(Smt.sym(budgetValues.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(100))));
+    script.assertThat(translated.defined());
+
+    assertEquals(SolverOutcome.UNSAT, solve(script).outcome());
+  }
+
+  private static MModel compileDivScope() {
+    String source =
+        """
+        model DivScope
+        class Department
+        attributes
+          budget : Integer
+        end
+        class Employee
+        attributes
+          dname : String
+        end
+        constraints
+        context d: Department inv budgetPerEmployee:
+          d.budget div (Employee.allInstances()->select(dname = 'nonexistent')->size()) > 0
+        """;
+    ModelFactory factory = new ModelFactory();
+    PrintWriter err = new PrintWriter(System.err);
+    MModel model = USECompiler.compileSpecification(source, "DivScope", err, factory);
+    err.flush();
+    if (model == null) {
+      throw new AssertionError("DivScope fixture model did not compile:\n" + source);
+    }
+    return model;
   }
 
   /**

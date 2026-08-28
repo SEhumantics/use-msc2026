@@ -194,6 +194,52 @@ public class SmtModelFinderTest {
     assertTrue(result.allActiveInvariantsHold());
   }
 
+  /**
+   * A genuinely empty reconstructed witness -- every class AND association scope forced to {@code
+   * (0,0)}, so the solver's SAT witness has literally zero objects and zero links of any kind, not
+   * merely an untested corner reached by coincidence. Proves {@code SystemStateReconstructor}
+   * handles the all-empty case cleanly (no crash, an {@link MSystemState} with zero total objects)
+   * and that every one of Library's own 9 real invariants -- each an implicit "for all instances of
+   * the context class" -- holds VACUOUSLY over that empty population, independently confirmed by
+   * USE's own evaluator rather than merely assumed. {@code borrowsEndMultiplicityIsApplied...}
+   * above and {@code theRealLibraryPropertiesDefaultSectionIsSatisfiable...} both reach a NON-empty
+   * witness; nothing else in the suite exercises a real, positive, solver-CHOSEN empty population
+   * (as opposed to a scope with capacity 0 that never reaches SAT at all, e.g. {@code
+   * ExistentialInvariantTest}'s own forced-empty fixture).
+   */
+  @Test
+  public void everyScopeForcedEmptyReconstructsALiterallyEmptySystemWithEveryInvariantVacuouslyTrue()
+      throws Exception {
+    MModel model = compileLibrary();
+    AnalysisConfiguration legacy = readConfig(model, null);
+    AnalysisConfiguration allEmpty =
+        new AnalysisConfiguration(
+            legacy.classScopes().stream()
+                .map(scope -> new ClassScope(scope.className(), 0, 0))
+                .toList(),
+            legacy.associationScopes().stream()
+                .map(scope -> new AssociationScope(scope.associationName(), 0, 0))
+                .toList(),
+            legacy.attributeDomains(),
+            legacy.activeInvariants(),
+            legacy.query(),
+            legacy.timeout(),
+            legacy.modelLimit());
+
+    ModelFinderResult result = SmtModelFinder.find(model, allEmpty);
+
+    assertTrue(
+        "expected SAT: the empty population trivially satisfies every invariant",
+        result.satisfiable());
+    assertTrue(
+        "expected every invariant to hold vacuously over the empty population",
+        result.allActiveInvariantsHold());
+    assertEquals(9, result.verdicts().size());
+    assertTrue(
+        "the reconstructed witness must have literally zero objects",
+        result.system().state().allObjects().isEmpty());
+  }
+
   private static AnalysisConfiguration readConfig(MModel model, String section) throws Exception {
     Path file = Path.of("../benchmark/examples/Library/Library.properties");
     if (!Files.isRegularFile(file)) {
