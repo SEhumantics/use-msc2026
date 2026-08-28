@@ -241,6 +241,90 @@ public class SystemStateReconstructorTest {
     assertTrue(state.hasLinkBetweenObjects(belongsToAssoc, belongsToOrder.toArray(new MObject[0])));
   }
 
+  /**
+   * A REFLEXIVE association (both ends the same class, e.g. CivilStatus's {@code Marriage}) used
+   * to throw {@code UnsupportedOperationException} unconditionally here -- {@link
+   * ExpressionTranslator#linkTerm} and this class's {@code createLinks} shared the same root
+   * problem, class-name-only end disambiguation, which is genuinely ambiguous when both ends are
+   * the same class. This proves the reconstruction half specifically: the single pinned link
+   * (wife-index 0, husband-index 1) must come back as person0-in-the-wife-position,
+   * person1-in-the-husband-position -- NOT the reverse, which an orientation bug would produce
+   * silently (a link IS created, just between the wrong roles).
+   */
+  @Test
+  public void aReflexiveAssociationReconstructsWithTheCorrectRoleOrientation() throws Exception {
+    MModel model = compileMarriage();
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots persons =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Person", 3, 3))).get("Person");
+    AssociationLinks marriage =
+        AssociationLinkEncoder.encode(
+            script,
+            "Marriage",
+            persons,
+            new Multiplicity(0, 1),
+            persons,
+            new Multiplicity(0, 1),
+            new AssociationScope("Marriage", 0, -1));
+    for (int i = 0; i < 3; i++) {
+      script.assertThat(Smt.sym("Person_" + i + "_exists"));
+    }
+    for (int i = 0; i < 3; i++) {
+      for (int j = 0; j < 3; j++) {
+        SmtTerm cell = Smt.sym(marriage.linkNames()[i][j]);
+        script.assertThat(i == 0 && j == 1 ? cell : Smt.not(cell));
+      }
+    }
+
+    SolverResult result =
+        new SolverProcess(SolverBinary.resolve(), Duration.ofSeconds(30)).run(script.toSmtLib());
+    assertEquals(SolverOutcome.SAT, result.outcome());
+    Map<String, SmtValue> modelValues = SmtModelParser.parse(result.modelText());
+
+    TranslationContext context =
+        new TranslationContext(
+            Map.of(), Map.of(), Map.of(), Map.of("Person", persons), Map.of("Marriage", marriage));
+    MSystem system = SystemStateReconstructor.reconstruct(model, context, modelValues);
+    MSystemState state = system.state();
+
+    MObject wife = state.objectByName("Person0");
+    MObject husband = state.objectByName("Person1");
+    MAssociation marriageAssoc = model.getAssociation("Marriage");
+    List<org.tzi.use.uml.mm.MAssociationEnd> ends = marriageAssoc.associationEnds();
+    assertEquals("wife", ends.get(0).nameAsRolename());
+    assertEquals("husband", ends.get(1).nameAsRolename());
+
+    assertTrue(
+        "person0 (wife-index 0) must be linked in the WIFE position, person1 (husband-index 1) in"
+            + " the HUSBAND position",
+        state.hasLinkBetweenObjects(marriageAssoc, wife, husband));
+    assertTrue(
+        "the reverse role assignment must NOT be a separate link -- an orientation bug would"
+            + " create the link with the roles swapped instead of correctly, not create an extra"
+            + " one",
+        !state.hasLinkBetweenObjects(marriageAssoc, husband, wife));
+  }
+
+  private static MModel compileMarriage() throws Exception {
+    String source =
+        """
+        model MarriageScope
+        class Person end
+        association Marriage between
+          Person [0..1] role wife
+          Person [0..1] role husband
+        end
+        """;
+    PrintWriter err = new PrintWriter(System.err);
+    MModel model =
+        USECompiler.compileSpecification(source, "MarriageScope", err, new org.tzi.use.uml.mm.ModelFactory());
+    err.flush();
+    if (model == null) {
+      throw new AssertionError("MarriageScope fixture model did not compile");
+    }
+    return model;
+  }
+
   private static MModel compileLibrary() throws Exception {
     Path file = Path.of("../benchmark/examples/Library/Library.use");
     if (!Files.isRegularFile(file)) {

@@ -140,13 +140,16 @@ public final class SystemStateReconstructor {
       Map<String, MObject> objectsBySlot)
       throws UseApiException {
     for (AssociationLinks links : context.linksByAssociation().values()) {
-      if (links.aEnd().className().equals(links.bEnd().className())) {
-        throw new UnsupportedOperationException(
-            "reflexive association reconstruction not yet supported: " + links.associationName());
-      }
       MAssociation association = model.getAssociation(links.associationName());
-      int aPosition = endPosition(association, links.aEnd().className());
-      int bPosition = endPosition(association, links.bEnd().className());
+      boolean reflexive = links.aEnd().className().equals(links.bEnd().className());
+      // A REFLEXIVE association (both ends the same class, e.g. CivilStatus's Marriage) cannot be
+      // resolved by class name -- endPosition() would find the same declared position for both
+      // aEnd and bEnd. There aEnd/bEnd are POSITIONALLY declared end 0/1 instead, the only
+      // convention SmtModelFinder.solve() (the sole caller that can even build a reflexive
+      // AssociationLinks -- no test fixture did before this fix) constructs one under, matching
+      // ExpressionTranslator.linkTerm's own reflexive-orientation convention on the read side.
+      int aPosition = reflexive ? 0 : endPosition(association, links.aEnd().className());
+      int bPosition = reflexive ? 1 : endPosition(association, links.bEnd().className());
       for (int i = 0; i < links.aEnd().capacity(); i++) {
         for (int j = 0; j < links.bEnd().capacity(); j++) {
           if (isTrue(modelValues, links.linkNames()[i][j])) {

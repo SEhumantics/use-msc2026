@@ -174,10 +174,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
     List<SmtTerm> targets = new ArrayList<>();
     for (int k = 0; k < destSlots.capacity(); k++) {
-      targets.add(linkTerm(links, source, k));
+      targets.add(linkTerm(links, destination, source, k));
     }
     return new TranslatedExpression(
-        Smt.or(targets), selectLinkedValue(links, source, destSlots, v));
+        Smt.or(targets), selectLinkedValue(links, destination, source, destSlots, v));
   }
 
   /**
@@ -195,14 +195,18 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * placeholder.
    */
   private SmtTerm selectLinkedValue(
-      AssociationLinks links, VariableBinding source, ObjectSlots destSlots, AttributeValues v) {
+      AssociationLinks links,
+      MNavigableElement destination,
+      VariableBinding source,
+      ObjectSlots destSlots,
+      AttributeValues v) {
     int capacity = destSlots.capacity();
     if (capacity == 0) {
       return placeholderOfSort(v.type());
     }
     SmtTerm value = Smt.sym(v.valueNames().get(capacity - 1));
     for (int k = capacity - 2; k >= 0; k--) {
-      value = Smt.ite(linkTerm(links, source, k), Smt.sym(v.valueNames().get(k)), value);
+      value = Smt.ite(linkTerm(links, destination, source, k), Smt.sym(v.valueNames().get(k)), value);
     }
     return value;
   }
@@ -974,7 +978,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     VariableBinding source = context.binding(variableNameOf(navigation.getObjectExpression()));
     List<SmtTerm> targets = new ArrayList<>();
     for (int k = 0; k < destinationSlots.capacity(); k++) {
-      targets.add(linkTerm(links, source, k));
+      targets.add(linkTerm(links, navigation.getDestination(), source, k));
     }
     return Smt.or(targets);
   }
@@ -996,8 +1000,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     List<SmtTerm> leftTargets = new ArrayList<>();
     List<SmtTerm> rightTargets = new ArrayList<>();
     for (int k = 0; k < destSlots.capacity(); k++) {
-      SmtTerm leftLink = linkTerm(links, leftSource, k);
-      SmtTerm rightLink = linkTerm(links, rightSource, k);
+      SmtTerm leftLink = linkTerm(links, left.getDestination(), leftSource, k);
+      SmtTerm rightLink = linkTerm(links, left.getDestination(), rightSource, k);
       leftTargets.add(leftLink);
       rightTargets.add(rightLink);
       sharedTarget.add(Smt.and(List.of(leftLink, rightLink)));
@@ -1010,17 +1014,47 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
   /**
    * Resolves which side of {@code links} a source binding is on, and returns the SMT term for its
-   * link to candidate slot {@code otherIndex}. Fails closed if the source's class matches neither
-   * end (a reflexive association, which Library does not have and this slice does not support).
+   * link to candidate slot {@code otherIndex}.
+   *
+   * <p>The ORDINARY case matches by class name, exactly as before this method learned about
+   * {@code destination} at all: {@code AssociationLinks}' own {@code aEnd}/{@code bEnd} carry no
+   * guaranteed relationship to the model's declared end order (deliberately -- {@link
+   * PredefinedLinkEncoder}'s own class javadoc documents "the SMT grid's end order can differ from
+   * {@code associationEnds()}", and several hand-built test fixtures construct {@code
+   * AssociationLinks} with the ends reversed on purpose), so class-name matching is the only
+   * association-agnostic way to resolve orientation when the two ends have DIFFERENT classes, and
+   * it is kept unconditionally for that case.
+   *
+   * <p>Class name is genuinely AMBIGUOUS only for a REFLEXIVE association (both ends the same
+   * class, e.g. CivilStatus's {@code Marriage}, {@code Person [0..1] role wife -- Person [0..1]
+   * role husband}) -- the one case previously refused outright. There, {@code destination} (the
+   * end actually being navigated TO) is resolved against the association's own DECLARED end order
+   * instead: {@code aEnd}/{@code bEnd} are always built from {@code associationEnds().get(0)}/
+   * {@code .get(1)} respectively, POSITIONALLY, in the one production caller that can even reach a
+   * reflexive association ({@code SmtModelFinder.solve()} -- no test fixture built one before this
+   * fix, so there is no reversed-reflexive precedent to preserve), so "{@code destination} is
+   * declared end 0" and "{@code source} is on the {@code aEnd} axis" are the same fact: OCL
+   * navigation always crosses from one end to the other.
    */
-  private SmtTerm linkTerm(AssociationLinks links, VariableBinding source, int otherIndex) {
-    if (links.aEnd().className().equals(source.className()))
-      return Smt.sym(links.linkNames()[source.slotIndex()][otherIndex]);
-    if (links.bEnd().className().equals(source.className()))
-      return Smt.sym(links.linkNames()[otherIndex][source.slotIndex()]);
-    throw unsupported(
-        FragmentBoundary.TIER_3,
-        "association " + links.associationName() + " does not connect class " + source.className());
+  private SmtTerm linkTerm(
+      AssociationLinks links, MNavigableElement destination, VariableBinding source, int otherIndex) {
+    if (!links.aEnd().className().equals(links.bEnd().className())) {
+      if (links.aEnd().className().equals(source.className()))
+        return Smt.sym(links.linkNames()[source.slotIndex()][otherIndex]);
+      if (links.bEnd().className().equals(source.className()))
+        return Smt.sym(links.linkNames()[otherIndex][source.slotIndex()]);
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "association "
+              + links.associationName()
+              + " does not connect class "
+              + source.className());
+    }
+    boolean destinationIsAEnd =
+        destination.equals(destination.association().associationEnds().get(0));
+    return destinationIsAEnd
+        ? Smt.sym(links.linkNames()[otherIndex][source.slotIndex()])
+        : Smt.sym(links.linkNames()[source.slotIndex()][otherIndex]);
   }
 
   private SmtTerm resolve(ExpConstString literal, Expression other) {
@@ -1177,9 +1211,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     List<SmtTerm> trueCandidates = new ArrayList<>();
     List<SmtTerm> definedCandidates = new ArrayList<>();
     for (int i = 0; i < destSlots.capacity(); i++) {
-      SmtTerm link1 = linkTerm(links, source, i);
+      SmtTerm link1 = linkTerm(links, range.getDestination(), source, i);
       for (int j = 0; j < destSlots.capacity(); j++) {
-        SmtTerm link2 = linkTerm(links, source, j);
+        SmtTerm link2 = linkTerm(links, range.getDestination(), source, j);
         TranslationContext extended =
             context
                 .withBinding(var1, new VariableBinding(destClass, i))
@@ -1389,7 +1423,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       List<PopulationMember> population = new ArrayList<>();
       for (int k = 0; k < destSlots.capacity(); k++) {
         population.add(
-            new PopulationMember(new VariableBinding(destClass, k), linkTerm(links, source, k)));
+            new PopulationMember(
+                new VariableBinding(destClass, k),
+                linkTerm(links, navigation.getDestination(), source, k)));
       }
       return population;
     }
