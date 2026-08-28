@@ -1,0 +1,46 @@
+model PriceCalc
+
+-- Authored specifically to give three already-implemented but
+-- previously corpus-unevidenced unc-modelvalidator constructs a real,
+-- wired benchmark scenario instead of only a dedicated unit fixture:
+-- binary Integer multiplication (linear shape -- one operand a
+-- compile-time literal), unary Integer plus, class-bounds NAMED objects
+-- (a bare "ClassName = Set{obj1,...}" literal), and an association-bounds
+-- explicit link-TUPLE literal ("AssocName = Set{(a,b),...}"). Each of
+-- those already has a passing dedicated fixture elsewhere in this
+-- project's test suite; this model's only job is to exercise all four
+-- together, in one small, honestly-checkable domain, through the real
+-- .use/.properties/manifest pipeline every other corpus scenario goes
+-- through.
+
+class Product
+attributes
+  name : String
+  unitPrice : Integer
+  doubledPrice : Integer
+end
+
+class Warehouse
+attributes
+  name : String
+end
+
+association Stores between
+  Warehouse[*] role warehouses
+  Product[*] role products
+end
+
+constraints
+
+-- Binary '*': one operand (2) is a compile-time Integer literal, the
+-- other (p.unitPrice) an ordinary navigated attribute -- exactly the
+-- linear shape unc-modelvalidator's pinned QF_LIA solver logic accepts.
+context p : Product inv doublePriceCheck:
+  p.unitPrice * 2 = p.doubledPrice
+
+-- Unary '+': translated as a plain identity, so this is semantically
+-- equivalent to "p.unitPrice > 0" -- the point is proving the syntax
+-- parses and translates correctly in a real scenario, not a different
+-- semantic outcome.
+context p : Product inv positiveUnitPrice:
+  +p.unitPrice > 0

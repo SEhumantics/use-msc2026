@@ -925,7 +925,9 @@
       "provenanceDetail": "Paired UNSAT mutation of CivilStatus, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as CivilStatus, new [everyoneMarried] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
-        "cmd.validate"
+        "cmd.validate",
+        "prim.enum-literals-equality",
+        "prim.string-literals-equality"
       ],
       "question": "Does an odd Person population (3) combined with a Marriage_min of 2 correctly come back UNSATISFIABLE, given that femaleHasNoWife/maleHasNoHusband force Marriage to be a 1-1 female/male matching capped at floor(Person_max/2) regardless of gender split?",
       "expected": {
@@ -981,6 +983,7 @@
       "provenanceDetail": "Paired UNSAT mutation of AssociationClass, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as AssociationClass, new [linkcap] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
+        "assoc.association-class",
         "cmd.validate"
       ],
       "question": "Does pushing Employment_min past the structural ceiling the Company[0..1]-per-Person end multiplicity imposes on a fixed Person population (3 Persons, so at most 3 Employment links, but Employment_min=4 demanded) correctly come back UNSATISFIABLE?",
@@ -1116,7 +1119,8 @@
       "features": [
         "cmd.validate",
         "config.primitive-type-wide-value-domain",
-        "invariant.activation-state-config"
+        "invariant.activation-state-config",
+        "prim.enum-literals-equality"
       ],
       "question": "Does a new invariant that is the directly-derived, provably-true converse of Clue10 (the house at position 1 must be Norwegian, following from Clue10 plus the position/nationality bijections) become unsatisfiable when negated, i.e. does forcing position 1's occupant to NOT be Norwegian genuinely conflict with Clue10 (which still forces the Norwegian into position 1), while the other 13 clues and 6 all-different invariants stay active over the normal 5-house population?",
       "expected": {
@@ -1202,6 +1206,7 @@
       "provenanceDetail": "Paired UNSAT mutation of Redefines, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as Redefines, new [tagBoundGap] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
+        "assoc.redefines",
         "cmd.validate"
       ],
       "question": "Does a superclass-declared attribute invariant (TagBNotEmpty on B) that is structurally unsatisfiable through its own bounded candidate domain still correctly fail the search for a redefining subclass's inherited instance (D < B), independent of -- and without relying on -- the plugin's separately confirmed `redefines` translation gap?",
@@ -1258,6 +1263,9 @@
       "provenanceDetail": "Paired UNSAT mutation of Subsets, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as Subsets, new [cdOverflow] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
+        "assoc.subsets",
+        "assoc.union",
+        "assoc.union-association",
         "cmd.validate"
       ],
       "question": "With C and D populated exactly as in [demo] except bumped to 2 objects each (so cd, an ordinary set-valued association with no per-object multiplicity constraint, can hold at most C_max*D_max=4 distinct (c,d) tuples), does the model correctly come back UNSATISFIABLE when cd_min/cd_max is pushed to 5 -- one past that structural ceiling -- while ab/ef and every other bound stay exactly as satisfiable as in [demo], confirming the contradiction is a direct cardinality-bound infeasibility rather than one relying on this plugin's known dead subsets/union enforcement gap?",
@@ -2181,6 +2189,64 @@
         "finite-domain-composition",
         "product-rule",
         "fourth-u-type-family"
+      ]
+    },
+    {
+      "id": "PriceCalc",
+      "directory": "PriceCalc",
+      "useFile": "PriceCalc.use",
+      "propertiesFile": "PriceCalc.properties",
+      "section": "main",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding+validating",
+      "hasValidationTests": true,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Authored for this thesis project (msc-4, Trong-Nghia Be) specifically to give three already-implemented, previously corpus-unevidenced unc-modelvalidator constructs (binary Integer '*' in its linear shape, unary '+', class-bounds NAMED objects, and an association-bounds explicit link-tuple literal) a real, wired benchmark scenario -- each already had a passing dedicated unit fixture, but no corpus scenario exercised any of them until now.",
+      "provenanceCitation": null,
+      "features": [
+        "assoc.predefined-links",
+        "config.association-bounds",
+        "config.class-bounds",
+        "prim.integer-arithmetic"
+      ],
+      "question": "Does unitPrice*2=doubledPrice (linear Integer multiplication) combined with named class-bounds objects (Product = Set{apple,banana,cherry}) and an explicit association-bounds link-tuple literal (Stores = Set{(mainWarehouse,apple),...}) reach the correct SATISFIABLE verdict when doubledPrice's domain is exactly 2x unitPrice's own domain?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "scenarioTags": [
+        "arithmetic",
+        "predefined-population",
+        "predefined-links"
+      ]
+    },
+    {
+      "id": "PriceCalc-UNSAT",
+      "directory": "PriceCalc",
+      "useFile": "PriceCalc.use",
+      "propertiesFile": "PriceCalc.properties",
+      "section": "mismatched",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Paired UNSAT mutation of PriceCalc, authored for this thesis project (msc-4, Trong-Nghia Be) alongside it. Same .use model, same 3 named Products and 1 named Warehouse fully populated with the same explicit Stores link-tuple literal -- the ONLY change is doubledPrice's domain shifted by +1 (Set{11,21,31} instead of Set{10,20,30}), so no candidate value satisfies unitPrice*2=doubledPrice for any Product, a genuine domain contradiction rather than an empty-universe trick.",
+      "provenanceCitation": null,
+      "features": [
+        "prim.integer-arithmetic"
+      ],
+      "question": "With doubledPrice's domain shifted so NO candidate equals 2x any unitPrice candidate, does the solver correctly report UNSATISFIABLE rather than silently ignoring the multiplication constraint?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "scenarioTags": [
+        "arithmetic",
+        "predefined-population",
+        "predefined-links",
+        "paired-unsat-mutation"
       ]
     }
   ]

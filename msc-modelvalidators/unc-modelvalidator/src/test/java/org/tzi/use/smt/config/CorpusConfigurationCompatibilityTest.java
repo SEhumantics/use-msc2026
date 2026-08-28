@@ -34,9 +34,12 @@ public class CorpusConfigurationCompatibilityTest {
    * either, plus the four {@code UIntegerThreshold-*} rows that landed with the second U-type
    * family, the four {@code UBooleanThreshold-*} rows that landed with the third and the five
    * {@code UStringThreshold-*} rows that landed with the fourth -- ordinary satisfiability
-   * questions too, so they land on the query-less side as well.
+   * questions too, so they land on the query-less side as well, plus {@code PriceCalc}/{@code
+   * PriceCalc-UNSAT} (2026-08-29), authored to give binary Integer '*', unary '+', class-bounds
+   * named objects, and an association-bounds explicit link-tuple literal a real corpus scenario --
+   * also ordinary satisfiability questions, no query key.
    */
-  private static final int QUERYLESS_SCENARIOS = 52;
+  private static final int QUERYLESS_SCENARIOS = 54;
 
   /** The Milestone 4.6 scenario-profile rows, the first corpus entries to configure a query. */
   private static final int QUERY_CARRYING_SCENARIOS = 6;

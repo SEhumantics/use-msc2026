@@ -1,0 +1,27 @@
+-- Hand-built, deliberately VALID instance of PriceCalc (regular USE SOIL
+-- statements, not a Kodkod/SMT search). Three Products with correctly
+-- doubled prices and positive unit prices, one Warehouse storing all
+-- three, so both doublePriceCheck and positiveUnitPrice hold for every
+-- Product.
+
+!create apple : Product
+!set apple.name := 'Apple'
+!set apple.unitPrice := 5
+!set apple.doubledPrice := 10
+
+!create banana : Product
+!set banana.name := 'Banana'
+!set banana.unitPrice := 10
+!set banana.doubledPrice := 20
+
+!create cherry : Product
+!set cherry.name := 'Cherry'
+!set cherry.unitPrice := 15
+!set cherry.doubledPrice := 30
+
+!create mainWarehouse : Warehouse
+!set mainWarehouse.name := 'Main'
+
+!insert (mainWarehouse, apple) into Stores
+!insert (mainWarehouse, banana) into Stores
+!insert (mainWarehouse, cherry) into Stores
