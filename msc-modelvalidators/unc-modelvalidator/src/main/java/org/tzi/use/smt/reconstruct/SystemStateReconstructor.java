@@ -15,8 +15,8 @@ import org.tzi.use.smt.encode.ObjectSlots;
 import org.tzi.use.smt.encode.TranslationContext;
 import org.tzi.use.smt.solver.SmtValue;
 import org.tzi.use.uml.mm.MAssociation;
-import org.tzi.use.uml.mm.MAssociationClass;
 import org.tzi.use.uml.mm.MAssociationEnd;
+import org.tzi.use.uml.mm.MAssociationClass;
 import org.tzi.use.uml.mm.MAttribute;
 import org.tzi.use.uml.mm.MClass;
 import org.tzi.use.uml.mm.MModel;
@@ -224,6 +224,20 @@ public final class SystemStateReconstructor {
       throws UseApiException {
     for (AssociationLinks links : context.linksByAssociation().values()) {
       MAssociation association = model.getAssociation(links.associationName());
+      List<MAssociationEnd> declaredEnds = association.associationEnds();
+      if (declaredEnds.get(0).isDerived() || declaredEnds.get(1).isDerived()) {
+        // USE core's own MSystem#createLink unconditionally refuses ANY link creation for a
+        // derived-end association (confirmed exception chain, see SmtModelFinder's association-
+        // scope loop). This is not a limitation to work around: it is UNNECESSARY here in the
+        // first place. DerivedLinkControllerDerivedEnd (use-core) recomputes a derived end's
+        // content dynamically, on every navigation, by re-evaluating the association's own
+        // derive expression against whatever the CURRENT reconstructed attribute state is -- it
+        // never consults a materialized link at all. So a real MSystemState needs no link object
+        // for this association for InvariantReEvaluator's re-check (or any other navigation) to
+        // see the correct derived content; only the plain attribute reconstruction above (already
+        // unconditional) needs to be correct, which it already is.
+        continue;
+      }
       boolean reflexive = links.aEnd().className().equals(links.bEnd().className());
       // A REFLEXIVE association (both ends the same class, e.g. CivilStatus's Marriage) cannot be
       // resolved by class name -- endPosition() would find the same declared position for both

@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.tzi.use.api.UseApiException;
 import org.tzi.use.main.Session;
@@ -24,6 +25,7 @@ import org.tzi.use.smt.encode.AttributeEncoder;
 import org.tzi.use.smt.encode.AttributeType;
 import org.tzi.use.smt.encode.AttributeValues;
 import org.tzi.use.smt.encode.CompositionCycleFreenessEncoder;
+import org.tzi.use.smt.encode.DerivedAssociationEncoder;
 import org.tzi.use.smt.encode.FragmentBoundary;
 import org.tzi.use.smt.encode.FragmentChecker;
 import org.tzi.use.smt.encode.FragmentCoverageLedger;
@@ -866,12 +868,44 @@ public final class SmtModelFinder {
         // reproduce whatever the solver happened to pick, unrelated to the declared derivation
         // formula. Confirmed directly, not assumed: USE core's own MSystem#createLink
         // unconditionally refuses ANY link creation for such an association
-        // ("MSystemException: Cannot create link for association with derived end"), so an
-        // independent grid does not even fail cleanly -- it reaches SmtModelFinder.witness()
-        // successfully (translation and solving both succeed) and only then crashes
-        // ungracefully during reconstruction. Refused here instead, at the same point every
-        // other structurally-unsupported association shape is refused, with a clear, located
-        // reason rather than a confusing low-level API exception two layers downstream.
+        // ("MSystemException: Cannot create link for association with derived end") -- moot for
+        // this narrow shape, since SystemStateReconstructor now skips link creation for ANY
+        // derived association entirely rather than reaching that refusal at all (USE core's own
+        // DerivedLinkControllerDerivedEnd recomputes derived content dynamically from
+        // reconstructed attribute state on every navigation, never from a materialized link).
+        //
+        // One derivation SHAPE is not arbitrary derivation at all, though, and does not need
+        // general OCL-expression-to-constraint evaluation: T.allInstances()->any(x | predicate),
+        // the "foreign-key lookup" idiom (e.g. CompanyERSchema's own FK_* associations, all
+        // twelve of them). This is the exact same "finite disjunction over candidate slots,
+        // select the first match in stable order" shape ExpressionTranslator's own objectAnyLet
+        // already implements for `let x = T.allInstances()->any(pred) in body` -- see
+        // DerivedAssociationEncoder for why constraining (not refusing) this one narrow shape is
+        // sound. Anything outside it falls through to the refusal below unchanged.
+        int derivedIndex = ends.get(0).isDerived() ? 0 : 1;
+        int sourceIndex = 1 - derivedIndex;
+        ObjectSlots sourceSlots = slotsByClass.get(ends.get(sourceIndex).cls().name());
+        ObjectSlots derivedSlots = slotsByClass.get(ends.get(derivedIndex).cls().name());
+        if (sourceSlots != null && derivedSlots != null) {
+          TranslationContext baseContext =
+              new TranslationContext(
+                  Map.of(), attributeValuesByKey, attributeDomainByKey, slotsByClass,
+                  linksByAssociation);
+          Optional<AssociationLinks> derived =
+              DerivedAssociationEncoder.encodeAnyMatch(
+                  script,
+                  scope.associationName(),
+                  ends.get(sourceIndex),
+                  sourceSlots,
+                  ends.get(derivedIndex),
+                  derivedSlots,
+                  baseContext,
+                  TranslationMode.UNCERTAIN);
+          if (derived.isPresent()) {
+            linksByAssociation.put(scope.associationName(), derived.get());
+            continue;
+          }
+        }
         throw new SmtTranslationException(
             FragmentBoundary.TIER_3,
             "association '"
