@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.Test;
 import org.tzi.use.parser.use.USECompiler;
+import org.tzi.use.smt.config.AssociationScope;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.ClassScope;
 import org.tzi.use.smt.solver.*;
@@ -176,6 +177,92 @@ public class ForAllTranslationTest {
         Smt.eq(Smt.sym(sigValues.valueNames().get(0)), Smt.sym(sigValues.valueNames().get(1))));
     script.assertThat(translated);
 
+    assertEquals(SolverOutcome.UNSAT, solve(script).outcome());
+  }
+
+  /**
+   * {@code source.role->forAll(body)}, the shape that was refused before {@code visitForAll} was
+   * widened to reuse {@link ExpressionTranslator#populationOf populationOf} -- the real corpus
+   * motivation is Genealogy's {@code p.child->forAll(c | p.yearB+15<=c.yearB)}. Uses a dedicated,
+   * non-reflexive Department/Employee fixture rather than a self-referential one deliberately:
+   * self-referential associations are a SEPARATE, still-unsupported gap (see the master plan's own
+   * research on it), and conflating the two would leave this test unable to isolate which gap it
+   * is actually exercising.
+   */
+  @Test
+  public void forAllOverACollectionValuedNavigationOnTheRealAst() throws Exception {
+    String modelSource =
+        """
+        model DeptScope
+        class Department
+        attributes
+          budget : Integer
+        end
+        class Employee
+        attributes
+          salary : Integer
+        end
+        association Employs between
+          Department[1] role dept
+          Employee[*] role staff
+        end
+        constraints
+        context d : Department inv allStaffEarnLessThanBudget:
+          d.staff->forAll(e | e.salary < d.budget)
+        """;
+    PrintWriter err = new PrintWriter(System.err);
+    MModel model = USECompiler.compileSpecification(modelSource, "DeptScope", err, new ModelFactory());
+    err.flush();
+    MClassInvariant inv = findInvariant(model, "allStaffEarnLessThanBudget");
+
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots depts =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Department", 1, 1)))
+            .get("Department");
+    ObjectSlots employees =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Employee", 2, 2)))
+            .get("Employee");
+    AttributeDomain budgetDomain =
+        new AttributeDomain("Department", "budget", null, List.of(), null, null);
+    AttributeDomain salaryDomain = new AttributeDomain("Employee", "salary", null, List.of(), null, null);
+    AttributeValues budget =
+        AttributeEncoder.encode(script, depts, "budget", AttributeType.INTEGER, budgetDomain);
+    AttributeValues salary =
+        AttributeEncoder.encode(script, employees, "salary", AttributeType.INTEGER, salaryDomain);
+    AssociationLinks employs =
+        AssociationLinkEncoder.encode(
+            script,
+            "Employs",
+            depts,
+            new Multiplicity(1, 1),
+            employees,
+            new Multiplicity(0, -1),
+            new AssociationScope("Employs", 0, -1));
+
+    TranslationContext ctx =
+        new TranslationContext(
+            Map.of("d", new VariableBinding("Department", 0)),
+            Map.of("Department.budget", budget, "Employee.salary", salary),
+            Map.of("Department.budget", budgetDomain, "Employee.salary", salaryDomain),
+            Map.of("Department", depts, "Employee", employees),
+            Map.of("Employs", employs));
+    var translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx);
+
+    script.assertThat(Smt.sym("Department_0_exists"));
+    script.assertThat(Smt.sym("Employee_0_exists"));
+    script.assertThat(Smt.sym("Employee_1_exists"));
+    script.assertThat(Smt.sym(employs.linkNames()[0][0]));
+    script.assertThat(Smt.sym(employs.linkNames()[0][1]));
+    script.assertThat(
+        Smt.eq(Smt.sym(budget.valueNames().get(0)), Smt.intLit(java.math.BigInteger.valueOf(100))));
+    script.assertThat(
+        Smt.eq(Smt.sym(salary.valueNames().get(0)), Smt.intLit(java.math.BigInteger.valueOf(50))));
+    script.assertThat(
+        Smt.eq(Smt.sym(salary.valueNames().get(1)), Smt.intLit(java.math.BigInteger.valueOf(150))));
+    script.assertThat(translated);
+
+    // Employee_1's salary (150) exceeds the budget (100), so the invariant genuinely fails --
+    // confirms this isn't vacuously true from an empty or unlinked population.
     assertEquals(SolverOutcome.UNSAT, solve(script).outcome());
   }
 

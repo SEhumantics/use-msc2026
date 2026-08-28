@@ -1169,19 +1169,27 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         new TranslatedExpression(Smt.or(List.of(anyTrue, Smt.and(definedCandidates))), anyTrue);
   }
 
+  /**
+   * {@code X.allInstances()->forAll(body)} or {@code source.role->forAll(body)} (a single-hop,
+   * collection-valued association navigation) -- reuses {@link #populationOf} for both range
+   * shapes, the exact same population-building code {@code isUnique}/{@link #collectionSize}
+   * already trust, rather than re-deriving a second, navigation-specific loop here. Was
+   * {@code X.allInstances()}-only until this change; the real corpus motivation is Genealogy's
+   * {@code p.child->forAll(c | p.yearB+15<=c.yearB)} and {@code
+   * gp.child.child->forAll(gc|...)}-shaped invariants (the second is a two-hop navigation,
+   * still refused by {@link #populationOf}'s own "more than one hop" guard -- not attempted here).
+   */
   @Override
   public void visitForAll(ExpForAll e) {
     if (e.getVariableDeclarations().size() != 1)
       throw unsupported(FragmentBoundary.TIER_1, "forAll with more than one loop variable");
-    if (!(e.getRangeExpression() instanceof ExpAllInstances all))
-      throw unsupported(FragmentBoundary.TIER_1, "forAll over a range other than X.allInstances");
     String loopVariable = e.getVariableDeclarations().varDecl(0).name();
     List<SmtTerm> valueConjuncts = new ArrayList<>();
     List<SmtTerm> definedConjuncts = new ArrayList<>();
     List<SmtTerm> falseCandidates = new ArrayList<>();
-    for (PolymorphicRange.Slot slot : PolymorphicRange.slotsOf(all.getSourceType(), context)) {
-      TranslationContext extended = context.withBinding(loopVariable, slot.binding());
-      SmtTerm exists = Smt.sym(slot.existsName());
+    for (PopulationMember member : populationOf(e.getRangeExpression(), "forAll")) {
+      TranslationContext extended = context.withBinding(loopVariable, member.binding());
+      SmtTerm exists = member.memberGuard();
       TranslatedExpression body =
           translate(e.getQueryExpression(), extended, mode, positivePolarity, localBindings);
       valueConjuncts.add(Smt.app("=>", exists, body.value()));
