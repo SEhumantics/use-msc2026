@@ -4,6 +4,8 @@ class A
 attributes
   i : Integer
   j : Integer
+  name : String
+  otherName : String
 end
 
 class Holder
@@ -47,3 +49,7 @@ context h : Holder inv objectAnyLet:
 context h : Holder inv objectAnyLetNonStrictBody:
   let chosen : Candidate = Candidate.allInstances()->any(c | c.key = h.target) in
     chosen = oclUndefined(Candidate)
+
+context a : A inv stringLet:
+  let s : String = a.name in
+    s = a.otherName

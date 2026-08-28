@@ -103,6 +103,56 @@ public class LetTranslationTest {
         ExpressionTranslator.translate(invariant.bodyExpression(), context).toSmtLib());
   }
 
+  /**
+   * String is the fourth primitive let-bound type ({@code visitLet}'s own type gate previously
+   * accepted only Integer/Boolean/Real) -- found while auditing prim.oclundefined-literal's sibling
+   * entry {@code ocl.let}: nothing about the let mechanism itself (a native SMT-LIB {@code let} over
+   * whatever sort the bound expression already produces) is Integer/Boolean/Real-specific, and a
+   * String attribute is ALREADY encoded as an Integer domain index, so the gate was excluding a case
+   * the underlying machinery already handled correctly. Scoped narrowly: comparing the let-bound
+   * variable against a STRING LITERAL still fails closed (resolve(ExpConstString,...) only special-
+   * cases a literal against a direct ExpAttrOp receiver, not a let-bound ExpVariable) -- this closes
+   * comparison against another String-valued expression (an attribute), not the literal shape.
+   */
+  @Test
+  public void stringLetBindsAnAttributeAndComparesAgainstAnotherStringAttribute() throws Exception {
+    assertEquals(SolverOutcome.UNSAT, solveStringLet(0, 1));
+    assertEquals(SolverOutcome.SAT, solveStringLet(0, 0));
+  }
+
+  private static SolverOutcome solveStringLet(int nameIndex, int otherNameIndex) throws Exception {
+    MModel model = compileFixture();
+    MClassInvariant invariant = findInvariant(model, "stringLet");
+
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots objects =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("A", 1, 1))).get("A");
+    AttributeDomain nameDomain =
+        new AttributeDomain("A", "name", null, List.of("alice", "bob"), null, null);
+    AttributeDomain otherNameDomain =
+        new AttributeDomain("A", "otherName", null, List.of("alice", "bob"), null, null);
+    AttributeValues name =
+        AttributeEncoder.encode(script, objects, "name", AttributeType.STRING, nameDomain);
+    AttributeValues otherName =
+        AttributeEncoder.encode(script, objects, "otherName", AttributeType.STRING, otherNameDomain);
+    TranslationContext context =
+        new TranslationContext(
+            Map.of("a", new VariableBinding("A", 0)),
+            Map.of("A.name", name, "A.otherName", otherName),
+            Map.of("A.name", nameDomain, "A.otherName", otherNameDomain),
+            Map.of("A", objects),
+            Map.of());
+
+    TranslatedExpression translated =
+        ExpressionTranslator.translate(invariant.bodyExpression(), context, TranslationMode.UNCERTAIN);
+
+    script.assertThat(Smt.sym("A_0_exists"));
+    pin(script, name, 0, nameIndex);
+    pin(script, otherName, 0, otherNameIndex);
+    script.assertThat(translated.trueTerm());
+    return solve(script);
+  }
+
   @Test
   public void objectTypedLetWithANonAnyInitializerFailsClosed() throws Exception {
     assertUnsupportedBinding("objectLet", "object variable 'chosen'", "initializer is not");

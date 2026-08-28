@@ -1895,14 +1895,15 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     if (!e.getVarType().isTypeOfInteger()
         && !e.getVarType().isTypeOfBoolean()
-        && !e.getVarType().isTypeOfReal()) {
+        && !e.getVarType().isTypeOfReal()
+        && !e.getVarType().isTypeOfString()) {
       throw unsupported(
           FragmentBoundary.TIER_3,
           "let-bound variable '"
               + e.getVarname()
               + "' of type "
               + e.getVarType()
-              + ": only primitive Integer, Boolean, and Real let bindings are supported;"
+              + ": only primitive Integer, Boolean, Real, and String let bindings are supported;"
               + " object- and collection-typed bindings require a finite object/collection"
               + " representation that this translation slice does not have");
     }
