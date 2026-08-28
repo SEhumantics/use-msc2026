@@ -71,4 +71,8 @@ public final class Smt {
   public static SmtTerm ite(SmtTerm condition, SmtTerm thenTerm, SmtTerm elseTerm) {
     return app("ite", condition, thenTerm, elseTerm);
   }
+
+  public static SmtTerm let(List<SmtTerm.Binding> bindings, SmtTerm body) {
+    return new SmtTerm.Let(bindings, body);
+  }
 }

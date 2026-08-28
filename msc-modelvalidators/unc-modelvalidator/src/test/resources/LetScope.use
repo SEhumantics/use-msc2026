@@ -12,3 +12,18 @@ context a : A inv primitiveLet:
   let threshold : Integer = a.i + 1 in
     threshold > a.j
 
+context a : A inv undefinedLet:
+  let threshold : Integer = oclUndefined(Integer) in
+    threshold > 0
+
+context a : A inv equalityLet:
+  let copy : Integer = a.i in
+    copy = a.j
+
+context a : A inv objectLet:
+  let chosen : A = A.allInstances()->any(x | x.i = a.i) in
+    chosen.i > 0
+
+context a : A inv collectionLet:
+  let chosen : Set(A) = A.allInstances() in
+    chosen->isEmpty()

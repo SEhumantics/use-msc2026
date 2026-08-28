@@ -3,7 +3,9 @@ package org.tzi.use.smt.encode;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.TranslationMode;
 import org.tzi.use.smt.solver.Smt;
@@ -18,13 +20,18 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   private final TranslationContext context;
   private final TranslationMode mode;
   private final boolean positivePolarity;
+  private final Map<String, LocalBinding> localBindings;
   private TranslatedExpression result;
 
   private ExpressionTranslator(
-      TranslationContext c, TranslationMode mode, boolean positivePolarity) {
+      TranslationContext c,
+      TranslationMode mode,
+      boolean positivePolarity,
+      Map<String, LocalBinding> localBindings) {
     context = c;
     this.mode = mode;
     this.positivePolarity = positivePolarity;
+    this.localBindings = localBindings;
   }
 
   public static SmtTerm translate(Expression e, TranslationContext c) {
@@ -38,7 +45,16 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
   private static TranslatedExpression translate(
       Expression e, TranslationContext c, TranslationMode mode, boolean positivePolarity) {
-    ExpressionTranslator t = new ExpressionTranslator(c, mode, positivePolarity);
+    return translate(e, c, mode, positivePolarity, Map.of());
+  }
+
+  private static TranslatedExpression translate(
+      Expression e,
+      TranslationContext c,
+      TranslationMode mode,
+      boolean positivePolarity,
+      Map<String, LocalBinding> localBindings) {
+    ExpressionTranslator t = new ExpressionTranslator(c, mode, positivePolarity, localBindings);
     e.processWithVisitor(t);
     return t.result;
   }
@@ -79,6 +95,12 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
   @Override
   public void visitVariable(ExpVariable e) {
+    LocalBinding local = localBindings.get(e.getVarname());
+    if (local != null) {
+      result =
+          new TranslatedExpression(Smt.sym(local.definedSymbol()), Smt.sym(local.valueSymbol()));
+      return;
+    }
     throw unsupported(
         FragmentBoundary.TIER_1,
         "bare variable reference '" + e.getVarname() + "' outside an attribute access");
@@ -692,7 +714,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       }
       return defined(Smt.not(definednessOf(l instanceof ExpUndefined ? r : l)));
     }
-    if (l instanceof ExpVariable lv && r instanceof ExpVariable rv)
+    if (l instanceof ExpVariable lv
+        && r instanceof ExpVariable rv
+        && !localBindings.containsKey(lv.getVarname())
+        && !localBindings.containsKey(rv.getVarname()))
       return defined(
           Smt.bool(context.binding(lv.getVarname()).equals(context.binding(rv.getVarname()))));
     if (l instanceof ExpConstString s) {
@@ -828,7 +853,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   }
 
   private TranslatedExpression argResult(Expression e, boolean polarity) {
-    return translate(e, context, mode, polarity);
+    return translate(e, context, mode, polarity, localBindings);
   }
 
   private static String variableNameOf(Expression e) {
@@ -957,7 +982,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
                 .withBinding(var2, new VariableBinding(destClass, j));
         SmtTerm member = Smt.and(List.of(link1, link2));
         TranslatedExpression body =
-            translate(e.getQueryExpression(), extended, mode, positivePolarity);
+            translate(e.getQueryExpression(), extended, mode, positivePolarity, localBindings);
         trueCandidates.add(Smt.and(List.of(member, body.defined(), body.value())));
         definedCandidates.add(Smt.app("=>", member, body.defined()));
       }
@@ -981,7 +1006,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       TranslationContext extended = context.withBinding(loopVariable, slot.binding());
       SmtTerm exists = Smt.sym(slot.existsName());
       TranslatedExpression body =
-          translate(e.getQueryExpression(), extended, mode, positivePolarity);
+          translate(e.getQueryExpression(), extended, mode, positivePolarity, localBindings);
       valueConjuncts.add(Smt.app("=>", exists, body.value()));
       definedConjuncts.add(Smt.app("=>", exists, body.defined()));
       falseCandidates.add(Smt.and(List.of(exists, body.defined(), Smt.not(body.value()))));
@@ -1113,7 +1138,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     List<TranslatedExpression> bodies = new ArrayList<>(population.size());
     for (PopulationMember member : population) {
       TranslationContext extended = context.withBinding(loopVariable, member.binding());
-      bodies.add(translate(body, extended, mode, positivePolarity));
+      bodies.add(translate(body, extended, mode, positivePolarity, localBindings));
     }
     List<SmtTerm> distinctPairs = new ArrayList<>();
     for (int i = 0; i < population.size(); i++) {
@@ -1189,10 +1214,53 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     throw unsupported(FragmentBoundary.TIER_3, "iterate");
   }
 
+  /**
+   * Translates a scalar {@code let} as two simultaneous native SMT-LIB bindings: one for the
+   * bound expression's value and one for its explicit definedness. USE's {@link ExpLet#eval}
+   * evaluates the variable expression, pushes that value even when it is undefined, and then
+   * evaluates the body; carrying both terms into the local environment preserves exactly that
+   * behavior instead of incorrectly short-circuiting an undefined bound expression.
+   *
+   * <p>The representation is deliberately limited to primitive sorts already represented by a
+   * standalone {@link SmtTerm}. Objects in this encoder are Java-side {@link VariableBinding}s and
+   * collections are finite guarded populations, neither a first-class SMT value, so accepting
+   * either here would require inventing a representation. Those shapes fail before their bound or
+   * body expression is visited, with a message that identifies the let variable and its type.
+   */
   @Override
   public void visitLet(ExpLet e) {
-    throw unsupported(FragmentBoundary.TIER_3, "let");
+    if (!e.getVarType().isTypeOfInteger()
+        && !e.getVarType().isTypeOfBoolean()
+        && !e.getVarType().isTypeOfReal()) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "let-bound variable '"
+              + e.getVarname()
+              + "' of type "
+              + e.getVarType()
+              + ": only primitive Integer, Boolean, and Real let bindings are supported;"
+              + " object- and collection-typed bindings require a finite object/collection"
+              + " representation that this translation slice does not have");
+    }
+
+    TranslatedExpression bound = argResult(e.getVarExpression());
+    String symbolStem = "|ocl-let-" + e.getVarname();
+    LocalBinding binding =
+        new LocalBinding(symbolStem + "-defined|", symbolStem + "-value|");
+    Map<String, LocalBinding> extended = new LinkedHashMap<>(localBindings);
+    extended.put(e.getVarname(), binding);
+    TranslatedExpression body =
+        translate(e.getInExpression(), context, mode, positivePolarity, Map.copyOf(extended));
+    List<SmtTerm.Binding> bindings =
+        List.of(
+            new SmtTerm.Binding(binding.definedSymbol(), bound.defined()),
+            new SmtTerm.Binding(binding.valueSymbol(), bound.value()));
+    result =
+        new TranslatedExpression(
+            Smt.let(bindings, body.defined()), Smt.let(bindings, body.value()));
   }
+
+  private record LocalBinding(String definedSymbol, String valueSymbol) {}
 
   @Override
   public void visitNavigation(ExpNavigation e) {
