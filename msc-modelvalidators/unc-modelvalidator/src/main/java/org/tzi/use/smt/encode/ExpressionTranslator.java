@@ -336,6 +336,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           case "implies" ->
               booleanOr(
                   negate(argResult(a[0], !positivePolarity)), argResult(a[1], positivePolarity));
+          case "xor" -> booleanXor(argResult(a[0]), argResult(a[1]));
           case "=" -> comparison(a[0], a[1]);
           case "<>" -> negate(comparison(a[0], a[1]));
           case ">=", "<=", ">", "<" -> orderedComparison(e.opname(), a[0], a[1]);
@@ -379,6 +380,21 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
   private static TranslatedExpression negate(TranslatedExpression expression) {
     return new TranslatedExpression(expression.defined(), Smt.not(expression.value()));
+  }
+
+  /**
+   * Unlike {@link #booleanAnd}/{@link #booleanOr}, {@code xor} has no ABSORBING value under Kleene
+   * three-valued logic -- {@code xor(true, x)} is {@code not(x)}, so it genuinely depends on {@code
+   * x} regardless of whether {@code x} turns out true or false, and the same holds symmetrically for
+   * {@code xor(false, x)}. Neither operand being definitely true or definitely false can settle the
+   * result the way it does for {@code and}/{@code or}, so definedness is the plain conjunctive rule
+   * {@link #orderedComparison} already uses: defined exactly when BOTH operands are.
+   */
+  private static TranslatedExpression booleanXor(
+      TranslatedExpression left, TranslatedExpression right) {
+    return new TranslatedExpression(
+        Smt.and(List.of(left.defined(), right.defined())),
+        Smt.app("xor", left.value(), right.value()));
   }
 
   private TranslatedExpression orderedComparison(
