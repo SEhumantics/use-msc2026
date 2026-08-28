@@ -6,6 +6,18 @@ attributes
   j : Integer
 end
 
+class Holder
+attributes
+  target : Integer
+  limit : Integer
+end
+
+class Candidate
+attributes
+  key : Integer
+  value : Integer
+end
+
 constraints
 
 context a : A inv primitiveLet:
@@ -27,3 +39,7 @@ context a : A inv objectLet:
 context a : A inv collectionLet:
   let chosen : Set(A) = A.allInstances() in
     chosen->isEmpty()
+
+context h : Holder inv objectAnyLet:
+  let chosen : Candidate = Candidate.allInstances()->any(c | c.key = h.target) in
+    chosen.value > h.limit

@@ -5,8 +5,10 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.Test;
@@ -14,8 +16,12 @@ import org.tzi.use.parser.use.USECompiler;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.ClassScope;
 import org.tzi.use.smt.config.TranslationMode;
+import org.tzi.use.smt.solver.Smt;
 import org.tzi.use.smt.solver.SmtScript;
 import org.tzi.use.smt.solver.SmtTerm;
+import org.tzi.use.smt.solver.SolverBinary;
+import org.tzi.use.smt.solver.SolverOutcome;
+import org.tzi.use.smt.solver.SolverProcess;
 import org.tzi.use.uml.mm.MClassInvariant;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
@@ -104,6 +110,65 @@ public class LetTranslationTest {
   @Test
   public void collectionTypedLetFailsClosedBeforeItsUnsupportedBody() throws Exception {
     assertUnsupportedBinding("collectionLet", "Set(A)", "object- and collection-typed");
+  }
+
+  @Test
+  public void objectAnyLetSelectsTheMatchingFiniteSlot() throws Exception {
+    MClassInvariant invariant = findInvariant(compileFixture(), "objectAnyLet");
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots holders =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Holder", 1, 1))).get("Holder");
+    ObjectSlots candidates =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Candidate", 2, 2)))
+            .get("Candidate");
+    AttributeDomain targetDomain =
+        new AttributeDomain("Holder", "target", null, List.of(), null, null);
+    AttributeDomain limitDomain =
+        new AttributeDomain("Holder", "limit", null, List.of(), null, null);
+    AttributeDomain keyDomain =
+        new AttributeDomain("Candidate", "key", null, List.of(), null, null);
+    AttributeDomain valueDomain =
+        new AttributeDomain("Candidate", "value", null, List.of(), null, null);
+    AttributeValues target =
+        AttributeEncoder.encode(
+            script, holders, "target", AttributeType.INTEGER, targetDomain);
+    AttributeValues limit =
+        AttributeEncoder.encode(script, holders, "limit", AttributeType.INTEGER, limitDomain);
+    AttributeValues key =
+        AttributeEncoder.encode(script, candidates, "key", AttributeType.INTEGER, keyDomain);
+    AttributeValues value =
+        AttributeEncoder.encode(script, candidates, "value", AttributeType.INTEGER, valueDomain);
+    TranslationContext context =
+        new TranslationContext(
+            Map.of("h", new VariableBinding("Holder", 0)),
+            Map.of(
+                "Holder.target", target,
+                "Holder.limit", limit,
+                "Candidate.key", key,
+                "Candidate.value", value),
+            Map.of(
+                "Holder.target", targetDomain,
+                "Holder.limit", limitDomain,
+                "Candidate.key", keyDomain,
+                "Candidate.value", valueDomain),
+            Map.of("Holder", holders, "Candidate", candidates),
+            Map.of());
+
+    script.assertThat(
+        Smt.eq(Smt.sym(target.valueNames().get(0)), Smt.intLit(BigInteger.ONE)));
+    script.assertThat(Smt.eq(Smt.sym(limit.valueNames().get(0)), Smt.intLit(BigInteger.TEN)));
+    script.assertThat(Smt.eq(Smt.sym(key.valueNames().get(0)), Smt.intLit(BigInteger.ZERO)));
+    script.assertThat(Smt.eq(Smt.sym(value.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(99))));
+    script.assertThat(Smt.eq(Smt.sym(key.valueNames().get(1)), Smt.intLit(BigInteger.ONE)));
+    script.assertThat(
+        Smt.eq(Smt.sym(value.valueNames().get(1)), Smt.intLit(BigInteger.valueOf(11))));
+    script.assertThat(ExpressionTranslator.translate(invariant.bodyExpression(), context));
+
+    assertEquals(
+        SolverOutcome.SAT,
+        new SolverProcess(SolverBinary.resolve(), Duration.ofSeconds(30))
+            .run(script.toSmtLib())
+            .outcome());
   }
 
   private static void assertUnsupportedBinding(String invariantName, String type, String scope)
