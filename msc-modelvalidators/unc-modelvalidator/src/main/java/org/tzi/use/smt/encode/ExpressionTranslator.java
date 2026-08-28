@@ -10,6 +10,7 @@ import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.TranslationMode;
 import org.tzi.use.smt.solver.Smt;
 import org.tzi.use.smt.solver.SmtTerm;
+import org.tzi.use.uml.mm.MAssociationClass;
 import org.tzi.use.uml.mm.MAttribute;
 import org.tzi.use.uml.mm.MNavigableElement;
 import org.tzi.use.uml.ocl.expr.*;
@@ -166,18 +167,77 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           "attribute access after more than one navigation hop is not yet supported");
     }
     String destClass = destination.cls().name();
-    AssociationLinks links = context.linksFor(destination.association().name());
     ObjectSlots destSlots = context.slotsFor(destClass);
     VariableBinding source = context.binding(sourceVar.getVarname());
     AttributeValues v = context.attributeValues(destClass, attribute.name());
     guardAgainstUncertainAttribute(v);
 
+    if (destination.association() instanceof MAssociationClass) {
+      return associationClassNavigatedAttribute(source, destination, destSlots, v);
+    }
+
+    AssociationLinks links = context.linksFor(destination.association().name());
     List<SmtTerm> targets = new ArrayList<>();
     for (int k = 0; k < destSlots.capacity(); k++) {
       targets.add(linkTerm(links, destination, source, k));
     }
     return new TranslatedExpression(
         Smt.or(targets), selectLinkedValue(links, destination, source, destSlots, v));
+  }
+
+  /**
+   * {@code e.employer.budget}-shaped: {@code e} is bound to an ASSOCIATION CLASS instance, not to
+   * either end's class, so there is no {@link AssociationLinks} grid to consult at all -- the
+   * source's own link identity IS its index-pointer attribute ({@link
+   * AssociationClassPointerEncoder}), looked up the same way any other attribute is (zero special
+   * {@link TranslationContext} plumbing). Unconditionally DEFINED: an association-class instance's
+   * two ends are always bound BY CONSTRUCTION the moment the instance itself exists (confirmed
+   * directly against {@code ExpNavigationClassifierSource#eval}, use-core -- "a link is always
+   * connected to objects, i.e. obj cannot be null" -- and enforced on the encoding side by {@link
+   * AssociationClassPointerEncoder}'s own existing-target guard), matching {@link #visitAttrOp}'s
+   * own unconditional-defined convention for a direct attribute access exactly -- the OUTER
+   * exists-guard {@code InvariantAssembler} already wraps every translated invariant with is what
+   * handles "what if {@code e} itself does not exist", not this expression's own concern.
+   */
+  private TranslatedExpression associationClassNavigatedAttribute(
+      VariableBinding source, MNavigableElement destination, ObjectSlots destSlots,
+      AttributeValues v) {
+    AttributeValues pointer = associationClassPointer(source.className(), destination);
+    int capacity = destSlots.capacity();
+    if (capacity == 0) {
+      return defined(placeholderOfSort(v.type()));
+    }
+    SmtTerm value = Smt.sym(v.valueNames().get(capacity - 1));
+    for (int k = capacity - 2; k >= 0; k--) {
+      SmtTerm pointsHere =
+          Smt.eq(Smt.sym(pointer.valueNames().get(source.slotIndex())), Smt.intLit(BigInteger.valueOf(k)));
+      value = Smt.ite(pointsHere, Smt.sym(v.valueNames().get(k)), value);
+    }
+    return defined(value);
+  }
+
+  /**
+   * Resolves which of the association class's two synthetic pointer attributes {@code end}
+   * corresponds to, by declared end position -- the same reflexive-safe convention {@link
+   * #linkTerm} already uses (compare against {@code associationEnds().get(0)} rather than class
+   * name, so this stays correct even for a hypothetical reflexive association class, though the
+   * real corpus does not have one).
+   *
+   * <p>{@code associationClassName} is taken explicitly rather than derived from a binding's own
+   * {@code className()}: the two call sites disagree on whose binding is in scope. {@link
+   * #associationClassNavigatedAttribute} is reached from the classifier's OWN instance ({@code
+   * e.employer}, {@code source} bound to Employment), where {@code source.className()} happens to
+   * equal the association class's name -- but {@link #associationClassEndNavigationDefined} is
+   * reached from the OPPOSITE end's instance ({@code p.employer}, {@code source} bound to Person),
+   * where it does not.
+   */
+  private AttributeValues associationClassPointer(String associationClassName, MNavigableElement end) {
+    boolean isEnd0 = end.equals(end.association().associationEnds().get(0));
+    String attributeName =
+        isEnd0
+            ? AssociationClassPointerEncoder.END0_POINTER_ATTRIBUTE
+            : AssociationClassPointerEncoder.END1_POINTER_ATTRIBUTE;
+    return context.attributeValues(associationClassName, attributeName);
   }
 
   /**
@@ -970,19 +1030,63 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (e instanceof ExpNavigation navigation && !navigation.getDestination().isCollection()) {
       return singleValuedNavigationDefined(navigation);
     }
+    if (e instanceof ExpNavigationClassifierSource) {
+      // An association-class instance's two ends are always bound the moment the instance
+      // itself exists -- see associationClassNavigatedAttribute's own javadoc for the confirmed
+      // use-core semantics this mirrors. No link search needed at all, unlike the ExpNavigation
+      // branch above.
+      return Smt.bool(true);
+    }
     return argResult(e).defined();
   }
 
   /** True exactly when the source slot links to some target slot of the navigated association. */
   private SmtTerm singleValuedNavigationDefined(ExpNavigation navigation) {
-    AssociationLinks links = context.linksFor(navigation.getDestination().association().name());
-    ObjectSlots destinationSlots = context.slotsFor(navigation.getDestination().cls().name());
+    MNavigableElement destination = navigation.getDestination();
     VariableBinding source = context.binding(variableNameOf(navigation.getObjectExpression()));
+    if (destination.association() instanceof MAssociationClass associationClass) {
+      return associationClassEndNavigationDefined(associationClass, destination, source);
+    }
+    AssociationLinks links = context.linksFor(destination.association().name());
+    ObjectSlots destinationSlots = context.slotsFor(destination.cls().name());
     List<SmtTerm> targets = new ArrayList<>();
     for (int k = 0; k < destinationSlots.capacity(); k++) {
-      targets.add(linkTerm(links, navigation.getDestination(), source, k));
+      targets.add(linkTerm(links, destination, source, k));
     }
     return Smt.or(targets);
+  }
+
+  /**
+   * {@code p.employer}-shaped: navigating from an ORDINARY end (Person) toward the association
+   * class's OTHER end (Company), through the classifier itself. There is no {@link AssociationLinks}
+   * grid to consult here either -- same reason as {@link #associationClassNavigatedAttribute} --
+   * so existence is resolved the mirror way: does some EXISTING association-class slot have its
+   * OWN pointer for the end {@code source} sits at (the end OPPOSITE {@code destination}) equal to
+   * {@code source}'s own slot index. Multiplicity on that end (enforced by {@link
+   * AssociationClassPointerEncoder}'s degree constraint) already guarantees at most one such slot;
+   * this only needs to find it, matching {@link #navigationEquals}'s own "find, don't enforce
+   * uniqueness" convention for the ordinary link-grid case.
+   */
+  private SmtTerm associationClassEndNavigationDefined(
+      MAssociationClass associationClass, MNavigableElement destination, VariableBinding source) {
+    MNavigableElement sourceEnd = oppositeEnd(destination);
+    ObjectSlots associationClassSlots = context.slotsFor(associationClass.name());
+    AttributeValues pointer = associationClassPointer(associationClass.name(), sourceEnd);
+    List<SmtTerm> matches = new ArrayList<>();
+    for (int k = 0; k < associationClassSlots.capacity(); k++) {
+      SmtTerm exists = Smt.sym(associationClassSlots.existsNames().get(k));
+      SmtTerm pointsToSource =
+          Smt.eq(
+              Smt.sym(pointer.valueNames().get(k)),
+              Smt.intLit(BigInteger.valueOf(source.slotIndex())));
+      matches.add(Smt.and(List.of(exists, pointsToSource)));
+    }
+    return Smt.or(matches);
+  }
+
+  private static MNavigableElement oppositeEnd(MNavigableElement end) {
+    List<? extends MNavigableElement> ends = end.association().associationEnds();
+    return end.equals(ends.get(0)) ? ends.get(1) : ends.get(0);
   }
 
   /**
@@ -1516,17 +1620,26 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * branch is a supported {@code size()} source, checked HERE before {@link #populationOf} is even
    * consulted. {@code X.allInstances()->size()} is a different shape, not evidenced by the real
    * corpus and out of this slice's scope, so it is refused with a {@code size()}-specific message
-   * rather than silently falling into {@link #populationOf}'s allInstances branch. The same refusal
-   * covers a single-valued 0..1 navigation coerced to a set via OCL's own {@code ->op} "uniform
-   * syntax" rule ({@link ExpObjAsSet}, not an {@link ExpNavigation} either -- e.g. {@code
-   * AssociationClass}'s {@code p.employer->size()}, {@code employer} being a 0..1 end), {@code
-   * size()} on a String -- which never reaches this method with an {@link ExpNavigation} receiver
-   * at all, since a String operand is never navigation-shaped -- and a filtered/derived collection
-   * whose OWN source is not {@code X.allInstances()} (e.g. {@code self.assoc->select(...)->size()});
-   * only {@code X.allInstances()->select(...)->size()} is the supported {@link ExpSelect} shape
-   * (see {@link #selectedAllInstancesPopulation}), checked as part of this method's own branch
-   * condition so every other {@link ExpSelect} source falls through to this shared message instead
-   * of a select-specific one.
+   * rather than silently falling into {@link #populationOf}'s allInstances branch.
+   *
+   * <p>A single-valued 0..1 navigation coerced to a set via OCL's own {@code ->op} "uniform syntax"
+   * rule ({@link ExpObjAsSet}, not an {@link ExpNavigation} either) IS supported for the ONE shape
+   * evidenced by the real corpus -- {@code AssociationClass}'s {@code p.employer->size()}, {@code
+   * employer} being a 0..1 end reached THROUGH the association class -- as a 0-or-1 indicator over
+   * {@link #definednessOf} rather than a genuine population sum: there is at most one linked slot
+   * by construction (the end's own declared multiplicity), so "how many" and "is there one at all"
+   * coincide. Deliberately NOT generalized to an ORDINARY (non-association-class) single-valued
+   * navigation coerced the same way -- nothing about the underlying {@link #definednessOf}/{@link
+   * #singleValuedNavigationDefined} machinery would need to change to support it too, but it was
+   * never evidenced by the real corpus and stays refused, matching the dedicated regression test
+   * that locks this in. {@code size()} on a String
+   * never reaches this method with an {@link ExpNavigation} receiver at all, since a String operand
+   * is never navigation-shaped, and a filtered/derived collection whose OWN source is not {@code
+   * X.allInstances()} (e.g. {@code self.assoc->select(...)->size()}) remains refused; only {@code
+   * X.allInstances()->select(...)->size()} is the supported {@link ExpSelect} shape (see {@link
+   * #selectedAllInstancesPopulation}), checked as part of this method's own branch condition so
+   * every other {@link ExpSelect} source falls through to the shared message below instead of a
+   * select-specific one.
    */
   private TranslatedExpression collectionSize(Expression receiver) {
     if (receiver instanceof ExpNavigation navigation
@@ -1536,6 +1649,20 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (receiver instanceof ExpSelect select
         && select.getRangeExpression() instanceof ExpAllInstances) {
       return defined(sizeTerm(selectedAllInstancesPopulation(select)));
+    }
+    if (receiver instanceof ExpObjAsSet objAsSet
+        && objAsSet.getObjectExpression() instanceof ExpNavigation navigation
+        && !navigation.getDestination().isCollection()
+        && navigation.getDestination().association() instanceof MAssociationClass) {
+      // Scoped to the association-class case specifically (AtMostOneEmployer's own shape) --
+      // NOT generalized to an ORDINARY single-valued 0..1 navigation coerced to a set, which
+      // SizeTranslationTest#singleValuedNavigationCoercedToASetIsNotConfusedAndFailsClosed
+      // deliberately locks in as still refused (that shape was never in this slice's scope, and
+      // widening it here would be an untested, unrequested expansion of what Appendix M asked
+      // for).
+      return defined(
+          Smt.ite(
+              definednessOf(navigation), Smt.intLit(BigInteger.ONE), Smt.intLit(BigInteger.ZERO)));
     }
     throw unsupported(
         FragmentBoundary.TIER_3,

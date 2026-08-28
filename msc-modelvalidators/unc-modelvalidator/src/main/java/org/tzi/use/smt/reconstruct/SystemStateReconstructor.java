@@ -7,6 +7,7 @@ import org.tzi.use.api.UseApiException;
 import org.tzi.use.api.UseSystemApi;
 import org.tzi.use.main.Session;
 import org.tzi.use.smt.config.AttributeDomain;
+import org.tzi.use.smt.encode.AssociationClassPointerEncoder;
 import org.tzi.use.smt.encode.AssociationLinks;
 import org.tzi.use.smt.encode.AttributeType;
 import org.tzi.use.smt.encode.AttributeValues;
@@ -14,10 +15,12 @@ import org.tzi.use.smt.encode.ObjectSlots;
 import org.tzi.use.smt.encode.TranslationContext;
 import org.tzi.use.smt.solver.SmtValue;
 import org.tzi.use.uml.mm.MAssociation;
+import org.tzi.use.uml.mm.MAssociationClass;
 import org.tzi.use.uml.mm.MAssociationEnd;
 import org.tzi.use.uml.mm.MAttribute;
 import org.tzi.use.uml.mm.MClass;
 import org.tzi.use.uml.mm.MModel;
+import org.tzi.use.uml.sys.MLinkObject;
 import org.tzi.use.uml.sys.MObject;
 import org.tzi.use.uml.sys.MSystem;
 
@@ -61,6 +64,7 @@ public final class SystemStateReconstructor {
 
     Map<String, MObject> objectsBySlot = new LinkedHashMap<>();
     createObjects(api, model, context, modelValues, objectsBySlot);
+    createAssociationClassObjects(api, model, context, modelValues, objectsBySlot);
     assignAttributes(api, model, context, modelValues, objectsBySlot);
     createLinks(api, model, context, modelValues, objectsBySlot);
     return session.system();
@@ -77,6 +81,12 @@ public final class SystemStateReconstructor {
       String className = entry.getKey();
       ObjectSlots slots = entry.getValue();
       MClass cls = model.getClass(className);
+      if (cls instanceof MAssociationClass) {
+        // An association class's own instances go through createAssociationClassObjects
+        // instead, after every ordinary class's objects (including its own two ends) already
+        // exist -- see that method's own javadoc for why createObjectEx cannot be used here.
+        continue;
+      }
       for (int i = 0; i < slots.capacity(); i++) {
         if (isTrue(modelValues, slots.existsNames().get(i))) {
           // The slot's own name: the configured identity when the class predefined one, and
@@ -91,6 +101,73 @@ public final class SystemStateReconstructor {
     }
   }
 
+  /**
+   * An association class's own instances cannot go through {@link #createObjects}'s ordinary
+   * {@code createObjectEx} path -- USE's own SOIL evaluator refuses a bare {@code create} for a
+   * link-object class ("Creation of a linkobject is not allowed with the command create. Use
+   * 'create ... between ...' or 'insert' instead.", confirmed directly against the real
+   * exception). {@link UseSystemApi#createLinkObjectEx} is the supported alternative, needing the
+   * two connected end objects UP FRONT -- resolved here by decoding each existing slot's two
+   * synthetic index-pointer attributes ({@link AssociationClassPointerEncoder}) back into the
+   * ALREADY-CREATED end objects, which is why this runs after {@link #createObjects} (so both
+   * ends exist) but before {@link #assignAttributes} (so the returned {@link MLinkObject} --
+   * itself an {@link MObject} -- is present in {@code objectsBySlot} for the association class's
+   * OWN attributes, e.g. {@code salary}/{@code startDate}, to be assigned onto next).
+   *
+   * <p>{@link AssociationClassPointerEncoder}'s own {@code requirePointsToAnExistingObject}
+   * constraint guarantees every existing association-class slot's two pointers resolve to an
+   * existing end-object slot, so {@code objectsBySlot.get(...)} below is never null for a
+   * satisfiable model.
+   */
+  private static void createAssociationClassObjects(
+      UseSystemApi api,
+      MModel model,
+      TranslationContext context,
+      Map<String, SmtValue> modelValues,
+      Map<String, MObject> objectsBySlot)
+      throws UseApiException {
+    for (Map.Entry<String, ObjectSlots> entry : context.slotsByClass().entrySet()) {
+      String className = entry.getKey();
+      if (!(model.getClass(className) instanceof MAssociationClass associationClass)) {
+        continue;
+      }
+      ObjectSlots slots = entry.getValue();
+      List<MAssociationEnd> ends = associationClass.associationEnds();
+      AttributeValues end0Pointer =
+          context.attributeValues(
+              className, AssociationClassPointerEncoder.END0_POINTER_ATTRIBUTE);
+      AttributeValues end1Pointer =
+          context.attributeValues(
+              className, AssociationClassPointerEncoder.END1_POINTER_ATTRIBUTE);
+      for (int i = 0; i < slots.capacity(); i++) {
+        if (!isTrue(modelValues, slots.existsNames().get(i))) {
+          continue;
+        }
+        MObject[] connectedObjects = new MObject[2];
+        connectedObjects[0] =
+            objectsBySlot.get(
+                slotKey(
+                    ends.get(0).cls().name(),
+                    decodeIndex(modelValues, end0Pointer.valueNames().get(i))));
+        connectedObjects[1] =
+            objectsBySlot.get(
+                slotKey(
+                    ends.get(1).cls().name(),
+                    decodeIndex(modelValues, end1Pointer.valueNames().get(i))));
+        MLinkObject linkObject =
+            api.createLinkObjectEx(associationClass, slots.objectNames().get(i), connectedObjects);
+        objectsBySlot.put(slotKey(className, i), linkObject);
+      }
+    }
+  }
+
+  private static int decodeIndex(Map<String, SmtValue> modelValues, String symbol) {
+    if (!(modelValues.get(symbol) instanceof SmtValue.Int value)) {
+      throw new IllegalStateException("expected an Int model value for " + symbol);
+    }
+    return value.value().intValueExact();
+  }
+
   private static void assignAttributes(
       UseSystemApi api,
       MModel model,
@@ -99,6 +176,12 @@ public final class SystemStateReconstructor {
       Map<String, MObject> objectsBySlot)
       throws UseApiException {
     for (AttributeValues values : context.attributes().values()) {
+      if (AssociationClassPointerEncoder.END0_POINTER_ATTRIBUTE.equals(values.attributeName())
+          || AssociationClassPointerEncoder.END1_POINTER_ATTRIBUTE.equals(values.attributeName())) {
+        // Synthetic index-pointer bookkeeping, not a real USE attribute -- already consumed by
+        // createAssociationClassObjects to resolve the link, never assigned via setAttributeValueEx.
+        continue;
+      }
       String className = values.className();
       MClass cls = model.getClass(className);
       MAttribute attribute = cls.attribute(values.attributeName(), true);

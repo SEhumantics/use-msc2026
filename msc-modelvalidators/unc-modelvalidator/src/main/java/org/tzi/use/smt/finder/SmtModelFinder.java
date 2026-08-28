@@ -17,6 +17,7 @@ import org.tzi.use.smt.config.QueryRequirements;
 import org.tzi.use.smt.config.Scenario;
 import org.tzi.use.smt.config.ScenarioProfile;
 import org.tzi.use.smt.config.TranslationMode;
+import org.tzi.use.smt.encode.AssociationClassPointerEncoder;
 import org.tzi.use.smt.encode.AssociationLinkEncoder;
 import org.tzi.use.smt.encode.AssociationLinks;
 import org.tzi.use.smt.encode.AttributeEncoder;
@@ -46,6 +47,7 @@ import org.tzi.use.smt.verify.InvariantReEvaluator;
 import org.tzi.use.smt.verify.InvariantVerdict;
 import org.tzi.use.smt.verify.QueryWitnessChecker;
 import org.tzi.use.uml.mm.MAssociation;
+import org.tzi.use.uml.mm.MAssociationClass;
 import org.tzi.use.uml.mm.MAssociationEnd;
 import org.tzi.use.uml.mm.MAttribute;
 import org.tzi.use.uml.mm.MClass;
@@ -831,6 +833,17 @@ public final class SmtModelFinder {
     Map<String, AssociationLinks> linksByAssociation = new LinkedHashMap<>();
     for (AssociationScope scope : config.associationScopes()) {
       MAssociation association = model.getAssociation(scope.associationName());
+      if (association instanceof MAssociationClass associationClass) {
+        registerAssociationClassPointers(
+            script,
+            model,
+            associationClass,
+            scope,
+            slotsByClass,
+            attributeValuesByKey,
+            attributeDomainByKey);
+        continue;
+      }
       List<MAssociationEnd> ends = association.associationEnds();
       if (ends.size() != 2) {
         throw new IllegalArgumentException(
@@ -1084,6 +1097,63 @@ public final class SmtModelFinder {
         attributeDomainByKey.put(key, domain);
       }
     }
+  }
+
+  /**
+   * Registers one ASSOCIATION CLASS's index-pointer representation ({@link
+   * AssociationClassPointerEncoder}) instead of the ordinary boolean link grid {@link
+   * AssociationLinkEncoder} builds for a plain association -- an association-class instance has
+   * its own identity distinct from either end's class (confirmed directly: {@code
+   * MAssociationClass extends MClass, MAssociation, MNavigableElement}, and {@code
+   * model.classes()}/{@code model.associations()} both already list it, so its OWN attributes
+   * (declared like any other class's) are registered by the ORDINARY per-attribute loop above this
+   * method's caller -- this method only adds the two synthetic pointer attributes and their degree
+   * constraints, keyed the same way so {@link ExpressionTranslator} can look them up through the
+   * SAME {@code context.attributeValues(...)} path as any other attribute, with zero change to
+   * {@link TranslationContext}'s own shape).
+   */
+  private static void registerAssociationClassPointers(
+      SmtScript script,
+      MModel model,
+      MAssociationClass associationClass,
+      AssociationScope scope,
+      Map<String, ObjectSlots> slotsByClass,
+      Map<String, AttributeValues> attributeValuesByKey,
+      Map<String, AttributeDomain> attributeDomainByKey) {
+    List<MAssociationEnd> ends = associationClass.associationEnds();
+    if (ends.size() != 2) {
+      throw new IllegalArgumentException(
+          "association class '"
+              + scope.associationName()
+              + "' does not have exactly two ends; not yet supported");
+    }
+    ObjectSlots associationClassSlots = slotsByClass.get(associationClass.name());
+    ObjectSlots end0Slots = slotsByClass.get(ends.get(0).cls().name());
+    ObjectSlots end1Slots = slotsByClass.get(ends.get(1).cls().name());
+    if (associationClassSlots == null || end0Slots == null || end1Slots == null) {
+      throw new IllegalArgumentException(
+          "association class '"
+              + scope.associationName()
+              + "' references a class with no configured scope");
+    }
+    // Cross-wired the same way AssociationLinkEncoder.encode's own linksPerB/linksPerA are: the
+    // bound on how many association-class instances may share the SAME end0 pointer value is
+    // end1's OWN declared multiplicity (the role a source at end0 navigates THROUGH to reach
+    // end1), and vice versa.
+    AssociationClassPointerEncoder.PointerAttributes pointers =
+        AssociationClassPointerEncoder.encode(
+            script,
+            associationClassSlots,
+            end0Slots,
+            toMultiplicity(ends.get(1).multiplicity()),
+            end1Slots,
+            toMultiplicity(ends.get(0).multiplicity()));
+    String end0Key =
+        associationClass.name() + "." + AssociationClassPointerEncoder.END0_POINTER_ATTRIBUTE;
+    String end1Key =
+        associationClass.name() + "." + AssociationClassPointerEncoder.END1_POINTER_ATTRIBUTE;
+    attributeValuesByKey.put(end0Key, pointers.end0Pointer());
+    attributeValuesByKey.put(end1Key, pointers.end1Pointer());
   }
 
   /**
