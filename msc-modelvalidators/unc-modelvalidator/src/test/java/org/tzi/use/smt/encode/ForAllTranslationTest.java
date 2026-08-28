@@ -13,6 +13,7 @@ import org.tzi.use.parser.use.USECompiler;
 import org.tzi.use.smt.config.AssociationScope;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.ClassScope;
+import org.tzi.use.smt.config.TranslationMode;
 import org.tzi.use.smt.solver.*;
 import org.tzi.use.uml.mm.MClassInvariant;
 import org.tzi.use.uml.mm.MModel;
@@ -184,10 +185,8 @@ public class ForAllTranslationTest {
    * {@code source.role->forAll(body)}, the shape that was refused before {@code visitForAll} was
    * widened to reuse {@link ExpressionTranslator#populationOf populationOf} -- the real corpus
    * motivation is Genealogy's {@code p.child->forAll(c | p.yearB+15<=c.yearB)}. Uses a dedicated,
-   * non-reflexive Department/Employee fixture rather than a self-referential one deliberately:
-   * self-referential associations are a SEPARATE, still-unsupported gap (see the master plan's own
-   * research on it), and conflating the two would leave this test unable to isolate which gap it
-   * is actually exercising.
+   * non-reflexive Department/Employee fixture rather than a self-referential one deliberately, to
+   * isolate this from {@code ReflexiveAssociationTranslationTest}'s own separate coverage.
    */
   @Test
   public void forAllOverACollectionValuedNavigationOnTheRealAst() throws Exception {
@@ -264,6 +263,74 @@ public class ForAllTranslationTest {
     // Employee_1's salary (150) exceeds the budget (100), so the invariant genuinely fails --
     // confirms this isn't vacuously true from an empty or unlinked population.
     assertEquals(SolverOutcome.UNSAT, solve(script).outcome());
+  }
+
+  /**
+   * {@code X.allInstances()->forAll(v1, v2 | v1<>v2 implies ...)} -- ZebraPuzzle's own
+   * {@code DistinctColor}/{@code DistinctNationality}/etc. shape (six invariants, all identical
+   * modulo the compared attribute), previously refused outright at more than one loop variable.
+   * Widened by generalising the single-variable loop into a full cross product over the SAME
+   * population (mirroring {@link ExpressionTranslator#visitExists visitExists}'s own two-variable
+   * pattern, confirmed against {@code ExpQuery.evalForAll0}/use-core: real USE ranges every
+   * variable over the full population independently, including the {@code v1==v2} pair, relying on
+   * the body's own {@code <>} guard to neutralise it -- not excluded by this translation either).
+   */
+  @Test
+  public void twoVariableForAllOverAllInstancesRejectsADuplicateAndAllowsDistinctValues()
+      throws Exception {
+    String modelSource =
+        """
+        model DistinctScope
+        class Item
+        attributes
+          val : Integer
+        end
+        constraints
+        context i : Item inv distinctVal:
+          Item.allInstances->forAll(i1, i2 |
+            i1 <> i2 implies i1.val <> i2.val)
+        """;
+    PrintWriter err = new PrintWriter(System.err);
+    MModel model =
+        USECompiler.compileSpecification(modelSource, "DistinctScope", err, new ModelFactory());
+    err.flush();
+    MClassInvariant inv = findInvariant(model, "distinctVal");
+
+    // Two existing Items forced to the SAME value: the cross product must catch the (i1=0,i2=1)
+    // and (i1=1,i2=0) pair, so this must be UNSAT.
+    assertEquals(SolverOutcome.UNSAT, solveDistinctVal(model, inv, true));
+    // Two existing Items with DIFFERENT values: no pair violates it, so this must be SAT.
+    assertEquals(SolverOutcome.SAT, solveDistinctVal(model, inv, false));
+  }
+
+  private static SolverOutcome solveDistinctVal(MModel model, MClassInvariant inv, boolean sameValue)
+      throws Exception {
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots items =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Item", 2, 2))).get("Item");
+    AttributeDomain valDomain = new AttributeDomain("Item", "val", null, List.of(), null, null);
+    AttributeValues val =
+        AttributeEncoder.encode(script, items, "val", AttributeType.INTEGER, valDomain);
+    TranslationContext ctx =
+        new TranslationContext(
+            Map.of(),
+            Map.of("Item.val", val),
+            Map.of("Item.val", valDomain),
+            Map.of("Item", items),
+            Map.of());
+    var translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx, TranslationMode.UNCERTAIN);
+
+    script.assertThat(Smt.sym("Item_0_exists"));
+    script.assertThat(Smt.sym("Item_1_exists"));
+    script.assertThat(
+        Smt.eq(Smt.sym(val.valueNames().get(0)), Smt.intLit(java.math.BigInteger.valueOf(1))));
+    script.assertThat(
+        Smt.eq(
+            Smt.sym(val.valueNames().get(1)),
+            Smt.intLit(java.math.BigInteger.valueOf(sameValue ? 1 : 2))));
+    script.assertThat(translated.trueTerm());
+
+    return solve(script).outcome();
   }
 
   private static MModel compileLibrary() throws Exception {

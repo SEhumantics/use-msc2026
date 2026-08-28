@@ -1194,36 +1194,26 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    */
   @Override
   public void visitExists(ExpExists e) {
-    if (e.getVariableDeclarations().size() != 2)
-      throw unsupported(FragmentBoundary.TIER_2, "exists with a variable count other than two");
-    if (!(e.getRangeExpression() instanceof ExpNavigation range))
-      throw unsupported(
-          FragmentBoundary.TIER_2, "exists over a range other than a collection-valued navigation");
-    if (!range.getDestination().isCollection())
-      throw unsupported(FragmentBoundary.TIER_2, "exists over a single-valued navigation");
-    VariableBinding source = context.binding(variableNameOf(range.getObjectExpression()));
-    String destClass = range.getDestination().cls().name();
-    AssociationLinks links = context.linksFor(range.getDestination().association().name());
-    ObjectSlots destSlots = context.slotsFor(destClass);
-    String var1 = e.getVariableDeclarations().varDecl(0).name();
-    String var2 = e.getVariableDeclarations().varDecl(1).name();
-
+    int variableCount = e.getVariableDeclarations().size();
+    if (variableCount != 1 && variableCount != 2) {
+      throw unsupported(FragmentBoundary.TIER_2, "exists with more than two loop variables");
+    }
+    List<PopulationMember> population = populationOf(e.getRangeExpression(), "exists");
     List<SmtTerm> trueCandidates = new ArrayList<>();
     List<SmtTerm> definedCandidates = new ArrayList<>();
-    for (int i = 0; i < destSlots.capacity(); i++) {
-      SmtTerm link1 = linkTerm(links, range.getDestination(), source, i);
-      for (int j = 0; j < destSlots.capacity(); j++) {
-        SmtTerm link2 = linkTerm(links, range.getDestination(), source, j);
-        TranslationContext extended =
-            context
-                .withBinding(var1, new VariableBinding(destClass, i))
-                .withBinding(var2, new VariableBinding(destClass, j));
-        SmtTerm member = Smt.and(List.of(link1, link2));
-        TranslatedExpression body =
-            translate(e.getQueryExpression(), extended, mode, positivePolarity, localBindings);
-        trueCandidates.add(Smt.and(List.of(member, body.defined(), body.value())));
-        definedCandidates.add(Smt.app("=>", member, body.defined()));
+    for (List<PopulationMember> members : tuplesOf(population, variableCount)) {
+      TranslationContext extended = context;
+      List<SmtTerm> memberGuards = new ArrayList<>(variableCount);
+      for (int i = 0; i < variableCount; i++) {
+        String variableName = e.getVariableDeclarations().varDecl(i).name();
+        extended = extended.withBinding(variableName, members.get(i).binding());
+        memberGuards.add(members.get(i).memberGuard());
       }
+      SmtTerm member = variableCount == 1 ? memberGuards.get(0) : Smt.and(memberGuards);
+      TranslatedExpression body =
+          translate(e.getQueryExpression(), extended, mode, positivePolarity, localBindings);
+      trueCandidates.add(Smt.and(List.of(member, body.defined(), body.value())));
+      definedCandidates.add(Smt.app("=>", member, body.defined()));
     }
     SmtTerm anyTrue = Smt.or(trueCandidates);
     result =
@@ -1242,15 +1232,23 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    */
   @Override
   public void visitForAll(ExpForAll e) {
-    if (e.getVariableDeclarations().size() != 1)
-      throw unsupported(FragmentBoundary.TIER_1, "forAll with more than one loop variable");
-    String loopVariable = e.getVariableDeclarations().varDecl(0).name();
+    int variableCount = e.getVariableDeclarations().size();
+    if (variableCount != 1 && variableCount != 2) {
+      throw unsupported(FragmentBoundary.TIER_1, "forAll with more than two loop variables");
+    }
+    List<PopulationMember> population = populationOf(e.getRangeExpression(), "forAll");
     List<SmtTerm> valueConjuncts = new ArrayList<>();
     List<SmtTerm> definedConjuncts = new ArrayList<>();
     List<SmtTerm> falseCandidates = new ArrayList<>();
-    for (PopulationMember member : populationOf(e.getRangeExpression(), "forAll")) {
-      TranslationContext extended = context.withBinding(loopVariable, member.binding());
-      SmtTerm exists = member.memberGuard();
+    for (List<PopulationMember> members : tuplesOf(population, variableCount)) {
+      TranslationContext extended = context;
+      List<SmtTerm> memberGuards = new ArrayList<>(variableCount);
+      for (int i = 0; i < variableCount; i++) {
+        String variableName = e.getVariableDeclarations().varDecl(i).name();
+        extended = extended.withBinding(variableName, members.get(i).binding());
+        memberGuards.add(members.get(i).memberGuard());
+      }
+      SmtTerm exists = variableCount == 1 ? memberGuards.get(0) : Smt.and(memberGuards);
       TranslatedExpression body =
           translate(e.getQueryExpression(), extended, mode, positivePolarity, localBindings);
       valueConjuncts.add(Smt.app("=>", exists, body.value()));
@@ -1261,6 +1259,35 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         new TranslatedExpression(
             Smt.or(List.of(Smt.or(falseCandidates), Smt.and(definedConjuncts))),
             Smt.and(valueConjuncts));
+  }
+
+  /**
+   * Every {@code variableCount}-length tuple drawn from {@code population}, EACH variable ranging
+   * independently over the SAME population -- including a tuple that repeats one member across
+   * positions (e.g. {@code h1==h2}), which OCL's own multi-variable {@code forAll}/{@code exists}
+   * does not exclude either (confirmed directly against {@code ExpQuery.evalForAll0}/{@code
+   * evalExists0}, use-core: {@code for (Value elemVal : rangeVal)} at every nesting level, no
+   * equal-index skip -- a body that must exclude it, like ZebraPuzzle's {@code DistinctColor}
+   * (h1&lt;&gt;h2 implies ...), does so with its own explicit inequality check, the same pattern
+   * {@link #visitExists}'s own two-variable cross product already relies on). For
+   * {@code variableCount==1} this degenerates to one singleton tuple per member, so the loop below
+   * is a strict generalisation of the pre-existing single-variable case, not a parallel code path.
+   */
+  private static List<List<PopulationMember>> tuplesOf(
+      List<PopulationMember> population, int variableCount) {
+    List<List<PopulationMember>> tuples = new ArrayList<>();
+    if (variableCount == 1) {
+      for (PopulationMember member : population) {
+        tuples.add(List.of(member));
+      }
+      return tuples;
+    }
+    for (PopulationMember first : population) {
+      for (PopulationMember second : population) {
+        tuples.add(List.of(first, second));
+      }
+    }
+    return tuples;
   }
 
   /**

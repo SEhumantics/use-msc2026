@@ -57,10 +57,10 @@ public class FragmentLedgerBoundaryTest {
         other : UReal
       end
       constraints
-      context self : Sample inv Tier1ForAllTwoVariables:
-        Sample.allInstances()->forAll(x, y | x.n > 0)
-      context self : Sample inv Tier2ExistsOneVariable:
-        Sample.allInstances()->exists(x | x.n > 0)
+      context self : Sample inv Tier1ForAllThreeVariables:
+        Sample.allInstances()->forAll(x, y, z | x.n > 0)
+      context self : Sample inv Tier2ExistsThreeVariables:
+        Sample.allInstances()->exists(x, y, z | x.n > 0)
       context self : Sample inv Tier2TypeTest:
         self.oclAsType(Sample).oclIsTypeOf(Sample)
       context self : Sample inv Tier2EnumLiteralVersusEnumLiteral:
@@ -82,8 +82,8 @@ public class FragmentLedgerBoundaryTest {
   @Test
   public void everyRefusalIsClassifiedAtItsTierOrUTypeBoundary() {
     Map<String, FragmentBoundary> expected = new LinkedHashMap<>();
-    expected.put("Sample::Tier1ForAllTwoVariables", FragmentBoundary.TIER_1);
-    expected.put("Sample::Tier2ExistsOneVariable", FragmentBoundary.TIER_2);
+    expected.put("Sample::Tier1ForAllThreeVariables", FragmentBoundary.TIER_1);
+    expected.put("Sample::Tier2ExistsThreeVariables", FragmentBoundary.TIER_2);
     expected.put("Sample::Tier2TypeTest", FragmentBoundary.TIER_2);
     expected.put("Sample::Tier2EnumLiteralVersusEnumLiteral", FragmentBoundary.TIER_2);
     expected.put("Sample::Tier3SetLiteral", FragmentBoundary.TIER_3);
