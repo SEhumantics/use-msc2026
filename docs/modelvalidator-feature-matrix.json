@@ -1057,13 +1057,17 @@
               "coverageNote": ""
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "SmtModelFinder.requireIndependentlySearchableExtent() now refuses, at TIER_3, any association with a 'union' end or a 'subsets'/'redefines' end relationship, because AssociationLinkEncoder gives every association an INDEPENDENT grid of link booleans constrained only by its own end multiplicities and its own configured link count. Reaching Subsets for the first time (predefined links removed the configuration-read blocker) produced a confident UNSATISFIABLE against the incumbent's SATISFIABLE: ab's ends are 'union', its extent is cd union ef, and the configuration asks for ab_min=ab_max=2 while giving A and B zero objects of their own, so an independent 0x0 grid cannot hold two links. A wrong verdict is worse than a refusal, so the gate was added and the row is an explicit TIER_3 refusal instead.",
-              "notes": "The one shipped example for this feature, Subsets (association 'ab' declared union), ERRORs for SMT-Z3 before reaching this code path at all: 'ConfigurationReadException: unsupported configuration key(s): C, D, E, F, cd, ef' (task-3.12-results.json) -- the failure is entirely due to Subsets.properties's [demo] section using explicit-tuple 'cd'/'ef' literals (see assoc.predefined-links), read and rejected before model translation begins. That run says nothing empirically about union-end handling specifically; the zero-hits code search is the actual basis for this status.",
-              "satScenarioIds": [],
-              "unsatScenarioIds": [],
+              "status": "degraded",
+              "evidence": "SmtModelFinder's association-scope loop now detects a union-declared end and SKIPS the association entirely -- no AssociationLinkEncoder grid, no symbols, its own _min/_max bound left unenforced -- rather than either refusing the whole model (the prior behaviour) or giving it an independent grid (which would reproduce Kodkod's own known-defect: an ordinary, unconstrained association with zero SAT-level tie to what subsets it). This correctly AVOIDS the wrong-verdict trap the prior refusal was pinned against (an independent grid over A/B's own zero-capacity slots structurally cannot hold ab_min=ab_max=2, which would have produced a confident but wrong UNSATISFIABLE), but does not actually DERIVE or COMPUTE the union's real content: no invariant can navigate the union role and get a correct answer (see ocl.navigation-union-subsets, still unsupported), and its own configured bound is silently -- if deliberately and documentedly -- unenforced rather than checked against the derived union size.",
+              "notes": "Subsets (section [demo]) now reaches the correct SATISFIABLE verdict end to end, matching the incumbent's own answer and the manifest's expected classification, confirmed by PredefinedPopulationRoundTripTest.theUnionAssociationOfTheRealSubsetsFixtureIsSkippedNotGivenAnIndependentGrid -- cd's and ef's own predefined links (the associations that actually subset ab) survive reconstruction unchanged. Subsets-UNSAT (section [cdOverflow]) also now reaches its correct UNSATISFIABLE verdict, though its own contradiction is an ordinary cd pigeonhole bound unrelated to union semantics.",
+              "satScenarioIds": [
+                "Subsets"
+              ],
+              "unsatScenarioIds": [
+                "Subsets-UNSAT"
+              ],
               "validationOracleScenarioIds": [],
-              "coverageNote": "Explicitly refused rather than merely absent since predefined-link support made the tagged scenario reachable; the refusal is pinned by PredefinedPopulationRoundTripTest.theUnionAssociationOfTheRealSubsetsFixtureIsRefusedNotAnswered for the union case, which drives the real Subsets fixture end to end."
+              "coverageNote": "Degraded, not supported: the union role's own content is never computed, so this only helps a scenario (like the real Subsets fixture) whose invariants never navigate it. A future scenario that DID navigate the union role would still need ocl.navigation-union-subsets, which remains unimplemented."
             }
           }
         },
@@ -1084,12 +1088,12 @@
             },
             "unc-modelvalidator": {
               "status": "unsupported",
-              "evidence": "SmtModelFinder.requireIndependentlySearchableExtent() now refuses, at TIER_3, any association with a 'union' end or a 'subsets'/'redefines' end relationship, because AssociationLinkEncoder gives every association an INDEPENDENT grid of link booleans constrained only by its own end multiplicities and its own configured link count. cd/ef subset ab in benchmark/examples/Subsets; the same gate refuses them, so the subsetting relationship can never be silently dropped by the independent link grid.",
-              "notes": "Same caveat as assoc.union: Subsets ERRORs for SMT-Z3 on the unrelated assoc.predefined-links problem (cd/ef explicit-tuple literals in the [demo] section) before ever reaching subsets-specific code, so this status rests on the source-level absence, not an observed subsets-specific ERROR.",
+              "evidence": "SmtModelFinder.requireIndependentlySearchableExtent() no longer refuses a plain 'subsets' end on its own account: cd/ef (the subsetting associations in benchmark/examples/Subsets) now get ORDINARY, independent AssociationLinkEncoder grids, exactly like any other association -- which is sound for them (their own extent genuinely is independently searchable), but means the CONTAINMENT constraint this feature names (every cd/ef link must also be an ab link) is not enforced or derived anywhere; it is simply never checked, one-directionally safe only because ab (the union end) is itself skipped (see assoc.union) rather than given content that containment could contradict.",
+              "notes": "Subsets (section [demo]) and Subsets-UNSAT (section [cdOverflow]) both now reach correct verdicts, but neither exercises the containment constraint itself -- [demo]'s SAT witness is not checked against 'is every cd/ef link also present in ab', and [cdOverflow]'s UNSAT is an ordinary cd pigeonhole bound with nothing to do with subsets. A scenario that specifically required containment to be enforced (e.g. an invariant expecting ab's navigated content to include cd's links) would still be wrong or unsupported.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
-              "coverageNote": "Explicitly refused rather than merely absent since predefined-link support made the tagged scenario reachable; the refusal is pinned by PredefinedPopulationRoundTripTest.theUnionAssociationOfTheRealSubsetsFixtureIsRefusedNotAnswered for the union case, which drives the real Subsets fixture end to end."
+              "coverageNote": "The subsetting association's OWN link grid is now correctly encoded (see PredefinedPopulationRoundTripTest's real-Subsets-fixture tests), but the subsets RELATIONSHIP -- the containment tie into the superset end -- is still not modeled at all."
             }
           }
         },
@@ -4426,13 +4430,17 @@
               "coverageNote": ""
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "`grep -rni 'union|subset' unc-modelvalidator/src/main/java` returns zero real hits (the two matches are unrelated English words in docstrings: ConfigurationVocabulary.java:40 'a fixed subset for one test', SmtModelFinder.java:52 'a hand-built subset of Library'); unc-modelvalidator/src/main/java/org/tzi/use/smt/encode/AssociationLinkEncoder.java (the sole association encoder) has no union/subsets-aware branch of any kind -- worse than kk-modelvalidator, which at least ships a dead UnionAssociation stub class attempting the concept.",
-              "notes": "No union/subsets concept exists anywhere. The manifest's only assoc.union-association-tagged scenario, Subsets, does not actually reach this gap in its own SMT-Z3 run either way: task-3.12-results.json shows it ERRORs at the CONFIGURATION-READ stage with 'ConfigurationReadException: unsupported configuration key(s): C, D, E, F, cd, ef' -- a completely different, earlier failure caused by Subsets.properties' own predefined-object-literal syntax (bare 'C = Set{c1}' class keys and 'cd = Set{(c1,d1)}' association-tuple keys, ported verbatim from kk's own predefined-links convention) that unc-modelvalidator/src/main/java/org/tzi/use/smt/config/ConfigurationReader.java's recognisedKeys()/normalize() (lines 145-153, 181-188) does not parse yet -- confirmed by the code's own comment there: 'explicit association tuples are retained but link reconstruction is scheduled for Phase 3'. So Subsets's own ERROR is not itself direct evidence for union/subsets OCL-translation support one way or the other -- the code-absence finding above is.",
-              "satScenarioIds": [],
-              "unsatScenarioIds": [],
+              "status": "degraded",
+              "evidence": "Stale evidence superseded: predefined-object/link literals ('C = Set{c1}', 'cd = Set{(c1,d1)}') have been parsed and reconstructed correctly for a while (see assoc.predefined-links); Subsets.properties no longer ERRORs at configuration-reading. Now reaches SmtModelFinder's association-scope loop, which SKIPS a union-declared association entirely (no link grid, no symbols, its own _min/_max left unenforced) rather than deriving its real union-of-subsetting-associations content -- same degraded status and reasoning as assoc.union, which this feature duplicates from kk's own dead-UnionAssociation-class angle.",
+              "notes": "Subsets (section [demo]) and Subsets-UNSAT (section [cdOverflow]) both reach correct verdicts end to end now, confirmed by PredefinedPopulationRoundTripTest. The union association's real content is still never computed or checked against its own configured bound -- only correct because neither wired scenario's own (nonexistent) OCL invariants navigate the union role.",
+              "satScenarioIds": [
+                "Subsets"
+              ],
+              "unsatScenarioIds": [
+                "Subsets-UNSAT"
+              ],
               "validationOracleScenarioIds": [],
-              "coverageNote": "Subsets is the manifest's only tagged scenario but its SMT-Z3 run ERRORs at configuration-reading (unrecognised predefined-object-literal .properties keys), never reaching either the association-encoding or OCL-translation stage where union/subsets support would actually matter; status rests on direct source-code absence, not on that scenario's own error text."
+              "coverageNote": "See assoc.union's own coverage note -- degraded, not supported, for the same reason."
             }
           }
         },
