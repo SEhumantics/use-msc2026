@@ -1119,13 +1119,19 @@
               "coverageNote": ""
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "SmtModelFinder.requireIndependentlySearchableExtent() now refuses, at TIER_3, any association with a 'union' end or a 'subsets'/'redefines' end relationship, because AssociationLinkEncoder gives every association an INDEPENDENT grid of link booleans constrained only by its own end multiplicities and its own configured link count. CD's ends redefine AB's in benchmark/examples/Redefines; the same gate now refuses both associations. Without it, unc would reproduce the very soundness gap that example's header documents for the incumbent -- a vacuously-true invariant over an empty navigation.",
-              "notes": "The one shipped example for this feature, Redefines (association end CD redefining AB's role), ERRORs for SMT-Z3 before reaching this code path: 'ConfigurationReadException: unsupported configuration key(s): A, AB, B, C, CD, D' (task-3.12-results.json) -- entirely due to Redefines.properties's [default] section using explicit-instance/explicit-tuple literals (A/B/C/D class-instance sets, AB/CD association-tuple sets; see assoc.predefined-links), read and rejected before model translation begins. As with union/subsets, this status rests on the source-level absence, not an observed redefines-specific ERROR.",
-              "satScenarioIds": [],
-              "unsatScenarioIds": [],
-              "validationOracleScenarioIds": [],
-              "coverageNote": "Explicitly refused rather than merely absent since predefined-link support made the tagged scenario reachable; the refusal is pinned by PredefinedPopulationRoundTripTest.theUnionAssociationOfTheRealSubsetsFixtureIsRefusedNotAnswered for the union case, which drives the real Subsets fixture end to end."
+              "status": "supported",
+              "evidence": "The requireIndependentlySearchableExtent refusal is removed entirely (CD's own link grid is a perfectly ordinary, independently encodable extent on its own account -- what redefines additionally implies is a NAVIGATION concern, not an encoding one). New ExpressionTranslator#resolveRedefinedDestination redirects navigation through a redefined role name (c.b, RedefinedRoleTagCheck's own shape) to the REDEFINING association's grid whenever the source's own declared class matches the redefining end's opposite class, resolved STATICALLY off the VariableBinding (a binding carries exactly one fixed class for its lifetime in this encoder, so there is no 'A variable dynamically holding a C' case left unhandled). Wired into populationOf's collection-valued-navigation branch, the sole shape RedefinedRoleTagCheck (c.b->forAll(...)) and collectionSize (c.b->size()) both route through.",
+              "notes": "Redefines (section [default]) now reaches SAT with all 3 real invariants -- including RedefinedRoleTagCheck -- confirmed by USE's own evaluator (RedefinesCorpusRoundTripTest). Redefines-UNSAT (section [tagBoundGap]) reaches its correct UNSAT verdict too. A third, un-manifested section ([translationGap], D_tagD pinned to a value that must genuinely falsify RedefinedRoleTagCheck) is independently tested as a real SUPERSESSION case: unc-modelvalidator correctly reports UNSATISFIABLE where Kodkod's own translator (per this feature's own kk-modelvalidator evidence above) reports a confirmed false SATISFIABLE, reading c.b through AB's own always-empty-for-C relation instead of CD's. ForAllTranslationTest adds a direct encoder-level test proving the redirect is correctly SCOPED: a genuinely A-typed source navigating the SAME role name still reads AB's own grid unchanged, not universally redirected.",
+              "satScenarioIds": [
+                "Redefines"
+              ],
+              "unsatScenarioIds": [
+                "Redefines-UNSAT"
+              ],
+              "validationOracleScenarioIds": [
+                "Redefines"
+              ],
+              "coverageNote": "Scoped to the single-hop collection-valued navigation shape the real corpus needs (populationOf, feeding forAll/size()); single-valued redefined-role navigation and other call sites that separately consult context.linksFor(...) (singleValuedNavigationDefined, navigationEquals, closureReachability) are not yet redirect-aware -- unexercised by any shipped scenario, so left as a real, undischarged limitation rather than silently assumed safe."
             }
           }
         },
