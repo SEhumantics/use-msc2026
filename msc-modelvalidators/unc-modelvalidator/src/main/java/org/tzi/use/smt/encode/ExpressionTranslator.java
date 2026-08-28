@@ -350,6 +350,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           case "isUndefined" -> defined(Smt.not(definednessOf(a[0])));
           case "excludes" -> membershipTest(a[0], a[1], false);
           case "includes" -> membershipTest(a[0], a[1], true);
+          case "includesAll" -> collectionIncludesAll(a[0], a[1]);
           default ->
               throw unsupported(boundaryOfOperator(e.opname()), "operator '" + e.opname() + "'");
         };
@@ -1731,6 +1732,64 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         FragmentBoundary.TIER_3,
         "size() over anything other than a single-hop, collection-valued association navigation"
             + " or select over X.allInstances() is not yet supported");
+  }
+
+  /**
+   * {@code X->includesAll(Y)} for two single-hop, collection-valued navigations reaching the SAME
+   * destination class -- confirmed as a real, recurring shape by sweeping unc-modelvalidator
+   * against USE's own bundled example models (not our own curated benchmark corpus): {@code
+   * self.department.employee->includesAll(self.employee)} (Demo.use, ex.use, Project.use, all
+   * three the identical shape modulo the outer navigation hop -- {@code
+   * self.department.employee} itself is a second, separate, still-unsupported multi-hop
+   * limitation these three don't fully close on their own).
+   *
+   * <p>Reduces to {@link #populationOf} directly rather than a new membership primitive: both
+   * navigations, reaching the SAME class, draw from that class's ONE shared {@link ObjectSlots}
+   * pool, so their two populations are index-aligned by construction -- slot {@code k} in one
+   * population and slot {@code k} in the other refer to the exact same candidate object. "every Y
+   * member is also an X member" is then simply, per slot, "Y's own member guard implies X's own
+   * member guard" -- the SAME "found, don't reinvent" reuse {@link #navigationEquals} and {@link
+   * #collectionSize} already established for single-hop populations. An empty Y population makes
+   * the whole conjunction vacuously true (an empty {@link List} yields {@code Smt.and([])} =
+   * {@code true}, matching every other empty-population convention in this class), matching OCL's
+   * own {@code includesAll} semantics over an empty argument.
+   */
+  private TranslatedExpression collectionIncludesAll(Expression collectionExpr, Expression otherExpr) {
+    if (!(collectionExpr instanceof ExpNavigation collectionNav)
+        || !collectionNav.getDestination().isCollection()) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "includesAll over anything other than a single-hop, collection-valued association"
+              + " navigation is not yet supported");
+    }
+    if (!(otherExpr instanceof ExpNavigation otherNav) || !otherNav.getDestination().isCollection()) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "includesAll's argument, over anything other than a single-hop, collection-valued"
+              + " association navigation, is not yet supported");
+    }
+    String collectionDestClass = collectionNav.getDestination().cls().name();
+    String otherDestClass = otherNav.getDestination().cls().name();
+    if (!collectionDestClass.equals(otherDestClass)) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "includesAll between two navigations reaching different classes ("
+              + collectionDestClass
+              + ", "
+              + otherDestClass
+              + ") is not yet supported");
+    }
+    List<PopulationMember> collectionPopulation = populationOf(collectionNav, "includesAll");
+    List<PopulationMember> otherPopulation = populationOf(otherNav, "includesAll");
+    List<SmtTerm> everyOtherMemberIsAlsoAMember = new ArrayList<>(otherPopulation.size());
+    for (int k = 0; k < otherPopulation.size(); k++) {
+      everyOtherMemberIsAlsoAMember.add(
+          Smt.app(
+              "=>",
+              otherPopulation.get(k).memberGuard(),
+              collectionPopulation.get(k).memberGuard()));
+    }
+    return defined(Smt.and(everyOtherMemberIsAlsoAMember));
   }
 
   /**
