@@ -139,6 +139,70 @@ public class LetTranslationTest {
     assertEquals(SolverOutcome.SAT, solve(encoded.script()));
   }
 
+  @Test
+  public void companyDepartmentBudgetLetTranslatesItsRealParsedAst() throws Exception {
+    MClassInvariant invariant =
+        findInvariant(compileCompany(), "DepartmentBudget_greater_allEmployeeSalary");
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots employees =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Employee", 2, 2)))
+            .get("Employee");
+    ObjectSlots departments =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Department", 2, 2)))
+            .get("Department");
+    AttributeDomain employeeNameDomain =
+        new AttributeDomain(
+            "Employee", "dname", null, List.of("Accounting", "Research"), null, null);
+    AttributeDomain departmentNameDomain =
+        new AttributeDomain(
+            "Department", "dname", null, List.of("Accounting", "Research"), null, null);
+    AttributeDomain salaryDomain =
+        new AttributeDomain("Employee", "salary", null, List.of(), null, null);
+    AttributeDomain budgetDomain =
+        new AttributeDomain("Department", "budget", null, List.of(), null, null);
+    AttributeValues employeeName =
+        AttributeEncoder.encode(
+            script, employees, "dname", AttributeType.STRING, employeeNameDomain);
+    AttributeValues departmentName =
+        AttributeEncoder.encode(
+            script, departments, "dname", AttributeType.STRING, departmentNameDomain);
+    AttributeValues salary =
+        AttributeEncoder.encode(script, employees, "salary", AttributeType.INTEGER, salaryDomain);
+    AttributeValues budget =
+        AttributeEncoder.encode(
+            script, departments, "budget", AttributeType.INTEGER, budgetDomain);
+    TranslationContext context =
+        new TranslationContext(
+            Map.of("e", new VariableBinding("Employee", 0)),
+            Map.of(
+                "Employee.dname", employeeName,
+                "Employee.salary", salary,
+                "Department.dname", departmentName,
+                "Department.budget", budget),
+            Map.of(
+                "Employee.dname", employeeNameDomain,
+                "Employee.salary", salaryDomain,
+                "Department.dname", departmentNameDomain,
+                "Department.budget", budgetDomain),
+            Map.of("Employee", employees, "Department", departments),
+            Map.of());
+
+    pin(script, employeeName, 0, 0);
+    pin(script, employeeName, 1, 1);
+    pin(script, departmentName, 0, 0);
+    pin(script, departmentName, 1, 1);
+    pin(script, salary, 0, 3);
+    pin(script, salary, 1, 9);
+    pin(script, budget, 0, 20);
+    pin(script, budget, 1, 30);
+    TranslatedExpression translated =
+        ExpressionTranslator.translate(
+            invariant.bodyExpression(), context, TranslationMode.UNCERTAIN);
+    script.assertThat(translated.trueTerm());
+
+    assertEquals(SolverOutcome.SAT, solve(script));
+  }
+
   private static ObjectAnyCase encodeObjectAnyLet(
       int targetValue, int limitValue, int key0, int value0, int key1, int value1)
       throws Exception {
@@ -211,6 +275,12 @@ public class LetTranslationTest {
 
   private record ObjectAnyCase(SmtScript script, TranslatedExpression expression) {}
 
+  private static void pin(SmtScript script, AttributeValues values, int slot, int value) {
+    script.assertThat(
+        Smt.eq(
+            Smt.sym(values.valueNames().get(slot)), Smt.intLit(BigInteger.valueOf(value))));
+  }
+
   private static void assertUnsupportedBinding(String invariantName, String type, String scope)
       throws Exception {
     MClassInvariant invariant = findInvariant(compileFixture(), invariantName);
@@ -236,6 +306,19 @@ public class LetTranslationTest {
     err.flush();
     if (model == null) {
       throw new AssertionError("LetScope fixture model did not compile");
+    }
+    return model;
+  }
+
+  private static MModel compileCompany() throws Exception {
+    Path file = Path.of("../benchmark/examples/CompanyERSchema/CompanyER.use");
+    String source = Files.readString(file);
+    ModelFactory factory = new ModelFactory();
+    PrintWriter err = new PrintWriter(System.err);
+    MModel model = USECompiler.compileSpecification(source, "CompanyER", err, factory);
+    err.flush();
+    if (model == null) {
+      throw new AssertionError("CompanyER fixture model did not compile");
     }
     return model;
   }
