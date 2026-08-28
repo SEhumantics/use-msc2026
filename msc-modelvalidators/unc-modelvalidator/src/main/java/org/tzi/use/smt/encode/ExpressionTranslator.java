@@ -353,6 +353,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           case "excludes" -> membershipTest(a[0], a[1], false);
           case "includes" -> membershipTest(a[0], a[1], true);
           case "includesAll" -> collectionIncludesAll(a[0], a[1]);
+          case "isEmpty" -> collectionEmptiness(a[0], true);
+          case "notEmpty" -> collectionEmptiness(a[0], false);
           default ->
               throw unsupported(boundaryOfOperator(e.opname()), "operator '" + e.opname() + "'");
         };
@@ -1814,6 +1816,42 @@ public final class ExpressionTranslator implements ExpressionVisitor {
               collectionPopulation.get(k).memberGuard()));
     }
     return defined(Smt.and(everyOtherMemberIsAlsoAMember));
+  }
+
+  /**
+   * {@code X->isEmpty()} / {@code X->notEmpty()}, found while chasing CompanyERSchema's own
+   * remaining gaps (its {@code Project::pname_primary_key} and {@code ProjectWork::
+   * fname_lname_pname_primary_key} invariants both end in this shape). Reduces to whichever
+   * population primitive already matches the receiver -- {@link #populationOf} for a bare {@code
+   * X.allInstances()} or a single-hop collection-valued navigation, {@link
+   * #selectedAllInstancesPopulation} for {@code X.allInstances()->select(pred)} (the SAME two
+   * primitives {@link #collectionSize} and {@link #collectionIncludesAll} already reuse) -- rather
+   * than inventing a third way to enumerate a population. "Some member exists" is exactly the OR
+   * of every candidate's own {@link PopulationMember#memberGuard()}; {@code isEmpty} negates it,
+   * {@code notEmpty} doesn't, and an empty population OR's to {@code false} either way (matching
+   * OCL's own {@code Set{}->isEmpty()} = true), so no separate empty-population special case is
+   * needed.
+   */
+  private TranslatedExpression collectionEmptiness(Expression receiver, boolean wantEmpty) {
+    String construct = wantEmpty ? "isEmpty" : "notEmpty";
+    List<PopulationMember> population;
+    if (receiver instanceof ExpSelect select
+        && select.getRangeExpression() instanceof ExpAllInstances) {
+      population = selectedAllInstancesPopulation(select);
+    } else if (receiver instanceof ExpAllInstances
+        || (receiver instanceof ExpNavigation navigation
+            && navigation.getDestination().isCollection())) {
+      population = populationOf(receiver, construct);
+    } else {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          construct
+              + " over anything other than X.allInstances(), a single-hop collection-valued"
+              + " association navigation, or select over X.allInstances() is not yet supported");
+    }
+    SmtTerm someMemberExists =
+        Smt.or(population.stream().map(PopulationMember::memberGuard).toList());
+    return defined(wantEmpty ? Smt.not(someMemberExists) : someMemberExists);
   }
 
   /**
