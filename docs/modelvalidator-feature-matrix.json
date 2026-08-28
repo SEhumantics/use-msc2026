@@ -1929,18 +1929,21 @@
               "evidence": "ExpressionTranslator.comparison() (lines 82-92) special-cases a String literal ONLY when it is the direct operand of '='/'<>' against an ExpAttrOp: lines 85-86 `if (l instanceof ExpConstString s) return Smt.eq(resolve(s, r), arg(r)); if (r instanceof ExpConstString s) return Smt.eq(arg(l), resolve(s, l));`, and resolve() (lines 129-136) itself `throw unsupported(\"string literal compared against a non-attribute expression\")` (line 130-131) if the other side is not ExpAttrOp. Any OTHER use of a String literal -- standalone, compared to a variable, compared to another literal, nested in any other construct -- goes through visitConstString (lines 32-36), which unconditionally `throw unsupported(\"free-standing string literal (...) outside an attribute comparison\")`. isDefined/isUndefined as OCL operations are now implemented (see notes).",
               "notes": "The core case genuinely works and is heavily exercised: Library's nameAddressFormatOk/signatureFormatOk/titleFormatOk/authSeqFormatOk (attr<>'') and MultipleInheritance's NameNotEmpty (a.name <> '') all reach SATISFIABLE via SMT-Z3. But this is a narrow special case, not general String-literal support -- and CivilStatus's real SMT-Z3 ERROR independently confirms the isDefined half is unimplemented: `attributesDefined (unsupported OCL construct in this translation slice: operator 'isDefined')` (CivilStatus.use line 75: name.isDefined and civstat.isDefined and ...), a live scenario error naming this exact construct. isDefined/isUndefined are now implemented generically for ANY operand type (visitStdOp's switch, case \"isDefined\"/\"isUndefined\"): both are TOTAL functions confirmed directly against Op_isDefined/Op_isUndefined (use-core) -- the operand's own TranslatedExpression#defined() (already computed by argResult) becomes THIS expression's VALUE, while this expression's OWN definedness is unconditionally true. Verified with a dedicated fixture (IsDefinedTranslationTest, 5 tests: a defined attribute, an undefined literal, both isDefined and isUndefined, plus one full round trip confirmed by USE's own evaluator) and against the live corpus: CivilStatus's real attributesDefined invariant (`name.isDefined and civstat.isDefined and gender.isDefined and alive.isDefined`) no longer fails on isDefined at all -- confirmed by rereading the corpus log, isDefined no longer appears anywhere in CivilStatus's error output.",
               "satScenarioIds": [
+                "CivilStatus",
                 "Library",
                 "MultipleInheritance"
               ],
               "unsatScenarioIds": [
+                "CivilStatus-UNSAT",
                 "Library-UNSAT",
                 "MultipleInheritance-UNSAT"
               ],
               "validationOracleScenarioIds": [
+                "CivilStatus",
                 "Library",
                 "MultipleInheritance"
               ],
-              "coverageNote": "CivilStatus tags this feature but never reaches a real verdict (SMT-Z3 outcome ERROR) -- its attributesDefined invariant is real, live confirmatory evidence for the isDefined gap even though the overall scenario doesn't validate."
+              "coverageNote": "2026-08-29: corrected a stale claim -- this note previously said CivilStatus 'never reaches a real verdict (SMT-Z3 outcome ERROR)'. Re-checked directly against the live benchmark results: CivilStatus and CivilStatus-UNSAT both now reach clean SATISFIABLE/UNSATISFIABLE with zero ERROR (the isDefined fix this entry's own notes already describe closed the blocker the stale coverageNote hadn't caught up to). attributesDefined (name.isDefined and civstat.isDefined and gender.isDefined and alive.isDefined) is real, live, positive evidence for the isDefined half of this feature now, not merely confirmatory evidence for a gap."
             }
           }
         },
