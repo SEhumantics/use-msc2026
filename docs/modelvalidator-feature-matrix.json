@@ -2115,13 +2115,13 @@
               "coverageNote": ""
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "ExpressionTranslator.visitLet() (lines 303-306): `throw unsupported(\"let\")`, unconditional. Directly confirmed live: CompanyERSchema's real SMT-Z3 ERROR (task-3.12-results.json) lists `acyclic (unsupported OCL construct in this translation slice: let)` and `DepartmentBudget_greater_allEmployeeSalary (unsupported OCL construct in this translation slice: let)` -- two separate invariants failing on exactly this construct, reproduced identically in CompanyERSchema-UNSAT's error.",
-              "notes": "Both source and a real, live scenario error agree precisely: let is entirely unimplemented. CompanyERSchema itself never reaches a verdict (ERROR overall, since SmtModelFinder.java:227 `checked.ledger().requireAllSupported()` refuses to proceed if any active invariant fails to translate), so this is 'unsupported' via a live ERROR message naming the exact construct, not via a SAT/UNSAT scenario.",
+              "status": "degraded",
+              "evidence": "ExpressionTranslator.visitLet() lines 1217-1263 translates Integer/Boolean/Real lets as native SMT-LIB bindings for both explicit definedness and value, and refuses every other bound type at lines 1232-1244 before translating its initializer/body. SmtTerm.Let lines 30-58 renders `(let ((name value) ...) body)`. Parser-backed LetTranslationTest lines 26-118 covers a primitive value, undefined propagation, primitive equality, and located object/collection refusals. The pinned `tools/z3/bin/z3` identifies itself as 5.1.0 and returned `sat` for the emitted two-binding shape. Live 2026-08-28 corpus rerun: CompanyERSchema and CompanyERSchema-UNSAT both remain ERROR, now naming `p : Part` and `d : Department` as the explicitly refused object-typed let bindings.",
+              "notes": "Partial scalar support only: plain Integer, Boolean, and Real let-bound variables compose through the existing expression translator, including USE-compatible undefinedness. String/enum/U-type, object, and collection lets remain fail-closed. The two CompanyERSchema lets are object-typed results of `allInstances()->any(...)`; supporting them would require first-class finite object selection plus their still-unsupported bodies (`any`, `select`, allInstances-derived `size`, `div`, closure/user-operation navigation), so this increment does not pretend that those independent feature gaps are `ocl.let` support.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
-              "coverageNote": "CompanyERSchema/CompanyERSchema-UNSAT tag this feature and both ERROR with the exact \"operator ... let\" message quoted above, but neither reaches a real SAT/UNSAT verdict, so per task instructions they are not listed in satScenarioIds/unsatScenarioIds; the error text itself is the evidence."
+              "coverageNote": "Dedicated parser-backed unit coverage is green, but no benchmark scenario exercises a supported scalar let. CompanyERSchema/CompanyERSchema-UNSAT still tag this feature and still ERROR on their explicitly out-of-scope object lets, so neither is listed as SAT/UNSAT/oracle evidence."
             }
           }
         },
