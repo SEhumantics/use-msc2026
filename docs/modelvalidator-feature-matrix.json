@@ -1091,13 +1091,17 @@
               "coverageNote": ""
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "SmtModelFinder.requireIndependentlySearchableExtent() no longer refuses a plain 'subsets' end on its own account: cd/ef (the subsetting associations in benchmark/examples/Subsets) now get ORDINARY, independent AssociationLinkEncoder grids, exactly like any other association -- which is sound for them (their own extent genuinely is independently searchable), but means the CONTAINMENT constraint this feature names (every cd/ef link must also be an ab link) is not enforced or derived anywhere; it is simply never checked, one-directionally safe only because ab (the union end) is itself skipped (see assoc.union) rather than given content that containment could contradict.",
+              "status": "degraded",
+              "evidence": "Corrected 2026-08-28 -- the prior evidence text cited SmtModelFinder.requireIndependentlySearchableExtent(), a method that no longer exists in the codebase (removed entirely during this session's later redefines closure). Current mechanism: SmtModelFinder's association-scope loop has no special-casing for a 'subsets' end at all (only 'union'/'derived' are checked); cd/ef (the subsetting associations in benchmark/examples/Subsets) therefore fall through to the ORDINARY AssociationLinkEncoder path and get their own independent link grid, exactly like any other association -- which is sound for them (their own extent genuinely is independently searchable), but means the CONTAINMENT constraint this feature names (every cd/ef link must also be an ab link) is not enforced or derived anywhere; it is simply never checked, one-directionally safe only because ab (the union end) is itself skipped (see assoc.union) rather than given content that containment could contradict. Reclassified from 'unsupported' to 'degraded' to match assoc.union/assoc.union-association's own status for the identical reason (real, sound, independent verdicts reached; the relationship itself just isn't modeled) -- this alignment was missed when those two were updated in the same closure pass.",
               "notes": "Subsets (section [demo]) and Subsets-UNSAT (section [cdOverflow]) both now reach correct verdicts, but neither exercises the containment constraint itself -- [demo]'s SAT witness is not checked against 'is every cd/ef link also present in ab', and [cdOverflow]'s UNSAT is an ordinary cd pigeonhole bound with nothing to do with subsets. A scenario that specifically required containment to be enforced (e.g. an invariant expecting ab's navigated content to include cd's links) would still be wrong or unsupported.",
-              "satScenarioIds": [],
-              "unsatScenarioIds": [],
+              "satScenarioIds": [
+                "Subsets"
+              ],
+              "unsatScenarioIds": [
+                "Subsets-UNSAT"
+              ],
               "validationOracleScenarioIds": [],
-              "coverageNote": "The subsetting association's OWN link grid is now correctly encoded (see PredefinedPopulationRoundTripTest's real-Subsets-fixture tests), but the subsets RELATIONSHIP -- the containment tie into the superset end -- is still not modeled at all."
+              "coverageNote": "The subsetting association's OWN link grid is now correctly encoded (see PredefinedPopulationRoundTripTest's real-Subsets-fixture tests), but the subsets RELATIONSHIP -- the containment tie into the superset end -- is still not modeled at all. Implementing general containment enforcement (independent of whether the superset end is itself 'union') is a real, not-yet-started feature -- see the master plan's 2026-08-28 readiness-audit entry."
             }
           }
         },
@@ -2441,12 +2445,12 @@
             },
             "unc-modelvalidator": {
               "status": "unsupported",
-              "evidence": "grep across the entire unc-modelvalidator src tree for 'union'/'subset' returns zero relevant source hits (the only two matches are unrelated javadoc prose in ConfigurationVocabulary.java:40 and SmtModelFinder.java:52, not the OCL subsets/union association-end keyword). Subsets is the one scenario tagging this feature; its real SMT-Z3 result is ERROR: `ConfigurationReadException: unsupported configuration key(s): C, D, E, F, cd, ef` (and, for Subsets-UNSAT, the same minus D).",
-              "notes": "The Subsets scenario's own ERROR is a whole-model-unusable-level ConfigurationReadException -- it fails before any invariant or expression is even attempted, so it does not specifically name 'union' or 'subsets' as the culprit, and should not be over-read as targeted confirmation. The stronger evidence is the source-wide absence: nothing in this codebase recognises the subsets/union association-end keywords at all, so even if the config-loading obstacle were fixed, there is no mechanism anywhere that would enforce or navigate a subsetting/union relationship between associations.",
+              "evidence": "Corrected 2026-08-28 -- the prior evidence text described a ConfigurationReadException that no longer reproduces (that config-loading gap was fixed earlier this session; see assoc.union/assoc.union-association). Current, re-verified state: grep across the entire unc-modelvalidator src tree for 'isUnion'/'isSubsets'/'getSubsettedEnds'/'getSubsettingEnds' returns exactly ONE hit, SmtModelFinder.java's association-scope loop calling ends.get(N).isUnion() purely to SKIP encoding a union-declared association (see assoc.union) -- nothing anywhere calls MAssociationEnd.getSubsettedEnds()/getSubsettingEnds(), and ExpressionTranslator has no navigation-redirection logic for a union or subsets role at all (unlike resolveRedefinedDestination for 'redefines', which IS implemented). The Subsets scenario ([demo] section) now reaches a genuine SATISFIABLE (config loads fine, cd/ef get ordinary link grids -- see assoc.subsets), but Subsets.use itself has ZERO OCL invariants that navigate the union role ab at all (confirmed by reading the model directly), so this feature remains genuinely unexercised by any real corpus scenario, not merely unconfirmed.",
+              "notes": "If any future invariant DID navigate a union-declared role (e.g. 'self.ab->size()'), ExpressionTranslator's own context.linksFor(...) lookup would fail closed with a clear, located error, since nothing registers a grid for a skipped union association -- a safe refusal, not a silent wrong answer, but still zero mechanism for computing the union's actual derived content or redirecting through its subsetting associations.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
-              "coverageNote": "Subsets/Subsets-UNSAT tag this feature but ERROR at config-parse time for the whole model (unrelated class/association names unrecognized), not specifically on the union/subsets construct, so they are not listed as scenario evidence; verdict rests on the source-wide absence of any union/subsets handling."
+              "coverageNote": "Subsets/Subsets-UNSAT tag this feature but neither one's invariants (there are none in Subsets.use) actually navigate the union/subsets construct, so they are not listed as scenario evidence for THIS feature specifically (see assoc.subsets/assoc.union for what they do evidence); verdict rests on the source-wide absence of any union/subsets navigation handling."
             }
           }
         },
