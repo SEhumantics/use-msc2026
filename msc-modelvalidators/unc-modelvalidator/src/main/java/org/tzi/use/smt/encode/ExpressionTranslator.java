@@ -983,6 +983,14 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && r instanceof ExpNavigation rn
         && !ln.getDestination().isCollection()
         && !rn.getDestination().isCollection()) return navigationEquals(ln, rn);
+    if (l instanceof ExpNavigation ln
+        && !ln.getDestination().isCollection()
+        && r instanceof ExpVariable rv
+        && !localBindings.containsKey(rv.getVarname())) return navigationEqualsVariable(ln, rv);
+    if (r instanceof ExpNavigation rn
+        && !rn.getDestination().isCollection()
+        && l instanceof ExpVariable lv
+        && !localBindings.containsKey(lv.getVarname())) return navigationEqualsVariable(rn, lv);
     return useEquality(argResult(l), argResult(r));
   }
 
@@ -1116,6 +1124,28 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         new TranslatedExpression(Smt.or(leftTargets), Smt.bool(true)),
         new TranslatedExpression(Smt.or(rightTargets), Smt.bool(true)),
         Smt.or(sharedTarget));
+  }
+
+  /**
+   * {@code f.primaryParent <> f}-shaped: a single-valued navigation compared against a BARE
+   * object variable rather than another navigation ({@link #navigationEquals}'s own shape). A bare
+   * variable is always defined (it names an already-bound, live object), so USE's total-equality
+   * rule ({@link #useEquality}) collapses to exactly "the navigation is defined AND its value is
+   * this specific target slot" -- which {@link #linkTerm} already computes directly, with no need
+   * to build and immediately discard a separate definedness term the way {@link #navigationEquals}
+   * does for two navigations. Always defined, matching every other comparison's own convention.
+   */
+  private TranslatedExpression navigationEqualsVariable(
+      ExpNavigation navigation, ExpVariable variable) {
+    MNavigableElement destination = navigation.getDestination();
+    VariableBinding source = context.binding(variableNameOf(navigation.getObjectExpression()));
+    VariableBinding target = context.binding(variable.getVarname());
+    if (!target.className().equals(destination.cls().name())) {
+      // Structurally a different class entirely: the navigation can never resolve to it.
+      return defined(Smt.bool(false));
+    }
+    AssociationLinks links = context.linksFor(destination.association().name());
+    return defined(linkTerm(links, destination, source, target.slotIndex()));
   }
 
   /**

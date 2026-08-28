@@ -23,6 +23,7 @@ import org.tzi.use.smt.encode.AssociationLinks;
 import org.tzi.use.smt.encode.AttributeEncoder;
 import org.tzi.use.smt.encode.AttributeType;
 import org.tzi.use.smt.encode.AttributeValues;
+import org.tzi.use.smt.encode.CompositionCycleFreenessEncoder;
 import org.tzi.use.smt.encode.FragmentBoundary;
 import org.tzi.use.smt.encode.FragmentChecker;
 import org.tzi.use.smt.encode.FragmentCoverageLedger;
@@ -46,6 +47,7 @@ import org.tzi.use.smt.solver.SolverResult;
 import org.tzi.use.smt.verify.InvariantReEvaluator;
 import org.tzi.use.smt.verify.InvariantVerdict;
 import org.tzi.use.smt.verify.QueryWitnessChecker;
+import org.tzi.use.uml.mm.MAggregationKind;
 import org.tzi.use.uml.mm.MAssociation;
 import org.tzi.use.uml.mm.MAssociationClass;
 import org.tzi.use.uml.mm.MAssociationEnd;
@@ -843,6 +845,8 @@ public final class SmtModelFinder {
         script, model, slotsByClass, attributeValuesByKey, attributeDomainByKey);
 
     Map<String, AssociationLinks> linksByAssociation = new LinkedHashMap<>();
+    Map<String, List<AssociationLinks>> reflexiveCompositionsByClass = new LinkedHashMap<>();
+    List<String> crossClassCompositionsWithNonzeroPopulation = new ArrayList<>();
     for (AssociationScope scope : config.associationScopes()) {
       MAssociation association = model.getAssociation(scope.associationName());
       if (association instanceof MAssociationClass associationClass) {
@@ -904,6 +908,44 @@ public final class SmtModelFinder {
       PredefinedLinkEncoder.encode(
           script, scope, links, List.of(ends.get(0).cls().name(), ends.get(1).cls().name()));
       linksByAssociation.put(scope.associationName(), links);
+      if (config.requireAggregationCycleFreedom()
+          && (ends.get(0).aggregationKind() != MAggregationKind.NONE
+              || ends.get(1).aggregationKind() != MAggregationKind.NONE)) {
+        if (aEnd.className().equals(bEnd.className())) {
+          reflexiveCompositionsByClass
+              .computeIfAbsent(aEnd.className(), ignored -> new ArrayList<>())
+              .add(links);
+        } else if (aEnd.capacity() > 0 && bEnd.capacity() > 0) {
+          // A composition/aggregation between two DIFFERENT classes, both with a genuinely
+          // nonzero configured population -- combining a cross-class graph into the same
+          // reachability check as the reflexive case is a materially harder problem (different
+          // classes' slots are unrelated SMT identities under this encoder), so this is refused
+          // rather than silently excluded from the cycle check it was configured to run.
+          crossClassCompositionsWithNonzeroPopulation.add(scope.associationName());
+        }
+        // A cross-class composition/aggregation with a ZERO-capacity end is vacuously safe to
+        // exclude: no object of that class can ever exist to participate in a cycle through it.
+      }
+    }
+
+    if (config.requireAggregationCycleFreedom()
+        && !crossClassCompositionsWithNonzeroPopulation.isEmpty()) {
+      throw new SmtTranslationException(
+          FragmentBoundary.TIER_3,
+          "aggregationcyclefreeness = on, but association(s) "
+              + crossClassCompositionsWithNonzeroPopulation
+              + " are composition/aggregation between two different classes with nonzero"
+              + " configured population; only compositions/aggregations reflexive over a single"
+              + " class are supported (see CompositionCycleFreenessEncoder), so a cross-class"
+              + " cycle cannot be soundly checked and this is refused rather than silently"
+              + " ignored");
+    }
+    for (Map.Entry<String, List<AssociationLinks>> entry : reflexiveCompositionsByClass.entrySet()) {
+      CompositionCycleFreenessEncoder.assertAcyclic(
+          script,
+          "|aggregation-cycle-" + entry.getKey() + "-",
+          slotsByClass.get(entry.getKey()),
+          entry.getValue());
     }
 
     Map<String, Set<TranslationMode>> requirements =

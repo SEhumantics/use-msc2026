@@ -39,7 +39,7 @@ public class ConfigurationReaderTest {
             Integer_max = 9
             timeout = 12
             modelLimit = 4
-            aggregationcyclefreeness = on
+            bitwidth = 12
             """);
 
     ConfigurationReader.NormalizedConfiguration normalized =
@@ -59,7 +59,68 @@ public class ConfigurationReaderTest {
     assertEquals(Duration.ofSeconds(12), configuration.timeout());
     assertEquals(4, configuration.modelLimit());
     assertEquals(QueryExpr.SATISFY, configuration.query());
-    assertEquals("aggregationcyclefreeness", normalized.diagnostics().getFirst().key());
+    assertFalse(configuration.requireAggregationCycleFreedom());
+    assertEquals("bitwidth", normalized.diagnostics().getFirst().key());
+  }
+
+  @Test
+  public void aggregationCycleFreenessOnActivatesTheConfigurationFlagWithoutADiagnostic()
+      throws Exception {
+    Path file = temporaryConfiguration("User_min = 1\naggregationcyclefreeness = on\n");
+
+    ConfigurationReader.NormalizedConfiguration normalized =
+        ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY);
+
+    assertTrue(normalized.diagnostics().isEmpty());
+    assertTrue(normalized.requireSupported().requireAggregationCycleFreedom());
+  }
+
+  @Test
+  public void aggregationCycleFreenessOffLeavesTheConfigurationFlagFalse() throws Exception {
+    Path file = temporaryConfiguration("User_min = 1\naggregationcyclefreeness = off\n");
+
+    ConfigurationReader.NormalizedConfiguration normalized =
+        ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY);
+
+    assertTrue(normalized.diagnostics().isEmpty());
+    assertFalse(normalized.requireSupported().requireAggregationCycleFreedom());
+  }
+
+  @Test
+  public void aggregationCycleFreenessAbsentDefaultsToFalseNotTheIncumbentsOwnOnDefault()
+      throws Exception {
+    Path file = temporaryConfiguration("User_min = 1\n");
+
+    AnalysisConfiguration configuration =
+        ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY)
+            .requireSupported();
+
+    assertFalse(configuration.requireAggregationCycleFreedom());
+  }
+
+  @Test
+  public void aggregationCycleFreenessRejectsAnythingOtherThanOnOrOff() throws Exception {
+    Path file = temporaryConfiguration("User_min = 1\naggregationcyclefreeness = maybe\n");
+
+    ConfigurationReadException exception =
+        assertThrows(
+            ConfigurationReadException.class,
+            () -> ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY));
+
+    assertTrue(exception.getMessage(), exception.getMessage().contains("aggregationcyclefreeness"));
+  }
+
+  @Test
+  public void forbiddenSharingIsSilentlyAcceptedRegardlessOfValue() throws Exception {
+    Path file = temporaryConfiguration("User_min = 1\nforbiddensharing = on\n");
+
+    ConfigurationReader.NormalizedConfiguration normalized =
+        ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY);
+
+    assertTrue(
+        "forbiddensharing must never become a diagnostic -- see ConfigurationReader's own"
+            + " comment for why silently accepting it is sound here",
+        normalized.diagnostics().isEmpty());
   }
 
   @Test

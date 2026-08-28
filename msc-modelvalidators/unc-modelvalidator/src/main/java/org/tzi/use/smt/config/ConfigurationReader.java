@@ -206,16 +206,22 @@ public final class ConfigurationReader {
                     new ConfigurationDiagnostic(
                         key, "not yet understood; retained without weakening the configuration"))
             .toList());
-    deferredKeyDiagnostic(
-        entries,
-        diagnostics,
-        "aggregationcyclefreeness",
-        "aggregation-cycle encoding is scheduled for Phase 3");
-    deferredKeyDiagnostic(
-        entries,
-        diagnostics,
-        "forbiddensharing",
-        "forbidden-sharing encoding is scheduled for Phase 3");
+    // forbiddensharing is deliberately NOT a deferredKeyDiagnostic (which would still block
+    // requireSupported()): its own cross-inheritance violation (a subtype object composed via two
+    // DIFFERENT compositions through two DIFFERENT supertype-typed ends, e.g. FileSystem.use's
+    // MediaFile shared between FolderHasFile's File-typed end and ArchiveHasMedia's MediaFile-typed
+    // end) is structurally UNREACHABLE under this encoder as it stands: an association end's
+    // candidate population is drawn ONLY from its own declared class's slots (confirmed directly --
+    // AssociationLinkEncoder never widens to descendant slots the way PolymorphicRange does for
+    // allInstances()/select), so a MediaFile object can never even be a candidate for
+    // FolderHasFile's File-typed end in the first place. Silently accepting the key (already in
+    // recognisedKeys(), so it needs no further handling here) is therefore sound, not a weakening
+    // of a REACHABLE constraint -- unlike bitwidth/satsolver below, which are ALSO deferred
+    // diagnostics (not silent) because THEY are genuinely retained-but-unsupported rather than
+    // provably inert. (The SAME-CLASS sharing case FileSystem.use's own header comment separately
+    // documents as unconditionally enforced by Kodkod regardless of this toggle remains genuinely
+    // unaddressed here -- no shipped scenario needs it, but a future one that did would need real
+    // cross-association enforcement this does not provide.)
     deferredKeyDiagnostic(
         entries,
         diagnostics,
@@ -264,7 +270,8 @@ public final class ConfigurationReader {
             active,
             negatedInvariantQuery(entries, vocabulary, negated, diagnostics),
             duration(entries),
-            modelLimit(entries));
+            modelLimit(entries),
+            aggregationCycleFreedomRequired(entries));
     return new NormalizedConfiguration(configuration, diagnostics);
   }
 
@@ -704,6 +711,27 @@ public final class ConfigurationReader {
 
   private static int modelLimit(Map<String, List<String>> entries) {
     return bound(entries, "modelLimit", DEFAULT_MODEL_LIMIT);
+  }
+
+  /**
+   * Deliberately defaults to {@code false} (not the incumbent's own on-by-default convention) --
+   * see {@link AnalysisConfiguration#requireAggregationCycleFreedom()}'s own javadoc for why:
+   * every existing corpus scenario with a composition/aggregation association never mentions this
+   * key, so matching the incumbent's default would add a brand new constraint nobody asked for.
+   */
+  private static boolean aggregationCycleFreedomRequired(Map<String, List<String>> entries) {
+    String status = one(entries, "aggregationcyclefreeness");
+    if (status == null) {
+      return false;
+    }
+    if ("on".equalsIgnoreCase(status)) {
+      return true;
+    }
+    if ("off".equalsIgnoreCase(status)) {
+      return false;
+    }
+    throw new ConfigurationReadException(
+        "invalid aggregationcyclefreeness value: expected on or off but was '" + status + "'");
   }
 
   private static QueryExpr query(
