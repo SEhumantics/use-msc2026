@@ -1,0 +1,22 @@
+model IfThenElseScope
+
+class A
+attributes
+  i : Integer
+  j : Integer
+  flag : Boolean
+end
+
+constraints
+
+context a : A inv trueBranch:
+  (if a.flag then a.i else a.j endif) = a.i
+
+context a : A inv falseBranch:
+  (if a.flag then a.i else a.j endif) = a.j
+
+context a : A inv undefinedConditionIsUndefined:
+  (if oclUndefined(Boolean) then a.i else a.j endif) > 0
+
+context a : A inv mismatchedBranchTypes:
+  (if a.flag then a.i else 1.5 endif) > 0

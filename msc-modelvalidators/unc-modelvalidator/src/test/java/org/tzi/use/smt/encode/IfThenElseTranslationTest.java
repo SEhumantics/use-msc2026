@@ -1,0 +1,160 @@
+package org.tzi.use.smt.encode;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
+
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+import org.junit.Test;
+import org.tzi.use.parser.use.USECompiler;
+import org.tzi.use.smt.config.AnalysisConfiguration;
+import org.tzi.use.smt.config.AttributeDomain;
+import org.tzi.use.smt.config.ClassScope;
+import org.tzi.use.smt.config.ConfigurationReader;
+import org.tzi.use.smt.config.ConfigurationVocabulary;
+import org.tzi.use.smt.config.RawConfiguration;
+import org.tzi.use.smt.solver.SmtScript;
+import org.tzi.use.uml.mm.MClassInvariant;
+import org.tzi.use.uml.mm.MModel;
+import org.tzi.use.uml.mm.ModelFactory;
+
+/**
+ * Parser-backed regression coverage for {@code if <cond> then <a> else <b> endif}.
+ *
+ * <p>USE's own {@code ExpIf#eval} (use-core) makes the whole if-expression undefined when its
+ * condition is undefined -- it does NOT fall through to either branch (the method's own docstring
+ * says otherwise; the actual code, guarded by {@code if (condValue.isDefined())}, does not match
+ * its docstring, and this translation follows the code). That is the one correctness property
+ * this test suite exists to pin, not merely "it compiles and picks a branch."
+ */
+public class IfThenElseTranslationTest {
+
+  @Test
+  public void trueConditionSelectsTheThenBranch() throws Exception {
+    TranslatedExpression translated = translateInvariant("trueBranch");
+    assertEquals(
+        "(= (ite A_0_flag A_0_i A_0_j) A_0_i)", translated.value().toSmtLib());
+    assertEquals(
+        "(and (and true true) (ite A_0_flag true true))", translated.defined().toSmtLib());
+  }
+
+  @Test
+  public void falseConditionSelectsTheElseBranch() throws Exception {
+    TranslatedExpression translated = translateInvariant("falseBranch");
+    assertEquals(
+        "(= (ite A_0_flag A_0_i A_0_j) A_0_j)", translated.value().toSmtLib());
+  }
+
+  @Test
+  public void undefinedConditionMakesTheWholeIfUndefinedNotEitherBranch() throws Exception {
+    TranslatedExpression translated = translateInvariant("undefinedConditionIsUndefined");
+    // The condition's own definedness (false, from oclUndefined(Boolean)) is conjoined directly --
+    // confirming the WHOLE expression is undefined regardless of which branch an ite would have
+    // picked, not "false but only because a branch happened to be false too".
+    assertTrue(
+        "must gate on the condition's own definedness, not fall through to a branch: "
+            + translated.defined().toSmtLib(),
+        translated.defined().toSmtLib().startsWith("(and false "));
+  }
+
+  @Test
+  public void mismatchedBranchTypesAreRefused() throws Exception {
+    MModel model = compileFixture();
+    MClassInvariant invariant = findInvariant(model, "mismatchedBranchTypes");
+    SmtTranslationException thrown =
+        assertThrows(
+            SmtTranslationException.class,
+            () -> ExpressionTranslator.translate(invariant.bodyExpression(), emptyIfContext()));
+    assertTrue(thrown.getMessage(), thrown.getMessage().contains("different types"));
+  }
+
+  @Test
+  public void fullRoundTripReconstructsAndUseEvaluatorConfirmsTheTrueBranch() throws Exception {
+    MModel model = compileFixture();
+    AnalysisConfiguration config =
+        readConfig(
+            model,
+            """
+            A_min = 1
+            A_max = 1
+            A_i = Set{7}
+            A_j = Set{-3}
+            A_flag = Set{true}
+            A_trueBranch = active
+            A_falseBranch = inactive
+            A_undefinedConditionIsUndefined = inactive
+            A_mismatchedBranchTypes = inactive
+            """);
+    org.tzi.use.smt.finder.ModelFinderResult result =
+        org.tzi.use.smt.finder.SmtModelFinder.find(model, config);
+
+    assertTrue("expected SAT", result.satisfiable());
+    assertTrue("expected the invariant to hold per USE's own evaluator", result.allActiveInvariantsHold());
+  }
+
+  private static AnalysisConfiguration readConfig(MModel model, String body) throws Exception {
+    Path file = Files.createTempFile("ifthenelse", ".properties");
+    file.toFile().deleteOnExit();
+    Files.writeString(file, body);
+    RawConfiguration raw = ConfigurationReader.read(file, null);
+    return ConfigurationReader.normalize(raw, ConfigurationVocabulary.fromModel(model))
+        .requireSupported();
+  }
+
+  private static TranslatedExpression translateInvariant(String invariantName) throws Exception {
+    MModel model = compileFixture();
+    MClassInvariant invariant = findInvariant(model, invariantName);
+    return ExpressionTranslator.translate(
+        invariant.bodyExpression(), fullIfContext(), org.tzi.use.smt.config.TranslationMode.UNCERTAIN);
+  }
+
+  private static TranslationContext fullIfContext() {
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots objects =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("A", 1, 1))).get("A");
+    AttributeDomain iDomain = new AttributeDomain("A", "i", null, List.of(), null, null);
+    AttributeDomain jDomain = new AttributeDomain("A", "j", null, List.of(), null, null);
+    AttributeDomain flagDomain = new AttributeDomain("A", "flag", null, List.of(), null, null);
+    AttributeValues i = AttributeEncoder.encode(script, objects, "i", AttributeType.INTEGER, iDomain);
+    AttributeValues j = AttributeEncoder.encode(script, objects, "j", AttributeType.INTEGER, jDomain);
+    AttributeValues flag =
+        AttributeEncoder.encode(script, objects, "flag", AttributeType.BOOLEAN, flagDomain);
+    return new TranslationContext(
+        Map.of("a", new VariableBinding("A", 0)),
+        Map.of("A.i", i, "A.j", j, "A.flag", flag),
+        Map.of("A.i", iDomain, "A.j", jDomain, "A.flag", flagDomain),
+        Map.of("A", objects),
+        Map.of());
+  }
+
+  private static TranslationContext emptyIfContext() {
+    return new TranslationContext(
+        Map.of("a", new VariableBinding("A", 0)), Map.of(), Map.of(), Map.of(), Map.of());
+  }
+
+  private static MModel compileFixture() throws Exception {
+    Path file = Path.of("src/test/resources/IfThenElseScope.use");
+    PrintWriter err = new PrintWriter(System.err);
+    MModel model =
+        USECompiler.compileSpecification(
+            Files.readString(file), "IfThenElseScope", err, new ModelFactory());
+    err.flush();
+    if (model == null) {
+      throw new AssertionError("IfThenElseScope fixture model did not compile");
+    }
+    return model;
+  }
+
+  private static MClassInvariant findInvariant(MModel model, String name) {
+    for (MClassInvariant invariant : model.classInvariants()) {
+      if (invariant.name().equals(name)) {
+        return invariant;
+      }
+    }
+    throw new IllegalStateException("invariant not found: " + name);
+  }
+}
