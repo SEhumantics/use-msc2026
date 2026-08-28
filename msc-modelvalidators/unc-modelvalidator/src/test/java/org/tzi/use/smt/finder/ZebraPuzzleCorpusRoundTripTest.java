@@ -1,5 +1,6 @@
 package org.tzi.use.smt.finder;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
@@ -50,6 +51,34 @@ public class ZebraPuzzleCorpusRoundTripTest {
             + failing
             + " did not",
         failing == 0);
+  }
+
+  /**
+   * The paired UNSAT scenario ({@code ZebraPuzzle-UNSAT} in the manifest, section {@code
+   * clue10_contradiction}): every clue stays active EXCEPT the added {@code
+   * Clue16_FirstHouseIsNorwegian_Corollary}, which is given {@code status = negate} -- a genuine
+   * exercise of {@link org.tzi.use.smt.config.QueryExpr.Counterexample} through the properties-file
+   * config path (not just its own dedicated unit test), reusing the SAME query desugaring {@link
+   * SmtModelFinder#independenceSweep} already relies on. Clue16 is Clue10's own direct logical
+   * converse (Clue10: the Norwegian lives in house 1 => Clue16: house 1's occupant is Norwegian),
+   * so asking for a witness where every OTHER clue holds but Clue16 is FALSE must be
+   * unsatisfiable -- Clue10 alone already forces Clue16 true, independent of the other 19
+   * invariants (see ZebraPuzzle.properties[clue10_contradiction]'s own header comment for the full
+   * bijection argument).
+   */
+  @Test
+  public void theRealZebraPuzzleUnsatScenarioIsGenuinelyUnsatisfiable() throws Exception {
+    MModel model = compileZebraPuzzle();
+    Path propertiesFile = examplePath("ZebraPuzzle/ZebraPuzzle.properties");
+    RawConfiguration raw = ConfigurationReader.read(propertiesFile, "clue10_contradiction");
+    AnalysisConfiguration config =
+        ConfigurationReader.normalize(raw, ConfigurationVocabulary.fromModel(model))
+            .requireSupported();
+
+    assertFalse(
+        "no witness can satisfy every other clue while Clue16 (Clue10's own direct converse) is"
+            + " false, not an artifact of a mistranslated negate/counterexample query",
+        SmtModelFinder.find(model, config).satisfiable());
   }
 
   private static MModel compileZebraPuzzle() throws Exception {

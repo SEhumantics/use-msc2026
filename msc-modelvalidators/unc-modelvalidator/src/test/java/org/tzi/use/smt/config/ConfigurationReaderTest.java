@@ -97,6 +97,58 @@ public class ConfigurationReaderTest {
         exception.getMessage(), exception.getMessage().contains("unknown invariant 'Missing'"));
   }
 
+  /**
+   * {@code status = negate} means exactly {@link QueryExpr.Counterexample}: a witness where THIS
+   * invariant is false while every other active invariant holds. The negated invariant stays a
+   * member of {@code activeInvariants()} (it must, for {@link QueryExpr.Counterexample}'s own
+   * {@code requireActive} to accept it as a target once the query is desugared) -- only the query
+   * itself changes, not the active set's own membership rule.
+   */
+  @Test
+  public void negatedInvariantBecomesACounterexampleQueryAndStaysActive() throws Exception {
+    Path file =
+        temporaryConfiguration("User_min = 1\nUser_nameIsKey = negate\nBook_titleIsKey = active\n");
+
+    ConfigurationReader.NormalizedConfiguration normalized =
+        ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY);
+
+    assertTrue(normalized.diagnostics().isEmpty());
+    AnalysisConfiguration configuration = normalized.requireSupported();
+    assertEquals(Set.of("User::nameIsKey", "Book::titleIsKey"), configuration.activeInvariants());
+    assertEquals(
+        new QueryExpr.Profiled(
+            ScenarioProfile.EXISTS, new QueryExpr.Counterexample("User::nameIsKey")),
+        configuration.query());
+  }
+
+  @Test
+  public void negatingMoreThanOneInvariantInOneSectionIsAmbiguousAndFailsClosed()
+      throws Exception {
+    Path file =
+        temporaryConfiguration(
+            "User_min = 1\nUser_nameIsKey = negate\nBook_titleIsKey = negate\n");
+
+    ConfigurationReader.NormalizedConfiguration normalized =
+        ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY);
+
+    assertFalse(normalized.diagnostics().isEmpty());
+    assertThrows(ConfigurationReadException.class, normalized::requireSupported);
+  }
+
+  @Test
+  public void anExplicitQueryAlongsideANegatedInvariantIsAmbiguousAndFailsClosed()
+      throws Exception {
+    Path file =
+        temporaryConfiguration(
+            "User_min = 1\nUser_nameIsKey = negate\nquery = uncertain all are true\n");
+
+    ConfigurationReader.NormalizedConfiguration normalized =
+        ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY);
+
+    assertFalse(normalized.diagnostics().isEmpty());
+    assertThrows(ConfigurationReadException.class, normalized::requireSupported);
+  }
+
   @Test
   public void readsNamedSectionsWithoutInheritingDefaultValues() throws Exception {
     Path file =

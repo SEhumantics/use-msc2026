@@ -172,23 +172,28 @@ public final class ConfigurationReader {
 
     Set<String> active = new LinkedHashSet<>();
     List<ConfigurationDiagnostic> diagnostics = new ArrayList<>();
+    List<String> negated = new ArrayList<>();
     for (String invariant : vocabulary.invariantNames()) {
       String status = one(entries, invariant);
       if (status == null || "active".equalsIgnoreCase(status)) {
         active.add(invariant.replaceFirst("_", "::"));
-      } else if (!"inactive".equalsIgnoreCase(status) && !"negate".equalsIgnoreCase(status)) {
+      } else if ("negate".equalsIgnoreCase(status)) {
+        // A negated invariant is still active (QueryExpr.Counterexample's own target must be
+        // active -- see QueryCompiler.desugar's requireActive), but the query is switched below
+        // to ask for a witness where it is FALSE while every other active invariant holds,
+        // exactly the incumbent's InvariantIndepChecker-style single-invariant negation --
+        // reusing the counterexample query machinery already built and tested for
+        // SmtModelFinder.independenceSweep rather than inventing a second one.
+        String qualified = invariant.replaceFirst("_", "::");
+        active.add(qualified);
+        negated.add(qualified);
+      } else if (!"inactive".equalsIgnoreCase(status)) {
         throw new ConfigurationReadException(
             "invalid invariant state for '"
                 + invariant
                 + "': expected active, inactive, or negate but was '"
                 + status
                 + "'");
-      } else if ("negate".equalsIgnoreCase(status)) {
-        diagnostics.add(
-            new ConfigurationDiagnostic(
-                invariant,
-                "negated invariants are retained but cannot be submitted before query support is"
-                    + " added"));
       }
     }
 
@@ -257,7 +262,7 @@ public final class ConfigurationReader {
             associations,
             domains,
             active,
-            query(entries, vocabulary),
+            negatedInvariantQuery(entries, vocabulary, negated, diagnostics),
             duration(entries),
             modelLimit(entries));
     return new NormalizedConfiguration(configuration, diagnostics);
@@ -709,6 +714,45 @@ public final class ConfigurationReader {
     }
     // The legacy comma delimiter also splits functional query atoms; restore their source text.
     return QueryParser.parse(String.join(",", values).trim(), vocabulary);
+  }
+
+  /**
+   * A {@code status = negate} invariant asks for a witness where THAT ONE invariant is false
+   * while every other active invariant still holds -- exactly {@link QueryExpr.Counterexample}'s
+   * own meaning, so this reuses that query rather than inventing a second representation of the
+   * same idea. Refused (retained as a diagnostic, same fail-closed policy as every other
+   * not-yet-understood key) rather than guessed at in the two cases where "the" target is
+   * genuinely ambiguous: more than one invariant negated in the same section (a counterexample
+   * query has exactly one target), or an explicit {@code query} key ALSO configured alongside a
+   * negated invariant (which of the two should win is not this reader's call to make).
+   */
+  private static QueryExpr negatedInvariantQuery(
+      Map<String, List<String>> entries,
+      ConfigurationVocabulary vocabulary,
+      List<String> negated,
+      List<ConfigurationDiagnostic> diagnostics) {
+    if (negated.isEmpty()) {
+      return query(entries, vocabulary);
+    }
+    if (negated.size() > 1) {
+      diagnostics.add(
+          new ConfigurationDiagnostic(
+              String.join(", ", negated),
+              "a counterexample query has exactly one target, so which of these "
+                  + negated.size()
+                  + " negated invariants is meant is ambiguous"));
+      return QueryExpr.SATISFY;
+    }
+    if (entries.containsKey("query")) {
+      diagnostics.add(
+          new ConfigurationDiagnostic(
+              negated.get(0),
+              "an explicit 'query' key is also configured in this section; combining it with a"
+                  + " negated invariant is ambiguous, so this is refused rather than guessing"
+                  + " which one should win"));
+      return QueryExpr.SATISFY;
+    }
+    return new QueryExpr.Profiled(ScenarioProfile.EXISTS, new QueryExpr.Counterexample(negated.get(0)));
   }
 
   private static String one(Map<String, List<String>> entries, String key) {

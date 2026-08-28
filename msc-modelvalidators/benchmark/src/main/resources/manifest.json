@@ -1115,7 +1115,8 @@
       "provenanceCitation": null,
       "features": [
         "cmd.validate",
-        "config.primitive-type-wide-value-domain"
+        "config.primitive-type-wide-value-domain",
+        "invariant.activation-state-config"
       ],
       "question": "Does a new invariant that is the directly-derived, provably-true converse of Clue10 (the house at position 1 must be Norwegian, following from Clue10 plus the position/nationality bijections) become unsatisfiable when negated, i.e. does forcing position 1's occupant to NOT be Norwegian genuinely conflict with Clue10 (which still forces the Norwegian into position 1), while the other 13 clues and 6 all-different invariants stay active over the normal 5-house population?",
       "expected": {
