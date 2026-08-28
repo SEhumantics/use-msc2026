@@ -167,9 +167,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           FragmentBoundary.TIER_2,
           "attribute access after more than one navigation hop is not yet supported");
     }
+    VariableBinding source = context.binding(sourceVar.getVarname());
+    destination = resolveRedefinedDestination(destination, source);
     String destClass = destination.cls().name();
     ObjectSlots destSlots = context.slotsFor(destClass);
-    VariableBinding source = context.binding(sourceVar.getVarname());
     AttributeValues v = context.attributeValues(destClass, attribute.name());
     guardAgainstUncertainAttribute(v);
 
@@ -1050,10 +1051,17 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     return argResult(e).defined();
   }
 
-  /** True exactly when the source slot links to some target slot of the navigated association. */
+  /**
+   * True exactly when the source slot links to some target slot of the navigated association.
+   * Redirect-aware for {@code redefines} via {@link #resolveRedefinedDestination}, the same
+   * primitive {@link #populationOf} already uses -- a subclass-typed source navigating a
+   * superclass-declared role that its own association redefines reads the REDEFINING grid, not
+   * the redefined one, matching real UML redefinition semantics rather than failing closed with
+   * "association ... does not connect class ..." the way this used to.
+   */
   private SmtTerm singleValuedNavigationDefined(ExpNavigation navigation) {
-    MNavigableElement destination = navigation.getDestination();
     VariableBinding source = context.binding(variableNameOf(navigation.getObjectExpression()));
+    MNavigableElement destination = resolveRedefinedDestination(navigation.getDestination(), source);
     if (destination.association() instanceof MAssociationClass associationClass) {
       return associationClassEndNavigationDefined(associationClass, destination, source);
     }
@@ -1171,8 +1179,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    */
   private TranslatedExpression navigationEqualsVariable(
       ExpNavigation navigation, ExpVariable variable) {
-    MNavigableElement destination = navigation.getDestination();
     VariableBinding source = context.binding(variableNameOf(navigation.getObjectExpression()));
+    MNavigableElement destination = resolveRedefinedDestination(navigation.getDestination(), source);
     VariableBinding target = context.binding(variable.getVarname());
     if (!target.className().equals(destination.cls().name())) {
       // Structurally a different class entirely: the navigation can never resolve to it.
