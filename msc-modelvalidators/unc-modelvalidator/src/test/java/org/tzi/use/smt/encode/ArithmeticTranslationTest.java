@@ -297,6 +297,124 @@ public class ArithmeticTranslationTest {
     assertTrue(thrown.getMessage(), thrown.getMessage().contains("operator '+'"));
   }
 
+  // ---------------------------------------------------------------------
+  // Binary * -- two plain crisp Integer operands, ArithmeticScope::productOfTwoIntegers
+  // ---------------------------------------------------------------------
+
+  @Test
+  public void productOfTwoIntegersOnTheRealAstIsSatWhenTheProductMatches() throws Exception {
+    // 2 * 3 = 6, matching the literal in the invariant.
+    assertEquals(SolverOutcome.SAT, solveArithmeticScope("productOfTwoIntegers", 2, 3));
+  }
+
+  /**
+   * Adversarial: 2 + 4 = 6 (matches the invariant's literal) while 2 * 4 = 8 (does not) --
+   * isolating {@code *} from a {@code +}-swap mutation, which would wrongly compute 6 here and
+   * report SAT instead of the correct UNSAT.
+   */
+  @Test
+  public void productOfTwoIntegersOnTheRealAstIsUnsatWhenTheSumWouldMatchButTheProductDoesNot()
+      throws Exception {
+    assertEquals(SolverOutcome.UNSAT, solveArithmeticScope("productOfTwoIntegers", 2, 4));
+  }
+
+  /**
+   * Sign-sensitive: {@code (-2) * (-3) = 6} (matches), while {@code (-2) - (-3) = 1} (does not) --
+   * isolating {@code *} from a {@code -}-swap mutation, which would wrongly compute 1 here and
+   * report UNSAT instead of the correct SAT.
+   */
+  @Test
+  public void productOfTwoIntegersOnTheRealAstIsSatWithNegativeOperandsWhoseProductIsPositive()
+      throws Exception {
+    assertEquals(SolverOutcome.SAT, solveArithmeticScope("productOfTwoIntegers", -2, -3));
+  }
+
+  /**
+   * {@code a.i * a.r} type-checks and widens to {@code Real} under the same {@code
+   * ArithOperation.matches} rule as {@code binaryPlusOverARealOperandFailsClosedRatherThanMixingSorts}
+   * above (confirmed by compiling this exact fixture and inspecting the AST: {@code ExpStdOp}
+   * opname {@code "*"}, {@code a.length==2}, result type {@code Real}) -- so {@code *} must refuse
+   * a non-Integer operand exactly like {@code +}/{@code -} already do, reusing the same {@link
+   * #requireCrispInteger} guard rather than a separate one.
+   */
+  @Test
+  public void binaryTimesOverARealOperandFailsClosedRatherThanMixingSorts() throws Exception {
+    MModel model = compileArithmeticScope();
+    MClassInvariant inv = findInvariant(model, "productWithRealOperandNotConfused");
+
+    SmtTranslationException thrown =
+        assertThrows(
+            SmtTranslationException.class,
+            () ->
+                ExpressionTranslator.translate(
+                    inv.bodyExpression(),
+                    new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of(), Map.of())));
+
+    assertEquals(FragmentBoundary.TIER_2, thrown.boundary());
+    assertTrue(thrown.getMessage(), thrown.getMessage().contains("non-Integer operand"));
+  }
+
+  // ---------------------------------------------------------------------
+  // Unary + -- identity over one plain crisp Integer operand,
+  // ArithmeticScope::unaryPlusIsIdentity
+  // ---------------------------------------------------------------------
+
+  @Test
+  public void unaryPlusIsIdentityOnTheRealAstIsSatWhenBothOperandsAreEqual() throws Exception {
+    assertEquals(SolverOutcome.SAT, solveArithmeticScope("unaryPlusIsIdentity", 5, 5));
+  }
+
+  /**
+   * Sign-sensitive: {@code a.i = +a.j} at i=-7, j=7 is UNSAT ({@code -7 <> +7}, i.e. {@code -7 <>
+   * 7}). A mutation that implemented unary {@code +} as negation (confusing it with the
+   * already-supported unary {@code -}) would compute {@code +7} as {@code -7} here, matching
+   * {@code i}, and wrongly report SAT instead of the correct UNSAT.
+   */
+  @Test
+  public void unaryPlusIsIdentityOnTheRealAstIsUnsatWhenSignsWouldMatchUnderNegationMutation()
+      throws Exception {
+    assertEquals(SolverOutcome.UNSAT, solveArithmeticScope("unaryPlusIsIdentity", -7, 7));
+  }
+
+  /**
+   * Shared fixture for the {@code productOfTwoIntegers}/{@code unaryPlusIsIdentity} outcome tests
+   * above: binds {@code a.i}/{@code a.j} to the given values on a single {@code A} instance and
+   * solves the named invariant against the real Z3 binary, exactly {@link #solveNoAttack}'s
+   * bind-then-solve pattern applied to {@link #compileArithmeticScope}'s fixture class instead of
+   * NQueens's.
+   */
+  private static SolverOutcome solveArithmeticScope(String invariantName, int iValue, int jValue)
+      throws Exception {
+    MModel model = compileArithmeticScope();
+    MClassInvariant inv = findInvariant(model, invariantName);
+
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots as = ObjectSlotEncoder.encode(script, List.of(new ClassScope("A", 1, 1))).get("A");
+    AttributeDomain iDomain = new AttributeDomain("A", "i", null, List.of(), null, null);
+    AttributeValues iValues =
+        AttributeEncoder.encode(script, as, "i", AttributeType.INTEGER, iDomain);
+    AttributeDomain jDomain = new AttributeDomain("A", "j", null, List.of(), null, null);
+    AttributeValues jValues =
+        AttributeEncoder.encode(script, as, "j", AttributeType.INTEGER, jDomain);
+    TranslationContext ctx =
+        new TranslationContext(
+            Map.of("a", new VariableBinding("A", 0)),
+            Map.of("A.i", iValues, "A.j", jValues),
+            Map.of("A.i", iDomain, "A.j", jDomain),
+            Map.of("A", as),
+            Map.of());
+    SmtTerm translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx);
+
+    script.assertThat(Smt.sym("A_0_exists"));
+    script.assertThat(
+        Smt.eq(Smt.sym(iValues.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(iValue))));
+    script.assertThat(
+        Smt.eq(Smt.sym(jValues.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(jValue))));
+    script.assertThat(translated);
+
+    return solve(script).outcome();
+  }
+
   private static MModel compileArithmeticScope() {
     String source =
         """
@@ -304,6 +422,7 @@ public class ArithmeticTranslationTest {
         class A
         attributes
           i : Integer
+          j : Integer
           r : Real
         end
         constraints
@@ -311,6 +430,12 @@ public class ArithmeticTranslationTest {
           a.i + a.r = a.r
         context a: A inv unaryPlusNotSupported:
           a.i = +a.i
+        context a: A inv productOfTwoIntegers:
+          a.i * a.j = 6
+        context a: A inv productWithRealOperandNotConfused:
+          a.i * a.r = a.r
+        context a: A inv unaryPlusIsIdentity:
+          a.i = +a.j
         """;
     ModelFactory factory = new ModelFactory();
     PrintWriter err = new PrintWriter(System.err);
