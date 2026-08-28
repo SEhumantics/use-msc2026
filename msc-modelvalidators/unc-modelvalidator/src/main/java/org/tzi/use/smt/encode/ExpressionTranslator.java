@@ -1634,13 +1634,17 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       }
       return population;
     }
-    if (range instanceof ExpSelect select && isSupportedSelectSource(select)) {
+    if (range instanceof ExpQuery query
+        && (query instanceof ExpSelect || query instanceof ExpReject)
+        && isSupportedSelectSource(query)) {
       // The same X.allInstances()->select(pred) shape collectionSize/collectionEmptiness already
       // reuse selectedAllInstancesPopulation for -- found while chasing CompanyERSchema's own
       // ProjectBudget_greater_PartCost, whose forAll range is exactly this shape. Generalizing it
       // into populationOf itself (rather than special-casing forAll alone) means every population-
       // consuming construct -- forAll, exists, isUnique, includesAll -- gets it uniformly.
-      return selectedAllInstancesPopulation(select);
+      // reject() rides the same branch, sharing selectedAllInstancesPopulation's own reject/select
+      // distinction, since every consuming construct needs it exactly as much as select() does.
+      return selectedAllInstancesPopulation(query);
     }
     if (range instanceof ExpNavigation navigation && navigation.getDestination().isCollection()) {
       if (navigation.getObjectExpression() instanceof ExpVariable sourceVar) {
@@ -1810,8 +1814,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && navigation.getDestination().isCollection()) {
       return defined(sizeTerm(populationOf(navigation, "size()")));
     }
-    if (receiver instanceof ExpSelect select && isSupportedSelectSource(select)) {
-      return defined(sizeTerm(selectedAllInstancesPopulation(select)));
+    if (receiver instanceof ExpQuery query
+        && (query instanceof ExpSelect || query instanceof ExpReject)
+        && isSupportedSelectSource(query)) {
+      return defined(sizeTerm(selectedAllInstancesPopulation(query)));
     }
     if (receiver instanceof ExpObjAsSet objAsSet
         && objAsSet.getObjectExpression() instanceof ExpNavigation navigation
@@ -1910,8 +1916,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   private TranslatedExpression collectionEmptiness(Expression receiver, boolean wantEmpty) {
     String construct = wantEmpty ? "isEmpty" : "notEmpty";
     List<PopulationMember> population;
-    if (receiver instanceof ExpSelect select && isSupportedSelectSource(select)) {
-      population = selectedAllInstancesPopulation(select);
+    if (receiver instanceof ExpQuery query
+        && (query instanceof ExpSelect || query instanceof ExpReject)
+        && isSupportedSelectSource(query)) {
+      population = selectedAllInstancesPopulation(query);
     } else if (receiver instanceof ExpAllInstances
         || (receiver instanceof ExpNavigation navigation
             && navigation.getDestination().isCollection())) {
@@ -1945,13 +1953,13 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * guard, so a future second caller cannot silently bypass it.
    */
   /**
-   * True for exactly the two {@code select} source shapes {@link #selectedAllInstancesPopulation}
-   * knows how to enumerate -- a bare {@code X.allInstances()} or {@code
-   * X.allInstances()->excluding(v)} -- so every caller that dispatches to it shares ONE shape
-   * check rather than each re-deriving (and risking silently drifting from) its own.
+   * True for exactly the two {@code select}/{@code reject} source shapes {@link
+   * #selectedAllInstancesPopulation} knows how to enumerate -- a bare {@code X.allInstances()} or
+   * {@code X.allInstances()->excluding(v)} -- so every caller that dispatches to it shares ONE
+   * shape check rather than each re-deriving (and risking silently drifting from) its own.
    */
-  private static boolean isSupportedSelectSource(ExpSelect select) {
-    Expression range = select.getRangeExpression();
+  private static boolean isSupportedSelectSource(ExpQuery query) {
+    Expression range = query.getRangeExpression();
     if (range instanceof ExpAllInstances) {
       return true;
     }
@@ -1962,12 +1970,24 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && excludingOp.args()[1] instanceof ExpVariable;
   }
 
-  private List<PopulationMember> selectedAllInstancesPopulation(ExpSelect select) {
+  /**
+   * Shared population builder for BOTH {@code select(pred)} and {@code reject(pred)} -- {@code
+   * X->reject(pred)} is exactly {@code X->select(not pred)}, and {@code ExpReject}/{@code
+   * ExpSelect} share every accessor used here via their common {@link ExpQuery} base, so the two
+   * constructs differ only in which of {@link TranslatedExpression#trueTerm} (select: genuinely,
+   * definitely true) or {@link TranslatedExpression#falseTerm} (reject: genuinely, definitely
+   * false -- NOT simply the negation of {@code trueTerm}, since an undefined predicate must stay
+   * excluded from a reject() result too, matching OCL's Kleene-negation-preserves-undefinedness
+   * rule) each population member's guard is built from.
+   */
+  private List<PopulationMember> selectedAllInstancesPopulation(ExpQuery query) {
+    boolean reject = query instanceof ExpReject;
+    String construct = reject ? "reject()" : "select()";
     ExpAllInstances all;
     VariableBinding excluded = null;
-    if (select.getRangeExpression() instanceof ExpAllInstances direct) {
+    if (query.getRangeExpression() instanceof ExpAllInstances direct) {
       all = direct;
-    } else if (select.getRangeExpression() instanceof ExpStdOp excludingOp
+    } else if (query.getRangeExpression() instanceof ExpStdOp excludingOp
         && "excluding".equals(excludingOp.opname())
         && excludingOp.args()[0] instanceof ExpAllInstances excludingSource
         && excludingOp.args()[1] instanceof ExpVariable excludedVar) {
@@ -1976,14 +1996,14 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     } else {
       throw unsupported(
           FragmentBoundary.TIER_3,
-          "select() over a source other than X.allInstances() or"
+          construct
+              + " over a source other than X.allInstances() or"
               + " X.allInstances()->excluding(v) is not yet supported");
     }
-    if (select.getVariableDeclarations().size() != 1) {
-      throw unsupported(
-          FragmentBoundary.TIER_3, "select() with a variable count other than one");
+    if (query.getVariableDeclarations().size() != 1) {
+      throw unsupported(FragmentBoundary.TIER_3, construct + " with a variable count other than one");
     }
-    String iterator = select.getVariableDeclarations().varDecl(0).name();
+    String iterator = query.getVariableDeclarations().varDecl(0).name();
     List<PopulationMember> population = new ArrayList<>();
     for (PolymorphicRange.Slot slot : PolymorphicRange.slotsOf(all.getSourceType(), context)) {
       if (excluded != null && slot.binding().equals(excluded)) {
@@ -1992,14 +2012,15 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       }
       TranslatedExpression predicate =
           translate(
-              select.getQueryExpression(),
+              query.getQueryExpression(),
               context.withBinding(iterator, slot.binding()),
               mode,
               positivePolarity,
               localBindings);
+      SmtTerm matches = reject ? predicate.falseTerm() : predicate.trueTerm();
       population.add(
           new PopulationMember(
-              slot.binding(), Smt.and(List.of(Smt.sym(slot.existsName()), predicate.trueTerm()))));
+              slot.binding(), Smt.and(List.of(Smt.sym(slot.existsName()), matches))));
     }
     return population;
   }
