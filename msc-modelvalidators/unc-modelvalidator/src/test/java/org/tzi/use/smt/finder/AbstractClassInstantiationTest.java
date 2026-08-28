@@ -1,5 +1,6 @@
 package org.tzi.use.smt.finder;
 
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
@@ -8,6 +9,7 @@ import java.nio.file.Path;
 import org.junit.Test;
 import org.tzi.use.parser.use.USECompiler;
 import org.tzi.use.smt.config.AnalysisConfiguration;
+import org.tzi.use.smt.config.ConfigurationReadException;
 import org.tzi.use.smt.config.ConfigurationReader;
 import org.tzi.use.smt.config.ConfigurationVocabulary;
 import org.tzi.use.smt.config.RawConfiguration;
@@ -57,6 +59,65 @@ public class AbstractClassInstantiationTest {
             + " soundness violation the incumbent (ClassConfigurator.generateObjectsTuple)"
             + " forbids unconditionally",
         state.objectsOfClass(model.getClass("Vehicle")).isEmpty());
+  }
+
+  /**
+   * The other branch of the same decision: when the user EXPLICITLY configures a nonzero {@code
+   * Vehicle_min}/{@code Vehicle_max} for the abstract {@code Vehicle} class -- an outright
+   * config/model contradiction, not merely an unconfigured default -- this reader refuses it with
+   * a located, descriptive {@link ConfigurationReadException} rather than silently overriding it
+   * to 0/0 the way Kodkod's {@code ClassConfigurator.generateObjectsTuple} unconditionally does.
+   * That choice follows this codebase's own established precedent for a genuinely analogous
+   * config/model contradiction: {@code ConfigurationReader.associationScope} already refuses
+   * (rather than silently resolves) a mismatch between predefined link tuples and an explicit
+   * association bound (commits 4277d708/53944b23/b5820df5).
+   */
+  @Test
+  public void anAbstractClassExplicitlyConfiguredNonzeroIsRefusedNotSilentlyOverridden()
+      throws Exception {
+    MModel model = compile();
+    ConfigurationVocabulary vocabulary = ConfigurationVocabulary.fromModel(model);
+    Path file = Files.createTempFile("abstract-class-explicit-override", ".properties");
+    Files.writeString(
+        file,
+        """
+        Integer_min = 0
+        Integer_max = 7
+
+        Vehicle_min = 1
+        Vehicle_max = 1
+
+        Vehicle_licensePlate = Set{'CAR-001','TRK-100'}
+        Vehicle_wheels = Set{4,6,8}
+
+        Car_min = 1
+        Car_max = 1
+
+        Car_numDoors = Set{2,4,5}
+
+        Truck_min = 1
+        Truck_max = 1
+
+        Truck_payloadCapacity = Set{2,5,10}
+
+        Vehicle_PositiveWheels = active
+        Car_ReasonableDoors = active
+        Truck_PositivePayload = active
+        """);
+    file.toFile().deleteOnExit();
+    RawConfiguration raw = ConfigurationReader.read(file, null);
+
+    ConfigurationReadException thrown =
+        assertThrows(
+            ConfigurationReadException.class,
+            () -> ConfigurationReader.normalize(raw, vocabulary).requireSupported());
+
+    assertTrue(
+        "the refusal must name the offending class so a user can locate the contradiction",
+        thrown.getMessage().contains("Vehicle"));
+    assertTrue(
+        "the refusal must name the offending key",
+        thrown.getMessage().contains("Vehicle_min"));
   }
 
   /**

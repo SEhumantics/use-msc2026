@@ -20,26 +20,41 @@ import org.tzi.use.uml.ocl.type.Type;
  * and the same file cannot be read correctly without that distinction. It is a required component,
  * not an optional one, so a hand-built vocabulary cannot silently default to "no attribute is a
  * String" and re-open the defect this closed.
+ *
+ * <p>{@code abstractClassNames} is the subset of {@code classNames} whose {@code
+ * MClassifier.isAbstract()} (use-core/src/main/java/org/tzi/use/uml/mm/MClassifier.java:57) is
+ * true. It exists so {@link ConfigurationReader#normalize} can refuse to let an abstract class's
+ * own direct-instance bound be configured nonzero -- see that method for why: without it,
+ * ConfigurationReader has no way to tell an abstract class from a concrete one at all, and
+ * defaults every unconfigured class's {@code _min}/{@code _max} to 1/1 identically (docs/
+ * modelvalidator-feature-matrix.json, feature {@code class.abstract}).
  */
 public record ConfigurationVocabulary(
     Set<String> classNames,
     Set<String> associationNames,
     Set<String> attributeNames,
     Set<String> stringAttributeNames,
-    Set<String> invariantNames) {
+    Set<String> invariantNames,
+    Set<String> abstractClassNames) {
   public ConfigurationVocabulary {
     classNames = Set.copyOf(classNames);
     associationNames = Set.copyOf(associationNames);
     attributeNames = Set.copyOf(attributeNames);
     stringAttributeNames = Set.copyOf(stringAttributeNames);
     invariantNames = Set.copyOf(invariantNames);
+    abstractClassNames = Set.copyOf(abstractClassNames);
   }
 
   public static ConfigurationVocabulary empty() {
-    return new ConfigurationVocabulary(Set.of(), Set.of(), Set.of(), Set.of(), Set.of());
+    return new ConfigurationVocabulary(
+        Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), Set.of());
   }
 
-  /** Attribute names use the incumbent's {@code Class_attribute} spelling. */
+  /**
+   * Attribute names use the incumbent's {@code Class_attribute} spelling. {@code
+   * abstractClassNames} defaults to empty -- every prior call site of this 5-argument overload
+   * hand-writes a small fixed vocabulary for one test, none of which name an abstract class.
+   */
   public static ConfigurationVocabulary of(
       Set<String> classNames,
       Set<String> associationNames,
@@ -47,12 +62,22 @@ public record ConfigurationVocabulary(
       Set<String> stringAttributeNames,
       Set<String> invariantNames) {
     return new ConfigurationVocabulary(
-        classNames, associationNames, attributeNames, stringAttributeNames, invariantNames);
+        classNames,
+        associationNames,
+        attributeNames,
+        stringAttributeNames,
+        invariantNames,
+        Set.of());
   }
 
   /** True for an attribute whose declared (element) type is String, in {@code Class_attribute}. */
   public boolean isStringAttribute(String attributeName) {
     return stringAttributeNames.contains(attributeName);
+  }
+
+  /** True for a class name declared {@code abstract} in the loaded USE model. */
+  public boolean isAbstractClass(String className) {
+    return abstractClassNames.contains(className);
   }
 
   /**
@@ -64,8 +89,12 @@ public record ConfigurationVocabulary(
     Set<String> classNames = new LinkedHashSet<>();
     Set<String> attributeNames = new LinkedHashSet<>();
     Set<String> stringAttributeNames = new LinkedHashSet<>();
+    Set<String> abstractClassNames = new LinkedHashSet<>();
     for (MClass cls : model.classes()) {
       classNames.add(cls.name());
+      if (cls.isAbstract()) {
+        abstractClassNames.add(cls.name());
+      }
       for (MAttribute attribute : cls.attributes()) {
         String key = cls.name() + "_" + attribute.name();
         attributeNames.add(key);
@@ -80,7 +109,13 @@ public record ConfigurationVocabulary(
     for (MClassInvariant invariant : model.classInvariants()) {
       invariantNames.add(invariant.cls().name() + "_" + invariant.name());
     }
-    return of(classNames, associationNames, attributeNames, stringAttributeNames, invariantNames);
+    return new ConfigurationVocabulary(
+        classNames,
+        associationNames,
+        attributeNames,
+        stringAttributeNames,
+        invariantNames,
+        abstractClassNames);
   }
 
   /**

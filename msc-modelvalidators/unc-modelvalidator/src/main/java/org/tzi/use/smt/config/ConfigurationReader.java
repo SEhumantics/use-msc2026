@@ -98,7 +98,13 @@ public final class ConfigurationReader {
     List<ClassScope> classes = new ArrayList<>();
     Map<String, List<String>> objectNamesByClass = new LinkedHashMap<>();
     for (String name : vocabulary.classNames().stream().sorted().toList()) {
+      int min = bound(entries, name + "_min", 1);
       int max = bound(entries, name + "_max", 1);
+      if (vocabulary.isAbstractClass(name)) {
+        int[] forced = abstractClassBounds(entries, name, min, max);
+        min = forced[0];
+        max = forced[1];
+      }
       List<String> objectNames =
           entries.containsKey(name) ? objectNames(name, entries.get(name)) : List.of();
       if (max != -1 && objectNames.size() > max) {
@@ -114,7 +120,7 @@ public final class ConfigurationReader {
                 + " configured population, so it is refused here instead");
       }
       objectNamesByClass.put(name, objectNames);
-      classes.add(new ClassScope(name, bound(entries, name + "_min", 1), max, objectNames));
+      classes.add(new ClassScope(name, min, max, objectNames));
     }
     List<AssociationScope> associations = new ArrayList<>();
     for (String name : vocabulary.associationNames().stream().sorted().toList()) {
@@ -370,6 +376,62 @@ public final class ConfigurationReader {
     return body.isEmpty()
         ? List.of()
         : List.of(body.split(",", -1)).stream().map(String::trim).toList();
+  }
+
+  /**
+   * Forces an abstract class's own direct-instance bound to 0/0 -- refusing rather than silently
+   * overriding when the user explicitly configured a nonzero {@code ClassName_min}/{@code
+   * ClassName_max} for it.
+   *
+   * <p>UML abstract classes categorically cannot have direct instances; nothing before this
+   * checked that anywhere in unc-modelvalidator (docs/modelvalidator-feature-matrix.json, feature
+   * {@code class.abstract}) -- an unconfigured abstract class defaulted to the ordinary min=1/
+   * max=1 a concrete class gets, and USE's own core object-creation API (not this reader) was
+   * left to reject the resulting witness at reconstruction time with an uncaught {@code
+   * MSystemException}. Kodkod's own {@code ClassConfigurator.generateObjectsTuple}
+   * (kk-modelvalidator, lines 23-34) handles this by forcing an abstract class's own relation to
+   * an empty {@code TupleSet} UNCONDITIONALLY -- it overrides whatever bound was configured,
+   * silently.
+   *
+   * <p>This reader does not follow that override precedent. It follows this codebase's OWN
+   * precedent instead -- {@link #associationScope}, directly above -- which refuses rather than
+   * silently resolves a genuine contradiction between what the user configured and what the model
+   * structurally demands (there, k forced link tuples versus an explicit association bound; here,
+   * abstractness versus an explicit class bound). Only a bound the user left UNCONFIGURED is
+   * defaulted to 0/0 silently -- exactly like every other unconfigured bound in this method
+   * already defaults, so a scenario that never mentions the abstract class's bounds at all (the
+   * ordinary case) is unaffected. A bound the user explicitly wrote down to something other than
+   * 0 is a config/model contradiction, refused with a located, descriptive error instead of
+   * guessed at -- per this project's standing bias against silently doing something other than
+   * what was asked.
+   */
+  private static int[] abstractClassBounds(
+      Map<String, List<String>> entries, String name, int min, int max) {
+    if (entries.containsKey(name + "_min") && min != 0) {
+      throw new ConfigurationReadException(
+          "class '"
+              + name
+              + "' is declared abstract and can never have a direct instance of its own, but '"
+              + name
+              + "_min' is explicitly configured to "
+              + min
+              + "; leave '"
+              + name
+              + "_min' unconfigured (or set it to 0) to let it default to 0");
+    }
+    if (entries.containsKey(name + "_max") && max != 0) {
+      throw new ConfigurationReadException(
+          "class '"
+              + name
+              + "' is declared abstract and can never have a direct instance of its own, but '"
+              + name
+              + "_max' is explicitly configured to "
+              + max
+              + "; leave '"
+              + name
+              + "_max' unconfigured (or set it to 0) to let it default to 0");
+    }
+    return new int[] {0, 0};
   }
 
   /**
