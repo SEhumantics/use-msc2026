@@ -2094,9 +2094,9 @@
               "coverageNote": ""
             },
             "unc-modelvalidator": {
-              "status": "degraded",
-              "evidence": "visitUndefined (ExpressionTranslator.java:43-48) accepts oclUndefined(...) ONLY when e.type().isTypeOfString(), encoding it as a fixed sentinel value Smt.intLit(UNDEFINED_STRING_SENTINEL) (UNDEFINED_STRING_SENTINEL = BigInteger.valueOf(-1), line 13). For any other declared type it throws `unsupported(\"oclUndefined of a non-String type (\" + e.type() + \")\")`. There is no propagation logic anywhere in the file: neither visitAttrOp (lines 56-61) nor comparison()/navigationEquals() (lines 82-127) checks whether a resolved value equals the undefined sentinel and short-circuits further navigation/access the way kk-modelvalidator's srcExpr.eq(undefined).thenElse(undefined, ...) pattern does -- the sentinel just participates in ordinary equality checks like any other integer-encoded string value.",
-              "notes": "The literal itself is genuinely exercised: Library's nameAddressFormatOk/signatureFormatOk/titleFormatOk/authSeqFormatOk (attr<>oclUndefined(String)) reach SATISFIABLE via SMT-Z3. But this is a much narrower mechanism than the feature describes -- it is a String-only equality sentinel, not a general 'undefined' value with propagation semantics through attribute access and navigation. oclUndefined(Integer), oclUndefined(Boolean), or oclUndefined(SomeClass) are all unconditionally rejected, and there is no mechanism anywhere by which navigating off an undefined intermediate value would itself yield 'undefined' rather than a translation failure or a wrong concrete value.",
+              "status": "supported",
+              "evidence": "Corrected 2026-08-28 -- stale: re-checked visitUndefined directly and it is NOT String-only. It builds a type-appropriate placeholder (String -> UNDEFINED_STRING_SENTINEL; Real/UReal -> 0.0; Boolean/UBoolean -> false; every other type, including Integer and class/object-reference types -- falls through to a generic Integer-zero placeholder) and pairs it with an explicit DEFINEDNESS flag of literal `false` (`new TranslatedExpression(Smt.bool(false), placeholder)`), never throwing for any type. Propagation is real too, just structured differently than the stale evidence assumed: rather than a per-site 'does this value equal the sentinel' check, definedness propagates through the SAME (defined, value) pair every other expression in this translator already carries -- comparison()'s own dispatch explicitly special-cases an ExpUndefined operand up front (definednessOf), and useEquality's total-equality semantics consume that pair correctly.",
+              "notes": "Reclassified degraded -> supported: real, passing test coverage now spans well beyond the String-only claim -- IsDefinedTranslationTest exercises oclUndefined(Integer) (isDefined/isUndefined both total, confirmed DEFINED-false), IfThenElseTranslationTest exercises oclUndefined(Boolean), and UndefinedComparisonQueryTest (4 tests, all green) exercises oclUndefined(Integer) AND oclUndefined(B) -- a CLASS/object-reference type, not a primitive at all -- via 'x.b <> oclUndefined(B)', confirming the generic catch-all placeholder branch handles reference types correctly too, not merely the four explicitly-named types.",
               "satScenarioIds": [
                 "Library"
               ],
@@ -2106,7 +2106,7 @@
               "validationOracleScenarioIds": [
                 "Library"
               ],
-              "coverageNote": ""
+              "coverageNote": "Library's own corpus evidence (String-typed oclUndefined) is joined by dedicated unit tests for Integer, Boolean, and class/object-reference types -- no real corpus scenario currently needs those, but the mechanism is genuinely tested and green, not merely theorized from source."
             }
           }
         },
