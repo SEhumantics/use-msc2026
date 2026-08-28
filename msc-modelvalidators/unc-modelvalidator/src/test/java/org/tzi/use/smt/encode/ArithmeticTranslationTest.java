@@ -11,24 +11,35 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.Test;
 import org.tzi.use.parser.use.USECompiler;
+import org.tzi.use.smt.config.AnalysisConfiguration;
 import org.tzi.use.smt.config.AssociationScope;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.ClassScope;
+import org.tzi.use.smt.finder.ModelFinderResult;
+import org.tzi.use.smt.finder.SmtModelFinder;
 import org.tzi.use.smt.solver.*;
+import org.tzi.use.smt.verify.InvariantVerdict;
 import org.tzi.use.uml.mm.MClassInvariant;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
 
 /**
- * Binary {@code +}/{@code -} and unary {@code -} over plain crisp Integer operands --
- * THESIS_SMT_MODEL_FINDER_PLAN.md 7.1 Tier 2's "integer arithmetic and comparisons", confirmed by
- * the manager's re-ranked ledger as the sole remaining refusal blocking BOTH {@code
- * EmployeeInvariants}/{@code EmployeeInvariants-UNSAT} (real invariant {@code NotBelowMinusOne:
- * self.salary > -1}) and {@code NQueens}/{@code NQueens-UNSAT} (real invariant {@code noAttack:
- * q1<>q2 implies (q1.row.idx+q1.col.idx <> q2.row.idx+q2.col.idx and q1.row.idx-q1.col.idx <>
- * q2.row.idx-q2.col.idx)}).
+ * Binary {@code +}/{@code -}/{@code *} and unary {@code -}/{@code +} over plain crisp Integer
+ * operands -- THESIS_SMT_MODEL_FINDER_PLAN.md 7.1 Tier 2's "integer arithmetic and comparisons".
+ * Binary {@code +}/{@code -} and unary {@code -} were confirmed by the manager's re-ranked ledger
+ * as the sole remaining refusal blocking BOTH {@code EmployeeInvariants}/{@code
+ * EmployeeInvariants-UNSAT} (real invariant {@code NotBelowMinusOne: self.salary > -1}) and {@code
+ * NQueens}/{@code NQueens-UNSAT} (real invariant {@code noAttack: q1<>q2 implies
+ * (q1.row.idx+q1.col.idx <> q2.row.idx+q2.col.idx and q1.row.idx-q1.col.idx <>
+ * q2.row.idx-q2.col.idx)}). Binary {@code *} and unary {@code +} complete the remaining two of the
+ * ten {@code prim.integer-arithmetic} operations that need no dedicated undefinedness handling
+ * (unlike {@code /}, {@code div}, {@code mod}, {@code abs}, {@code min}, {@code max}, which stay
+ * unconditionally refused); the {@code ArithmeticScope} fixture below constructs a real, compiled
+ * invariant for each rather than reusing an existing corpus scenario, since no scenario in the
+ * benchmark corpus happens to use {@code *} or unary {@code +}.
  *
  * <p>AST evidence (compiling the real models and inspecting the parsed tree directly, not
  * inferred): {@code self.salary > -1} reaches this visitor as {@code ExpStdOp} opname {@code "-"}
@@ -36,7 +47,9 @@ import org.tzi.use.uml.mm.ModelFactory;
  * minus into a negative constant at parse time, so unary minus is a real, reachable shape. {@code
  * q1.row.idx+q1.col.idx} / {@code q1.row.idx-q1.col.idx} reach it as {@code ExpStdOp} opname {@code
  * "+"}/{@code "-"} with {@code a.length==2}, each operand an already-supported navigated-attribute
- * {@code ExpAttrOp}.
+ * {@code ExpAttrOp}. {@code a.i * a.j} reaches it as {@code ExpStdOp} opname {@code "*"} with
+ * {@code a.length==2}; {@code +a.j} reaches it as {@code ExpStdOp} opname {@code "+"} with {@code
+ * a.length==1}.
  */
 public class ArithmeticTranslationTest {
 
@@ -260,21 +273,20 @@ public class ArithmeticTranslationTest {
 
   /**
    * Unary {@code +} is syntactically legal per USE's own OCL grammar ({@code ("not" | "-" | "+")
-   * unaryExpression}) and DOES reach this visitor for a crisp Integer operand (confirmed by
-   * compiling this exact fixture: {@code ExpStdOp} opname {@code "+"}, {@code a.length==1}, type
-   * {@code Integer}) -- but it is not needed by either target invariant and is deliberately out of
-   * this slice's scope, so it must fail closed rather than being silently treated as a no-op or
-   * folded into the binary case.
+   * unaryExpression}) and reaches this visitor for a crisp Integer operand (confirmed by compiling
+   * this exact fixture: {@code ExpStdOp} opname {@code "+"}, {@code a.length==1}, type {@code
+   * Integer}). {@code a.i = +a.i} is a tautology over every Integer -- unlike unary {@code -}'s
+   * boundary tests above, there is no bound value that makes it false -- so this is a SAT-only
+   * regression check that the identity translation actually reproduces {@code a.i}'s own value
+   * rather than, say, silently dropping the whole comparison to a vacuous {@code true}; {@link
+   * #unaryPlusIsIdentityOnTheRealAstIsUnsatWhenSignsWouldMatchUnderNegationMutation} below is the
+   * fixture that catches a wrong (non-identity) translation via an UNSAT case.
    */
   @Test
-  public void unaryPlusFailsClosedRatherThanBeingSilentlyGeneralized() throws Exception {
+  public void unaryPlusOverTheSameOperandOnTheRealAstIsSatForAnyValue() throws Exception {
     MModel model = compileArithmeticScope();
-    MClassInvariant inv = findInvariant(model, "unaryPlusNotSupported");
+    MClassInvariant inv = findInvariant(model, "unaryPlusOverSameOperandIsTautology");
 
-    // A real (non-empty) context: the invariant's LEFT operand (a.i, an ordinary attribute
-    // access) is evaluated before the right, so it must resolve successfully for the failure to
-    // come from the RIGHT operand's unary "+" -- the thing this test actually targets -- rather
-    // than from an unrelated missing-binding error on the left.
     SmtScript script = new SmtScript("QF_LIA");
     ObjectSlots as = ObjectSlotEncoder.encode(script, List.of(new ClassScope("A", 1, 1))).get("A");
     AttributeDomain iDomain = new AttributeDomain("A", "i", null, List.of(), null, null);
@@ -287,6 +299,100 @@ public class ArithmeticTranslationTest {
             Map.of("A.i", iDomain),
             Map.of("A", as),
             Map.of());
+    SmtTerm translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx);
+
+    script.assertThat(Smt.sym("A_0_exists"));
+    script.assertThat(
+        Smt.eq(Smt.sym(iValues.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(5))));
+    script.assertThat(translated);
+
+    assertEquals(SolverOutcome.SAT, solve(script).outcome());
+  }
+
+  // ---------------------------------------------------------------------
+  // Binary * -- one variable operand and one Integer LITERAL operand only.
+  //
+  // ArithmeticScope::productOfIntegerAndLiteral / productOfLiteralAndInteger.
+  //
+  // Discovered while implementing this slice (not assumed up front): this project's SmtScript is
+  // pinned to QF_LIA (linear integer arithmetic -- SmtModelFinder.java), and the pinned Z3 5.1.0
+  // binary enforces that syntactically -- feeding it "(declare-const x Int) (declare-const y Int)
+  // (assert (= x 2)) (assert (= y 3)) (assert (= (* x y) 6)) (check-sat)" directly returns
+  // "(error \"...logic does not support nonlinear arithmetic\")" before ever reaching check-sat,
+  // even though x and y are both pinned to concrete values by earlier assertions. "(* <var>
+  // <numeral>)" and "(* <numeral> <var>)" are both confirmed accepted (linear coefficient form).
+  // So a plain crisp Integer product is supported only when at least one OCL-level operand is a
+  // literal; the genuinely nonlinear "variable * variable" shape is refused, not silently handed
+  // to the solver to error out on -- see the dedicated refusal test below and {@link
+  // ExpressionTranslator#requireLinearProduct}.
+  // ---------------------------------------------------------------------
+
+  @Test
+  public void productOfIntegerAndLiteralOnTheRealAstIsSatWhenTheProductMatches() throws Exception {
+    // 3 * 2 = 6, matching the invariant's literal.
+    assertEquals(SolverOutcome.SAT, solveArithmeticScope("productOfIntegerAndLiteral", 3, 0));
+  }
+
+  /**
+   * Adversarial: 4 + 2 = 6 (matches the invariant's literal) while 4 * 2 = 8 (does not) --
+   * isolating {@code *} from a {@code +}-swap mutation, which would wrongly compute 6 here and
+   * report SAT instead of the correct UNSAT.
+   */
+  @Test
+  public void productOfIntegerAndLiteralOnTheRealAstIsUnsatWhenTheSumWouldMatchButNotTheProduct()
+      throws Exception {
+    assertEquals(SolverOutcome.UNSAT, solveArithmeticScope("productOfIntegerAndLiteral", 4, 0));
+  }
+
+  /**
+   * Adversarial: 8 - 2 = 6 (matches the invariant's literal) while 8 * 2 = 16 (does not) --
+   * isolating {@code *} from a {@code -}-swap mutation, which would wrongly compute 6 here and
+   * report SAT instead of the correct UNSAT.
+   */
+  @Test
+  public void
+      productOfIntegerAndLiteralOnTheRealAstIsUnsatWhenTheDifferenceWouldMatchButNotTheProduct()
+          throws Exception {
+    assertEquals(SolverOutcome.UNSAT, solveArithmeticScope("productOfIntegerAndLiteral", 8, 0));
+  }
+
+  /** The literal-first operand order ({@code 2 * a.j}), confirming order does not matter. */
+  @Test
+  public void productOfLiteralAndIntegerOnTheRealAstIsSatWhenTheProductMatches() throws Exception {
+    assertEquals(SolverOutcome.SAT, solveArithmeticScope("productOfLiteralAndInteger", 0, 3));
+  }
+
+  /**
+   * {@code a.i * a.j} -- both operands non-constant -- is the genuinely nonlinear shape {@link
+   * ExpressionTranslator#requireLinearProduct} refuses (see this section's header comment for the
+   * Z3-confirmed evidence): translated, it would produce {@code (* <symbol> <symbol>)}, which the
+   * pinned QF_LIA solver logic rejects outright. This must fail closed at TRANSLATION time with a
+   * located {@link SmtTranslationException}, not be silently handed to the solver to error out on
+   * (which would surface as an opaque {@code MALFORMED} solver result with no connection to the
+   * OCL construct that caused it).
+   */
+  @Test
+  public void
+      binaryTimesOverTwoNonConstantOperandsFailsClosedRatherThanEmittingNonlinearArithmetic()
+          throws Exception {
+    MModel model = compileArithmeticScope();
+    MClassInvariant inv = findInvariant(model, "productOfTwoNonConstantIntegers");
+
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots as = ObjectSlotEncoder.encode(script, List.of(new ClassScope("A", 1, 1))).get("A");
+    AttributeDomain iDomain = new AttributeDomain("A", "i", null, List.of(), null, null);
+    AttributeValues iValues =
+        AttributeEncoder.encode(script, as, "i", AttributeType.INTEGER, iDomain);
+    AttributeDomain jDomain = new AttributeDomain("A", "j", null, List.of(), null, null);
+    AttributeValues jValues =
+        AttributeEncoder.encode(script, as, "j", AttributeType.INTEGER, jDomain);
+    TranslationContext ctx =
+        new TranslationContext(
+            Map.of("a", new VariableBinding("A", 0)),
+            Map.of("A.i", iValues, "A.j", jValues),
+            Map.of("A.i", iDomain, "A.j", jDomain),
+            Map.of("A", as),
+            Map.of());
 
     SmtTranslationException thrown =
         assertThrows(
@@ -294,39 +400,7 @@ public class ArithmeticTranslationTest {
             () -> ExpressionTranslator.translate(inv.bodyExpression(), ctx));
 
     assertEquals(FragmentBoundary.TIER_2, thrown.boundary());
-    assertTrue(thrown.getMessage(), thrown.getMessage().contains("operator '+'"));
-  }
-
-  // ---------------------------------------------------------------------
-  // Binary * -- two plain crisp Integer operands, ArithmeticScope::productOfTwoIntegers
-  // ---------------------------------------------------------------------
-
-  @Test
-  public void productOfTwoIntegersOnTheRealAstIsSatWhenTheProductMatches() throws Exception {
-    // 2 * 3 = 6, matching the literal in the invariant.
-    assertEquals(SolverOutcome.SAT, solveArithmeticScope("productOfTwoIntegers", 2, 3));
-  }
-
-  /**
-   * Adversarial: 2 + 4 = 6 (matches the invariant's literal) while 2 * 4 = 8 (does not) --
-   * isolating {@code *} from a {@code +}-swap mutation, which would wrongly compute 6 here and
-   * report SAT instead of the correct UNSAT.
-   */
-  @Test
-  public void productOfTwoIntegersOnTheRealAstIsUnsatWhenTheSumWouldMatchButTheProductDoesNot()
-      throws Exception {
-    assertEquals(SolverOutcome.UNSAT, solveArithmeticScope("productOfTwoIntegers", 2, 4));
-  }
-
-  /**
-   * Sign-sensitive: {@code (-2) * (-3) = 6} (matches), while {@code (-2) - (-3) = 1} (does not) --
-   * isolating {@code *} from a {@code -}-swap mutation, which would wrongly compute 1 here and
-   * report UNSAT instead of the correct SAT.
-   */
-  @Test
-  public void productOfTwoIntegersOnTheRealAstIsSatWithNegativeOperandsWhoseProductIsPositive()
-      throws Exception {
-    assertEquals(SolverOutcome.SAT, solveArithmeticScope("productOfTwoIntegers", -2, -3));
+    assertTrue(thrown.getMessage(), thrown.getMessage().contains("non-constant"));
   }
 
   /**
@@ -335,7 +409,9 @@ public class ArithmeticTranslationTest {
    * above (confirmed by compiling this exact fixture and inspecting the AST: {@code ExpStdOp}
    * opname {@code "*"}, {@code a.length==2}, result type {@code Real}) -- so {@code *} must refuse
    * a non-Integer operand exactly like {@code +}/{@code -} already do, reusing the same {@link
-   * #requireCrispInteger} guard rather than a separate one.
+   * #requireCrispInteger} guard rather than a separate one. The type guard runs before the
+   * linearity guard, so this is refused as a type mismatch even though {@code a.r} is also
+   * non-constant.
    */
   @Test
   public void binaryTimesOverARealOperandFailsClosedRatherThanMixingSorts() throws Exception {
@@ -352,6 +428,28 @@ public class ArithmeticTranslationTest {
 
     assertEquals(FragmentBoundary.TIER_2, thrown.boundary());
     assertTrue(thrown.getMessage(), thrown.getMessage().contains("non-Integer operand"));
+  }
+
+  /**
+   * The independent-oracle discipline this codebase uses everywhere else (see {@link
+   * org.tzi.use.smt.verify.InvariantReEvaluator}, driven here through the full {@link
+   * SmtModelFinder} pipeline exactly as {@code SmtModelFinderTest} drives it): rather than trusting
+   * the Z3 witness on its own, {@link ModelFinderResult#allActiveInvariantsHold()} reconstructs the
+   * witness into a real {@link org.tzi.use.uml.sys.MSystem} and re-evaluates {@code
+   * productOfIntegerAndLiteral} with USE's OWN OCL evaluator -- a genuinely separate implementation
+   * of {@code *} from the one under test. Both must agree the witness is real.
+   */
+  @Test
+  public void productOfIntegerAndLiteralEndToEndWitnessIsIndependentlyConfirmedByTheUseEvaluator()
+      throws Exception {
+    MModel model = compileArithmeticScope();
+    ModelFinderResult result =
+        SmtModelFinder.find(model, arithmeticScopeConfig("A::productOfIntegerAndLiteral"));
+
+    assertTrue("expected SAT", result.satisfiable());
+    assertTrue(
+        "expected the USE evaluator to independently confirm the witness",
+        verdictFor(result, "A::productOfIntegerAndLiteral").holds());
   }
 
   // ---------------------------------------------------------------------
@@ -377,11 +475,73 @@ public class ArithmeticTranslationTest {
   }
 
   /**
-   * Shared fixture for the {@code productOfTwoIntegers}/{@code unaryPlusIsIdentity} outcome tests
-   * above: binds {@code a.i}/{@code a.j} to the given values on a single {@code A} instance and
-   * solves the named invariant against the real Z3 binary, exactly {@link #solveNoAttack}'s
-   * bind-then-solve pattern applied to {@link #compileArithmeticScope}'s fixture class instead of
-   * NQueens's.
+   * The same independent-oracle round trip as {@code
+   * productOfIntegerAndLiteralEndToEndWitnessIsIndependentlyConfirmedByTheUseEvaluator} above,
+   * for unary {@code +}: the Z3 witness for {@code a.i = +a.j} is reconstructed into a real {@link
+   * org.tzi.use.uml.sys.MSystem} and re-checked by USE's own OCL evaluator, not merely trusted.
+   */
+  @Test
+  public void unaryPlusIsIdentityEndToEndWitnessIsIndependentlyConfirmedByTheUseEvaluator()
+      throws Exception {
+    MModel model = compileArithmeticScope();
+    ModelFinderResult result =
+        SmtModelFinder.find(model, arithmeticScopeConfig("A::unaryPlusIsIdentity"));
+
+    assertTrue("expected SAT", result.satisfiable());
+    assertTrue(
+        "expected the USE evaluator to independently confirm the witness",
+        verdictFor(result, "A::unaryPlusIsIdentity").holds());
+  }
+
+  /**
+   * Picks out one named invariant's verdict from {@link ModelFinderResult#verdicts()}. The
+   * fixture model has SEVEN invariants for seven different, sometimes deliberately-conflicting
+   * translation-boundary purposes (this file's other tests), unlike e.g. Library.use's coherent
+   * default section where every model invariant is simultaneously active -- so {@link
+   * ModelFinderResult#allActiveInvariantsHold()} (which reads EVERY reevaluated invariant, not only
+   * the configured active set -- confirmed by inspecting {@link #arithmeticScopeConfig}'s witness
+   * directly: {@code A::productOfIntegerAndLiteral} activated alone still comes back with all seven
+   * invariants' verdicts, most FALSE since only the one active invariant constrained the solve) is
+   * the wrong tool here; this reads the ONE invariant this test is actually about.
+   */
+  private static InvariantVerdict verdictFor(ModelFinderResult result, String qualifiedName) {
+    return result.verdicts().stream()
+        .filter(v -> v.invariantName().equals(qualifiedName))
+        .findFirst()
+        .orElseThrow(
+            () -> new AssertionError("no verdict reported for " + qualifiedName + ": " + result));
+  }
+
+  /**
+   * A minimal, unbounded-Integer-domain {@link AnalysisConfiguration} over {@link
+   * #compileArithmeticScope}'s fixture class, activating exactly one named invariant -- the shape
+   * {@link SmtModelFinder#find(MModel, AnalysisConfiguration)} needs to run the full
+   * encode/solve/reconstruct/independently-re-verify pipeline, as opposed to the {@link
+   * #solveArithmeticScope} helper below, which drives {@link ExpressionTranslator} directly against
+   * a hand-picked value and never involves {@link org.tzi.use.smt.verify.InvariantReEvaluator}.
+   */
+  private static AnalysisConfiguration arithmeticScopeConfig(String qualifiedInvariantName) {
+    return new AnalysisConfiguration(
+        List.of(new ClassScope("A", 1, 1)),
+        List.of(),
+        List.of(
+            new AttributeDomain("A", "i", null, List.of(), null, null),
+            new AttributeDomain("A", "j", null, List.of(), null, null),
+            new AttributeDomain("A", "r", null, List.of(), null, null)),
+        Set.of(qualifiedInvariantName),
+        null,
+        Duration.ofSeconds(30),
+        1);
+  }
+
+  /**
+   * Shared fixture for the {@code productOfIntegerAndLiteral}/{@code productOfLiteralAndInteger}/
+   * {@code unaryPlusIsIdentity} outcome tests above: binds {@code a.i}/{@code a.j} to the given
+   * values on a single {@code A} instance and solves the named invariant against the real Z3
+   * binary, exactly {@link #solveNoAttack}'s bind-then-solve pattern applied to {@link
+   * #compileArithmeticScope}'s fixture class instead of NQueens's. Drives {@link
+   * ExpressionTranslator} directly, unlike {@link #arithmeticScopeConfig}/{@link SmtModelFinder}
+   * above, which drive the full pipeline including independent re-verification.
    */
   private static SolverOutcome solveArithmeticScope(String invariantName, int iValue, int jValue)
       throws Exception {
@@ -428,9 +588,13 @@ public class ArithmeticTranslationTest {
         constraints
         context a: A inv realOperandNotConfused:
           a.i + a.r = a.r
-        context a: A inv unaryPlusNotSupported:
+        context a: A inv unaryPlusOverSameOperandIsTautology:
           a.i = +a.i
-        context a: A inv productOfTwoIntegers:
+        context a: A inv productOfIntegerAndLiteral:
+          a.i * 2 = 6
+        context a: A inv productOfLiteralAndInteger:
+          2 * a.j = 6
+        context a: A inv productOfTwoNonConstantIntegers:
           a.i * a.j = 6
         context a: A inv productWithRealOperandNotConfused:
           a.i * a.r = a.r

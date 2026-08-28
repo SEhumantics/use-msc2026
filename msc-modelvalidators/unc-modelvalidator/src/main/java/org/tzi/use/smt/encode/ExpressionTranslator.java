@@ -252,7 +252,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           case "<>" -> negate(comparison(a[0], a[1]));
           case ">=", "<=", ">", "<" -> orderedComparison(e.opname(), a[0], a[1]);
           case "size" -> collectionSize(a[0]);
-          case "+", "-" -> arithmetic(e.opname(), a);
+          case "+", "-", "*" -> arithmetic(e.opname(), a);
           default ->
               throw unsupported(boundaryOfOperator(e.opname()), "operator '" + e.opname() + "'");
         };
@@ -291,28 +291,43 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   }
 
   /**
-   * Binary {@code +}/{@code -} over two plain crisp Integer operands -- the shape {@code
+   * Binary {@code +}/{@code -}/{@code *} over two plain crisp Integer operands -- the shape {@code
    * NQueens::noAttack} needs ({@code q1.row.idx+q1.col.idx}, {@code q1.row.idx-q1.col.idx}, each
-   * over two already-supported {@link #navigatedAttribute} results) -- and unary {@code -} over one
-   * plain crisp Integer operand, confirmed real and reachable by compiling the real {@code
-   * Employee.use} and inspecting the parsed AST directly: {@code self.salary > -1} reaches this
-   * visitor as {@code ExpStdOp} opname {@code "-"} with {@code a.length==1} wrapping {@code
-   * ExpConstInteger(1)} -- USE does NOT fold a literal unary minus into a negative constant at
-   * parse time. Unary {@code +} is syntactically legal per USE's own grammar ({@code ("not" | "-" |
-   * "+") unaryExpression}, {@code OCLBase.gpart:232}) and DOES reach this method for a crisp
-   * Integer operand (confirmed by compiling {@code a.i = +a.i}), but is not needed by either target
-   * invariant, so it is refused explicitly by falling through to the final {@code throw} rather
-   * than silently generalized.
+   * over two already-supported {@link #navigatedAttribute} results) -- and unary {@code -}/{@code
+   * +} over one plain crisp Integer operand. Unary {@code -} is confirmed real and reachable by
+   * compiling the real {@code Employee.use} and inspecting the parsed AST directly: {@code
+   * self.salary > -1} reaches this visitor as {@code ExpStdOp} opname {@code "-"} with {@code
+   * a.length==1} wrapping {@code ExpConstInteger(1)} -- USE does NOT fold a literal unary minus
+   * into a negative constant at parse time. Unary {@code +} is syntactically legal per USE's own
+   * grammar ({@code ("not" | "-" | "+") unaryExpression}, {@code OCLBase.gpart:232}) and DOES reach
+   * this method for a crisp Integer operand, confirmed the same way (compiling {@code a.i =
+   * +a.j} reaches {@code ExpStdOp} opname {@code "+"}, {@code a.length==1}); it is translated as a
+   * plain identity -- {@code +x} denotes the same value as {@code x} -- rather than as an emitted
+   * SMT-LIB {@code (+ x)} application, since SMT-LIB's arithmetic theories declare {@code +} with
+   * arity &gt;= 2 (unlike {@code -}, which SMT-LIB itself overloads with an explicit 1-argument
+   * negation form, the form the unary {@code -} case below already relies on).
+   *
+   * <p>Binary {@code *} additionally requires {@link #requireLinearProduct}: unlike {@code +}/
+   * {@code -}, which are linear for any two Integer operands, a product of two non-constant
+   * operands is nonlinear arithmetic, which this project's pinned {@code QF_LIA} solver logic
+   * rejects outright (see that method's docstring for the Z3-confirmed evidence) -- so {@code *} is
+   * supported only when at least one operand is a compile-time Integer literal.
    *
    * <p>Each supported shape produces an ordinary, always-defined {@link TranslatedExpression}
    * wrapping an SMT Integer term, exactly {@link #orderedComparison}'s own {@code
-   * argResult}/definedness-conjunction pattern -- so {@code +}/{@code -} compose with the existing
-   * generic {@link #comparison}/{@link #orderedComparison} dispatch with ZERO special-casing, the
-   * same design {@link #collectionSize} established one task ago.
+   * argResult}/definedness-conjunction pattern -- so {@code +}/{@code -}/{@code *} compose with the
+   * existing generic {@link #comparison}/{@link #orderedComparison} dispatch with ZERO
+   * special-casing, the same design {@link #collectionSize} established one task ago.
+   *
+   * <p>{@code /}, {@code div}, {@code mod}, {@code abs}, {@code min}, and {@code max} remain
+   * deliberately out of this method's scope and unconditionally refused via the final {@code
+   * throw}: each carries real division/mod-by-zero undefinedness semantics (and, for {@code /}
+   * specifically, OCL's Integer-may-widen-to-Real rule) that this always-defined shape does not
+   * model and that need their own dedicated translation, not a silent extension of this one.
    *
    * <p>The {@link #requireCrispInteger} guard is defense-in-depth rather than a dead branch: a
-   * {@code UInteger} operand genuinely DOES reach {@code +}/{@code -} through the real parser
-   * (({@code StandardOperationsNumber.ArithOperation.matches} widens {@code UInteger op
+   * {@code UInteger} operand genuinely DOES reach {@code +}/{@code -}/{@code *} through the real
+   * parser (({@code StandardOperationsNumber.ArithOperation.matches} widens {@code UInteger op
    * Integer}/{@code UInteger} to {@code UInteger}, and {@code Op_number_unaryminus.matches} accepts
    * any {@code isKindOfNumber} operand including {@code UInteger} -- both confirmed by compiling
    * {@code f.u + 1 = f.u2}), but every USE invariant must itself be Boolean-typed, and the only way
@@ -324,13 +339,16 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * sub-expression before ever calling this method -- so a UInteger operand cannot reach here
    * through any invariant the real front end will actually compile. A genuinely crisp {@code Real}
    * operand IS reachable this way ({@code self.i + self.r = self.r2} compiles and widens to {@code
-   * Real} per the same {@code ArithOperation.matches}), and is the shape this guard actually
-   * refuses in practice.
+   * Real} per the same {@code ArithOperation.matches}, and {@code self.i * self.r = self.r2} widens
+   * the same way under {@code *}), and is the shape this guard actually refuses in practice.
    */
   private TranslatedExpression arithmetic(String opname, Expression[] a) {
     if (a.length == 2) {
       requireCrispInteger(a[0], opname);
       requireCrispInteger(a[1], opname);
+      if ("*".equals(opname)) {
+        requireLinearProduct(a[0], a[1]);
+      }
       TranslatedExpression l = argResult(a[0]);
       TranslatedExpression r = argResult(a[1]);
       return new TranslatedExpression(
@@ -341,8 +359,53 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       TranslatedExpression operand = argResult(a[0]);
       return new TranslatedExpression(operand.defined(), Smt.app("-", operand.value()));
     }
+    if (a.length == 1 && "+".equals(opname)) {
+      requireCrispInteger(a[0], opname);
+      return argResult(a[0]);
+    }
     throw unsupported(
         boundaryOfOperator(opname), "operator '" + opname + "' with " + a.length + " argument(s)");
+  }
+
+  /**
+   * {@code *} needs a guard {@code +}/{@code -} do not: this project's SMT script is pinned to
+   * {@code QF_LIA} (linear integer arithmetic, {@code SmtModelFinder.java}), and Z3 enforces that
+   * restriction syntactically -- {@code (* <non-numeral> <non-numeral>)} is rejected outright with
+   * {@code "logic does not support nonlinear arithmetic"} even when both sides are transitively
+   * pinned to a specific value by other assertions (confirmed by feeding the pinned Z3 5.1.0 binary
+   * {@code (declare-const x Int) (declare-const y Int) (assert (= x 2)) (assert (= y 3)) (assert (=
+   * (* x y) 6))} directly: the solver errors before ever reaching {@code check-sat}). {@code
+   * (* <numeral-or-negated-numeral> <var>)} and {@code (* <var> <numeral-or-negated-numeral>)} are
+   * both linear and confirmed accepted the same way. So a plain crisp Integer product is supported
+   * exactly when at least one OCL-level operand is a literal (optionally unary-minus-wrapped, e.g.
+   * {@code -2}, mirroring the negative-literal shape {@link #arithmetic} already documents for unary
+   * {@code -}) -- {@code a.i * 2}, {@code 2 * a.j} -- and refused, rather than silently handed to
+   * the solver to error out on, when BOTH operands are non-constant, e.g. {@code a.i * a.j}. This is
+   * a genuinely narrower slice than {@code +}/{@code -} (which are linear for any two operands): it
+   * is a property of the PINNED SOLVER LOGIC, not of OCL's own arithmetic semantics, and widening it
+   * (moving to {@code QF_NIA}, or reformulating products differently) is out of this task's scope --
+   * changing the project's pinned decidable fragment is exactly the kind of solver-plumbing decision
+   * this task was told not to make.
+   */
+  private static void requireLinearProduct(Expression left, Expression right) {
+    if (!isIntegerLiteral(left) && !isIntegerLiteral(right)) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "operator '*' between two non-constant Integer operands: multiplying two non-constant"
+              + " terms is nonlinear arithmetic, which this project's pinned QF_LIA solver logic"
+              + " does not accept (confirmed against the real Z3 binary) -- only a product with at"
+              + " least one compile-time Integer literal operand is supported");
+    }
+  }
+
+  private static boolean isIntegerLiteral(Expression e) {
+    if (e instanceof ExpConstInteger) {
+      return true;
+    }
+    return e instanceof ExpStdOp op
+        && "-".equals(op.opname())
+        && op.args().length == 1
+        && isIntegerLiteral(op.args()[0]);
   }
 
   private static void requireCrispInteger(Expression e, String opname) {
