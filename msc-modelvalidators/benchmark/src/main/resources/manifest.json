@@ -83,6 +83,7 @@
         "invIndep.mandatory-explicit-argument",
         "invariant.activation-state-config",
         "invariant.transform-to-kodkod",
+        "prim.integer-arithmetic",
         "reconstruction.object-diagram",
         "solve.trivial-sat-unsat-dispatch"
       ],
@@ -869,7 +870,8 @@
       "provenanceCitation": null,
       "features": [
         "cmd.validate",
-        "config.primitive-type-wide-value-domain"
+        "config.primitive-type-wide-value-domain",
+        "prim.integer-arithmetic"
       ],
       "question": "Does tightening the salary domain to its exact NotBelowMinusOne/PositiveSalary boundary (Integer_max = 0) make the jointly-active invariant pair unsatisfiable, even though the model stays fully populated (1-2 Employees)?",
       "expected": {
@@ -1225,7 +1227,8 @@
       "provenanceDetail": "Paired UNSAT mutation of NQueens, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as NQueens, new [tooSmall] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
-        "cmd.validate"
+        "cmd.validate",
+        "prim.integer-arithmetic"
       ],
       "question": "Is the classic N-Queens puzzle genuinely unsolvable at N=3 -- does the solver correctly report UNSATISFIABLE for a fully-populated 3-queen board under the exact same bijective-association encoding and Integer-bound sizing formula that returns SATISFIABLE for N=8 and N=17?",
       "expected": {
