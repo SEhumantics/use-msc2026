@@ -1229,6 +1229,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    */
   @Override
   public void visitLet(ExpLet e) {
+    if (e.getVarType().isTypeOfClass()) {
+      result = objectAnyLet(e);
+      return;
+    }
     if (!e.getVarType().isTypeOfInteger()
         && !e.getVarType().isTypeOfBoolean()
         && !e.getVarType().isTypeOfReal()) {
@@ -1261,6 +1265,111 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   }
 
   private record LocalBinding(String definedSymbol, String valueSymbol) {}
+
+  /**
+   * Translates the finite object-selection shape {@code let x = T.allInstances()->any(p) in body}
+   * without pretending objects are first-class SMT values. Each candidate slot gets the ordinary
+   * Java-side {@link VariableBinding}; the predicate and body are translated once for that slot,
+   * then candidate guards select the first matching existing slot in the same stable order as the
+   * bounded population. {@link ExpAny#eval} treats an undefined predicate as false, hence each
+   * match uses {@link TranslatedExpression#trueTerm()} rather than the raw value term.
+   *
+   * <p>The supported body is deliberately strict in the object binding: if {@code any} finds no
+   * match, USE binds the let variable to undefined, and a strict attribute/arithmetic/comparison
+   * body is therefore undefined too. Non-strict bodies such as {@code chosen = oclUndefined(T)}
+   * could produce a defined result for that same no-match case; they are refused because this
+   * encoder has no undefined-object binding to evaluate them against.
+   */
+  private TranslatedExpression objectAnyLet(ExpLet e) {
+    if (!(e.getVarExpression() instanceof ExpAny any)
+        || !(any.getRangeExpression() instanceof ExpAllInstances all)) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "let-bound object variable '"
+              + e.getVarname()
+              + "' whose initializer is not T.allInstances()->any(predicate)");
+    }
+    if (any.getVariableDeclarations().size() != 1) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "let-bound object variable '"
+              + e.getVarname()
+              + "' whose any initializer does not declare exactly one iterator");
+    }
+    if (!isStrictObjectLetBody(e.getInExpression(), e.getVarname())) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "let-bound object variable '"
+              + e.getVarname()
+              + "' used by a body that is not a strict ordered comparison over its attributes;"
+              + " the no-match/undefined-object case cannot be represented soundly");
+    }
+
+    String iterator = any.getVariableDeclarations().varDecl(0).name();
+    List<SmtTerm> priorMatches = new ArrayList<>();
+    List<SmtTerm> selectors = new ArrayList<>();
+    List<TranslatedExpression> bodies = new ArrayList<>();
+    for (PolymorphicRange.Slot slot : PolymorphicRange.slotsOf(all.getSourceType(), context)) {
+      TranslationContext predicateContext = context.withBinding(iterator, slot.binding());
+      TranslatedExpression predicate =
+          translate(
+              any.getQueryExpression(),
+              predicateContext,
+              mode,
+              positivePolarity,
+              localBindings);
+      SmtTerm match = Smt.and(List.of(Smt.sym(slot.existsName()), predicate.trueTerm()));
+      SmtTerm selected = Smt.and(List.of(match, Smt.not(Smt.or(priorMatches))));
+      selectors.add(selected);
+      priorMatches.add(match);
+      bodies.add(
+          translate(
+              e.getInExpression(),
+              context.withBinding(e.getVarname(), slot.binding()),
+              mode,
+              positivePolarity,
+              localBindings));
+    }
+
+    List<SmtTerm> definedCases = new ArrayList<>(selectors.size());
+    for (int i = 0; i < selectors.size(); i++) {
+      definedCases.add(Smt.and(List.of(selectors.get(i), bodies.get(i).defined())));
+    }
+    SmtTerm value = Smt.bool(false);
+    for (int i = selectors.size() - 1; i >= 0; i--) {
+      value = Smt.ite(selectors.get(i), bodies.get(i).value(), value);
+    }
+    return new TranslatedExpression(Smt.or(definedCases), value);
+  }
+
+  private static boolean isStrictObjectLetBody(Expression body, String variableName) {
+    if (!(body instanceof ExpStdOp operation)
+        || !List.of(">", ">=", "<", "<=").contains(operation.opname())) {
+      return false;
+    }
+    for (Expression argument : operation.args()) {
+      if (containsAttributeOf(argument, variableName)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean containsAttributeOf(Expression expression, String variableName) {
+    if (expression instanceof ExpAttrOp attribute
+        && attribute.objExp() instanceof ExpVariable variable
+        && variableName.equals(variable.getVarname())) {
+      return true;
+    }
+    if (expression instanceof ExpStdOp operation) {
+      for (Expression argument : operation.args()) {
+        if (containsAttributeOf(argument, variableName)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
 
   @Override
   public void visitNavigation(ExpNavigation e) {

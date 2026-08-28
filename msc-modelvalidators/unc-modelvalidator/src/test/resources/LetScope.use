@@ -33,7 +33,7 @@ context a : A inv equalityLet:
     copy = a.j
 
 context a : A inv objectLet:
-  let chosen : A = A.allInstances()->any(x | x.i = a.i) in
+  let chosen : A = a in
     chosen.i > 0
 
 context a : A inv collectionLet:
@@ -43,3 +43,7 @@ context a : A inv collectionLet:
 context h : Holder inv objectAnyLet:
   let chosen : Candidate = Candidate.allInstances()->any(c | c.key = h.target) in
     chosen.value > h.limit
+
+context h : Holder inv objectAnyLetNonStrictBody:
+  let chosen : Candidate = Candidate.allInstances()->any(c | c.key = h.target) in
+    chosen = oclUndefined(Candidate)

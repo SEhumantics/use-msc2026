@@ -103,8 +103,8 @@ public class LetTranslationTest {
   }
 
   @Test
-  public void objectTypedLetFailsClosedBeforeItsUnsupportedAnyExpression() throws Exception {
-    assertUnsupportedBinding("objectLet", "type A", "object- and collection-typed");
+  public void objectTypedLetWithANonAnyInitializerFailsClosed() throws Exception {
+    assertUnsupportedBinding("objectLet", "object variable 'chosen'", "initializer is not");
   }
 
   @Test
@@ -113,7 +113,35 @@ public class LetTranslationTest {
   }
 
   @Test
+  public void objectAnyLetWithANonStrictBodyFailsClosed() throws Exception {
+    assertUnsupportedBinding(
+        "objectAnyLetNonStrictBody", "object variable 'chosen'", "not a strict ordered comparison");
+  }
+
+  @Test
   public void objectAnyLetSelectsTheMatchingFiniteSlot() throws Exception {
+    ObjectAnyCase encoded = encodeObjectAnyLet(1, 10, 0, 99, 1, 11);
+    encoded.script().assertThat(encoded.expression().trueTerm());
+    assertEquals(SolverOutcome.SAT, solve(encoded.script()));
+  }
+
+  @Test
+  public void objectAnyLetUsesTheFirstSlotWhenMoreThanOneMatches() throws Exception {
+    ObjectAnyCase encoded = encodeObjectAnyLet(1, 10, 1, 9, 1, 11);
+    encoded.script().assertThat(encoded.expression().trueTerm());
+    assertEquals(SolverOutcome.UNSAT, solve(encoded.script()));
+  }
+
+  @Test
+  public void objectAnyLetIsUndefinedWhenNoSlotMatches() throws Exception {
+    ObjectAnyCase encoded = encodeObjectAnyLet(1, 10, 0, 99, 2, 99);
+    encoded.script().assertThat(Smt.not(encoded.expression().defined()));
+    assertEquals(SolverOutcome.SAT, solve(encoded.script()));
+  }
+
+  private static ObjectAnyCase encodeObjectAnyLet(
+      int targetValue, int limitValue, int key0, int value0, int key1, int value1)
+      throws Exception {
     MClassInvariant invariant = findInvariant(compileFixture(), "objectAnyLet");
     SmtScript script = new SmtScript("QF_LIA");
     ObjectSlots holders =
@@ -155,21 +183,33 @@ public class LetTranslationTest {
             Map.of());
 
     script.assertThat(
-        Smt.eq(Smt.sym(target.valueNames().get(0)), Smt.intLit(BigInteger.ONE)));
-    script.assertThat(Smt.eq(Smt.sym(limit.valueNames().get(0)), Smt.intLit(BigInteger.TEN)));
-    script.assertThat(Smt.eq(Smt.sym(key.valueNames().get(0)), Smt.intLit(BigInteger.ZERO)));
-    script.assertThat(Smt.eq(Smt.sym(value.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(99))));
-    script.assertThat(Smt.eq(Smt.sym(key.valueNames().get(1)), Smt.intLit(BigInteger.ONE)));
+        Smt.eq(
+            Smt.sym(target.valueNames().get(0)),
+            Smt.intLit(BigInteger.valueOf(targetValue))));
     script.assertThat(
-        Smt.eq(Smt.sym(value.valueNames().get(1)), Smt.intLit(BigInteger.valueOf(11))));
-    script.assertThat(ExpressionTranslator.translate(invariant.bodyExpression(), context));
-
-    assertEquals(
-        SolverOutcome.SAT,
-        new SolverProcess(SolverBinary.resolve(), Duration.ofSeconds(30))
-            .run(script.toSmtLib())
-            .outcome());
+        Smt.eq(
+            Smt.sym(limit.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(limitValue))));
+    script.assertThat(
+        Smt.eq(Smt.sym(key.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(key0))));
+    script.assertThat(
+        Smt.eq(Smt.sym(value.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(value0))));
+    script.assertThat(
+        Smt.eq(Smt.sym(key.valueNames().get(1)), Smt.intLit(BigInteger.valueOf(key1))));
+    script.assertThat(
+        Smt.eq(Smt.sym(value.valueNames().get(1)), Smt.intLit(BigInteger.valueOf(value1))));
+    return new ObjectAnyCase(
+        script,
+        ExpressionTranslator.translate(
+            invariant.bodyExpression(), context, TranslationMode.UNCERTAIN));
   }
+
+  private static SolverOutcome solve(SmtScript script) {
+    return new SolverProcess(SolverBinary.resolve(), Duration.ofSeconds(30))
+        .run(script.toSmtLib())
+        .outcome();
+  }
+
+  private record ObjectAnyCase(SmtScript script, TranslatedExpression expression) {}
 
   private static void assertUnsupportedBinding(String invariantName, String type, String scope)
       throws Exception {
