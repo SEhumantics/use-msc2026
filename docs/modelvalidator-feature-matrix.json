@@ -2759,13 +2759,13 @@
               "coverageNote": "zero coverage - no scenario's cited evidence/notes point to a reject(v|expr) usage"
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "ExpressionTranslator.java:343-346 visitReject(ExpReject e) -- unconditional `throw unsupported(\"reject\")`.",
-              "notes": "No conditional logic; identical hard-rejection pattern to select().",
+              "status": "supported",
+              "evidence": "2026-08-29: CLOSED -- X->reject(pred) is exactly X->select(not pred), so selectedAllInstancesPopulation was generalized from ExpSelect to the shared ExpQuery base (ExpReject's own superclass) rather than a second, independently-derived population builder. Member inclusion uses TranslatedExpression#falseTerm() for reject() (genuinely, definitely false) instead of a bare negation of trueTerm(), matching OCL's Kleene-negation-preserves-undefinedness rule (an undefined predicate must stay excluded from reject() too). All three call sites that recognize select() as a range/receiver (populationOf, collectionSize, collectionEmptiness) now recognize reject() identically. `feat` commit `ff0a96ed`.",
+              "notes": "Same narrow, construct-mediated scope as select(): reject() is only recognized when it is the DIRECT argument to forAll/exists/isUnique/size()/includesAll/isEmpty/notEmpty, and only when its own source is X.allInstances() or the excluding()-wrapped primary-key idiom -- a bare/standalone reject(), unchanged, still refuses via visitReject's own unconditional throw. 5 new tests (RejectTranslationTest), all through the full SmtModelFinder.find() pipeline against real Z3, each pairing a deterministic Boolean-forcing invariant with the reject()-based invariant under test, BOTH marked active -- an inconsistency between them (a wrongly-encoded reject()) manufactures a genuine, provable SAT/UNSAT contradiction. This design was reached only after discovering the FIRST draft (every reject()-based invariant left inactive, verdict read via verdictFor()) passed unchanged even with the encoder fully reverted: SmtModelFinder only ever hands an ACTIVE invariant to ExpressionTranslator at all (QueryRequirements.requiredClassifications gates on config.activeInvariants()); an inactive invariant's verdict comes entirely from InvariantReEvaluator's native USE evaluation of the reconstructed witness, never touching this translator's own encoding. Adversarially verified under the corrected design: reverting the fix makes 4 of 5 tests fail with the exact expected refusal message.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
-              "coverageNote": "zero coverage - no manifest scenario tags this feature id and no example's active invariants call reject(v|expr)."
+              "coverageNote": "No manifest scenario tags this feature id and no corpus example's active invariants call reject(v|expr) -- confirmed genuine via 5 dedicated unit tests against real Z3 instead."
             }
           }
         },
