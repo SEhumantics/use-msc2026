@@ -252,6 +252,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           case "<>" -> negate(comparison(a[0], a[1]));
           case ">=", "<=", ">", "<" -> orderedComparison(e.opname(), a[0], a[1]);
           case "size" -> collectionSize(a[0]);
+          case "+", "-" -> arithmetic(e.opname(), a);
           default ->
               throw unsupported(boundaryOfOperator(e.opname()), "operator '" + e.opname() + "'");
         };
@@ -287,6 +288,73 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     TranslatedExpression r = argResult(right);
     return new TranslatedExpression(
         Smt.and(List.of(l.defined(), r.defined())), Smt.app(operator, l.value(), r.value()));
+  }
+
+  /**
+   * Binary {@code +}/{@code -} over two plain crisp Integer operands -- the shape {@code
+   * NQueens::noAttack} needs ({@code q1.row.idx+q1.col.idx}, {@code q1.row.idx-q1.col.idx}, each
+   * over two already-supported {@link #navigatedAttribute} results) -- and unary {@code -} over one
+   * plain crisp Integer operand, confirmed real and reachable by compiling the real {@code
+   * Employee.use} and inspecting the parsed AST directly: {@code self.salary > -1} reaches this
+   * visitor as {@code ExpStdOp} opname {@code "-"} with {@code a.length==1} wrapping {@code
+   * ExpConstInteger(1)} -- USE does NOT fold a literal unary minus into a negative constant at
+   * parse time. Unary {@code +} is syntactically legal per USE's own grammar ({@code ("not" | "-" |
+   * "+") unaryExpression}, {@code OCLBase.gpart:232}) and DOES reach this method for a crisp
+   * Integer operand (confirmed by compiling {@code a.i = +a.i}), but is not needed by either target
+   * invariant, so it is refused explicitly by falling through to the final {@code throw} rather
+   * than silently generalized.
+   *
+   * <p>Each supported shape produces an ordinary, always-defined {@link TranslatedExpression}
+   * wrapping an SMT Integer term, exactly {@link #orderedComparison}'s own {@code
+   * argResult}/definedness-conjunction pattern -- so {@code +}/{@code -} compose with the existing
+   * generic {@link #comparison}/{@link #orderedComparison} dispatch with ZERO special-casing, the
+   * same design {@link #collectionSize} established one task ago.
+   *
+   * <p>The {@link #requireCrispInteger} guard is defense-in-depth rather than a dead branch: a
+   * {@code UInteger} operand genuinely DOES reach {@code +}/{@code -} through the real parser
+   * (({@code StandardOperationsNumber.ArithOperation.matches} widens {@code UInteger op
+   * Integer}/{@code UInteger} to {@code UInteger}, and {@code Op_number_unaryminus.matches} accepts
+   * any {@code isKindOfNumber} operand including {@code UInteger} -- both confirmed by compiling
+   * {@code f.u + 1 = f.u2}), but every USE invariant must itself be Boolean-typed, and the only way
+   * to turn that UInteger-typed result back into one is (a) an ordinary {@code =}/{@code <>}, which
+   * USE compiles as UBoolean and therefore REJECTS at compile time ("An invariant must be a boolean
+   * expression", confirmed empirically for {@code f.u + 1 = f.u2}) unless wrapped in {@code
+   * toBooleanC}, or (b) {@code toBooleanC} itself, whose own extraction in {@link #uTypeThreshold}
+   * requires the compared operand to be a bare {@link ExpAttrOp} and refuses an arithmetic
+   * sub-expression before ever calling this method -- so a UInteger operand cannot reach here
+   * through any invariant the real front end will actually compile. A genuinely crisp {@code Real}
+   * operand IS reachable this way ({@code self.i + self.r = self.r2} compiles and widens to {@code
+   * Real} per the same {@code ArithOperation.matches}), and is the shape this guard actually
+   * refuses in practice.
+   */
+  private TranslatedExpression arithmetic(String opname, Expression[] a) {
+    if (a.length == 2) {
+      requireCrispInteger(a[0], opname);
+      requireCrispInteger(a[1], opname);
+      TranslatedExpression l = argResult(a[0]);
+      TranslatedExpression r = argResult(a[1]);
+      return new TranslatedExpression(
+          Smt.and(List.of(l.defined(), r.defined())), Smt.app(opname, l.value(), r.value()));
+    }
+    if (a.length == 1 && "-".equals(opname)) {
+      requireCrispInteger(a[0], opname);
+      TranslatedExpression operand = argResult(a[0]);
+      return new TranslatedExpression(operand.defined(), Smt.app("-", operand.value()));
+    }
+    throw unsupported(
+        boundaryOfOperator(opname), "operator '" + opname + "' with " + a.length + " argument(s)");
+  }
+
+  private static void requireCrispInteger(Expression e, String opname) {
+    if (!e.type().isTypeOfInteger()) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "operator '"
+              + opname
+              + "' over a non-Integer operand of type "
+              + e.type()
+              + ": only plain crisp Integer arithmetic is supported");
+    }
   }
 
   /**

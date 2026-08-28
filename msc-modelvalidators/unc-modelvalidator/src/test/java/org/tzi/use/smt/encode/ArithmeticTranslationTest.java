@@ -105,7 +105,7 @@ public class ArithmeticTranslationTest {
 
     script.assertThat(Smt.sym("Employee_0_exists"));
     script.assertThat(
-        Smt.eq(Smt.sym(salary.valueNames().get(0)), Smt.intLit(BigInteger.valueOf(-1).negate())));
+        Smt.eq(Smt.sym(salary.valueNames().get(0)), Smt.intLit(BigInteger.ONE.negate())));
     // The line above intentionally re-derives -1 via negate() of 1 rather than writing a literal
     // -1 directly, so this fixture is not itself vulnerable to the same sign mistake it exists to
     // catch in the production code.
