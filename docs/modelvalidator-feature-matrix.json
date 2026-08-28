@@ -1991,13 +1991,22 @@
               "coverageNote": ""
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "ExpressionTranslator.visitConstEnum() (lines 182-185): `throw unsupported(\"enum literal\")`, unconditional -- no enum literal can ever be translated, so no equality comparison involving one can succeed either. Independently, SmtModelFinder.attributeTypeOf() (lines 245-259) has no case for an Enum-typed MAttribute at all -- String/Integer/Real/Boolean are the only four recognised (AttributeType.java:3-8), and any other type (including Enum) falls through to the final `throw new IllegalArgumentException(\"unsupported attribute type for encoding: \" + type)` (line 258) -- meaning an enum-typed ATTRIBUTE could not even be given a configured value domain in the first place, a second, independent point of total absence.",
-              "notes": "Both the expression-level literal (visitConstEnum) and the attribute-domain-level typing (attributeTypeOf) reject enums outright, so there is no path by which an enum-typed value could ever exist in this SMT encoding, let alone be compared for equality.",
-              "satScenarioIds": [],
-              "unsatScenarioIds": [],
-              "validationOracleScenarioIds": [],
-              "coverageNote": "ZebraPuzzle tags this feature but its SMT-Z3 ERROR ('no attribute values registered for House.nationality', etc.) fails on the ATTRIBUTE lookup before the enum-literal RHS is ever evaluated (comparison()'s `Smt.eq(arg(l), arg(r))` evaluates arguments left-to-right, so the attribute-access failure on the left masks whatever would have happened translating the right), so the scenario's own error text does not literally name 'enum literal' even though the underlying cause is consistent with total enum absence. Verdict rests primarily on the two independent unconditional-throw/reject code paths."
+              "status": "degraded",
+              "evidence": "Corrected 2026-08-28 -- both prior claims in this entry are stale; the underlying support was added later in this project's history without this row being updated (the same drift already found and fixed today for assoc.subsets/ocl.navigation-union-subsets). Re-verified directly against current source: AttributeType.ENUM is a real enum constant (encode/AttributeType.java), and SmtModelFinder#attributeTypeOf DOES return it for an Enum-typed MAttribute (confirmed by reading the method directly, not assumed) -- so an enum-typed attribute registers a value domain exactly like String does, contrary to the old claim that it fell through to an IllegalArgumentException. ExpressionTranslator.comparison() special-cases an enum literal (ExpConstEnum) the SAME way it special-cases a String literal: ONLY as the direct operand of '='/'<>' against an ExpAttrOp, resolved via resolve(ExpConstEnum,...) as an index into the compared attribute's own registered domain. Any OTHER use -- standalone, compared to a variable, nested elsewhere -- still goes through visitConstEnum, which unconditionally refuses ('free-standing enum literal ... outside an attribute comparison', TIER_2) -- this part of the old evidence was accurate and still holds.",
+              "notes": "Reclassified unsupported -> degraded to match prim.string-literals-equality's own precedent, since the limitation is now structurally identical for both: the common attribute-comparison shape works, a free-standing literal is refused. EnumTranslationTest (6 tests, real Z3) locks this in: literal equality/inequality against an attribute, isDefined over an enum attribute, a genuine SAT/UNSAT discriminating pair, the free-standing refusal, and a full round trip with NO explicit .properties domain config at all (registerDeclarationBoundedAttributes' declaration-bounded fallback), confirmed by USE's own evaluator.",
+              "satScenarioIds": [
+                "CivilStatus",
+                "ZebraPuzzle"
+              ],
+              "unsatScenarioIds": [
+                "CivilStatus-UNSAT",
+                "ZebraPuzzle-UNSAT"
+              ],
+              "validationOracleScenarioIds": [
+                "CivilStatus",
+                "ZebraPuzzle"
+              ],
+              "coverageNote": "Re-ran the full benchmark corpus 2026-08-28: CivilStatus, CivilStatus-UNSAT, ZebraPuzzle, and ZebraPuzzle-UNSAT all now reach correct SAT/UNSAT SMT-Z3 verdicts (not the ERROR this row previously described), with reconstructed=true and useChecked=true for both SAT rows (confirmed directly from the fresh results.json, not assumed from an older run). The free-standing-literal limitation remains real and is exercised by EnumTranslationTest's own dedicated refusal test, not merely theorized."
             }
           }
         },
