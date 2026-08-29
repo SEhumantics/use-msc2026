@@ -1447,6 +1447,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       TranslatedExpression local = contentAwareEquality(l, r);
       if (local != null) return local;
     }
+    if (isVirtualStringOp(l) || isVirtualStringOp(r)) {
+      return virtualStringComparison(l, r);
+    }
     if (l instanceof ExpConstString s) {
       TranslatedExpression content = contentAwareEquality(l, r);
       if (content != null) return content;
@@ -3045,6 +3048,152 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * ({@code LocalBinding#enumeratedValues}), so size composes through lets; a literal's length
    * is a compile-time constant. USE's {@code StringSize.eval} is {@code value.length()}.
    */
+/**
+   * A VIRTUAL STRING: a concat/substring expression whose result strings are computable at
+   * translation time from the source's configured candidates. The configured spellings are the
+   * content space, so the operation expands per candidate -- each candidate's result is the
+   * compile-time Java concat/substring of that spelling -- and an equality against a literal
+   * keeps only the candidates whose result matches, as a guarded disjunction over the source
+   * symbol's configured index. USE semantics confirmed against the use-core bytecode:
+   * substring(start, end) is 1-based INCLUSIVE (java substring(start-1, end)) and an
+   * out-of-range indices yield the EMPTY STRING (the evaluator's exception handler), never
+   * undefined.
+   */
+  private boolean isVirtualStringOp(Expression e) {
+    if (!(e instanceof ExpStdOp op)) {
+      return false;
+    }
+    switch (op.opname()) {
+      case "concat" -> {
+        return op.args().length == 2
+            && op.args()[1] instanceof ExpConstString
+            && stringCandidates(op.args()[0]) != null;
+      }
+      case "substring" -> {
+        return op.args().length == 3
+            && op.args()[1] instanceof ExpConstInteger
+            && op.args()[2] instanceof ExpConstInteger
+            && stringCandidates(op.args()[0]) != null;
+      }
+      default -> {
+        return false;
+      }
+    }
+  }
+
+  /** One candidate of an enumerable string source: its guard and its spelling. */
+  private static final class StringCandidateCase {
+    final String spelling;
+    final SmtTerm guard;
+
+    StringCandidateCase(String spelling, SmtTerm guard) {
+      this.spelling = spelling;
+      this.guard = guard;
+    }
+  }
+
+  private static final class EnumerableString {
+    final List<StringCandidateCase> candidates = new ArrayList<>();
+    SmtTerm defined = Smt.bool(true);
+  }
+
+  /**
+   * The configured candidates of an enumerable string source: a literal (its own content),
+   * a bare String attribute on a context variable (its configured domain), or a String let
+   * variable (its recorded candidate list). Null for anything else.
+   */
+  private EnumerableString stringCandidates(Expression e) {
+    EnumerableString result = new EnumerableString();
+    if (e instanceof ExpConstString literal) {
+      result.candidates.add(new StringCandidateCase(literal.value(), Smt.bool(true)));
+      return result;
+    }
+    if (e instanceof ExpAttrOp attr
+        && attr.objExp() instanceof ExpVariable source
+        && !localBindings.containsKey(source.getVarname())) {
+      VariableBinding b = context.binding(source.getVarname());
+      AttributeValues values = context.attributeValues(b.className(), attr.attr().name());
+      guardAgainstUncertainAttribute(values);
+      AttributeDomain domain = context.attributeDomain(b.className(), attr.attr().name());
+      SmtTerm symbol = Smt.sym(values.valueNames().get(b.slotIndex()));
+      for (int i = 0; i < domain.enumeratedValues().size(); i++) {
+        result.candidates.add(
+            new StringCandidateCase(
+                domain.enumeratedValues().get(i), Smt.eq(symbol, Smt.intLit(BigInteger.valueOf(i)))));
+      }
+      return result;
+    }
+    if (e instanceof ExpVariable v) {
+      LocalBinding local = localBindings.get(v.getVarname());
+      if (local != null && local.stringOrEnum() && local.enumeratedValues() != null) {
+        SmtTerm symbol = Smt.sym(local.valueSymbol());
+        for (int i = 0; i < local.enumeratedValues().size(); i++) {
+          result.candidates.add(
+              new StringCandidateCase(
+                  local.enumeratedValues().get(i),
+                  Smt.eq(symbol, Smt.intLit(BigInteger.valueOf(i)))));
+        }
+        result.defined = Smt.sym(local.definedSymbol());
+        return result;
+      }
+    }
+    return null;
+  }
+
+  /** Expands the virtual string: one compile-time result spelling per source candidate. */
+  private EnumerableString expandVirtualString(ExpStdOp op) {
+    EnumerableString source = stringCandidates(op.args()[0]);
+    EnumerableString result = new EnumerableString();
+    result.defined = source.defined;
+    if ("concat".equals(op.opname())) {
+      String suffix = ((ExpConstString) op.args()[1]).value();
+      for (StringCandidateCase candidate : source.candidates) {
+        result.candidates.add(
+            new StringCandidateCase(candidate.spelling + suffix, candidate.guard));
+      }
+      return result;
+    }
+    int from = ((ExpConstInteger) op.args()[1]).value();
+    int to = ((ExpConstInteger) op.args()[2]).value();
+    for (StringCandidateCase candidate : source.candidates) {
+      // USE's own handler: out-of-range indices yield the empty string, not undefined.
+      String piece =
+          from >= 1 && to >= from && to <= candidate.spelling.length()
+              ? candidate.spelling.substring(from - 1, to)
+              : "";
+      result.candidates.add(new StringCandidateCase(piece, candidate.guard));
+    }
+    return result;
+  }
+
+  /**
+   * An equality/inequality with a virtual-string side: expand the virtual side per candidate,
+   * compare each result against the literal at compile time, and keep the matching candidates'
+   * guards as the disjunction. The result is a defined Boolean (USE's total equality makes an
+   * undefined operand side merely unequal, never undefined-equal).
+   */
+  private TranslatedExpression virtualStringComparison(Expression l, Expression r) {
+    Expression virtual = isVirtualStringOp(l) ? l : r;
+    Expression other = virtual == l ? r : l;
+    if (!(other instanceof ExpConstString literal)) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "concat/substring compared against anything other than a string literal is not"
+              + " supported in this slice");
+    }
+    EnumerableString expanded = expandVirtualString((ExpStdOp) virtual);
+    List<SmtTerm> admitted = new ArrayList<>();
+    for (StringCandidateCase candidate : expanded.candidates) {
+      if (candidate.spelling.equals(literal.value())) {
+        admitted.add(candidate.guard);
+      }
+    }
+    SmtTerm value =
+        admitted.isEmpty() ? Smt.bool(false) : Smt.or(admitted);
+    return new TranslatedExpression(
+        Smt.bool(true), Smt.and(List.of(expanded.defined, value)));
+  }
+
   private TranslatedExpression stringSize(Expression receiver) {
     if (receiver instanceof ExpConstString literal) {
       return defined(Smt.intLit(BigInteger.valueOf(literal.value().length())));
