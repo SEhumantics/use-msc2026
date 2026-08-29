@@ -18,11 +18,14 @@ import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
 
 /**
- * End-to-end regression for Integer range literals ({@code Set{a..b}}) as quantifier ranges --
- * each Integer in the closed interval binds the loop variable exactly as a singleton-content
- * candidate. This is the Integer-range sibling of the String-constant set-literal quantifier
- * slice: the per-element SMT let binds the loop variable's value to the element constant, and
- * body comparisons resolve against the compared attribute's own domain.
+ * End-to-end regression for Integer range literals ({@code Set{a..b}}) as quantifier ranges.
+ * Each Integer in the closed interval binds the loop variable exactly as a singleton-content
+ * candidate through the same per-element SMT let machinery as the set-literal quantifier
+ * slice.
+ *
+ * <p>Pre-fix, range literals were refused outright. Post-fix, Set{2..4}->exists(k | k = x.i)
+ * is SAT when i can be 2, 3, or 4 and UNSAT otherwise (with i domain {5,6}); forAll over
+ * {2..4} requires every element to satisfy the body.
  */
 public class RangeLiteralQuantifierTest {
 
