@@ -2770,6 +2770,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         || (receiver instanceof ExpNavigation navigation
             && navigation.getDestination().isCollection())) {
       population = populationOf(receiver, construct);
+    } else if (receiver instanceof ExpSetLiteral set && set.getElemExpr().length > 0) {
+      // A non-empty String set literal always has elements: isEmpty = false, notEmpty = true.
+      return new TranslatedExpression(
+          Smt.bool(true), wantEmpty ? Smt.bool(false) : Smt.bool(true));
     } else {
       throw unsupported(
           FragmentBoundary.TIER_3,
