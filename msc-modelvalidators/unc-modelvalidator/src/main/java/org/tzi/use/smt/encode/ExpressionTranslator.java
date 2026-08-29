@@ -3313,29 +3313,62 @@ public final class ExpressionTranslator implements ExpressionVisitor {
               + operation.paramList().size()
               + " parameter(s)");
     }
-    if (!(arguments[0] instanceof ExpVariable targetVar)) {
-      throw unsupported(
-          FragmentBoundary.TIER_2,
-          "operation call on a receiver that is not a bare variable is not yet supported");
+    Set<MOperation> inProgress = new java.util.HashSet<>(operationsInProgress);
+    Expression receiver = arguments[0];
+    // Two supported receiver shapes. A BARE VARIABLE binds self to the receiver's own slot
+    // binding (one dispatch, one body). A SINGLE-VALUED NAVIGATION from a context variable
+    // (x.b.op()) has no single slot to bind: the call expands per destination slot exactly the
+    // way {@link #navigationObjectLet} expands a navigation-object let -- self bound to each
+    // slot's CONCRETE binding (so polymorphic dispatch resolves per slot), each case gated by
+    // that slot's link term. Both refusals below stay located: a let-bound scalar receiver and
+    // every other receiver shape (deeper chains, collection-typed receivers) are out of slice.
+    if (receiver instanceof ExpVariable targetVar
+        && !localBindings.containsKey(targetVar.getVarname())) {
+      VariableBinding selfBinding = context.binding(targetVar.getVarname());
+      // Polymorphic dispatch: the receiver's CONCRETE class (a folded slot's own class, or the
+      // static class for unfolded views) may REDEFINE the operation -- use its most specific
+      // body, exactly the incumbent's runtime-type dispatch resolved at translation time via
+      // the slot's concrete binding.
+      MOperation dispatched = context.dispatchOperation(selfBinding.className(), operation.name());
+      MOperation resolved = dispatched != null ? dispatched : operation;
+      inProgress.add(resolved);
+      result =
+          inlineOperationBody(resolved, arguments, context.withBinding("self", selfBinding), inProgress);
+      return;
     }
-    if (localBindings.containsKey(targetVar.getVarname())) {
+    if (receiver instanceof ExpVariable) {
       throw unsupported(
           FragmentBoundary.TIER_3,
           "operation call on a let-bound scalar receiver is not supported");
     }
-    VariableBinding selfBinding = context.binding(targetVar.getVarname());
-    // Polymorphic dispatch: the receiver's CONCRETE class (a folded slot's own class, or the
-    // static class for unfolded views) may REDEFINE the operation -- use its most specific
-    // body, exactly the incumbent's runtime-type dispatch resolved at translation time via
-    // the slot's concrete binding.
-    MOperation dispatched = context.dispatchOperation(selfBinding.className(), operation.name());
-    if (dispatched != null) {
-      operation = dispatched;
+    if (receiver instanceof ExpNavigation navigation
+        && !navigation.getDestination().isCollection()
+        && navigation.getObjectExpression() instanceof ExpVariable sourceVar
+        && !localBindings.containsKey(sourceVar.getVarname())) {
+      result =
+          navigationReceiverOperation(operation, arguments, navigation, sourceVar.getVarname(), inProgress);
+      return;
     }
+    throw unsupported(
+        FragmentBoundary.TIER_2,
+        "operation call on a receiver that is neither a bare variable nor a single-valued"
+            + " navigation from a context variable is not yet supported");
+  }
+
+  /**
+   * One inlined call body: constructs the per-call SMT lets for {@code operation}'s crisp
+   * parameters from the CALLER-side arguments (arguments evaluate in the caller's scope, so
+   * they translate under this translator's own context; only the BODY evaluates under
+   * {@code selfContext}), then translates the already dispatch-resolved body. Shared by the
+   * variable-receiver path (one call) and {@link #navigationReceiverOperation} (one call per
+   * destination slot, each with that slot's dispatch-resolved operation).
+   */
+  private TranslatedExpression inlineOperationBody(
+      MOperation operation,
+      Expression[] arguments,
+      TranslationContext selfContext,
+      Set<MOperation> inProgress) {
     boolean parameterized = operation.paramList().size() > 0;
-    TranslationContext selfContext = context.withBinding("self", selfBinding);
-    Set<MOperation> inProgress = new java.util.HashSet<>(operationsInProgress);
-    inProgress.add(operation);
     // Parameterized calls: each parameter is bound through a per-call SMT let to the
     // translated ARGUMENT's value and definedness -- constants carry their literal, attribute
     // arguments carry the attribute's own symbol, so the body computes over the caller's
@@ -3386,13 +3419,68 @@ public final class ExpressionTranslator implements ExpressionVisitor {
             positivePolarity,
             bodyLocalBindings,
             inProgress);
-    result = body;
     if (parameterized) {
-      result =
-          new TranslatedExpression(
-              Smt.let(parameterBindings, body.defined()),
-              Smt.let(parameterBindings, body.value()));
+      return new TranslatedExpression(
+          Smt.let(parameterBindings, body.defined()),
+          Smt.let(parameterBindings, body.value()));
     }
+    return body;
+  }
+
+  /**
+   * {@code x.b.op(...)}: the navigated receiver names the LINKED object, not a slot, so the
+   * inlined call expands per destination slot -- self bound to each slot's concrete binding
+   * (dispatching the operation against that slot's concrete class, the same translation-time
+   * polymorphic resolution the variable path gets from a folded slot), each case gated by the
+   * slot's link term. Definedness and value are both {@code or}-combinations of the per-slot
+   * cases exactly as {@link #navigationObjectLet} builds them for a let-bound navigation
+   * initializer.
+   */
+  private TranslatedExpression navigationReceiverOperation(
+      MOperation operation,
+      Expression[] arguments,
+      ExpNavigation navigation,
+      String sourceName,
+      Set<MOperation> inProgress) {
+    VariableBinding source = context.binding(sourceName);
+    MNavigableElement destination = resolveRedefinedDestination(navigation.getDestination(), source);
+    if (destination.association() instanceof MAssociationClass) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "operation call on a receiver navigating an association class is not yet supported");
+    }
+    AssociationLinks links = context.linksFor(destination.association().name());
+    ObjectSlots destinationSlots = destinationEndView(links, destination);
+    List<SmtTerm> definedCases = new ArrayList<>();
+    List<SmtTerm> gatedValues = new ArrayList<>();
+    for (int k = 0; k < destinationSlots.capacity(); k++) {
+      VariableBinding slotBinding = destinationSlots.concreteBindings().get(k);
+      MOperation dispatched = context.dispatchOperation(slotBinding.className(), operation.name());
+      MOperation resolved = dispatched != null ? dispatched : operation;
+      java.util.Set<MOperation> slotInProgress = new java.util.HashSet<>(inProgress);
+      slotInProgress.add(resolved);
+      TranslatedExpression body =
+          inlineOperationBody(
+              resolved, arguments, context.withBinding("self", slotBinding), slotInProgress);
+      SmtTerm link = linkTerm(links, destination, source, k);
+      SmtTerm gate = Smt.and(List.of(link, body.defined()));
+      definedCases.add(gate);
+      gatedValues.add(gate);
+      gatedValues.add(body.value());
+    }
+    // The VALUE cases must combine into a term of the BODY's own sort, not a boolean or():
+    // the per-slot value terms are Ints (or Booleans) and the comparison consumer compares
+    // them by sort. objectAnyLet's ite-chain is the established shape; the gate is each
+    // slot's defined case, and at most one is true (a single-valued navigation's multiplicity
+    // bounds pin at most one destination). The final fallback is the last slot's own value,
+    // sort-consistent by construction and never consulted: it is read only when every gate
+    // is false, i.e. when the definedness case is false and USE's total-equality rule never
+    // looks at the value.
+    SmtTerm value = gatedValues.get(gatedValues.size() - 1);
+    for (int k = gatedValues.size() - 2; k >= 0; k -= 2) {
+      value = Smt.ite(gatedValues.get(k), gatedValues.get(k + 1), value);
+    }
+    return new TranslatedExpression(Smt.or(definedCases), value);
   }
 
   @Override
