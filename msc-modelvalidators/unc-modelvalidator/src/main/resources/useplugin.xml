@@ -12,4 +12,13 @@
 			id="org.tzi.use.smt.plugin.SmtValidatePropertyAction">
 		</action>
 	</actions>
+	<commands>
+		<command id="org.tzi.use.smt.plugin.SmtValidateCmd"
+			class="org.tzi.use.smt.plugin.SmtValidateCmd"
+			help="Validates the currently loaded model with the SMT (Z3) model finder. A path to a properties configuration file must be given; an optional second argument selects a named section from it. The outcome and a per-invariant summary are printed directly to the shell."
+			label="SmtValidateCmd"
+			shellcmd="smtmodelvalidator -validate"
+			alias="smv -validate">
+		</command>
+	</commands>
 </plugin>
