@@ -899,6 +899,7 @@
       "provenanceCitation": null,
       "features": [
         "cmd.validate",
+        "ocl.one",
         "ocl.query-operation-inlining"
       ],
       "question": "Can CompanyER's ProjectPart, Project, and Part populations be scaled so every foreign-key-derived link stays legal, if Project's own primary-key candidate set is shrunk to a single value while ProjectPart is still required to instantiate more compound-key tuples than that shrunk Project count times Part's (unshrunk) count of achievable distinct part names can supply?",
