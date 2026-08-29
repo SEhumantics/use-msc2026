@@ -787,17 +787,25 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * {@link #comparison} and {@link #orderedComparison}.
    */
   private TranslatedExpression realDivision(Expression[] arguments) {
-    if (arguments.length != 2
-        || !arguments[0].type().isTypeOfInteger()
-        || !arguments[1].type().isTypeOfInteger()) {
+    if (arguments.length != 2) {
       throw unsupported(
           FragmentBoundary.TIER_2,
           "operator '/' over non-Integer or wrong-arity operands: only crisp Integer / crisp"
               + " Integer (USE's real division) is supported");
     }
-    requireCrispInteger(arguments[0], "/");
+    // USE's Op_number_div matches (Number, Number) and answers REAL division; both operands
+    // are lifted to the Reals. Dividend: crisp Integer (lifted) or crisp Real attribute.
+    boolean dividendInt = arguments[0].type().isTypeOfInteger();
+    boolean dividendReal = arguments[0].type().isTypeOfReal();
+    if (!dividendInt && !dividendReal) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "operator '/' over a non-numeric dividend: only crisp Integer and crisp Real"
+              + " dividends are supported");
+    }
     TranslatedExpression dividend = argResult(arguments[0]);
-    SmtTerm lifted = Smt.app("to_real", dividend.value());
+    SmtTerm lifted =
+        dividendInt ? Smt.app("to_real", dividend.value()) : dividend.value();
     if (arguments[1] instanceof ExpConstInteger constantDivisor) {
       if (constantDivisor.value() == 0) {
         return new TranslatedExpression(Smt.bool(false), Smt.bool(false));
@@ -806,38 +814,75 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           dividend.defined(),
           Smt.app("/", lifted, Smt.realLit(BigDecimal.valueOf(constantDivisor.value()))));
     }
-    java.util.LinkedHashSet<BigInteger> candidates = finiteDomainCandidates(arguments[1], "/");
-    if (candidates == null) {
+    if (arguments[1] instanceof ExpConstReal constantRealDivisor) {
+      BigDecimal c = BigDecimal.valueOf(constantRealDivisor.value());
+      if (c.signum() == 0) {
+        return new TranslatedExpression(Smt.bool(false), Smt.bool(false));
+      }
+      return new TranslatedExpression(
+          dividend.defined(), Smt.app("/", lifted, Smt.realLit(c)));
+    }
+    // Variable divisor with a finite configured candidate domain (Integer or Real attribute):
+    // the candidate enumeration keeps every branch a division by a nonzero numeral, linear in
+    // the pinned logic. Candidates parse exactly as configured; a zero candidate is excluded
+    // from the definedness (division by zero is undefined, never a fallback value).
+    if (!(arguments[1] instanceof ExpAttrOp divisorAttr)
+        || !(divisorAttr.objExp() instanceof ExpVariable divisorSource)
+        || localBindings.containsKey(divisorSource.getVarname())) {
       throw unsupported(
           FragmentBoundary.TIER_2,
-          "operator '/' with a divisor that is neither a compile-time Integer literal nor a"
-              + " crisp Integer attribute with a finite configured domain");
+          "operator '/' with a divisor that is neither a compile-time constant nor a"
+              + " configured numeric attribute");
     }
-    requireCrispInteger(arguments[1], "/");
-    java.util.List<BigInteger> nonzero =
-        candidates.stream().filter(c -> c.signum() != 0).toList();
+    VariableBinding b = context.binding(divisorSource.getVarname());
+    AttributeValues divisorValues =
+        context.attributeValues(b.className(), divisorAttr.attr().name());
+    guardAgainstUncertainAttribute(divisorValues);
+    AttributeDomain divisorDomain =
+        context.attributeDomain(b.className(), divisorAttr.attr().name());
+    boolean divisorInt = arguments[1].type().isTypeOfInteger();
+    List<BigDecimal> divisorCandidates = new ArrayList<>();
+    for (String candidate : divisorDomain.enumeratedValues()) {
+      BigDecimal parsed;
+      try {
+        parsed = divisorInt
+            ? BigDecimal.valueOf(Integer.parseInt(candidate.trim()))
+            : new BigDecimal(candidate.trim());
+      } catch (NumberFormatException e) {
+        throw unsupported(
+            FragmentBoundary.TIER_2,
+            "operator '/' by a divisor whose configured domain entry '"
+                + candidate
+                + "' is not a numeric literal");
+      }
+      divisorCandidates.add(parsed);
+    }
+    if (divisorCandidates.isEmpty()) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "operator '/' by a divisor with an empty configured domain");
+    }
+    TranslatedExpression divisor = argResult(arguments[1]);
+    List<BigDecimal> nonzero =
+        divisorCandidates.stream().filter(c -> c.signum() != 0).toList();
     if (nonzero.isEmpty()) {
       return new TranslatedExpression(Smt.bool(false), Smt.bool(false));
     }
-    TranslatedExpression divisor = argResult(arguments[1]);
     int last = nonzero.size() - 1;
-    SmtTerm value =
-        Smt.app("/", lifted, Smt.realLit(BigDecimal.valueOf(nonzero.get(last).longValue())));
+    SmtTerm value = Smt.app("/", lifted, Smt.realLit(nonzero.get(last)));
     for (int i = last - 1; i >= 0; i--) {
-      value =
-          Smt.ite(
-              Smt.eq(divisor.value(), Smt.intLit(nonzero.get(i))),
-              Smt.app("/", lifted, Smt.realLit(BigDecimal.valueOf(nonzero.get(i).longValue()))),
-              value);
+      SmtTerm gate =
+          divisorInt
+              ? Smt.eq(divisor.value(), Smt.intLit(nonzero.get(i).toBigInteger()))
+              : Smt.eq(divisor.value(), Smt.realLit(nonzero.get(i)));
+      value = Smt.ite(gate, Smt.app("/", lifted, Smt.realLit(nonzero.get(i))), value);
     }
-    SmtTerm defined = Smt.and(List.of(dividend.defined(), divisor.defined()));
-    if (nonzero.size() < candidates.size()) {
-      defined =
-          Smt.and(
-              List.of(
-                  defined,
-                  Smt.not(Smt.eq(divisor.value(), Smt.intLit(BigInteger.ZERO)))));
-    }
+    SmtTerm defined =
+        Smt.and(
+            List.of(
+                dividend.defined(),
+                divisor.defined(),
+                Smt.not(Smt.eq(divisor.value(), Smt.realLit(BigDecimal.ZERO)))));
     return new TranslatedExpression(defined, value);
   }
 
