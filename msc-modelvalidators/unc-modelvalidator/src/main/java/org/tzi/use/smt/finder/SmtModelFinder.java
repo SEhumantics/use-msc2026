@@ -837,6 +837,11 @@ public final class SmtModelFinder {
     Map<String, AssociationLinks> linksByAssociation = new LinkedHashMap<>();
     Map<String, List<AssociationLinks>> reflexiveCompositionsByClass = new LinkedHashMap<>();
     List<String> crossClassCompositionsWithNonzeroPopulation = new ArrayList<>();
+    // Association-class pointer END VIEWS, folded over configured subclasses exactly like the
+    // ordinary association grids' ends: keyed by association-class name, listed in declared end
+    // order. Consumed by the pointer paths in ExpressionTranslator and by the witness
+    // reconstructor; absent entries keep the single-class views.
+    Map<String, List<ObjectSlots>> assocClassEndViews = new LinkedHashMap<>();
     for (AssociationScope scope : config.associationScopes()) {
       MAssociation association = model.getAssociation(scope.associationName());
       if (association instanceof MAssociationClass associationClass) {
@@ -847,7 +852,8 @@ public final class SmtModelFinder {
             scope,
             slotsByClass,
             attributeValuesByKey,
-            attributeDomainByKey);
+            attributeDomainByKey,
+            assocClassEndViews);
         continue;
       }
       List<MAssociationEnd> ends = association.associationEnds();
@@ -1028,7 +1034,7 @@ public final class SmtModelFinder {
       TranslationContext context =
           new TranslationContext(
               Map.of(), attributes, attributeDomainByKey, slotsByClass, linksByAssociation,
-              operationDispatch);
+              operationDispatch, assocClassEndViews);
       assertDerivedAttributeValues(script, model, context, attributes);
       FragmentChecker.ReifiedResult checked =
           FragmentChecker.checkAndReify(
@@ -1237,7 +1243,8 @@ public final class SmtModelFinder {
       AssociationScope scope,
       Map<String, ObjectSlots> slotsByClass,
       Map<String, AttributeValues> attributeValuesByKey,
-      Map<String, AttributeDomain> attributeDomainByKey) {
+      Map<String, AttributeDomain> attributeDomainByKey,
+      Map<String, List<ObjectSlots>> assocClassEndViews) {
     List<MAssociationEnd> ends = associationClass.associationEnds();
     if (ends.size() != 2) {
       throw new IllegalArgumentException(
@@ -1246,14 +1253,19 @@ public final class SmtModelFinder {
               + "' does not have exactly two ends; not yet supported");
     }
     ObjectSlots associationClassSlots = slotsByClass.get(associationClass.name());
-    ObjectSlots end0Slots = slotsByClass.get(ends.get(0).cls().name());
-    ObjectSlots end1Slots = slotsByClass.get(ends.get(1).cls().name());
+    // FOLDED end views -- the declared class's slots plus every configured subclass's, the same
+    // construction the ordinary association grids use -- so an association class's pointer can
+    // attach to a SUBCLASS instance of a superclass-typed end, and its degree/existence guards
+    // see the whole polymorphic population.
+    ObjectSlots end0Slots = endSlotsView(slotsByClass, ends.get(0).cls());
+    ObjectSlots end1Slots = endSlotsView(slotsByClass, ends.get(1).cls());
     if (associationClassSlots == null || end0Slots == null || end1Slots == null) {
       throw new IllegalArgumentException(
           "association class '"
               + scope.associationName()
               + "' references a class with no configured scope");
     }
+    assocClassEndViews.put(associationClass.name(), List.of(end0Slots, end1Slots));
     // Cross-wired the same way AssociationLinkEncoder.encode's own linksPerB/linksPerA are: the
     // bound on how many association-class instances may share the SAME end0 pointer value is
     // end1's OWN declared multiplicity (the role a source at end0 navigates THROUGH to reach

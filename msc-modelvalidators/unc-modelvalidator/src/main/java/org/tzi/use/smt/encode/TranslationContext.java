@@ -2,6 +2,7 @@ package org.tzi.use.smt.encode;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.uml.mm.MOperation;
@@ -12,7 +13,8 @@ public record TranslationContext(
     Map<String, AttributeDomain> domains,
     Map<String, ObjectSlots> slotsByClass,
     Map<String, AssociationLinks> linksByAssociation,
-    Map<String, Map<String, MOperation>> operationDispatch) {
+    Map<String, Map<String, MOperation>> operationDispatch,
+    Map<String, List<ObjectSlots>> assocClassEndViews) {
   /**
    * Convenience constructor for call sites that do not (yet) carry an operation-dispatch
    * table: operation dispatch then falls back to the statically-declared operation.
@@ -23,7 +25,34 @@ public record TranslationContext(
       Map<String, AttributeDomain> domains,
       Map<String, ObjectSlots> slotsByClass,
       Map<String, AssociationLinks> linksByAssociation) {
-    this(variables, attributes, domains, slotsByClass, linksByAssociation, Collections.emptyMap());
+    this(variables, attributes, domains, slotsByClass, linksByAssociation, Collections.emptyMap(),
+        Collections.emptyMap());
+  }
+
+  /**
+   * Convenience constructor for call sites that carry operation dispatch but no association-
+   * class end views: the association-class pointer paths then keep their single-class end
+   * views (the folded lookup falls back to {@link #slotsFor}).
+   */
+  public TranslationContext(
+      Map<String, VariableBinding> variables,
+      Map<String, AttributeValues> attributes,
+      Map<String, AttributeDomain> domains,
+      Map<String, ObjectSlots> slotsByClass,
+      Map<String, AssociationLinks> linksByAssociation,
+      Map<String, Map<String, MOperation>> operationDispatch) {
+    this(variables, attributes, domains, slotsByClass, linksByAssociation, operationDispatch,
+        Collections.emptyMap());
+  }
+
+  /**
+   * The FOLDED end view (declared class + configured subclasses, SmtModelFinder's endSlotsView
+   * order) an association class's pointer mechanism uses for the end at {@code endPosition} of
+   * {@code associationClassName}'s declared end order, or null when the producing side
+   * registered none -- the pointer paths then keep their single-class views.
+   */
+  public List<ObjectSlots> assocClassEndViews(String associationClassName) {
+    return assocClassEndViews.get(associationClassName);
   }
 
   /**
@@ -86,7 +115,8 @@ public record TranslationContext(
     Map<String, VariableBinding> extended = new LinkedHashMap<>(variables);
     extended.put(variableName, binding);
     return new TranslationContext(
-        extended, attributes, domains, slotsByClass, linksByAssociation, operationDispatch);
+        extended, attributes, domains, slotsByClass, linksByAssociation, operationDispatch,
+        assocClassEndViews);
   }
 
   private static <T> T require(

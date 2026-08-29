@@ -192,12 +192,26 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     VariableBinding source = context.binding(sourceVar.getVarname());
     destination = resolveRedefinedDestination(destination, source);
-    if (destination.association() instanceof MAssociationClass) {
-      ObjectSlots assocClassSlots = context.slotsFor(destination.cls().name());
+    if (destination.association() instanceof MAssociationClass assocClass) {
+      // Two shapes land here: the CLASSIFIER-to-end navigation (e.employer -- destination is an
+      // END of the association class) and an end-to-CLASSIFIER attribute read (p.own.attr --
+      // destination IS the classifier). Only the former has an end view to fold: use the same
+      // folded view the pointer mechanism's guards were built over. Hand-built contexts without
+      // registered views keep the single-class slotsFor behavior.
+      boolean destinationIsTheClassifier =
+          destination.cls().name().equals(assocClass.name());
+      ObjectSlots assocClassSlots =
+          destinationIsTheClassifier
+              ? context.slotsFor(destination.cls().name())
+              : assocClassEndViewOrNull(assocClass, destination);
+      if (assocClassSlots == null) {
+        assocClassSlots = context.slotsFor(destination.cls().name());
+      }
       AttributeValues assocClassValues =
           context.attributeValues(assocClassSlots.className(), attribute.name());
       guardEndAgainstUncertainAttribute(assocClassSlots, attribute, assocClassValues);
-      return associationClassNavigatedAttribute(source, destination, assocClassSlots, assocClassValues);
+      return associationClassNavigatedAttribute(
+          source, destination, assocClassSlots, assocClassValues, attribute);
     }
 
     AssociationLinks links = context.linksFor(destination.association().name());
@@ -282,17 +296,21 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    */
   private TranslatedExpression associationClassNavigatedAttribute(
       VariableBinding source, MNavigableElement destination, ObjectSlots destSlots,
-      AttributeValues v) {
+      AttributeValues v, MAttribute attribute) {
     AttributeValues pointer = associationClassPointer(source.className(), destination);
     int capacity = destSlots.capacity();
     if (capacity == 0) {
       return defined(placeholderOfSort(v.type()));
     }
-    SmtTerm value = Smt.sym(v.valueNames().get(capacity - 1));
+    // Slot k may belong to a CONFIGURED SUBCLASS of the declared end class (the folded view):
+    // read the value from that slot's concrete class's registration, exactly what
+    // selectLinkedValue does for the ordinary grid path. Identity slots keep the declared
+    // class's own values, so an unfolded view is byte-identical to the previous encoding.
+    SmtTerm value = valueSymbolForEndSlot(destSlots, v, attribute, capacity - 1);
     for (int k = capacity - 2; k >= 0; k--) {
       SmtTerm pointsHere =
           Smt.eq(Smt.sym(pointer.valueNames().get(source.slotIndex())), Smt.intLit(BigInteger.valueOf(k)));
-      value = Smt.ite(pointsHere, Smt.sym(v.valueNames().get(k)), value);
+      value = Smt.ite(pointsHere, valueSymbolForEndSlot(destSlots, v, attribute, k), value);
     }
     return defined(value);
   }
@@ -1791,16 +1809,62 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     MNavigableElement sourceEnd = oppositeEnd(destination);
     ObjectSlots associationClassSlots = context.slotsFor(associationClass.name());
     AttributeValues pointer = associationClassPointer(associationClass.name(), sourceEnd);
+    // The pointer indexes the FOLDED end view, so the source's own-class slot index is the
+    // wrong identity to compare against when the view folds subclasses: resolve the source
+    // binding's index WITHIN the folded view (its entry is there by construction -- the source
+    // binds one of the view's slots). Contexts without registered views keep the single-class
+    // own-index comparison.
+    int sourceFoldedIndex = foldedIndexOfSourceInEndView(associationClass, sourceEnd, source);
     List<SmtTerm> matches = new ArrayList<>();
     for (int k = 0; k < associationClassSlots.capacity(); k++) {
       SmtTerm exists = Smt.sym(associationClassSlots.existsNames().get(k));
       SmtTerm pointsToSource =
           Smt.eq(
               Smt.sym(pointer.valueNames().get(k)),
-              Smt.intLit(BigInteger.valueOf(source.slotIndex())));
+              Smt.intLit(BigInteger.valueOf(sourceFoldedIndex)));
       matches.add(Smt.and(List.of(exists, pointsToSource)));
     }
     return Smt.or(matches);
+  }
+
+  /**
+   * The source slot's index within the association class's FOLDED view of {@code sourceEnd}, or
+   * {@code source.slotIndex()} when no folded view was registered (the single-class fallback).
+   * Fails closed when a view IS registered but the source binding is not one of its slots --
+   * that would mean the source class is not part of the end's population at all, and comparing
+   * against any index would silently fabricate a link identity.
+   */
+  private int foldedIndexOfSourceInEndView(
+      MAssociationClass associationClass, MNavigableElement sourceEnd, VariableBinding source) {
+    List<ObjectSlots> views = context.assocClassEndViews(associationClass.name());
+    if (views == null) {
+      return source.slotIndex();
+    }
+    boolean sourceIsEnd0 = sourceEnd.equals(sourceEnd.association().associationEnds().get(0));
+    ObjectSlots view = sourceIsEnd0 ? views.get(0) : views.get(1);
+    int index = view.concreteBindings().indexOf(source);
+    if (index < 0) {
+      throw unsupported(
+          FragmentBoundary.ENCODING_SCOPE,
+          "association-class pointer lookup: source class "
+              + source.className()
+              + " is not part of the folded end view of "
+              + view.className());
+    }
+    return index;
+  }
+
+  /**
+   * The registered folded end view for one end of an association class, or null when none was
+   * registered (hand-built translation contexts keep the single-class behavior).
+   */
+  private ObjectSlots assocClassEndViewOrNull(MAssociationClass assocClass, MNavigableElement end) {
+    List<ObjectSlots> views = context.assocClassEndViews(assocClass.name());
+    if (views == null) {
+      return null;
+    }
+    boolean endIsEnd0 = end.equals(end.association().associationEnds().get(0));
+    return endIsEnd0 ? views.get(0) : views.get(1);
   }
 
   private static MNavigableElement oppositeEnd(MNavigableElement end) {

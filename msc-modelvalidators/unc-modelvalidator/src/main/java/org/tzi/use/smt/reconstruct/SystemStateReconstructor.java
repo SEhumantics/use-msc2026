@@ -144,21 +144,37 @@ public final class SystemStateReconstructor {
           continue;
         }
         MObject[] connectedObjects = new MObject[2];
+        // The pointer indexes the end's FOLDED view (declared class + configured subclasses),
+        // so the grid index maps to its concrete slot key through the view -- the same lookup
+        // the ordinary link-grid reconstruction already does via slotKeyAt. Without a registered
+        // view (hand-built contexts), the declared class's own keys keep the old behavior.
+        List<ObjectSlots> endViews = context.assocClassEndViews(className);
         connectedObjects[0] =
             objectsBySlot.get(
-                slotKey(
-                    ends.get(0).cls().name(),
+                resolvePointerKey(endViews, 0, ends.get(0).cls().name(),
                     decodeIndex(modelValues, end0Pointer.valueNames().get(i))));
         connectedObjects[1] =
             objectsBySlot.get(
-                slotKey(
-                    ends.get(1).cls().name(),
+                resolvePointerKey(endViews, 1, ends.get(1).cls().name(),
                     decodeIndex(modelValues, end1Pointer.valueNames().get(i))));
         MLinkObject linkObject =
             api.createLinkObjectEx(associationClass, slots.objectNames().get(i), connectedObjects);
         objectsBySlot.put(slotKey(className, i), linkObject);
       }
     }
+  }
+
+  /**
+   * The objectsBySlot key for one end of an association-class instance: through the end's
+   * FOLDED view when one is registered (grid index -> concrete class slot), otherwise the
+   * declared class's own generated key.
+   */
+  private static String resolvePointerKey(
+      List<ObjectSlots> endViews, int endPosition, String declaredClassName, int pointerIndex) {
+    if (endViews != null && endPosition < endViews.size()) {
+      return endViews.get(endPosition).slotKeyAt(pointerIndex);
+    }
+    return slotKey(declaredClassName, pointerIndex);
   }
 
   private static int decodeIndex(Map<String, SmtValue> modelValues, String symbol) {
