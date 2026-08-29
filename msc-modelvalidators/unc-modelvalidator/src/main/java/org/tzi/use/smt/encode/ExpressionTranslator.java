@@ -3408,45 +3408,83 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * binding would have to be threaded both components, which no consumer needs yet).
    */
   private TranslatedExpression uTypeLet(ExpLet e) {
-    if (!(e.getVarExpression() instanceof ExpAttrOp attr)
-        || !(attr.objExp() instanceof ExpVariable source)
-        || localBindings.containsKey(source.getVarname())) {
+    // Two supported initializer shapes: a bare U-typed attribute access on a context variable
+    // (the source of every family's symbols and configured candidate domains), and a CHAINED
+    // U-type let variable -- let u2 = u1 -- which aliases its predecessor's symbol(s) and
+    // INHERITS its let source, so the case-enumerating consumers treat the whole chain as the
+    // one value it is and the read-once aliasing rule spans the chain.
+    Expression initializer = e.getVarExpression();
+    boolean chained = false;
+    VariableBinding b = null;
+    AttributeValues values = null;
+    AttributeDomain firstDomain = null;
+    AttributeDomain secondDomain = null;
+    LocalBinding prevBinding = null;
+    String attributeName = null;
+    if (initializer instanceof ExpAttrOp attr
+        && attr.objExp() instanceof ExpVariable source
+        && !localBindings.containsKey(source.getVarname())) {
+      b = context.binding(source.getVarname());
+      attributeName = attr.attr().name();
+      values = context.attributeValues(b.className(), attributeName);
+    } else if (initializer instanceof ExpVariable prevVar
+        && localBindings.containsKey(prevVar.getVarname())) {
+      LocalBinding prev = localBindings.get(prevVar.getVarname());
+      if (prev.letSource() == null && prev.uncertaintySymbol() == null) {
+        throw unsupported(
+            FragmentBoundary.UTYPE_CORE,
+            "U-type let chained over '"
+                + prevVar.getVarname()
+                + "': the source binding carries no U-type encoding (only U-type lets chain)");
+      }
+      chained = true;
+      prevBinding = prev;
+    } else {
       throw unsupported(
           FragmentBoundary.UTYPE_CORE,
           "let-bound U-type variable '"
               + e.getVarname()
-              + "': only a bare U-typed attribute access on a context variable is supported as"
-              + " the initializer");
+              + "': only a bare U-typed attribute access on a context variable, or another U-type"
+              + " let variable, is supported as the initializer");
     }
-    VariableBinding b = context.binding(source.getVarname());
-    AttributeValues values = context.attributeValues(b.className(), attr.attr().name());
     String symbolStem = "|ocl-let-" + e.getVarname();
     String aliasKey = "let:" + e.getVarname();
     // Family-specific source: UReal/UInteger pair (representative + uncertainty), UBoolean
     // (the probability IS the value -- its truth is the p >= 0.5 rule), UString (spelling index
     // + confidence). The let source records the configured candidate domains the case-
     // enumerating consumers read; the SMT aliases make the binding's symbols interchangeable
-    // with the source's own.
-    AttributeDomain firstDomain = null;
-    AttributeDomain secondDomain = null;
+    // with the source's own. A CHAINED let aliases its predecessor's symbols and inherits its
+    // let source UNCHANGED -- the inherited alias key is what makes the read-once rule treat
+    // the whole chain as one value.
     String uncertaintySymbol = null;
     SmtTerm valueTerm;
     SmtTerm uncertaintyTerm = null;
-    if (values.type().isPairedUType()) {
-      firstDomain = context.attributeDomain(b.className(), attr.attr().name(), "value");
-      secondDomain = context.attributeDomain(b.className(), attr.attr().name(), "uncertainty");
+    LetBindingSource letSource;
+    if (chained) {
+      valueTerm = Smt.sym(prevBinding.valueSymbol());
+      if (prevBinding.uncertaintySymbol() != null) {
+        uncertaintySymbol = symbolStem + "-uncertainty|";
+        uncertaintyTerm = Smt.sym(prevBinding.uncertaintySymbol());
+      }
+      letSource = prevBinding.letSource();
+    } else if (values.type().isPairedUType()) {
+      firstDomain = context.attributeDomain(b.className(), attributeName, "value");
+      secondDomain = context.attributeDomain(b.className(), attributeName, "uncertainty");
       uncertaintySymbol = symbolStem + "-uncertainty|";
       valueTerm = Smt.sym(values.valueNames().get(b.slotIndex()));
       uncertaintyTerm = Smt.sym(values.uncertaintyNames().get(b.slotIndex()));
+      letSource = new LetBindingSource(aliasKey, b, values, firstDomain, secondDomain);
     } else if (values.type() == AttributeType.UBOOLEAN) {
-      firstDomain = context.attributeDomain(b.className(), attr.attr().name(), "probability");
+      firstDomain = context.attributeDomain(b.className(), attributeName, "probability");
       valueTerm = Smt.sym(values.valueNames().get(b.slotIndex()));
+      letSource = new LetBindingSource(aliasKey, b, values, firstDomain, secondDomain);
     } else if (values.type() == AttributeType.USTRING) {
-      firstDomain = context.attributeDomain(b.className(), attr.attr().name(), "value");
-      secondDomain = context.attributeDomain(b.className(), attr.attr().name(), "confidence");
+      firstDomain = context.attributeDomain(b.className(), attributeName, "value");
+      secondDomain = context.attributeDomain(b.className(), attributeName, "confidence");
       uncertaintySymbol = symbolStem + "-uncertainty|";
       valueTerm = Smt.sym(values.valueNames().get(b.slotIndex()));
       uncertaintyTerm = Smt.sym(values.confidenceNames().get(b.slotIndex()));
+      letSource = new LetBindingSource(aliasKey, b, values, firstDomain, secondDomain);
     } else {
       throw unsupported(
           FragmentBoundary.UTYPE_CORE,
@@ -3454,8 +3492,6 @@ public final class ExpressionTranslator implements ExpressionVisitor {
               + values.type()
               + " with no supported candidate-enumerable encoding");
     }
-    LetBindingSource letSource =
-        new LetBindingSource(aliasKey, b, values, firstDomain, secondDomain);
     LocalBinding binding =
         new LocalBinding(
             symbolStem + "-defined|",
