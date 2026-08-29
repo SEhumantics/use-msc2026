@@ -92,8 +92,17 @@ public class PlainRealAttributeRoundTripTest {
     assertNotEquals(mid, high, 0.0);
   }
 
+  /**
+   * 2026-08-29: Real literals are now SUPPORTED -- {@code visitConstReal} emits the exact SMT
+   * decimal, so {@code self.lowCut > 0.25} translates and solves (this superseded the refusal
+   * this test used to pin; the prim.integer-arithmetic {@code /} slice needed Real literals and
+   * Integer/Real comparison lifts). The original concern -- answering a Real literal with a
+   * TRUNCATED value, the incumbent's own {@code 0.25 -> 0} defect -- is still guarded, now
+   * positively: the threshold must be honored EXACTLY, so the witness clears 0.25 (not merely
+   * the truncated 0) and USE's evaluator confirms the invariant on the reconstruction.
+   */
   @Test
-  public void aRealLiteralIsRefusedExplicitlyRatherThanTruncated() throws Exception {
+  public void aRealLiteralThresholdIsHonoredExactlyRatherThanTruncated() throws Exception {
     MModel model = compile(resourcePath("PlainRealLiteral.use"));
     ConfigurationVocabulary vocabulary = ConfigurationVocabulary.fromModel(model);
     RawConfiguration raw =
@@ -101,17 +110,19 @@ public class PlainRealAttributeRoundTripTest {
     AnalysisConfiguration config =
         ConfigurationReader.normalize(raw, vocabulary).requireSupported();
 
-    try {
-      SmtModelFinder.find(model, config);
-      fail("a Real literal is outside the translated fragment and must be refused, not answered");
-    } catch (SmtTranslationException expected) {
-      assertTrue(
-          "the refusal must name the construct it refuses, got: " + expected.getMessage(),
-          expected.getMessage().contains("Real literal"));
-      assertTrue(
-          "the refusal must name the invariant it refuses, got: " + expected.getMessage(),
-          expected.getMessage().contains("Calibration::AboveAQuarter"));
-    }
+    ModelFinderResult result = SmtModelFinder.find(model, config);
+
+    assertTrue("lowCut's range (-2..2) admits values above 0.25", result.satisfiable());
+    assertTrue(
+        "the USE evaluator must independently confirm the reconstructed witness",
+        result.allActiveInvariantsHold());
+    MSystemState state = result.system().state();
+    MObject calibration = state.objectsOfClass(model.getClass("Calibration")).iterator().next();
+    double low = real(calibration, state, "lowCut");
+    assertTrue(
+        "the 0.25 threshold must be honored exactly (truncating it to 0, as the incumbent"
+            + " does, would accept any positive value), was " + low,
+        low > 0.25);
   }
 
   private static boolean offHalfGrid(double value) {

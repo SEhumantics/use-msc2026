@@ -441,6 +441,11 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           case ">=", "<=", ">", "<" -> orderedComparison(e.opname(), a[0], a[1]);
           case "size" -> collectionSize(a[0]);
           case "div" -> integerDivision(a);
+          // USE's Op_number_div is REAL division on Integers (evalRealResult, confirmed
+          // against the use-core bytecode): the result is Real-sorted, so the dividend is
+          // lifted with to_real and the division happens in the Reals. A numeral divisor is
+          // linear; a finite-domain variable divisor case-splits like div/mod.
+          case "/" -> realDivision(a);
           case "+", "-", "*" -> arithmetic(e.opname(), a);
           // Both total functions over any operand (confirmed directly against Op_isDefined/
           // Op_isUndefined, use-core: `!args[0].isUndefined()` / `args[0].isUndefined()`, kind()
@@ -607,8 +612,25 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     TranslatedExpression l = argResult(left);
     TranslatedExpression r = argResult(right);
+    SmtTerm leftValue = l.value();
+    SmtTerm rightValue = r.value();
+    if (left.type().isTypeOfInteger() && right.type().isTypeOfReal()) {
+      leftValue = Smt.app("to_real", leftValue);
+    } else if (left.type().isTypeOfReal() && right.type().isTypeOfInteger()) {
+      rightValue = Smt.app("to_real", rightValue);
+    }
     return new TranslatedExpression(
-        Smt.and(List.of(l.defined(), r.defined())), Smt.app(operator, l.value(), r.value()));
+        Smt.and(List.of(l.defined(), r.defined())), Smt.app(operator, leftValue, rightValue));
+  }
+
+  /**
+   * The value term of {@code e}, lifted with {@code to_real} when e is Integer-typed -- the
+   * mixed-sort guard's building block: Integer-typed terms are not sort-compatible with Real
+   * terms under strict SMT-LIB, numerals aside.
+   */
+  private SmtTerm maybeToReal(Expression e) {
+    SmtTerm value = argResult(e).value();
+    return e.type().isTypeOfInteger() ? Smt.app("to_real", value) : value;
   }
 
   /**
@@ -723,18 +745,84 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * candidate set: AttributeEncoder's domain guard pins the divisor symbol to exactly these
    * values, so the ite chain's impossible fallback is never consulted.
    */
-  private TranslatedExpression divisionByFiniteDomain(Expression[] arguments, String opname) {
-    requireCrispInteger(arguments[0], opname);
-    requireCrispInteger(arguments[1], opname);
-    if (!(arguments[1] instanceof ExpAttrOp attr)
-        || !(attr.objExp() instanceof ExpVariable receiver)
-        || localBindings.containsKey(receiver.getVarname())) {
+/**
+   * {@code x.n / d} over crisp Integer operands: USE's Op_number_div is REAL division on
+   * Integers (evalRealResult, confirmed against the use-core bytecode), so the result is
+   * Real-sorted -- the dividend lifts with {@code to_real} and the division happens in the
+   * Reals, where a numeral divisor is linear in the pinned QF_LIA logic. Variable divisors use
+   * the finite-domain case-split {@link #divisionByFiniteDomain} shares: each branch divides by
+   * a configured candidate literal. Zero keeps the established semantics (undefined, excluded
+   * from the definedness; a zero-only domain is the constant-false expression). Comparisons
+   * against Integer-typed operands lift them -- see the mixed-sort guard in
+   * {@link #comparison} and {@link #orderedComparison}.
+   */
+  private TranslatedExpression realDivision(Expression[] arguments) {
+    if (arguments.length != 2
+        || !arguments[0].type().isTypeOfInteger()
+        || !arguments[1].type().isTypeOfInteger()) {
       throw unsupported(
           FragmentBoundary.TIER_2,
-          "operator '"
-              + opname
-              + "' with a divisor that is neither a compile-time Integer literal nor a crisp"
-              + " Integer attribute with a finite configured domain");
+          "operator '/' over non-Integer or wrong-arity operands: only crisp Integer / crisp"
+              + " Integer (USE's real division) is supported");
+    }
+    requireCrispInteger(arguments[0], "/");
+    TranslatedExpression dividend = argResult(arguments[0]);
+    SmtTerm lifted = Smt.app("to_real", dividend.value());
+    if (arguments[1] instanceof ExpConstInteger constantDivisor) {
+      if (constantDivisor.value() == 0) {
+        return new TranslatedExpression(Smt.bool(false), Smt.bool(false));
+      }
+      return new TranslatedExpression(
+          dividend.defined(),
+          Smt.app("/", lifted, Smt.realLit(BigDecimal.valueOf(constantDivisor.value()))));
+    }
+    java.util.LinkedHashSet<BigInteger> candidates = finiteDomainCandidates(arguments[1], "/");
+    if (candidates == null) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "operator '/' with a divisor that is neither a compile-time Integer literal nor a"
+              + " crisp Integer attribute with a finite configured domain");
+    }
+    requireCrispInteger(arguments[1], "/");
+    java.util.List<BigInteger> nonzero =
+        candidates.stream().filter(c -> c.signum() != 0).toList();
+    if (nonzero.isEmpty()) {
+      return new TranslatedExpression(Smt.bool(false), Smt.bool(false));
+    }
+    TranslatedExpression divisor = argResult(arguments[1]);
+    int last = nonzero.size() - 1;
+    SmtTerm value =
+        Smt.app("/", lifted, Smt.realLit(BigDecimal.valueOf(nonzero.get(last).longValue())));
+    for (int i = last - 1; i >= 0; i--) {
+      value =
+          Smt.ite(
+              Smt.eq(divisor.value(), Smt.intLit(nonzero.get(i))),
+              Smt.app("/", lifted, Smt.realLit(BigDecimal.valueOf(nonzero.get(i).longValue()))),
+              value);
+    }
+    SmtTerm defined = Smt.and(List.of(dividend.defined(), divisor.defined()));
+    if (nonzero.size() < candidates.size()) {
+      defined =
+          Smt.and(
+              List.of(
+                  defined,
+                  Smt.not(Smt.eq(divisor.value(), Smt.intLit(BigInteger.ZERO)))));
+    }
+    return new TranslatedExpression(defined, value);
+  }
+
+  /**
+   * The configured candidate literals of a crisp Integer attribute divisor (deduplicated, in
+   * configuration order), or null when {@code expression} is not a bare attribute access on a
+   * context variable. Non-Integer domain entries and empty domains refuse -- the candidate set
+   * is the PROOF the ite case-split is exhaustive.
+   */
+  private java.util.LinkedHashSet<BigInteger> finiteDomainCandidates(
+      Expression expression, String opname) {
+    if (!(expression instanceof ExpAttrOp attr)
+        || !(attr.objExp() instanceof ExpVariable receiver)
+        || localBindings.containsKey(receiver.getVarname())) {
+      return null;
     }
     VariableBinding b = context.binding(receiver.getVarname());
     AttributeValues values = context.attributeValues(b.className(), attr.attr().name());
@@ -758,6 +846,22 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       throw unsupported(
           FragmentBoundary.TIER_2,
           "operator '" + opname + "' by a divisor with an empty configured domain");
+    }
+    return candidates;
+  }
+
+  private TranslatedExpression divisionByFiniteDomain(Expression[] arguments, String opname) {
+    requireCrispInteger(arguments[0], opname);
+    requireCrispInteger(arguments[1], opname);
+    java.util.LinkedHashSet<BigInteger> candidates =
+        finiteDomainCandidates(arguments[1], opname);
+    if (candidates == null) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "operator '"
+              + opname
+              + "' with a divisor that is neither a compile-time Integer literal nor a crisp"
+              + " Integer attribute with a finite configured domain");
     }
     TranslatedExpression dividend = argResult(arguments[0]);
     TranslatedExpression divisor = argResult(arguments[1]);
@@ -1389,6 +1493,20 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && !rn.getDestination().isCollection()
         && l instanceof ExpVariable lv
         && !localBindings.containsKey(lv.getVarname())) return navigationEqualsVariable(rn, lv);
+    // A Real-typed side (a `/` result, a Real literal or Real attribute) compared against an
+    // Integer-typed side is a SORT mix in the emitted text: lift the Integer side with
+    // to_real so the script stays sort-correct under strict SMT-LIB (the UInteger to_real
+    // portability precedent), instead of relying on a solver's automatic coercion.
+    boolean integerLeftRealRight =
+        l.type().isTypeOfInteger() && r.type().isTypeOfReal();
+    boolean realLeftIntegerRight =
+        l.type().isTypeOfReal() && r.type().isTypeOfInteger();
+    if (integerLeftRealRight || realLeftIntegerRight) {
+      SmtTerm valuesEqual =
+          Smt.eq(maybeToReal(l), maybeToReal(r));
+      return useEquality(argResult(l), argResult(r), valuesEqual);
+    }
+
     // toString()'s identity encoding yields the Integer VALUE, so any comparison against a
     // String/Enum-ENCODED operand (a domain INDEX) would silently equate unrelated things --
     // e.g. `x.s = x.a.toString()` with s's domain {'7','42'} and a = 2 would hold because the
@@ -2132,7 +2250,11 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
   @Override
   public void visitConstReal(ExpConstReal e) {
-    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "Real literal");
+    // Crisp Real literals: exact SMT-LIB decimals. USE evaluates Reals as doubles, so a
+    // literal a witness is compared against must be exactly representable in both -- halves
+    // and quarters are, arbitrary decimals are not (the UReal threshold slices already
+    // document that gap and enclose it; plain equality here simply trusts the decimal).
+    result = defined(Smt.realLit(BigDecimal.valueOf(e.value())));
   }
 
   @Override
