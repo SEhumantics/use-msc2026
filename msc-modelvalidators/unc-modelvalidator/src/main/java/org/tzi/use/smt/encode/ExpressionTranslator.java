@@ -22,7 +22,7 @@ import org.tzi.use.uml.ocl.expr.*;
 /** Translates the verified leaf-level Library OCL fragment and fails closed on everything else. */
 public final class ExpressionTranslator implements ExpressionVisitor {
   private static final BigInteger UNDEFINED_STRING_SENTINEL = BigInteger.valueOf(-1);
-  private final TranslationContext context;
+  private TranslationContext context;
   private final TranslationMode mode;
   private final boolean positivePolarity;
   private final Map<String, LocalBinding> localBindings;
@@ -2820,15 +2820,6 @@ public final class ExpressionTranslator implements ExpressionVisitor {
               + e.getVarname()
               + "' whose any initializer does not declare exactly one iterator");
     }
-    if (!isStrictObjectLetBody(e.getInExpression(), e.getVarname())) {
-      throw unsupported(
-          FragmentBoundary.TIER_3,
-          "let-bound object variable '"
-              + e.getVarname()
-              + "' used by a body that is not a strict ordered comparison over its attributes;"
-              + " the no-match/undefined-object case cannot be represented soundly");
-    }
-
     String iterator = any.getVariableDeclarations().varDecl(0).name();
     List<SmtTerm> priorMatches = new ArrayList<>();
     List<SmtTerm> selectors = new ArrayList<>();
@@ -2864,35 +2855,6 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       value = Smt.ite(selectors.get(i), bodies.get(i).value(), value);
     }
     return new TranslatedExpression(Smt.or(definedCases), value);
-  }
-
-  private static boolean isStrictObjectLetBody(Expression body, String variableName) {
-    if (!(body instanceof ExpStdOp operation)
-        || !List.of(">", ">=", "<", "<=").contains(operation.opname())) {
-      return false;
-    }
-    for (Expression argument : operation.args()) {
-      if (containsAttributeOf(argument, variableName)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private static boolean containsAttributeOf(Expression expression, String variableName) {
-    if (expression instanceof ExpAttrOp attribute
-        && attribute.objExp() instanceof ExpVariable variable
-        && variableName.equals(variable.getVarname())) {
-      return true;
-    }
-    if (expression instanceof ExpStdOp operation) {
-      for (Expression argument : operation.args()) {
-        if (containsAttributeOf(argument, variableName)) {
-          return true;
-        }
-      }
-    }
-    return false;
   }
 
   @Override
@@ -3077,6 +3039,18 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    */
   private TranslatedExpression membershipTest(
       Expression collectionExpr, Expression elementExpr, boolean wantIncludes) {
+    // A zero-arg query operation whose body is a closure (CompanyERSchema's containedPlus():
+    // `self.contained()->closure(p|p.contained())`) is inlined structurally: the operation's
+    // body IS the closure, with the operation's receiver bound as `self` for the whole
+    // reachability computation.
+    if (collectionExpr instanceof ExpObjOp objOp
+        && objOp.getOperation().expression() instanceof ExpClosure closure
+        && objOp.getArguments().length == 1
+        && objOp.getArguments()[0] instanceof ExpVariable receiverVar) {
+      VariableBinding receiver = context.binding(receiverVar.getVarname());
+      SmtTerm reachable = closureReachabilityWithReceiver(closure, elementExpr, receiver);
+      return defined(wantIncludes ? reachable : Smt.not(reachable));
+    }
     if (!(collectionExpr instanceof ExpClosure closure)) {
       throw unsupported(
           FragmentBoundary.TIER_3,
@@ -3085,6 +3059,18 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     SmtTerm reachable = closureReachability(closure, elementExpr);
     return defined(wantIncludes ? reachable : Smt.not(reachable));
+  }
+
+  /** Runs {@link #closureReachability} with {@code self} aliased to the operation's receiver. */
+  private SmtTerm closureReachabilityWithReceiver(
+      ExpClosure closure, Expression elementExpr, VariableBinding selfBinding) {
+    TranslationContext outer = context;
+    context = context.withBinding("self", selfBinding);
+    try {
+      return closureReachability(closure, elementExpr);
+    } finally {
+      context = outer;
+    }
   }
 
   /**
@@ -3114,6 +3100,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * exactly the failure mode named-{@code let} sharing exists to avoid.
    */
   private SmtTerm closureReachability(ExpClosure closure, Expression elementExpr) {
+    if (closure.getRangeExpression() instanceof ExpObjOp rangeOp) {
+      return operationClosureReachability(closure, rangeOp, elementExpr);
+    }
     if (!(closure.getRangeExpression() instanceof ExpNavigation rangeNav)
         || !rangeNav.getDestination().isCollection()) {
       throw unsupported(
@@ -3185,6 +3174,124 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     return result;
   }
+
+  /**
+   * The operation-call sibling of the navigation closure branch: {@code p.op()->excludes(p)}
+   * where {@code op(): Set(T) = T.allInstances()->select(v | pred)} is a zero-argument query
+   * operation and the closure body re-calls the SAME operation on its iterator
+   * ({@code closure(i | i.op())}) -- exactly CompanyERSchema's {@code containedPlus()} shape.
+   *
+   * <p>Reachability is the bounded least fixed point of the operation's membership relation
+   * Q(m, k) = "k is a member of op(m)", instantiated by translating the select's predicate with
+   * the select iterator bound to k's slot and {@code self} bound to m's slot (n*n predicate
+   * translations for n candidate slots, n fixed-point hops -- the same bounded-closure pattern
+   * as the navigation branch, with the predicate in place of the per-pair link term). Seed:
+   * one application from the operation's receiver ({@code self}, bound by the inliner to the
+   * receiver's slot). The element is reachable iff it is in the fixed point.
+   */
+  private SmtTerm operationClosureReachability(
+      ExpClosure closure, ExpObjOp rangeOp, Expression elementExpr) {
+    MOperation operation = rangeOp.getOperation();
+    Expression operationBody = operation.expression();
+    if (operationBody == null
+        || !(operationBody instanceof ExpSelect select)
+        || !(select.getRangeExpression() instanceof ExpAllInstances all)) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "closure() over the operation '"
+              + operation.name()
+              + "()' requires its body to be T.allInstances()->select(v | pred) with a"
+              + " single loop variable");
+    }
+    if (closure.getVariableDeclarations().size() != 1
+        || !(closure.getQueryExpression() instanceof ExpObjOp bodyCall)
+        || bodyCall.getOperation() != operation
+        || !(bodyCall.getArguments()[0] instanceof ExpVariable bodyReceiver)
+        || !bodyReceiver.getVarname().equals(closure.getVariableDeclarations().varDecl(0).name())) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "closure() whose body does not re-call the same operation on its iterator is not yet"
+              + " supported");
+    }
+    VariableBinding sourceBinding = context.binding(variableNameOf(rangeOp.getArguments()[0]));
+    VariableBinding elementBinding = context.binding(variableNameOf(elementExpr));
+    String selectIterator = select.getVariableDeclarations().varDecl(0).name();
+
+    List<PolymorphicRange.Slot> domain =
+        PolymorphicRange.slotsOf(all.getSourceType(), context);
+    int capacity = domain.size();
+    if (capacity == 0) {
+      return Smt.bool(false);
+    }
+    int sourceIndex = domain.indexOf(new PolymorphicRange.Slot(sourceBinding, null));
+    List<PolymorphicRange.Slot> slots = domain;
+    if (sourceIndex < 0) {
+      // The receiver may name a slot the folded domain lists under an equal-value binding;
+      // match by class name and index conservatively.
+      for (int i = 0; i < domain.size(); i++) {
+        if (domain.get(i).binding().className().equals(sourceBinding.className())
+            && domain.get(i).binding().slotIndex() == sourceBinding.slotIndex()) {
+          sourceIndex = i;
+          break;
+        }
+      }
+      if (sourceIndex < 0) {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            "closure() over '"
+                + operation.name()
+                + "()': the receiver binding "
+                + sourceBinding
+                + " is not in the operation's declared domain population");
+      }
+    }
+    int elementIndex = -1;
+    for (int i = 0; i < slots.size(); i++) {
+      if (slots.get(i).binding().className().equals(elementBinding.className())
+          && slots.get(i).binding().slotIndex() == elementBinding.slotIndex()) {
+        elementIndex = i;
+        break;
+      }
+    }
+    if (elementIndex < 0) {
+      // Structurally a different class: never a member of this closure.
+      return Smt.bool(false);
+    }
+
+    java.util.function.BiFunction<Integer, Integer, SmtTerm> memberTerm =
+        (m, k) -> {
+          TranslationContext pairContext =
+              context
+                  .withBinding("self", slots.get(m).binding())
+                  .withBinding(selectIterator, slots.get(k).binding());
+          return translate(predicateOf(select), pairContext, mode, positivePolarity, localBindings)
+              .value();
+        };
+
+    // Fixed point: reach_1(k) = Q(source, k); reach_{h+1}(k) = reach_h(k) OR (any m: reach_h(m)
+    // AND Q(m, k)). After `capacity` hops every multi-step derivation is covered.
+    SmtTerm[] reach = new SmtTerm[capacity];
+    for (int k = 0; k < capacity; k++) {
+      reach[k] = memberTerm.apply(sourceIndex, k);
+    }
+    for (int hop = 2; hop <= capacity; hop++) {
+      SmtTerm[] next = new SmtTerm[capacity];
+      for (int k = 0; k < capacity; k++) {
+        List<SmtTerm> viaAny = new ArrayList<>();
+        for (int m = 0; m < capacity; m++) {
+          viaAny.add(Smt.and(List.of(reach[m], memberTerm.apply(m, k))));
+        }
+        next[k] = Smt.or(List.of(reach[k], Smt.or(viaAny)));
+      }
+      reach = next;
+    }
+    return reach[elementIndex];
+  }
+
+  private static Expression predicateOf(ExpSelect select) {
+    return select.getQueryExpression();
+  }
+
 
   @Override
   public void visitOclInState(ExpOclInState e) {

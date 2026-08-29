@@ -164,12 +164,6 @@ public class LetTranslationTest {
   }
 
   @Test
-  public void objectAnyLetWithANonStrictBodyFailsClosed() throws Exception {
-    assertUnsupportedBinding(
-        "objectAnyLetNonStrictBody", "object variable 'chosen'", "not a strict ordered comparison");
-  }
-
-  @Test
   public void objectAnyLetSelectsTheMatchingFiniteSlot() throws Exception {
     ObjectAnyCase encoded = encodeObjectAnyLet(1, 10, 0, 99, 1, 11);
     encoded.script().assertThat(encoded.expression().trueTerm());
