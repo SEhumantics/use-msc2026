@@ -2710,6 +2710,11 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   @Override
   public void visitLet(ExpLet e) {
     if (e.getVarType().isTypeOfClass()) {
+      if (e.getVarExpression() instanceof ExpNavigation navigation
+          && !navigation.getDestination().isCollection()) {
+        result = navigationObjectLet(e, navigation);
+        return;
+      }
       result = objectAnyLet(e);
       return;
     }
@@ -2862,6 +2867,47 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * could produce a defined result for that same no-match case; they are refused because this
    * encoder has no undefined-object binding to evaluate them against.
    */
+  /**
+   * {@code let b : B = x.b in body} -- an object let whose initializer is a SINGLE-VALUED
+   * navigation. The bound variable names a slot of the destination end's (possibly folded)
+   * view; b's definedness is that slot's link term, and the body translates once per
+   * destination slot exactly as {@code objectAnyLet} translates per candidate slot. The result:
+   * defined = OR over linked slots of (link AND body-defined); value = the ite chain selecting
+   * the linked slot's body value. A destination that is collection-valued is refused
+   * (collect semantics); an unlinked destination leaves b undefined, so the body is undefined
+   * -- the total-equality/closure consumers already handle that via the definedness term.
+   */
+  private TranslatedExpression navigationObjectLet(ExpLet e, ExpNavigation navigation) {
+    VariableBinding source = context.binding(variableNameOf(navigation.getObjectExpression()));
+    MNavigableElement destination = resolveRedefinedDestination(navigation.getDestination(), source);
+    if (destination.association() instanceof MAssociationClass) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "let-bound object variable '"
+              + e.getVarname()
+              + "' whose initializer navigates an association class is not yet supported");
+    }
+    AssociationLinks links = context.linksFor(destination.association().name());
+    ObjectSlots destinationSlots = destinationEndView(links, destination);
+
+    List<SmtTerm> definedCases = new ArrayList<>();
+    List<SmtTerm> valueCases = new ArrayList<>();
+    String stem = "|ocl-let-" + e.getVarname() + "-";
+    for (int k = 0; k < destinationSlots.capacity(); k++) {
+      VariableBinding slotBinding = destinationSlots.concreteBindings().get(k);
+      TranslationContext slotContext = context.withBinding(e.getVarname(), slotBinding);
+      TranslatedExpression body =
+          translate(
+              e.getInExpression(), slotContext, mode, positivePolarity, localBindings);
+      SmtTerm link = linkTerm(links, destination, source, k);
+      // The let variable IS the linked object: its per-slot definedness is the link term
+      // itself, and its body must hold under that same link.
+      definedCases.add(Smt.and(List.of(link, body.defined())));
+      valueCases.add(Smt.and(List.of(link, body.value())));
+    }
+    return new TranslatedExpression(Smt.or(definedCases), Smt.or(valueCases));
+  }
+
   private TranslatedExpression objectAnyLet(ExpLet e) {
     if (!(e.getVarExpression() instanceof ExpAny any)
         || !(any.getRangeExpression() instanceof ExpAllInstances all)) {
