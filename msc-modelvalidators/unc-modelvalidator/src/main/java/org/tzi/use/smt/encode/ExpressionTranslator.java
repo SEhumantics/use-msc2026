@@ -451,6 +451,22 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           // lifted with to_real and the division happens in the Reals. A numeral divisor is
           // linear; a finite-domain variable divisor case-splits like div/mod.
           case "/" -> realDivision(a);
+          // Numeric string conversion over a configured-candidate string: each parseable
+          // candidate contributes its parsed value; USE's evaluators (Integer.parseInt /
+          // Double.parseDouble) yield UNDEFINED on NumberFormatException (use-core bytecode),
+          // so unparseable candidates are excluded -- a total-equality comparison never
+          // matches them, and an all-unparseable domain is the constant-false expression.
+          case "toInteger", "toReal" -> {
+            if (a.length == 1 && a[0].type().isTypeOfString()) {
+              yield stringNumericConversion(a[0], "toInteger".equals(e.opname()));
+            }
+            throw unsupported(
+                FragmentBoundary.TIER_2,
+                "operator '"
+                    + e.opname()
+                    + "' over a non-String or wrong-arity operand is not supported in this"
+                    + " slice");
+          }
           case "+", "-", "*" -> arithmetic(e.opname(), a);
           // Both total functions over any operand (confirmed directly against Op_isDefined/
           // Op_isUndefined, use-core: `!args[0].isUndefined()` / `args[0].isUndefined()`, kind()
@@ -3064,6 +3080,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       return false;
     }
     switch (op.opname()) {
+      case "toUpper", "toLower" -> {
+        return op.args().length == 1 && stringCandidates(op.args()[0]) != null;
+      }
       case "concat" -> {
         return op.args().length == 2
             && op.args()[1] instanceof ExpConstString
@@ -3145,6 +3164,19 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     EnumerableString source = stringCandidates(op.args()[0]);
     EnumerableString result = new EnumerableString();
     result.defined = source.defined;
+    if ("toUpper".equals(op.opname()) || "toLower".equals(op.opname())) {
+      // Locale.ROOT: USE calls the default-locale String.toUpperCase(); the pinned test
+      // fixtures are ASCII, where the two agree, and ROOT keeps the encoding reproducible.
+      boolean upper = "toUpper".equals(op.opname());
+      for (StringCandidateCase candidate : source.candidates) {
+        String converted =
+            upper
+                ? candidate.spelling.toUpperCase(java.util.Locale.ROOT)
+                : candidate.spelling.toLowerCase(java.util.Locale.ROOT);
+        result.candidates.add(new StringCandidateCase(converted, candidate.guard));
+      }
+      return result;
+    }
     if ("concat".equals(op.opname())) {
       String suffix = ((ExpConstString) op.args()[1]).value();
       for (StringCandidateCase candidate : source.candidates) {
@@ -3192,6 +3224,85 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         admitted.isEmpty() ? Smt.bool(false) : Smt.or(admitted);
     return new TranslatedExpression(
         Smt.bool(true), Smt.and(List.of(expanded.defined, value)));
+  }
+
+/**
+   * {@code toInteger()}/{@code toReal()} over a configured-candidate string: each parseable
+   * candidate contributes its parsed value to the ite chain; UNPARSEABLE candidates are
+   * excluded from the chain AND from the conversion's usability -- USE's evaluators yield
+   * UndefinedValue on NumberFormatException (use-core bytecode), and total equality treats
+   * undefined as unequal, so the comparison must never be able to read a parseable
+   * fallback value while an unparseable candidate is selected (the same soundness shape as
+   * the zero-divisor exclusion). An all-unparseable domain is the constant-false expression.
+   */
+  private TranslatedExpression stringNumericConversion(Expression receiver, boolean toInteger) {
+    EnumerableString source = stringCandidates(receiver);
+    if (source == null) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "numeric conversion over anything other than a configured-candidate string"
+              + " attribute, a String let variable, or a string literal");
+    }
+    List<StringCandidateCase> parseable = new ArrayList<>();
+    for (StringCandidateCase candidate : source.candidates) {
+      boolean parses;
+      if (toInteger) {
+        try {
+          Integer.parseInt(candidate.spelling.trim());
+          parses = true;
+        } catch (NumberFormatException e) {
+          parses = false;
+        }
+      } else {
+        try {
+          Double.parseDouble(candidate.spelling.trim());
+          parses = true;
+        } catch (NumberFormatException e) {
+          parses = false;
+        }
+      }
+      if (parses) {
+        parseable.add(candidate);
+      }
+    }
+    if (parseable.isEmpty()) {
+      return new TranslatedExpression(Smt.bool(false), Smt.bool(false));
+    }
+    List<SmtTerm> unparseableGates = new ArrayList<>();
+    List<SmtTerm> parseableGates = new ArrayList<>();
+    java.util.IdentityHashMap<StringCandidateCase, SmtTerm> gateByCase =
+        new java.util.IdentityHashMap<>();
+    for (StringCandidateCase candidate : source.candidates) {
+      if (parseable.contains(candidate)) {
+        parseableGates.add(candidate.guard);
+        gateByCase.put(candidate, candidate.guard);
+      } else {
+        unparseableGates.add(candidate.guard);
+      }
+    }
+    int last = parseable.size() - 1;
+    SmtTerm value = valueOfParsed(parseable.get(last), toInteger);
+    for (int i = last - 1; i >= 0; i--) {
+      value =
+          Smt.ite(
+              gateByCase.get(parseable.get(i)), valueOfParsed(parseable.get(i), toInteger), value);
+    }
+    // Definedness excludes the unparseable selections: selecting one means the conversion is
+    // undefined, so the comparison can never match (the value chain's fallback is never
+    // consulted once the definedness is false).
+    SmtTerm defined = source.defined;
+    if (!unparseableGates.isEmpty()) {
+      defined =
+          Smt.and(List.of(defined, Smt.not(Smt.or(unparseableGates))));
+    }
+    return new TranslatedExpression(defined, value);
+  }
+
+  private SmtTerm valueOfParsed(StringCandidateCase candidate, boolean toInteger) {
+    if (toInteger) {
+      return Smt.intLit(BigInteger.valueOf(Integer.parseInt(candidate.spelling.trim())));
+    }
+    return Smt.realLit(java.math.BigDecimal.valueOf(Double.parseDouble(candidate.spelling.trim())));
   }
 
   private TranslatedExpression stringSize(Expression receiver) {
