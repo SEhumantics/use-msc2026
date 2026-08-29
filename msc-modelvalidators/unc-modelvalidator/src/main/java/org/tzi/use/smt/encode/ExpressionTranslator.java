@@ -440,6 +440,47 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           // (Math.round(intValue) is the same int -- confirmed against the use-core source, not
           // inferred), so the encoding is the operand's own value with its definedness. Real and
           // UReal round() carry genuinely different rounding semantics and stay refused.
+          // abs / min / max over crisp Integers: TOTAL operations (no division-style
+          // undefinedness), each encodable as a LINEAR ite term -- the reason they join the
+          // slice while / and mod (whose zero-divisor case needs undefinedness semantics this
+          // slice does not model) stay refused. USE's own evaluators confirm the semantics:
+          // Op_integer_abs is Math.abs, Op_number_min/max the smaller/larger operand.
+          case "abs" -> {
+            if (a.length == 1 && a[0].type().isTypeOfInteger()) {
+              TranslatedExpression operand = argResult(a[0]);
+              yield new TranslatedExpression(
+                  operand.defined(),
+                  Smt.ite(
+                      Smt.app(">=", operand.value(), Smt.intLit(BigInteger.ZERO)),
+                      operand.value(),
+                      Smt.app("-", operand.value())));
+            }
+            throw unsupported(
+                FragmentBoundary.TIER_2,
+                "operator 'abs' over a non-Integer operand (Real/UReal rounding semantics are"
+                    + " not in this slice)");
+          }
+          case "min", "max" -> {
+            if (a.length == 2
+                && a[0].type().isTypeOfInteger()
+                && a[1].type().isTypeOfInteger()) {
+              TranslatedExpression left = argResult(a[0]);
+              TranslatedExpression right = argResult(a[1]);
+              SmtTerm comparison =
+                  "min".equals(e.opname())
+                      ? Smt.app("<=", left.value(), right.value())
+                      : Smt.app(">=", left.value(), right.value());
+              yield new TranslatedExpression(
+                  Smt.and(List.of(left.defined(), right.defined())),
+                  Smt.ite(comparison, left.value(), right.value()));
+            }
+            throw unsupported(
+                FragmentBoundary.TIER_2,
+                "operator '"
+                    + e.opname()
+                    + "' over non-Integer or wrong-arity operands is not supported in this"
+                    + " slice");
+          }
           case "round" -> {
             if (a.length == 1 && a[0].type().isTypeOfInteger()) {
               yield argResult(a[0]);
