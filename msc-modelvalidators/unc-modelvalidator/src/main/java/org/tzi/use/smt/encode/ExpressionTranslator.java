@@ -1114,10 +1114,21 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     // threshold reads them from the binding and everything downstream is shared.
     ExpAttrOp attribute = comparisonArgs[0] instanceof ExpAttrOp a ? a : null;
     ExpVariable letVariable = null;
-    if (attribute == null) {
+    ExpStdOp sizeOperand = null;
+    if (attribute == null
+        && comparisonArgs[0] instanceof ExpStdOp candidate
+        && "size".equals(candidate.opname())
+        && candidate.args().length == 1
+        && candidate.args()[0] instanceof ExpAttrOp sizeAttr
+        && sizeAttr.objExp() instanceof ExpVariable sizeVar
+        && !localBindings.containsKey(sizeVar.getVarname())
+        && sizeAttr.type().isTypeOfUString()) {
+      sizeOperand = candidate;
+    }
+    if (attribute == null && letVariable == null) {
       if (comparisonArgs[0] instanceof ExpVariable v && localBindings.containsKey(v.getVarname())) {
         letVariable = v;
-      } else {
+      } else if (sizeOperand == null) {
         throw unsupported(
             FragmentBoundary.UTYPE_CORE,
             "UReal threshold whose left operand is not an attribute access or a U-type let"
@@ -1146,9 +1157,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     BigDecimal confidence =
         decimalLiteral(projectionArgs[1], "confidence threshold", FragmentBoundary.UTYPE_CORE);
 
-    SmtTerm declared;
-    boolean integerRepresentative;
-    SmtTerm uncertainty;
+    SmtTerm declared = null;
+    boolean integerRepresentative = false;
+    SmtTerm uncertainty = null;
     if (attribute != null) {
       VariableBinding binding = context.binding(variableNameOf(attribute.objExp()));
       AttributeValues values = context.attributeValues(binding.className(), attribute.attr().name());
@@ -1160,7 +1171,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       declared = Smt.sym(values.valueNames().get(binding.slotIndex()));
       integerRepresentative = values.type() == AttributeType.UINTEGER;
       uncertainty = Smt.sym(values.uncertaintyNames().get(binding.slotIndex()));
-    } else {
+    } else if (letVariable != null) {
       LocalBinding local = localBindings.get(letVariable.getVarname());
       if (local.uncertaintySymbol() == null) {
         throw unsupported(
@@ -1170,6 +1181,34 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       declared = Smt.sym(local.valueSymbol());
       integerRepresentative = letVariable.type().isTypeOfUInteger();
       uncertainty = Smt.sym(local.uncertaintySymbol());
+    } else if (sizeOperand != null) {
+      // UString.size(): the representative is the SPELLING LENGTH -- a constant per configured
+      // spelling candidate, selected by the spelling symbol's ite chain -- and the uncertainty
+      // is the confidence symbol (UStringValue.uSize() carries the confidence through).
+      ExpAttrOp usAttr = (ExpAttrOp) sizeOperand.args()[0];
+      VariableBinding ub = context.binding(usAttr.objExp() instanceof ExpVariable uv ? uv.getVarname() : null);
+      AttributeValues uvalues = context.attributeValues(ub.className(), usAttr.attr().name());
+      AttributeDomain spellings =
+          context.attributeDomain(ub.className(), usAttr.attr().name(), "value");
+      context.attributeDomain(ub.className(), usAttr.attr().name(), "confidence");
+      List<String> spellingList = spellings.enumeratedValues();
+      if (spellingList.isEmpty()) {
+        throw unsupported(
+            FragmentBoundary.UTYPE_CORE,
+            "size over a UString attribute with an empty configured spelling domain");
+      }
+      SmtTerm spellingSym = Smt.sym(uvalues.valueNames().get(ub.slotIndex()));
+      SmtTerm rep = Smt.intLit(BigInteger.valueOf(spellingList.get(spellingList.size() - 1).length()));
+      for (int i = spellingList.size() - 2; i >= 0; i--) {
+        rep =
+            Smt.ite(
+                Smt.eq(spellingSym, Smt.intLit(BigInteger.valueOf(i))),
+                Smt.intLit(BigInteger.valueOf(spellingList.get(i).length())),
+                rep);
+      }
+      declared = rep;
+      integerRepresentative = true;
+      uncertainty = Smt.sym(uvalues.confidenceNames().get(ub.slotIndex()));
     }
     // The representative is an Int for UInteger and a Real for UReal, while the boundary is always
     // a Real -- so the arithmetic comparison lifts it. The DECLARED symbol stays an Int, which is
