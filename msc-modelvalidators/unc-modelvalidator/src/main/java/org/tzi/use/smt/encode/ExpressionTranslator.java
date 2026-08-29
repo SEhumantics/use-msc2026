@@ -1986,23 +1986,42 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    */
   private TranslatedExpression setLiteralQuantifier(
       ExpSetLiteral set, String iterator, Expression bodyExpr, boolean forAll) {
-    List<BigInteger> values = new ArrayList<>();
+    // Elements: Integer constants bind the loop variable to their literal VALUE; String
+    // constants bind it to a singleton CONTENT candidate (stringOrEnum LocalBinding whose
+    // candidate list is the literal), so body comparisons resolve by content. Mixing kinds in
+    // one literal is refused.
+    boolean sawInt = false;
+    boolean sawString = false;
+    List<BigInteger> intValues = new ArrayList<>();
+    List<String> stringValues = new ArrayList<>();
     for (Expression element : set.getElemExpr()) {
-      if (!(element instanceof ExpConstInteger constant)) {
+      if (element instanceof ExpConstInteger constant) {
+        sawInt = true;
+        BigInteger value = BigInteger.valueOf(constant.value());
+        if (!intValues.contains(value)) {
+          intValues.add(value);
+        }
+      } else if (element instanceof ExpConstString constant) {
+        sawString = true;
+        if (!stringValues.contains(constant.value())) {
+          stringValues.add(constant.value());
+        }
+      } else {
         throw unsupported(
             FragmentBoundary.TIER_3,
-            "Set literal with a non-constant or non-Integer element ("
+            "Set literal with a non-constant or non-Integer/non-String element ("
                 + element
-                + "); only Integer constants are supported in this slice");
+                + ")");
       }
-      BigInteger value = BigInteger.valueOf(constant.value());
-      if (!values.contains(value)) {
-        values.add(value);
-      }
+    }
+    if (sawInt && sawString) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "Set literal mixes Integer and String constants; not supported in this slice");
     }
     List<SmtTerm> definedTerms = new ArrayList<>();
     List<SmtTerm> valueTerms = new ArrayList<>();
-    for (BigInteger element : values) {
+    for (BigInteger element : intValues) {
       // No closing pipe in the stem: the -defined/-value suffixes complete the quoted symbol.
       String stem = "|ocl-set-" + iterator + "-" + element;
       LocalBinding binding =
@@ -2015,6 +2034,24 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           List.of(
               new SmtTerm.Binding(binding.definedSymbol(), Smt.bool(true)),
               new SmtTerm.Binding(binding.valueSymbol(), Smt.intLit(element)));
+      definedTerms.add(Smt.let(bindings, body.defined()));
+      valueTerms.add(Smt.let(bindings, body.value()));
+    }
+    for (String content : stringValues) {
+      // A String literal candidate carries its own CONTENT as the candidate list; its value
+      // anchor is arbitrary (0) because every comparison resolves by content against the
+      // other operand's domain.
+      String stem = "|ocl-set-" + iterator + "-" + content;
+      LocalBinding binding =
+          new LocalBinding(stem + "-defined|", stem + "-value|", true, List.of(content));
+      Map<String, LocalBinding> extended = new LinkedHashMap<>(localBindings);
+      extended.put(iterator, binding);
+      TranslatedExpression body =
+          translate(bodyExpr, context, mode, positivePolarity, Map.copyOf(extended));
+      List<SmtTerm.Binding> bindings =
+          List.of(
+              new SmtTerm.Binding(binding.definedSymbol(), Smt.bool(true)),
+              new SmtTerm.Binding(binding.valueSymbol(), Smt.intLit(BigInteger.ZERO)));
       definedTerms.add(Smt.let(bindings, body.defined()));
       valueTerms.add(Smt.let(bindings, body.value()));
     }
