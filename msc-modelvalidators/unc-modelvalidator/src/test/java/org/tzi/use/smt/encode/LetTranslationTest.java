@@ -153,9 +153,47 @@ public class LetTranslationTest {
     return solve(script);
   }
 
+  /**
+   * 2026-08-29: the non-any object let over a CONTEXT VARIABLE is now a supported CHAINED object
+   * let -- the alias IS the source binding, so {@code chosen.i} reads a's own slot symbols. This
+   * superseded the old TIER_3 refusal pin for this shape; a truly UNBOUND object initializer
+   * still fails closed with the unbound-variable error (see the next test).
+   */
   @Test
-  public void objectTypedLetWithANonAnyInitializerFailsClosed() throws Exception {
-    assertUnsupportedBinding("objectLet", "object variable 'chosen'", "initializer is not");
+  public void objectTypedContextAliasLetReadsTheAliasedSlot() throws Exception {
+    MModel model = compileFixture();
+    MClassInvariant invariant = findInvariant(model, "objectLet");
+
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots objects =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("A", 1, 1))).get("A");
+    AttributeDomain iDomain = new AttributeDomain("A", "i", null, List.of(), null, null);
+    AttributeValues i =
+        AttributeEncoder.encode(script, objects, "i", AttributeType.INTEGER, iDomain);
+    TranslationContext context =
+        new TranslationContext(
+            Map.of("a", new VariableBinding("A", 0)),
+            Map.of("A.i", i),
+            Map.of("A.i", iDomain),
+            Map.of("A", objects),
+            Map.of());
+
+    TranslatedExpression translated =
+        ExpressionTranslator.translate(invariant.bodyExpression(), context, TranslationMode.UNCERTAIN);
+
+    assertEquals("(> A_0_i 0)", translated.value().toSmtLib());
+  }
+
+  @Test
+  public void objectTypedLetWithAnUnboundInitializerStillFailsClosed() throws Exception {
+    MClassInvariant invariant = findInvariant(compileFixture(), "objectLet");
+    SmtTranslationException thrown =
+        assertThrows(
+            SmtTranslationException.class,
+            () -> ExpressionTranslator.translate(invariant.bodyExpression(), emptyContext()));
+    assertEquals(FragmentBoundary.ENCODING_SCOPE, thrown.boundary());
+    assertTrue(
+        thrown.getMessage(), thrown.getMessage().contains("unbound OCL variable"));
   }
 
   @Test

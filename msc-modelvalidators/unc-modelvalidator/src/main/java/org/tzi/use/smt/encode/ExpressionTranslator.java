@@ -3337,6 +3337,22 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         result = navigationObjectLet(e, navigation);
         return;
       }
+      // CHAINED OBJECT LET: the initializer names another OBJECT binding (an any-let or a
+      // navigation let variable) -- the alias IS that binding, so every read through the new
+      // variable reads the same slot's symbols and the chain's definedness is the
+      // initializer's. Pure binding aliasing; nothing new is enumerated.
+      if (e.getVarExpression() instanceof ExpVariable aliased
+          && !localBindings.containsKey(aliased.getVarname())) {
+        VariableBinding object = context.binding(aliased.getVarname());
+        result =
+            translate(
+                e.getInExpression(),
+                context.withBinding(e.getVarname(), object),
+                mode,
+                positivePolarity,
+                localBindings);
+        return;
+      }
       result = objectAnyLet(e);
       return;
     }
