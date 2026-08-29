@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import org.tzi.use.uml.mm.MOperation;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.TranslationMode;
 import org.tzi.use.smt.solver.Smt;
@@ -13,6 +15,7 @@ import org.tzi.use.smt.solver.SmtTerm;
 import org.tzi.use.uml.mm.MAssociationClass;
 import org.tzi.use.uml.mm.MAssociationEnd;
 import org.tzi.use.uml.mm.MAttribute;
+import org.tzi.use.uml.mm.MOperation;
 import org.tzi.use.uml.mm.MNavigableElement;
 import org.tzi.use.uml.ocl.expr.*;
 
@@ -23,17 +26,21 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   private final TranslationMode mode;
   private final boolean positivePolarity;
   private final Map<String, LocalBinding> localBindings;
+  private final Set<MOperation> operationsInProgress;
   private TranslatedExpression result;
 
   private ExpressionTranslator(
       TranslationContext c,
       TranslationMode mode,
       boolean positivePolarity,
-      Map<String, LocalBinding> localBindings) {
+      Map<String, LocalBinding> localBindings,
+      Set<MOperation> operationsInProgress) {
     context = c;
     this.mode = mode;
     this.positivePolarity = positivePolarity;
     this.localBindings = localBindings;
+    this.operationsInProgress =
+        operationsInProgress == null ? Set.of() : operationsInProgress;
   }
 
   public static SmtTerm translate(Expression e, TranslationContext c) {
@@ -47,16 +54,32 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
   private static TranslatedExpression translate(
       Expression e, TranslationContext c, TranslationMode mode, boolean positivePolarity) {
-    return translate(e, c, mode, positivePolarity, Map.of());
+    return translate(e, c, mode, positivePolarity, Map.of(), null);
   }
 
-  private static TranslatedExpression translate(
+  private TranslatedExpression translate(
       Expression e,
       TranslationContext c,
       TranslationMode mode,
       boolean positivePolarity,
       Map<String, LocalBinding> localBindings) {
-    ExpressionTranslator t = new ExpressionTranslator(c, mode, positivePolarity, localBindings);
+    return translate(e, c, mode, positivePolarity, localBindings, operationsInProgress);
+  }
+
+  /**
+   * Translation with an OPERATION-IN-PROGRESS set for query-operation inlining: an operation
+   * currently being inlined is a member, so a recursive (or mutually recursive) call is detected
+   * at the nested level and refused there instead of looping forever.
+   */
+  private static TranslatedExpression translate(
+      Expression e,
+      TranslationContext c,
+      TranslationMode mode,
+      boolean positivePolarity,
+      Map<String, LocalBinding> localBindings,
+      Set<MOperation> operationsInProgress) {
+    ExpressionTranslator t =
+        new ExpressionTranslator(c, mode, positivePolarity, localBindings, operationsInProgress);
     e.processWithVisitor(t);
     return t.result;
   }
@@ -2882,9 +2905,67 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "objAsSet");
   }
 
+  /**
+   * FIRST SLICE of query-operation inlining: {@code x.op()} where {@code op} is a zero-argument
+   * query operation ({@code op(): T = <OCL body>}) whose receiver is a bare variable, and whose
+   * body translates in the supported fragment. The call is INLINED -- the body is translated
+   * with {@code self} bound to the receiver's own slot binding -- so the operation's value is
+   * computed by the solver, never guessed. Nested operation calls inline recursively (the
+   * body's own {@code y.op2()} is visited with the extended in-progress set); an operation that
+   * re-enters itself, directly or transitively, is refused as recursive. Parameterized
+   * operations, non-variable receivers, and non-OCL-bodied operations stay refused.
+   */
   @Override
   public void visitInstanceOp(ExpInstanceOp e) {
-    throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "instance operation");
+    if (!(e instanceof ExpObjOp objOp)) {
+      throw unsupported(FragmentBoundary.BEYOND_FIRST_FRAGMENT, "instance operation");
+    }
+    MOperation operation = objOp.getOperation();
+    if (operationsInProgress.contains(operation)) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "recursive operation call '"
+              + operation.name()
+              + "': a query operation must not call itself, directly or transitively");
+    }
+    if (!operation.isCallableFromOCL() || operation.expression() == null) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "operation '"
+              + operation.name()
+              + "': it has no OCL expression body to inline");
+    }
+    Expression[] arguments = objOp.getArguments();
+    if (arguments.length != 1) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "operation '"
+              + operation.name()
+              + "' with parameters; only zero-argument query operations are supported in this"
+              + " slice");
+    }
+    if (!(arguments[0] instanceof ExpVariable targetVar)) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "operation call on a receiver that is not a bare variable is not yet supported");
+    }
+    if (localBindings.containsKey(targetVar.getVarname())) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "operation call on a let-bound scalar receiver is not supported");
+    }
+    VariableBinding selfBinding = context.binding(targetVar.getVarname());
+    TranslationContext selfContext = context.withBinding("self", selfBinding);
+    Set<MOperation> inProgress = new java.util.HashSet<>(operationsInProgress);
+    inProgress.add(operation);
+    result =
+        translate(
+            operation.expression(),
+            selfContext,
+            mode,
+            positivePolarity,
+            localBindings,
+            inProgress);
   }
 
   @Override
