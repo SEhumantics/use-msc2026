@@ -439,7 +439,12 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           case "=" -> comparison(a[0], a[1]);
           case "<>" -> negate(comparison(a[0], a[1]));
           case ">=", "<=", ">", "<" -> orderedComparison(e.opname(), a[0], a[1]);
-          case "size" -> collectionSize(a[0]);
+          case "size" -> {
+            if (a.length == 1 && a[0].type().isTypeOfString()) {
+              yield stringSize(a[0]);
+            }
+            yield collectionSize(a[0]);
+          }
           case "div" -> integerDivision(a);
           // USE's Op_number_div is REAL division on Integers (evalRealResult, confirmed
           // against the use-core bytecode): the result is Real-sorted, so the dividend is
@@ -3031,6 +3036,60 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * every other {@link ExpSelect} source falls through to the shared message below instead of a
    * select-specific one.
    */
+/**
+   * {@code String.size()} over a configured-candidate string. The configured spellings ARE the
+   * content space (the canonical string table this encoding works from), so the size is a
+   * candidate enumeration: an ite chain over the attribute's configured candidates, each branch
+   * the compile-time length of that spelling -- linear in the pinned QF_LIA logic, no string
+   * theory. A String let binding carries its own candidate list
+   * ({@code LocalBinding#enumeratedValues}), so size composes through lets; a literal's length
+   * is a compile-time constant. USE's {@code StringSize.eval} is {@code value.length()}.
+   */
+  private TranslatedExpression stringSize(Expression receiver) {
+    if (receiver instanceof ExpConstString literal) {
+      return defined(Smt.intLit(BigInteger.valueOf(literal.value().length())));
+    }
+    if (receiver instanceof ExpAttrOp attr
+        && attr.objExp() instanceof ExpVariable source
+        && !localBindings.containsKey(source.getVarname())) {
+      VariableBinding b = context.binding(source.getVarname());
+      AttributeValues values = context.attributeValues(b.className(), attr.attr().name());
+      guardAgainstUncertainAttribute(values);
+      AttributeDomain domain = context.attributeDomain(b.className(), attr.attr().name());
+      if (domain.enumeratedValues().isEmpty()) {
+        throw unsupported(
+            FragmentBoundary.TIER_2,
+            "size() over a string attribute with an empty configured domain");
+      }
+      SmtTerm symbol = Smt.sym(values.valueNames().get(b.slotIndex()));
+      return defined(lengthChain(symbol, domain.enumeratedValues()));
+    }
+    if (receiver instanceof ExpVariable v) {
+      LocalBinding local = localBindings.get(v.getVarname());
+      if (local != null && local.stringOrEnum() && local.enumeratedValues() != null) {
+        return defined(lengthChain(Smt.sym(local.valueSymbol()), local.enumeratedValues()));
+      }
+    }
+    throw unsupported(
+        FragmentBoundary.TIER_2,
+        "size() over anything other than a configured-candidate string attribute, a String let"
+            + " variable, or a string literal");
+  }
+
+  /** The ite chain spelling-to-length over the configured candidates, last-candidate fallback. */
+  private static SmtTerm lengthChain(SmtTerm symbol, List<String> candidates) {
+    SmtTerm length =
+        Smt.intLit(BigInteger.valueOf(candidates.get(candidates.size() - 1).length()));
+    for (int i = candidates.size() - 2; i >= 0; i--) {
+      length =
+          Smt.ite(
+              Smt.eq(symbol, Smt.intLit(BigInteger.valueOf(i))),
+              Smt.intLit(BigInteger.valueOf(candidates.get(i).length())),
+              length);
+    }
+    return length;
+  }
+
   private TranslatedExpression collectionSize(Expression receiver) {
     if (receiver instanceof ExpNavigation navigation
         && navigation.getDestination().isCollection()) {

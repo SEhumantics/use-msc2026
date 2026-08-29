@@ -13,8 +13,11 @@ import java.util.Map;
 import org.junit.Test;
 import org.tzi.use.parser.use.USECompiler;
 import org.tzi.use.smt.config.AssociationScope;
+import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.ClassScope;
+import org.tzi.use.smt.config.TranslationMode;
 import org.tzi.use.smt.solver.*;
+import org.tzi.use.uml.ocl.type.Type;
 import org.tzi.use.uml.mm.MClassInvariant;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
@@ -426,23 +429,36 @@ public class SizeTranslationTest {
    * confused with collection cardinality -- it never reaches an {@code ExpNavigation} receiver at
    * all, so it fails closed the same way any other non-navigation receiver does.
    */
+  /**
+   * 2026-08-29: {@code String.size()} over a configured-candidate string is now SUPPORTED -- the
+   * configured spellings are the content space, so the size enumerates their lengths (this
+   * superseded the old TIER_3 refusal pin for this shape; the dispatch still never confuses a
+   * String receiver with the collection path, which is what the original test guarded).
+   */
   @Test
-  public void stringSizeIsNotConfusedWithCollectionSizeAndFailsClosed() throws Exception {
+  public void stringSizeEnumeratesTheConfiguredSpellings() throws Exception {
     MModel model = compileSizeScope();
     MClassInvariant inv = findInvariant(model, "stringSizeNotConfused");
 
-    SmtTranslationException thrown =
-        assertThrows(
-            SmtTranslationException.class,
-            () ->
-                ExpressionTranslator.translate(
-                    inv.bodyExpression(),
-                    new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of(), Map.of())));
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots objects =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("A", 1, 1))).get("A");
+    AttributeDomain nameDomain =
+        new AttributeDomain("A", "name", null, List.of("abc", "de"), null, null);
+    AttributeValues name =
+        AttributeEncoder.encode(script, objects, "name", AttributeType.STRING, nameDomain);
+    TranslationContext context =
+        new TranslationContext(
+            Map.of("a", new VariableBinding("A", 0)),
+            Map.of("A.name", name),
+            Map.of("A.name", nameDomain),
+            Map.of("A", objects),
+            Map.of());
 
-    assertEquals(FragmentBoundary.TIER_3, thrown.boundary());
-    assertTrue(
-        thrown.getMessage(),
-        thrown.getMessage().contains("chained, collection-valued association navigation"));
+    TranslatedExpression translated =
+        ExpressionTranslator.translate(inv.bodyExpression(), context, TranslationMode.UNCERTAIN);
+
+    assertEquals("(= (ite (= A_0_name 0) 3 2) 3)", translated.value().toSmtLib());
   }
 
   /**
