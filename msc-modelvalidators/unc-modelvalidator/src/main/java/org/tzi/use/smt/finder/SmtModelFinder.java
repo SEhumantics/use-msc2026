@@ -31,7 +31,9 @@ import org.tzi.use.smt.encode.FragmentChecker;
 import org.tzi.use.smt.encode.FragmentCoverageLedger;
 import org.tzi.use.smt.encode.Multiplicity;
 import org.tzi.use.smt.encode.ObjectSlotEncoder;
+import org.tzi.use.smt.encode.VariableBinding;
 import org.tzi.use.smt.encode.ObjectSlots;
+import org.tzi.use.smt.encode.VariableBinding;
 import org.tzi.use.smt.encode.PredefinedLinkEncoder;
 import org.tzi.use.smt.encode.QueryCompiler;
 import org.tzi.use.smt.encode.ScenarioSpace;
@@ -915,8 +917,8 @@ public final class SmtModelFinder {
                 + " link grid would let the solver choose content unrelated to that formula, so"
                 + " it is refused rather than approximated");
       }
-      ObjectSlots aEnd = slotsByClass.get(ends.get(0).cls().name());
-      ObjectSlots bEnd = slotsByClass.get(ends.get(1).cls().name());
+      ObjectSlots aEnd = endSlotsView(slotsByClass, ends.get(0).cls());
+      ObjectSlots bEnd = endSlotsView(slotsByClass, ends.get(1).cls());
       if (aEnd == null || bEnd == null) {
         throw new IllegalArgumentException(
             "association '"
@@ -1399,6 +1401,50 @@ public final class SmtModelFinder {
       pinned.add(value);
     }
     return pinned;
+  }
+
+  /**
+   * One association end's slot view: the declared class's OWN slots unless that class has
+   * CONFIGURED subclasses, in which case the view FOLDS them in -- declared class's slots first,
+   * then each configured subclass's own slots in {@link MClassifier#allChildren()} order, the
+   * same population {@code PolymorphicRange} enumerates for {@code X.allInstances()}. This is
+   * what makes a superclass-typed association end accept links to subclass instances: UML
+   * multiplicity constraints and link ends quantify over the polymorphic population, exactly as
+   * the incumbent's inheritance-folded Kodkod relations do.
+   *
+   * <p>Unconfigured subclasses contribute nothing (no scope, no slots) and a class with no
+   * configured subclasses gets its own view back UNCHANGED, so every existing association encodes
+   * byte-identically. The view's {@code className} stays the DECLARED class's name (consumers and
+   * reconstruction resolve the association by its declared ends); per-slot concrete classes ride
+   * {@link ObjectSlots#concreteBindings()}.
+   */
+  private static ObjectSlots endSlotsView(Map<String, ObjectSlots> slotsByClass, MClass endClass) {
+    ObjectSlots own = slotsByClass.get(endClass.name());
+    if (own == null) {
+      return null;
+    }
+    List<ObjectSlots> parts = new ArrayList<>();
+    parts.add(own);
+    for (MClassifier descendant : endClass.allChildren()) {
+      ObjectSlots descendantSlots = slotsByClass.get(descendant.name());
+      if (descendantSlots != null) {
+        parts.add(descendantSlots);
+      }
+    }
+    if (parts.size() == 1) {
+      return own;
+    }
+    List<String> slotNames = new ArrayList<>();
+    List<String> existsNames = new ArrayList<>();
+    List<String> objectNames = new ArrayList<>();
+    List<VariableBinding> concreteBindings = new ArrayList<>();
+    for (ObjectSlots part : parts) {
+      slotNames.addAll(part.slotNames());
+      existsNames.addAll(part.existsNames());
+      objectNames.addAll(part.objectNames());
+      concreteBindings.addAll(part.concreteBindings());
+    }
+    return new ObjectSlots(endClass.name(), slotNames, existsNames, objectNames, concreteBindings);
   }
 
   /**

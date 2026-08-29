@@ -251,8 +251,11 @@ public final class SystemStateReconstructor {
         for (int j = 0; j < links.bEnd().capacity(); j++) {
           if (isTrue(modelValues, links.linkNames()[i][j])) {
             MObject[] order = new MObject[2];
-            order[aPosition] = objectsBySlot.get(slotKey(links.aEnd().className(), i));
-            order[bPosition] = objectsBySlot.get(slotKey(links.bEnd().className(), j));
+            // slotKeyAt resolves the slot's CONCRETE class and index: identical to
+            // className#index for a plain class view, and correct for a FOLDED end view where
+            // grid index i may stand for a subclass instance.
+            order[aPosition] = objectsBySlot.get(links.aEnd().slotKeyAt(i));
+            order[bPosition] = objectsBySlot.get(links.bEnd().slotKeyAt(j));
             api.createLinkEx(association, order);
           }
         }

@@ -169,22 +169,78 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     VariableBinding source = context.binding(sourceVar.getVarname());
     destination = resolveRedefinedDestination(destination, source);
-    String destClass = destination.cls().name();
-    ObjectSlots destSlots = context.slotsFor(destClass);
-    AttributeValues v = context.attributeValues(destClass, attribute.name());
-    guardAgainstUncertainAttribute(v);
-
     if (destination.association() instanceof MAssociationClass) {
-      return associationClassNavigatedAttribute(source, destination, destSlots, v);
+      ObjectSlots assocClassSlots = context.slotsFor(destination.cls().name());
+      AttributeValues assocClassValues =
+          context.attributeValues(assocClassSlots.className(), attribute.name());
+      guardEndAgainstUncertainAttribute(assocClassSlots, attribute, assocClassValues);
+      return associationClassNavigatedAttribute(source, destination, assocClassSlots, assocClassValues);
     }
 
     AssociationLinks links = context.linksFor(destination.association().name());
+    ObjectSlots destSlots = destinationEndView(links, destination);
+    AttributeValues v = context.attributeValues(destSlots.className(), attribute.name());
+    guardEndAgainstUncertainAttribute(destSlots, attribute, v);
+
     List<SmtTerm> targets = new ArrayList<>();
     for (int k = 0; k < destSlots.capacity(); k++) {
       targets.add(linkTerm(links, destination, source, k));
     }
     return new TranslatedExpression(
-        Smt.or(targets), selectLinkedValue(links, destination, source, destSlots, v));
+        Smt.or(targets),
+        selectLinkedValue(links, destination, source, destSlots, attribute, v));
+  }
+
+  /**
+   * The destination end's own slot view for one association's grid: the declared class's slots
+   * unless the grid is FOLDED over configured subclasses ({@code SmtModelFinder}'s end-view
+   * construction), in which case the view spans the whole polymorphic population. Unfolded
+   * associations return exactly {@code context.slotsFor(declared)} -- byte-identical to the
+   * pre-folding behavior.
+   */
+  private ObjectSlots destinationEndView(AssociationLinks links, MNavigableElement destination) {
+    String declared = destination.cls().name();
+    if (links.aEnd().className().equals(declared)) {
+      return links.aEnd();
+    }
+    if (links.bEnd().className().equals(declared)) {
+      return links.bEnd();
+    }
+    return context.slotsFor(declared);
+  }
+
+  /**
+   * The declared end class's values (the representative for placeholder sorts and for the
+   * identity fast path), guarded -- plus, for a FOLDED view, every DISTINCT concrete class the
+   * view spans, since grid slot k reads ITS class's values, and an uncertain one must be refused
+   * before any formula is emitted.
+   */
+  private void guardEndAgainstUncertainAttribute(
+      ObjectSlots destSlots, MAttribute attribute, AttributeValues declaredValues) {
+    guardAgainstUncertainAttribute(declaredValues);
+    for (VariableBinding concrete : destSlots.concreteBindings()) {
+      if (!concrete.className().equals(destSlots.className())) {
+        guardAgainstUncertainAttribute(
+            context.attributeValues(concrete.className(), attribute.name()));
+      }
+    }
+  }
+
+  /**
+   * The value symbol of the attribute at one destination slot of a (possibly folded) end view:
+   * the declared class's own value for identity slots, the concrete class's registered values
+   * otherwise (inherited attributes are registered per concrete subclass). {@code slotIndex} is
+   * the slot's index WITHIN its concrete class, exactly how those values were encoded.
+   */
+  private SmtTerm valueSymbolForEndSlot(
+      ObjectSlots destSlots, AttributeValues declaredValues, MAttribute attribute, int k) {
+    VariableBinding concrete = destSlots.concreteBindings().get(k);
+    if (concrete.className().equals(destSlots.className())) {
+      return Smt.sym(declaredValues.valueNames().get(k));
+    }
+    AttributeValues concreteValues =
+        context.attributeValues(concrete.className(), attribute.name());
+    return Smt.sym(concreteValues.valueNames().get(concrete.slotIndex()));
   }
 
   /**
@@ -261,14 +317,16 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       MNavigableElement destination,
       VariableBinding source,
       ObjectSlots destSlots,
+      MAttribute attribute,
       AttributeValues v) {
     int capacity = destSlots.capacity();
     if (capacity == 0) {
       return placeholderOfSort(v.type());
     }
-    SmtTerm value = Smt.sym(v.valueNames().get(capacity - 1));
+    SmtTerm value = valueSymbolForEndSlot(destSlots, v, attribute, capacity - 1);
     for (int k = capacity - 2; k >= 0; k--) {
-      value = Smt.ite(linkTerm(links, destination, source, k), Smt.sym(v.valueNames().get(k)), value);
+      value =
+          Smt.ite(linkTerm(links, destination, source, k), valueSymbolForEndSlot(destSlots, v, attribute, k), value);
     }
     return value;
   }
@@ -1170,6 +1228,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       return null;
     }
     String destClass = destination.cls().name();
+    AssociationLinks links = context.linksFor(destination.association().name());
+    ObjectSlots destSlots = destinationEndView(links, destination);
     AttributeValues destAttrValues = context.attributeValues(destClass, navAttribute.name());
     VariableBinding bareBinding = context.binding(bareVar.getVarname());
     AttributeValues bareAttrValues =
@@ -1179,13 +1239,11 @@ public final class ExpressionTranslator implements ExpressionVisitor {
             && bareAttrValues.type() != AttributeType.ENUM)) {
       return null;
     }
-    guardAgainstUncertainAttribute(destAttrValues);
+    guardEndAgainstUncertainAttribute(destSlots, navAttribute, destAttrValues);
     guardAgainstUncertainAttribute(bareAttrValues);
     AttributeDomain destDomain = context.attributeDomain(destClass, navAttribute.name());
     AttributeDomain bareDomain =
         context.attributeDomain(bareBinding.className(), bare.attr().name());
-    AssociationLinks links = context.linksFor(destination.association().name());
-    ObjectSlots destSlots = context.slotsFor(destClass);
     SmtTerm bareValue = Smt.sym(bareAttrValues.valueNames().get(bareBinding.slotIndex()));
 
     List<SmtTerm> targets = new ArrayList<>();
@@ -1193,7 +1251,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     for (int k = 0; k < destSlots.capacity(); k++) {
       SmtTerm link = linkTerm(links, destination, source, k);
       targets.add(link);
-      SmtTerm destValue = Smt.sym(destAttrValues.valueNames().get(k));
+      SmtTerm destValue = valueSymbolForEndSlot(destSlots, destAttrValues, navAttribute, k);
       List<SmtTerm> contentMatches = new ArrayList<>();
       for (int di = 0; di < destDomain.enumeratedValues().size(); di++) {
         for (int bi = 0; bi < bareDomain.enumeratedValues().size(); bi++) {
@@ -1432,7 +1490,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       return associationClassEndNavigationDefined(associationClass, destination, source);
     }
     AssociationLinks links = context.linksFor(destination.association().name());
-    ObjectSlots destinationSlots = context.slotsFor(destination.cls().name());
+    ObjectSlots destinationSlots = destinationEndView(links, destination);
     List<SmtTerm> targets = new ArrayList<>();
     for (int k = 0; k < destinationSlots.capacity(); k++) {
       targets.add(linkTerm(links, destination, source, k));
@@ -1515,7 +1573,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   private TranslatedExpression navigationEquals(ExpNavigation left, ExpNavigation right) {
     String destClass = left.getDestination().cls().name();
     AssociationLinks links = context.linksFor(left.getDestination().association().name());
-    ObjectSlots destSlots = context.slotsFor(destClass);
+    ObjectSlots destSlots = destinationEndView(links, left.getDestination());
     VariableBinding leftSource = context.binding(variableNameOf(left.getObjectExpression()));
     VariableBinding rightSource = context.binding(variableNameOf(right.getObjectExpression()));
     List<SmtTerm> sharedTarget = new ArrayList<>();
@@ -1582,23 +1640,37 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    */
   private SmtTerm linkTerm(
       AssociationLinks links, MNavigableElement destination, VariableBinding source, int otherIndex) {
-    if (!links.aEnd().className().equals(links.bEnd().className())) {
-      if (links.aEnd().className().equals(source.className()))
-        return Smt.sym(links.linkNames()[source.slotIndex()][otherIndex]);
-      if (links.bEnd().className().equals(source.className()))
-        return Smt.sym(links.linkNames()[otherIndex][source.slotIndex()]);
-      throw unsupported(
-          FragmentBoundary.TIER_3,
-          "association "
-              + links.associationName()
-              + " does not connect class "
-              + source.className());
+    // Orientation by SLOT-BINDING lookup, not by class name: the source binding is a member of
+    // exactly one end's view (identity for a plain class view, so the index equals the slot
+    // index and this reads exactly like the previous class-name dispatch), and for a FOLDED end
+    // view -- or a polymorphic context binding like a Car slot bound by `context v : Vehicle` --
+    // only the lookup finds it. An unrelated class lands in neither view and still fails closed.
+    int sourceIndex = links.aEnd().indexOf(source);
+    boolean sourceIsAEnd = sourceIndex >= 0;
+    if (!sourceIsAEnd) {
+      sourceIndex = links.bEnd().indexOf(source);
+      if (sourceIndex < 0) {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            "association "
+                + links.associationName()
+                + " does not connect class "
+                + source.className());
+      }
     }
-    boolean destinationIsAEnd =
-        destination.equals(destination.association().associationEnds().get(0));
-    return destinationIsAEnd
-        ? Smt.sym(links.linkNames()[otherIndex][source.slotIndex()])
-        : Smt.sym(links.linkNames()[source.slotIndex()][otherIndex]);
+    // Class name is genuinely AMBIGUOUS only for a REFLEXIVE association (both ends the same
+    // class, e.g. CivilStatus's Marriage): there, destination (the end actually being navigated
+    // TO) is resolved against the association's own DECLARED end order.
+    if (links.aEnd().className().equals(links.bEnd().className())) {
+      boolean destinationIsAEnd =
+          destination.equals(destination.association().associationEnds().get(0));
+      return destinationIsAEnd
+          ? Smt.sym(links.linkNames()[otherIndex][sourceIndex])
+          : Smt.sym(links.linkNames()[sourceIndex][otherIndex]);
+    }
+    return sourceIsAEnd
+        ? Smt.sym(links.linkNames()[sourceIndex][otherIndex])
+        : Smt.sym(links.linkNames()[otherIndex][sourceIndex]);
   }
 
   private SmtTerm resolve(ExpConstString literal, Expression other) {
@@ -2014,14 +2086,12 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         VariableBinding source = context.binding(sourceVar.getVarname());
         MNavigableElement destination =
             resolveRedefinedDestination(navigation.getDestination(), source);
-        String destClass = destination.cls().name();
         AssociationLinks links = context.linksFor(destination.association().name());
-        ObjectSlots destSlots = context.slotsFor(destClass);
+        ObjectSlots destSlots = destinationEndView(links, destination);
         List<PopulationMember> population = new ArrayList<>();
         for (int k = 0; k < destSlots.capacity(); k++) {
           population.add(
-              new PopulationMember(
-                  new VariableBinding(destClass, k), linkTerm(links, destination, source, k)));
+              new PopulationMember(destSlots.concreteBindings().get(k), linkTerm(links, destination, source, k)));
         }
         return population;
       }
@@ -2078,7 +2148,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         resolveRedefinedDestination(navigation.getDestination(), sourceClassWitness);
     String destClass = destination.cls().name();
     AssociationLinks links = context.linksFor(destination.association().name());
-    ObjectSlots destSlots = context.slotsFor(destClass);
+    ObjectSlots destSlots = destinationEndView(links, destination);
     List<PopulationMember> population = new ArrayList<>();
     for (int k = 0; k < destSlots.capacity(); k++) {
       SmtTerm reachable;
@@ -2095,7 +2165,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         }
         reachable = Smt.or(reachableVia);
       }
-      population.add(new PopulationMember(new VariableBinding(destClass, k), reachable));
+      population.add(new PopulationMember(destSlots.concreteBindings().get(k), reachable));
     }
     return new NavigationHop(destClass, population);
   }
