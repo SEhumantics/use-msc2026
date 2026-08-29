@@ -2191,6 +2191,52 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         negMod);
   }
 
+  /**
+   * {@code Set{'a','b'}->one(n | body)} over a String-constant set literal: exactly one
+   * literal element satisfies the body. Each literal binds the loop variable as a
+   * singleton-content candidate via the per-element SMT let, and the element-truth
+   * indicators sum under the let with the constraint count = 1.
+   */
+  private TranslatedExpression oneOverStringSetLiteral(ExpOne e, ExpSetLiteral set) {
+    String loopVariable = e.getVariableDeclarations().varDecl(0).name();
+    List<String> contents = new ArrayList<>();
+    for (Expression element : set.getElemExpr()) {
+      if (element instanceof ExpConstString cs) {
+        if (!contents.contains(cs.value())) {
+          contents.add(cs.value());
+        }
+      } else {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            "one() over a set literal with a non-String-constant element");
+      }
+    }
+    SmtTerm zero = Smt.intLit(BigInteger.ZERO);
+    SmtTerm one = Smt.intLit(BigInteger.ONE);
+    List<SmtTerm> definedTerms = new ArrayList<>();
+    SmtTerm count = zero;
+    for (String content : contents) {
+      String stem = "|ocl-set-" + loopVariable + "-" + content;
+      LocalBinding binding =
+          new LocalBinding(stem + "-defined|", stem + "-value|", true, List.of(content));
+      Map<String, LocalBinding> extended = new LinkedHashMap<>(localBindings);
+      extended.put(loopVariable, binding);
+      TranslatedExpression body =
+          translate(e.getQueryExpression(), context, mode, positivePolarity, Map.copyOf(extended));
+      List<SmtTerm.Binding> bindings =
+          List.of(
+              new SmtTerm.Binding(binding.definedSymbol(), Smt.bool(true)),
+              new SmtTerm.Binding(binding.valueSymbol(), Smt.intLit(BigInteger.ZERO)));
+      definedTerms.add(Smt.let(bindings, body.defined()));
+      SmtTerm truth = Smt.let(bindings, body.trueTerm());
+      count = Smt.app("+", count, Smt.ite(truth, one, zero));
+    }
+    SmtTerm allDefined = Smt.and(definedTerms);
+    return new TranslatedExpression(
+        Smt.or(List.of(Smt.eq(count, one), Smt.not(allDefined))),
+        Smt.eq(count, one));
+  }
+
   private static List<SmtTerm> zipConjunct(List<SmtTerm> defined, List<SmtTerm> value) {
     List<SmtTerm> result = new ArrayList<>();
     for (int i = 0; i < defined.size(); i++) {
@@ -3291,10 +3337,16 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       throw unsupported(FragmentBoundary.TIER_3, "one with more than one loop variable");
     }
     if (e.getRangeExpression() instanceof ExpSetLiteral set
-        && set.getElemExpr().length > 0
-        && set.getElemExpr()[0] instanceof ExpConstInteger) {
-      result = oneOverIntegerSetLiteral(e, set);
-      return;
+        && set.getElemExpr().length > 0) {
+      Expression first = set.getElemExpr()[0];
+      if (first instanceof ExpConstInteger) {
+        result = oneOverIntegerSetLiteral(e, set);
+        return;
+      }
+      if (first instanceof ExpConstString) {
+        result = oneOverStringSetLiteral(e, set);
+        return;
+      }
     }
     List<PopulationMember> population = populationOf(e.getRangeExpression(), "one");
     String loopVariable = e.getVariableDeclarations().varDecl(0).name();
