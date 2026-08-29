@@ -2734,7 +2734,19 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * comparison, the exact unsoundness {@link #contentAwareEquality} exists to prevent.
    */
   private List<String> initializerEnumeratedValues(ExpLet e) {
-    Expression init = e.getVarExpression();
+    return initializerEnumeratedValues(e.getVarExpression(), e.getVarname());
+  }
+
+  /**
+   * The configured candidate list a String/Enum-typed VALUE BINDING draws its content indices
+   * from, shared by scalar lets ({@link #visitLet}) and inlined operation parameters alike:
+   * the attribute's own domain for a bare or single-hop-navigated attribute access, the source
+   * binding's list for a chained variable, the literal's own singleton content, and null for
+   * an {@code oclUndefined}-rooted chain. Any other initializer shape is refused rather than
+   * admitted without a list -- a String/Enum local without one could only fall back to raw
+   * index comparison, the exact unsoundness {@link #contentAwareEquality} exists to prevent.
+   */
+  private List<String> initializerEnumeratedValues(Expression init, String variableName) {
     if (init instanceof ExpConstString s) {
       return List.of(s.value());
     }
@@ -2762,8 +2774,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       } else {
         throw unsupported(
             FragmentBoundary.TIER_3,
-            "let-bound variable '"
-                + e.getVarname()
+            "value binding '"
+                + variableName
                 + "': its initializer's attribute receiver is not a bare context variable or a"
                 + " single-hop navigation");
       }
@@ -2771,8 +2783,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       if (vals.type() != AttributeType.STRING && vals.type() != AttributeType.ENUM) {
         throw unsupported(
             FragmentBoundary.TIER_3,
-            "let-bound variable '"
-                + e.getVarname()
+            "value binding '"
+                + variableName
                 + "': initializer attribute "
                 + className
                 + "."
@@ -2784,8 +2796,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     throw unsupported(
         FragmentBoundary.TIER_3,
-        "let-bound variable '"
-            + e.getVarname()
+        "value binding '"
+            + variableName
             + "': its initializer is not a String/Enum attribute access, another let-bound"
             + " variable, a literal, or oclUndefined");
   }
@@ -2945,23 +2957,30 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         String parameterName = operation.paramList().varDecl(i).name();
         org.tzi.use.uml.ocl.type.Type parameterType =
             operation.paramList().varDecl(i).type();
-        if (parameterType.isTypeOfString() || parameterType.isTypeOfEnum()) {
-          throw unsupported(
-              FragmentBoundary.TIER_3,
-              "operation '"
-                  + operation.name()
-                  + "': String/Enum-typed parameter '"
-                  + parameterName
-                  + "' is not supported in this slice");
+        boolean contentTyped = parameterType.isTypeOfString() || parameterType.isTypeOfEnum();
+        Expression argument = arguments[i + 1];
+        TranslatedExpression argumentResult;
+        List<String> parameterValues = null;
+        if (contentTyped) {
+          parameterValues = initializerEnumeratedValues(argument, parameterName);
+          argumentResult =
+              argument instanceof ExpConstString || argument instanceof ExpConstEnum
+                  ? defined(Smt.intLit(BigInteger.ZERO))
+                  : argResult(argument);
+        } else {
+          argumentResult = argResult(argument);
         }
-        TranslatedExpression argument = argResult(arguments[i + 1]);
         String stem = "|ocl-param-" + operation.name() + "-" + parameterName;
         LocalBinding parameterBinding =
-            new LocalBinding(stem + "-defined|", stem + "-value|", false, null);
+            new LocalBinding(
+                stem + "-defined|",
+                stem + "-value|",
+                contentTyped,
+                parameterValues);
         parameterBindings.add(
-            new SmtTerm.Binding(parameterBinding.definedSymbol(), argument.defined()));
+            new SmtTerm.Binding(parameterBinding.definedSymbol(), argumentResult.defined()));
         parameterBindings.add(
-            new SmtTerm.Binding(parameterBinding.valueSymbol(), argument.value()));
+            new SmtTerm.Binding(parameterBinding.valueSymbol(), argumentResult.value()));
         Map<String, LocalBinding> extended = new LinkedHashMap<>(bodyLocalBindings);
         extended.put(parameterName, parameterBinding);
         bodyLocalBindings = Map.copyOf(extended);
