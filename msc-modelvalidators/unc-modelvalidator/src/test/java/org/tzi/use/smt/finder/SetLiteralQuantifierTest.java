@@ -60,6 +60,10 @@ public class SetLiteralQuantifierTest {
         Set{'alice','carol'}->excludes(x.s)
       context x : X inv StringSetSize:
         Set{'alice','carol'}->size() = 2
+      context x : X inv OneMatchesI:
+        Set{2,4}->one(k | k = x.i)
+      context x : X inv OneMatchesNine:
+        Set{2,4}->one(k | k = 9)
       """;
 
   /**
@@ -149,6 +153,28 @@ public class SetLiteralQuantifierTest {
     ModelFinderResult two = findS("StringSetSize", List.of("alice"));
     assertTrue(two.satisfiable());
     assertTrue(verdictFor(two, "X::StringSetSize").holds());
+  }
+
+  /**
+   * one() over an Integer-constant set literal: exactly one element satisfies the body.
+   * With i pinned to 2, exactly one member matches (SAT); with i free over {2,4}, both match
+   * (UNSAT); a constant no element can equal is also UNSAT.
+   */
+  @Test
+  public void oneOverASetLiteralRequiresExactlyOneMatchingElement() throws Exception {
+    ModelFinderResult pinned = find("OneMatchesI", List.of("2"), List.of("alice"));
+    assertTrue("only i = 2 matches, so exactly one element satisfies the body",
+        pinned.satisfiable());
+    assertTrue(verdictFor(pinned, "X::OneMatchesI").holds());
+
+    ModelFinderResult either = find("OneMatchesI", List.of("2", "4"), List.of("alice"));
+    assertTrue("i can be 2 or 4; either way exactly one element of {2,4} matches",
+        either.satisfiable());
+    assertTrue(verdictFor(either, "X::OneMatchesI").holds());
+
+    ModelFinderResult none = find("OneMatchesNine", List.of("2", "4"), List.of("alice"));
+    assertFalse("no element equals 9, so zero match -- not exactly one",
+        none.satisfiable());
   }
 
   private static ModelFinderResult findS(String invariantName, List<String> sDomain)
