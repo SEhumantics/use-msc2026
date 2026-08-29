@@ -822,16 +822,35 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       return uBooleanThreshold(projectionArgs[0], projectionArgs[1]);
     }
     Expression[] comparisonArgs = comparison.args();
-    if (comparisonArgs.length != 2 || !(comparisonArgs[0] instanceof ExpAttrOp attribute)) {
+    if (comparisonArgs.length != 2) {
       throw unsupported(
           FragmentBoundary.UTYPE_CORE,
           "UReal threshold whose left operand is not an attribute access");
     }
-    if (!attribute.type().isTypeOfUReal() && !attribute.type().isTypeOfUInteger()) {
-      throw unsupported(
-          FragmentBoundary.UTYPE_CORE, "toBooleanC comparison over a non-U-typed attribute");
+    // Two supported left-operand shapes: the attribute access (the original form) and a
+    // U-type LET variable, whose LocalBinding carries the same (representative, uncertainty)
+    // pair an attribute's symbols carry -- {@link #uTypeLet} bound both components, so the
+    // threshold reads them from the binding and everything downstream is shared.
+    ExpAttrOp attribute = comparisonArgs[0] instanceof ExpAttrOp a ? a : null;
+    ExpVariable letVariable = null;
+    if (attribute == null) {
+      if (comparisonArgs[0] instanceof ExpVariable v && localBindings.containsKey(v.getVarname())) {
+        letVariable = v;
+      } else {
+        throw unsupported(
+            FragmentBoundary.UTYPE_CORE,
+            "UReal threshold whose left operand is not an attribute access or a U-type let"
+                + " variable");
+      }
     }
-    if (comparisonArgs[1] instanceof ExpAttrOp rightAttribute
+    if (attribute != null) {
+      if (!attribute.type().isTypeOfUReal() && !attribute.type().isTypeOfUInteger()) {
+        throw unsupported(
+            FragmentBoundary.UTYPE_CORE, "toBooleanC comparison over a non-U-typed attribute");
+      }
+    }
+    if (attribute != null
+        && comparisonArgs[1] instanceof ExpAttrOp rightAttribute
         && attribute.type().isTypeOfUReal()
         && rightAttribute.type().isTypeOfUReal()
         && List.of("<", ">").contains(comparison.opname())) {
@@ -846,14 +865,31 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     BigDecimal confidence =
         decimalLiteral(projectionArgs[1], "confidence threshold", FragmentBoundary.UTYPE_CORE);
 
-    VariableBinding binding = context.binding(variableNameOf(attribute.objExp()));
-    AttributeValues values = context.attributeValues(binding.className(), attribute.attr().name());
-    if (!values.type().isPairedUType()) {
-      throw unsupported(
-          FragmentBoundary.UTYPE_CORE,
-          "U-type threshold without paired value/uncertainty SMT terms");
+    SmtTerm declared;
+    boolean integerRepresentative;
+    SmtTerm uncertainty;
+    if (attribute != null) {
+      VariableBinding binding = context.binding(variableNameOf(attribute.objExp()));
+      AttributeValues values = context.attributeValues(binding.className(), attribute.attr().name());
+      if (!values.type().isPairedUType()) {
+        throw unsupported(
+            FragmentBoundary.UTYPE_CORE,
+            "U-type threshold without paired value/uncertainty SMT terms");
+      }
+      declared = Smt.sym(values.valueNames().get(binding.slotIndex()));
+      integerRepresentative = values.type() == AttributeType.UINTEGER;
+      uncertainty = Smt.sym(values.uncertaintyNames().get(binding.slotIndex()));
+    } else {
+      LocalBinding local = localBindings.get(letVariable.getVarname());
+      if (local.uncertaintySymbol() == null) {
+        throw unsupported(
+            FragmentBoundary.UTYPE_CORE,
+            "U-type threshold over a let variable without a paired uncertainty binding");
+      }
+      declared = Smt.sym(local.valueSymbol());
+      integerRepresentative = letVariable.type().isTypeOfUInteger();
+      uncertainty = Smt.sym(local.uncertaintySymbol());
     }
-    SmtTerm declared = Smt.sym(values.valueNames().get(binding.slotIndex()));
     // The representative is an Int for UInteger and a Real for UReal, while the boundary is always
     // a Real -- so the arithmetic comparison lifts it. The DECLARED symbol stays an Int, which is
     // precisely what leaves the rounding to the solver's integer theory.
@@ -865,9 +901,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     // explicit to_real stays. What IS load-bearing is the Int SORT of the declared symbol:
     // declaring it Real instead makes the free-range fixture come back with the boundary itself,
     // 891857137/134217728 = 6.644853480160236, rather than 7.
-    SmtTerm representative =
-        values.type() == AttributeType.UINTEGER ? Smt.app("to_real", declared) : declared;
-    SmtTerm uncertainty = Smt.sym(values.uncertaintyNames().get(binding.slotIndex()));
+    SmtTerm representative = integerRepresentative ? Smt.app("to_real", declared) : declared;
     SmtTerm zero = Smt.realLit(BigDecimal.ZERO);
     SmtTerm exact = Smt.app(comparison.opname(), representative, Smt.realLit(literal));
     if (mode == TranslationMode.NOMINAL) {
@@ -3018,6 +3052,15 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       result = objectAnyLet(e);
       return;
     }
+    // Paired U-type families: the binding carries BOTH components of the pair (the Int/Real
+    // representative and the non-negative Real uncertainty), and the supported confidence-
+    // threshold consumer reads them from the binding exactly as it reads them from an
+    // attribute's own symbols. UString/UBoolean lets keep refusing (different encodings:
+    // content/confidence pairs, not value/uncertainty).
+    if (e.getVarType().isTypeOfUReal() || e.getVarType().isTypeOfUInteger()) {
+      result = uTypeLet(e);
+      return;
+    }
     boolean stringOrEnum =
         e.getVarType().isTypeOfString() || e.getVarType().isTypeOfEnum();
     if (!e.getVarType().isTypeOfInteger()
@@ -3030,7 +3073,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
               + e.getVarname()
               + "' of type "
               + e.getVarType()
-              + ": only primitive Integer, Boolean, Real, String, and Enum let bindings are"
+              + ": only primitive Integer, Boolean, Real, String, and Enum let bindings, plus"
+              + " paired UReal/UInteger bindings over a bare attribute-access initializer, are"
               + " supported; object- and collection-typed bindings require a finite"
               + " object/collection representation that this translation slice does not have");
     }
@@ -3065,6 +3109,59 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   }
 
   /**
+   * {@code let u : UReal/UInteger = <bare attribute access> in body}: the paired U-type let.
+   * The binding carries BOTH components -- its value symbol is let-bound to the initializer
+   * attribute's REPRESENTATIVE and its uncertainty symbol to the attribute's UNCERTAINTY -- so
+   * a confidence-threshold consumer reading the binding sees exactly the pair it would see
+   * reading the attribute. A bare read is mandatory: {@code guardAgainstUncertainAttribute}
+   * refuses every other U-typed expression shape, so no initializer outside the bare/navigated
+   * attribute forms translates anyway; chained let variables are refused here (the source
+   * binding would have to be threaded both components, which no consumer needs yet).
+   */
+  private TranslatedExpression uTypeLet(ExpLet e) {
+    if (!(e.getVarExpression() instanceof ExpAttrOp attr)
+        || !(attr.objExp() instanceof ExpVariable source)
+        || localBindings.containsKey(source.getVarname())) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "let-bound U-type variable '"
+              + e.getVarname()
+              + "': only a bare U-typed attribute access on a context variable is supported as"
+              + " the initializer");
+    }
+    VariableBinding b = context.binding(source.getVarname());
+    AttributeValues values = context.attributeValues(b.className(), attr.attr().name());
+    if (!values.type().isPairedUType()) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "U-type let without paired value/uncertainty SMT terms");
+    }
+    String symbolStem = "|ocl-let-" + e.getVarname();
+    LocalBinding binding =
+        new LocalBinding(
+            symbolStem + "-defined|",
+            symbolStem + "-value|",
+            false,
+            null,
+            symbolStem + "-uncertainty|");
+    Map<String, LocalBinding> extended = new LinkedHashMap<>(localBindings);
+    extended.put(e.getVarname(), binding);
+    TranslatedExpression body =
+        translate(e.getInExpression(), context, mode, positivePolarity, Map.copyOf(extended));
+    List<SmtTerm.Binding> bindings =
+        List.of(
+            new SmtTerm.Binding(
+                binding.definedSymbol(), Smt.bool(true)),
+            new SmtTerm.Binding(
+                binding.valueSymbol(), Smt.sym(values.valueNames().get(b.slotIndex()))),
+            new SmtTerm.Binding(
+                binding.uncertaintySymbol(),
+                Smt.sym(values.uncertaintyNames().get(b.slotIndex()))));
+    return new TranslatedExpression(
+        Smt.let(bindings, body.defined()), Smt.let(bindings, body.value()));
+  }
+
+  /**
    * A scalar {@code let}'s local environment entry. {@code stringOrEnum} marks a String/Enum-typed
    * variable, whose SMT value is an index positional within {@code enumeratedValues} -- the
    * initializer's configured candidate list (a literal initializer's own singleton list). {@code
@@ -3074,7 +3171,14 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    */
   private record LocalBinding(
       String definedSymbol, String valueSymbol, boolean stringOrEnum,
-      List<String> enumeratedValues) {}
+      List<String> enumeratedValues, String uncertaintySymbol) {
+    /** The scalar (non-U-typed) form: no uncertainty component. */
+    private LocalBinding(
+        String definedSymbol, String valueSymbol, boolean stringOrEnum,
+        List<String> enumeratedValues) {
+      this(definedSymbol, valueSymbol, stringOrEnum, enumeratedValues, null);
+    }
+  }
 
   /**
    * The configured candidate list a String/Enum let's initializer draws its value indices from:
