@@ -3418,7 +3418,71 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     return length;
   }
 
+/**
+   * A VIRTUAL SPLIT: {@code x.s.split(sep)} over a configured-candidate string with a literal
+   * separator. USE's Op_string_split is java {@code String.split(sep)} -- a regex split into a
+   * Sequence of strings, trailing empties removed -- and this encoding expands it per candidate
+   * at translation time by calling the SAME java method on the SAME spelling, so agreement is
+   * exact by construction (regex-special separators cancel).
+   */
+  private boolean isVirtualStringSplit(Expression e) {
+    if (!(e instanceof ExpStdOp op) || !"split".equals(op.opname())) {
+      return false;
+    }
+    return op.args().length == 2
+        && op.args()[1] instanceof ExpConstString
+        && stringCandidates(op.args()[0]) != null;
+  }
+
+  /** One candidate of an expanded split: its part list and its guard. */
+  private record SplitCase(List<String> parts, SmtTerm guard) {}
+
+  private List<SplitCase> expandVirtualSplit(ExpStdOp split) {
+    EnumerableString source = stringCandidates(split.args()[0]);
+    String sep = ((ExpConstString) split.args()[1]).value();
+    List<SplitCase> cases = new ArrayList<>();
+    for (StringCandidateCase candidate : source.candidates) {
+      cases.add(new SplitCase(List.of(candidate.spelling.split(sep)), candidate.guard));
+    }
+    return cases;
+  }
+
+  /** The per-candidate part-count chain for {@code split(sep)->size()}. */
+  private SmtTerm virtualSplitSizeChain(ExpStdOp split) {
+    List<SplitCase> cases = expandVirtualSplit(split);
+    int last = cases.size() - 1;
+    SmtTerm value = Smt.intLit(BigInteger.valueOf(cases.get(last).parts().size()));
+    for (int i = last - 1; i >= 0; i--) {
+      value =
+          Smt.ite(
+              cases.get(i).guard(),
+              Smt.intLit(BigInteger.valueOf(cases.get(i).parts().size())),
+              value);
+    }
+    return value;
+  }
+
+  /** The per-candidate membership chain for {@code split(sep)->includes/excludes(lit)}. */
+  private SmtTerm virtualSplitMembershipChain(
+      ExpStdOp split, String needle, boolean wantIncludes) {
+    List<SplitCase> cases = expandVirtualSplit(split);
+    int last = cases.size() - 1;
+    SmtTerm value =
+        Smt.bool(cases.get(last).parts().contains(needle) == wantIncludes);
+    for (int i = last - 1; i >= 0; i--) {
+      value =
+          Smt.ite(
+              cases.get(i).guard(),
+              Smt.bool(cases.get(i).parts().contains(needle) == wantIncludes),
+              value);
+    }
+    return value;
+  }
+
   private TranslatedExpression collectionSize(Expression receiver) {
+    if (isVirtualStringSplit(receiver)) {
+      return defined(virtualSplitSizeChain((ExpStdOp) receiver));
+    }
     if (receiver instanceof ExpNavigation navigation
         && navigation.getDestination().isCollection()) {
       return defined(sizeTerm(populationOf(navigation, "size()")));
@@ -4658,6 +4722,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     // from p is subsumed by opC(p), and a cycle through p passes through a member), which is
     // precisely the DIRECT form p.containedPlus()->excludes(p) -- so the collect is rewritten
     // to the direct call and handled by the branch below.
+    if (isVirtualStringSplit(collectionExpr) && elementExpr instanceof ExpConstString needle) {
+      return defined(virtualSplitMembershipChain((ExpStdOp) collectionExpr, needle.value(), wantIncludes));
+    }
     if (collectionExpr instanceof ExpCollect collect
         && collect.getRangeExpression() instanceof ExpObjOp rangeOp
         && rangeOp.getArguments().length == 1
