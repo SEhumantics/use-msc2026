@@ -553,7 +553,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
                   truncModTerm(dividend.value(), divisor.value()));
             }
             if (a.length == 2) {
-              yield divisionByFiniteDomain(a, "mod");
+              yield symbolicTruncatingDivision(a, true);
             }
             yield new TranslatedExpression(Smt.bool(false), Smt.bool(false));
           }
@@ -939,17 +939,14 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       SmtTerm quotient = truncDivTerm(numerator.value(), constantDivisor.value());
       return new TranslatedExpression(numerator.defined(), quotient);
     }
-    if (arguments.length == 2 && arguments[1] instanceof ExpAttrOp) {
-      return divisionByFiniteDomain(arguments, "div");
-    }
     if (arguments.length != 2
         || !(arguments[1] instanceof ExpStdOp size)
         || !"size".equals(size.opname())
         || size.args().length != 1
         || !(size.args()[0] instanceof ExpSelect select)) {
-      throw unsupported(
-          FragmentBoundary.TIER_2,
-          "operator 'div' outside the verified Integer / filtered-allInstances-size shape");
+      // Every other non-constant divisor takes the direct Euclidean encoding (Z3 accepts
+      // symbolic div under the pinned logic; see symbolicTruncatingDivision).
+      return symbolicTruncatingDivision(arguments, false);
     }
     requireCrispInteger(arguments[0], "div");
     requireCrispInteger(arguments[1], "div");
@@ -969,6 +966,50 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     return new TranslatedExpression(
         Smt.and(List.of(numerator.defined(), Smt.not(Smt.eq(count, zero)))), quotient);
+  }
+
+  /**
+   * mod / div with an ARBITRARY divisor: any Int-sorted divisor term works, because the pinned
+   * Z3 5.1.0 accepts {@code (mod a d)}/{@code (div a d)} with a variable divisor under QF_LIRA
+   * -- re-verified against the real binary per sign case; the long-documented "symbolic divisor
+   * is nonlinear" claim was too coarse (Z3's own classification of nonlinearity covers variable
+   * x variable multiplication, not Euclidean division). The binary's pair is EUCLIDEAN -- the
+   * remainder is always non-negative and takes the DIVISOR's sign ({@code mod(-7,2) = 1},
+   * {@code mod(7,-2) = 1}, {@code mod(-7,-2) = 1}) -- while USE/Java truncate toward zero with a
+   * dividend-signed remainder. The conversion is linear: the quotient gains a {+1,-1} correction
+   * exactly when the Euclidean remainder is nonzero and the operand signs differ (d&gt;0: +1,
+   * d&lt;0: -1), and the remainder becomes {@code mod_e - |d|} under the same condition; zero
+   * divisors exclude the candidate from the definedness (a total-equality comparison can never
+   * match, and a mod-by-0 is never rescued by a sibling value). Division by a zero divisor is
+   * likewise undefined.
+   */
+  private TranslatedExpression symbolicTruncatingDivision(Expression[] arguments, boolean mod) {
+    requireCrispInteger(arguments[0], mod ? "mod" : "div");
+    requireCrispInteger(arguments[1], mod ? "mod" : "div");
+    TranslatedExpression dividend = argResult(arguments[0]);
+    TranslatedExpression divisor = argResult(arguments[1]);
+    SmtTerm a = dividend.value();
+    SmtTerm d = divisor.value();
+    SmtTerm zero = Smt.intLit(BigInteger.ZERO);
+    SmtTerm modE = Smt.app("mod", a, d);
+    SmtTerm divE = Smt.app("div", a, d);
+    // Sign-correction condition: the Euclidean remainder is nonzero AND the operand signs
+    // differ -- exactly the cases where Euclidean and truncated quotients differ by one.
+    SmtTerm cond =
+        Smt.and(
+            List.of(
+                Smt.not(Smt.eq(modE, zero)),
+                Smt.or(
+                    List.of(
+                        Smt.and(List.of(Smt.app("<", a, zero), Smt.app(">", d, zero))),
+                        Smt.and(List.of(Smt.app("<", a, zero), Smt.app("<", d, zero)))))));
+    SmtTerm absD = Smt.ite(Smt.app(">=", d, zero), d, Smt.app("-", d));
+    SmtTerm quotient = Smt.ite(cond, Smt.app("+", divE, Smt.ite(Smt.app(">", d, zero), Smt.intLit(BigInteger.ONE), Smt.intLit(BigInteger.valueOf(-1)))), divE);
+    SmtTerm remainder = Smt.ite(cond, Smt.app("-", modE, absD), modE);
+    SmtTerm defined =
+        Smt.and(
+            List.of(dividend.defined(), divisor.defined(), Smt.not(Smt.eq(d, zero))));
+    return new TranslatedExpression(defined, mod ? remainder : quotient);
   }
 
   /**
