@@ -2429,6 +2429,12 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && isSupportedSelectSource(query)) {
       return defined(sizeTerm(selectedAllInstancesPopulation(query)));
     }
+    if (receiver instanceof ExpSetLiteral set
+        && set.getElemExpr().length > 0
+        && set.getElemExpr()[0] instanceof ExpConstString) {
+      List<String> constants = distinctStringConstants(set);
+      return defined(Smt.intLit(BigInteger.valueOf(constants.size())));
+    }
     if (receiver instanceof ExpSetLiteral set) {
       // The distinct element count is a compile-time constant (Set semantics collapse
       // duplicates), matching the incumbent's set-literal cardinality.
@@ -3239,6 +3245,30 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       SmtTerm reachable = closureReachabilityWithReceiver(closure, elementExpr, receiver);
       return defined(wantIncludes ? reachable : Smt.not(reachable));
     }
+    // String-constant set literal: membership by CONTENT against the element's own
+    // registered domain (single domain, so no cross-domain index comparison arises).
+    if (collectionExpr instanceof ExpSetLiteral set
+        && set.getElemExpr().length > 0
+        && set.getElemExpr()[0] instanceof ExpConstString) {
+      List<String> constants = distinctStringConstants(set);
+      ContentOperand element = contentOperand(elementExpr);
+      if (element == null || element.enumeratedValues() == null) {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            (wantIncludes ? "includes" : "excludes")
+                + " over a String set literal requires a String-typed element with a"
+                + " registered domain");
+      }
+      List<SmtTerm> stringMatches = new ArrayList<>();
+      for (String constant : constants) {
+        int idx = element.enumeratedValues().indexOf(constant);
+        if (idx >= 0) {
+          stringMatches.add(Smt.eq(element.value(), Smt.intLit(BigInteger.valueOf(idx))));
+        }
+      }
+      SmtTerm stringMember = Smt.and(List.of(element.defined(), Smt.or(stringMatches)));
+      return defined(wantIncludes ? stringMember : Smt.not(stringMember));
+    }
     if (collectionExpr instanceof ExpSetLiteral set) {
       // Membership in an Integer-constant set literal: the element's value equals one of the
       // DISTINCT literal constants (total -- a literal is always defined).
@@ -3259,6 +3289,27 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     SmtTerm reachable = closureReachability(closure, elementExpr);
     return defined(wantIncludes ? reachable : Smt.not(reachable));
+  }
+
+  /**
+   * The DISTINCT String constants of a set literal, in declaration order (duplicates
+   * collapsed per Set semantics).
+   */
+  private static List<String> distinctStringConstants(ExpSetLiteral set) {
+    List<String> values = new ArrayList<>();
+    for (Expression element : set.getElemExpr()) {
+      if (!(element instanceof ExpConstString constant)) {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            "Set literal with a non-constant or non-String element ("
+                + element
+                + "); only String constants are supported in this slice");
+      }
+      if (!values.contains(constant.value())) {
+        values.add(constant.value());
+      }
+    }
+    return values;
   }
 
   /**

@@ -39,6 +39,7 @@ public class SetLiteralQuantifierTest {
       class X
       attributes
         i : Integer
+        s : String
       end
       constraints
       context x : X inv SetExistsMatches:
@@ -53,6 +54,12 @@ public class SetLiteralQuantifierTest {
         Set{2,4}->includes(x.i)
       context x : X inv SetExcludesThree:
         Set{2,4}->excludes(x.i)
+      context x : X inv StringSetIncludes:
+        Set{'alice','carol'}->includes(x.s)
+      context x : X inv StringSetExcludes:
+        Set{'alice','carol'}->excludes(x.s)
+      context x : X inv StringSetSize:
+        Set{'alice','carol'}->size() = 2
       """;
 
   /**
@@ -61,22 +68,22 @@ public class SetLiteralQuantifierTest {
    */
   @Test
   public void existsOverASetLiteralMatchesAnElementOfTheLiteral() throws Exception {
-    ModelFinderResult match = find("SetExistsMatches", List.of("4"));
+    ModelFinderResult match = find("SetExistsMatches", List.of("4"), List.of("alice"));
     assertTrue("i can be 4, a member of the literal", match.satisfiable());
     assertTrue(verdictFor(match, "X::SetExistsMatches").holds());
 
-    ModelFinderResult miss = find("SetExistsMatches", List.of("3"));
+    ModelFinderResult miss = find("SetExistsMatches", List.of("3"), List.of("alice"));
     assertFalse("i can only be 3, which is not in {2,4}", miss.satisfiable());
   }
 
   /** forAll over {2,4}: every literal element must satisfy the body. */
   @Test
   public void forAllOverASetLiteralRequiresEveryElementToSatisfyTheBody() throws Exception {
-    ModelFinderResult holds = find("SetForAllHolds", List.of("9"));
+    ModelFinderResult holds = find("SetForAllHolds", List.of("9"), List.of("alice"));
     assertTrue("i = 9 satisfies k <= 9 for both k = 2 and k = 4", holds.satisfiable());
     assertTrue(verdictFor(holds, "X::SetForAllHolds").holds());
 
-    ModelFinderResult fails = find("SetForAllHolds", List.of("3"));
+    ModelFinderResult fails = find("SetForAllHolds", List.of("3"), List.of("alice"));
     assertFalse("i = 3 violates k = 2's conjunct, so the forAll is genuinely unsatisfiable",
         fails.satisfiable());
   }
@@ -87,41 +94,78 @@ public class SetLiteralQuantifierTest {
    */
   @Test
   public void setSizeIsTheDistinctElementCount() throws Exception {
-    ModelFinderResult two = find("SetSizeTwo", List.of("9"));
+    ModelFinderResult two = find("SetSizeTwo", List.of("9"), List.of("alice"));
     assertTrue("the duplicated 2 collapses, so the size is 2", two.satisfiable());
     assertTrue(verdictFor(two, "X::SetSizeTwo").holds());
 
-    ModelFinderResult three = find("SetSizeThree", List.of("9"));
+    ModelFinderResult three = find("SetSizeThree", List.of("9"), List.of("alice"));
     assertFalse("{2,4,2} cannot have size 3", three.satisfiable());
   }
 
   /** includes/excludes over a set literal track the caller attribute's membership. */
   @Test
   public void includesAndExcludesOverASetLiteralTrackMembership() throws Exception {
-    ModelFinderResult included = find("SetIncludesTwo", List.of("2"));
+    ModelFinderResult included = find("SetIncludesTwo", List.of("2"), List.of("alice"));
     assertTrue("i = 2 is a member of {2,4}", included.satisfiable());
     assertTrue(verdictFor(included, "X::SetIncludesTwo").holds());
 
-    ModelFinderResult notMember = find("SetIncludesTwo", List.of("3"));
+    ModelFinderResult notMember = find("SetIncludesTwo", List.of("3"), List.of("alice"));
     assertFalse("i = 3 is not a member of {2,4}", notMember.satisfiable());
 
-    ModelFinderResult excluded = find("SetExcludesThree", List.of("3"));
+    ModelFinderResult excluded = find("SetExcludesThree", List.of("3"), List.of("alice"));
     assertTrue("i = 3 is not a member of {2,4}, so excludes holds", excluded.satisfiable());
     assertTrue(verdictFor(excluded, "X::SetExcludesThree").holds());
 
-    ModelFinderResult memberExcluded = find("SetExcludesThree", List.of("2"));
+    ModelFinderResult memberExcluded = find("SetExcludesThree", List.of("2"), List.of("alice"));
     assertFalse("i = 2 IS a member of {2,4}, so excludes cannot hold",
         memberExcluded.satisfiable());
   }
 
-  private static ModelFinderResult find(String invariantName, List<String> iDomain)
+  /**
+   * String-constant set literals: includes/excludes/size resolve by CONTENT against the
+   * element attribute's own domain (sound: membership is against a single domain, so no
+   * cross-domain index comparison arises).
+   */
+  @Test
+  public void stringSetLiteralsTrackMembershipByContent() throws Exception {
+    ModelFinderResult included = findS("StringSetIncludes", List.of("alice"));
+    assertTrue("s = 'alice' is a member of {'alice','carol'}", included.satisfiable());
+    assertTrue(verdictFor(included, "X::StringSetIncludes").holds());
+
+    ModelFinderResult notMember = findS("StringSetIncludes", List.of("bob"));
+    assertFalse("s = 'bob' is not a member", notMember.satisfiable());
+
+    ModelFinderResult excluded = findS("StringSetExcludes", List.of("alice"));
+    assertFalse("s = 'alice' IS a member, so excludes cannot hold", excluded.satisfiable());
+
+    ModelFinderResult excludedHold = findS("StringSetExcludes", List.of("bob"));
+    assertTrue("s = 'bob' is not a member, so excludes holds", excludedHold.satisfiable());
+    assertTrue(verdictFor(excludedHold, "X::StringSetExcludes").holds());
+  }
+
+  /** size() over a String set literal is the distinct element count. */
+  @Test
+  public void stringSetSizeIsTheDistinctElementCount() throws Exception {
+    ModelFinderResult two = findS("StringSetSize", List.of("alice"));
+    assertTrue(two.satisfiable());
+    assertTrue(verdictFor(two, "X::StringSetSize").holds());
+  }
+
+  private static ModelFinderResult findS(String invariantName, List<String> sDomain)
       throws Exception {
+    return find(invariantName, List.of("9"), sDomain);
+  }
+
+  private static ModelFinderResult find(
+      String invariantName, List<String> iDomain, List<String> sDomain) throws Exception {
     MModel model = compile();
     AnalysisConfiguration config =
         new AnalysisConfiguration(
             List.of(new ClassScope("X", 1, 1)),
             List.of(),
-            List.of(new AttributeDomain("X", "i", null, iDomain, null, null)),
+            List.of(
+                new AttributeDomain("X", "i", null, iDomain, null, null),
+                new AttributeDomain("X", "s", null, sDomain, null, null)),
             Set.of("X::" + invariantName),
             QueryParser.parse("satisfy", ConfigurationVocabulary.fromModel(model)),
             Duration.ofSeconds(30),
