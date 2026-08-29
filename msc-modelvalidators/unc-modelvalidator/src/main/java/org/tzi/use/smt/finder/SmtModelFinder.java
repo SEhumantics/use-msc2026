@@ -1,6 +1,7 @@
 package org.tzi.use.smt.finder;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -57,6 +58,9 @@ import org.tzi.use.smt.solver.SolverResult;
 import org.tzi.use.smt.verify.InvariantReEvaluator;
 import org.tzi.use.smt.verify.InvariantVerdict;
 import org.tzi.use.smt.verify.QueryWitnessChecker;
+import org.tzi.use.uml.ocl.expr.ExpAttrOp;
+import org.tzi.use.uml.ocl.expr.ExpConstString;
+import org.tzi.use.uml.ocl.expr.ExpVariable;
 import org.tzi.use.uml.mm.MAggregationKind;
 import org.tzi.use.uml.mm.MAssociation;
 import org.tzi.use.uml.mm.MAssociationClass;
@@ -1489,6 +1493,10 @@ public final class SmtModelFinder {
       if (attribute == null || !attribute.isDerived()) {
         continue;
       }
+      if (attribute.type().isTypeOfString()) {
+        assertStringDerivedAttribute(script, model, context, attributes, className, attributeName);
+        continue;
+      }
       if (!attribute.type().isTypeOfInteger() && !attribute.type().isTypeOfBoolean()) {
         throw new org.tzi.use.smt.encode.SmtTranslationException(
             org.tzi.use.smt.encode.FragmentBoundary.TIER_3,
@@ -1498,7 +1506,8 @@ public final class SmtModelFinder {
                 + attributeName
                 + " is "
                 + attribute.type()
-                + ": only Integer and Boolean derived attributes are supported in this slice");
+                + ": only Integer, Boolean, and String derived attributes are supported in this"
+                + " slice");
       }
       org.tzi.use.uml.ocl.expr.Expression deriveExpression = attribute.getDeriveExpression();
       if (deriveExpression == null) {
@@ -1544,6 +1553,95 @@ public final class SmtModelFinder {
       dispatch.put(className, byName);
     }
     return dispatch;
+  }
+
+  /**
+   * String derivations: the derived attribute's value symbol is pinned, per slot, to the
+   * CANONICAL content of the derivation. For an aliasing derivation {@code mirror derive:
+   * self.first}, both sides' domain indices map through their own domain's value list into a
+   * shared content space (the union of the two domains' configured values), so the equality
+   * holds by CONTENT even when the two domains order or split their values differently -- the
+   * same content-aware discipline as the comparison slices. For a literal derivation the
+   * pinned content is the literal's own; if that content is absent from the derived attribute's
+   * domain the assertion is simply false (genuinely unsatisfiable). General String expressions
+   * and non-String-typed non-crisp derivations stay refused with located errors.
+   */
+  private static void assertStringDerivedAttribute(
+      SmtScript script,
+      MModel model,
+      TranslationContext context,
+      Map<String, AttributeValues> attributes,
+      String className,
+      String attributeName) {
+    MAttribute attribute = model.getClass(className).attribute(attributeName, true);
+    org.tzi.use.uml.ocl.expr.Expression deriveExpr = attribute.getDeriveExpression();
+    if (deriveExpr == null) {
+      throw new IllegalArgumentException(
+          "derived attribute " + className + "." + attributeName + " has no derive expression");
+    }
+    AttributeValues derivedValues = attributes.get(className + "." + attributeName);
+    if (derivedValues == null) {
+      throw new IllegalArgumentException(
+          "no registered values for derived attribute " + className + "." + attributeName);
+    }
+    ObjectSlots owner = context.slotsFor(className);
+    if (deriveExpr instanceof ExpAttrOp attrOp
+        && attrOp.objExp() instanceof ExpVariable selfVar
+        && "self".equals(selfVar.getVarname())) {
+      String srcAttributeName = attrOp.attr().name();
+      AttributeDomain srcDomain =
+          context.attributeDomain(className, srcAttributeName);
+      AttributeDomain dstDomain = context.attributeDomain(className, attributeName);
+      List<String> union = new ArrayList<>(dstDomain.enumeratedValues());
+      for (String v : srcDomain.enumeratedValues()) {
+        if (!union.contains(v)) {
+          union.add(v);
+        }
+      }
+      AttributeValues srcValues = context.attributeValues(className, srcAttributeName);
+      for (int slot = 0; slot < owner.capacity(); slot++) {
+        SmtTerm dstSymbol = Smt.sym(derivedValues.valueNames().get(slot));
+        SmtTerm srcSymbol = Smt.sym(srcValues.valueNames().get(slot));
+        script.assertThat(
+            Smt.eq(
+                canonicalChain(dstSymbol, dstDomain.enumeratedValues(), union),
+                canonicalChain(srcSymbol, srcDomain.enumeratedValues(), union)));
+      }
+      return;
+    }
+    AttributeDomain dstValuesList = context.attributeDomain(className, attributeName);
+    if (deriveExpr instanceof ExpConstString literal) {
+      // The literal's content must be offerable by the derived attribute's own configured
+      // domain: if it is absent, the derivation can never hold -> genuinely unsatisfiable.
+      int localIndex = dstValuesList.enumeratedValues().indexOf(literal.value());
+      for (int slot = 0; slot < owner.capacity(); slot++) {
+        SmtTerm dstSymbol = Smt.sym(derivedValues.valueNames().get(slot));
+        script.assertThat(
+            localIndex >= 0
+                ? Smt.eq(dstSymbol, Smt.intLit(BigInteger.valueOf(localIndex)))
+                : Smt.bool(false));
+      }
+      return;
+    }
+    throw new org.tzi.use.smt.encode.SmtTranslationException(
+        org.tzi.use.smt.encode.FragmentBoundary.TIER_3,
+        "String derivation for "
+            + className
+            + "."
+            + attributeName
+            + ": only an attribute alias (self.other) or a literal is supported in this slice");
+  }
+
+  private static SmtTerm canonicalChain(
+      SmtTerm symbol, List<String> values, List<String> union) {
+    SmtTerm chain = Smt.intLit(java.math.BigInteger.valueOf(-1));
+    for (int i = values.size() - 1; i >= 0; i--) {
+      chain = Smt.ite(
+          Smt.eq(symbol, Smt.intLit(BigInteger.valueOf(i))),
+          Smt.intLit(BigInteger.valueOf(union.indexOf(values.get(i)))),
+          chain);
+    }
+    return chain;
   }
 
   /**
