@@ -984,19 +984,32 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && !localBindings.containsKey(rv.getVarname()))
       return defined(
           Smt.bool(context.binding(lv.getVarname()).equals(context.binding(rv.getVarname()))));
+    if ((l instanceof ExpVariable cl && localBindings.containsKey(cl.getVarname()))
+        || (r instanceof ExpVariable cr && localBindings.containsKey(cr.getVarname()))) {
+      TranslatedExpression local = contentAwareEquality(l, r);
+      if (local != null) return local;
+    }
     if (l instanceof ExpConstString s) {
+      TranslatedExpression content = contentAwareEquality(l, r);
+      if (content != null) return content;
       TranslatedExpression other = argResult(r);
       return useEquality(defined(resolve(s, r)), other);
     }
     if (r instanceof ExpConstString s) {
+      TranslatedExpression content = contentAwareEquality(l, r);
+      if (content != null) return content;
       TranslatedExpression other = argResult(l);
       return useEquality(other, defined(resolve(s, l)));
     }
     if (l instanceof ExpConstEnum en) {
+      TranslatedExpression content = contentAwareEquality(l, r);
+      if (content != null) return content;
       TranslatedExpression other = argResult(r);
       return useEquality(defined(resolve(en, r)), other);
     }
     if (r instanceof ExpConstEnum en) {
+      TranslatedExpression content = contentAwareEquality(l, r);
+      if (content != null) return content;
       TranslatedExpression other = argResult(l);
       return useEquality(other, defined(resolve(en, l)));
     }
@@ -1185,6 +1198,146 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     TranslatedExpression navigatedSide = new TranslatedExpression(Smt.or(targets), Smt.bool(false));
     TranslatedExpression bareSide = defined(bareValue);
     return useEquality(navigatedSide, bareSide, Smt.or(matches));
+  }
+
+  /**
+   * Content-aware equality between two operands that are both String/Enum-typed values this
+   * translator can DESCRIBE: a let-bound variable (carrying its initializer's configured candidate
+   * list, see {@link LocalBinding}), a bare or single-hop-navigated attribute access, or a literal
+   * (its own singleton content). Returns {@code null} when either side is not such an operand,
+   * deferring to the caller's ordinary path -- Integer/Real/Boolean values ARE their SMT symbol, so
+   * raw equality is already correct for them.
+   *
+   * <p>This is the same positional-index soundness finding {@link #crossDomainStringOrEnumEquality}
+   * fixed for the bare-vs-bare attribute shape, extended to the shapes that finding's turn
+   * deliberately left open: a LET-BOUND String/Enum variable compared against anything (it used to
+   * route through the raw, unsound {@link #useEquality} fallback and manufactured witnesses USE's
+   * own re-evaluation denied -- {@code WitnessAttributionException} on swapped or disjoint
+   * domains), and a free-standing literal against a non-bare-attribute operand (it used to fail
+   * closed with "string literal compared against a non-attribute expression"). Bare-attribute
+   * operands are also described here, superseding the old {@code resolve}-based emission with a
+   * logically equivalent one; the old path remains as the fallback and still owns its refusal for
+   * operands no descriptor can capture.
+   */
+  private TranslatedExpression contentAwareEquality(Expression l, Expression r) {
+    ContentOperand lo = contentOperand(l);
+    ContentOperand ro = contentOperand(r);
+    if (lo == null || ro == null) return null;
+    return useEquality(lo.translated(), ro.translated(), contentMatches(lo, ro));
+  }
+
+  /**
+   * The {@link ContentOperand} describing {@code e}, or {@code null}. Every returned operand's
+   * values are indices into {@code enumeratedValues()} (null only for a let rooted in
+   * {@code oclUndefined}, whose value can never be consulted under {@link #useEquality}'s
+   * both-defined rule -- {@link #visitLet} refuses every other domain-less initializer).
+   */
+  private ContentOperand contentOperand(Expression e) {
+    if (e instanceof ExpVariable v) {
+      LocalBinding local = localBindings.get(v.getVarname());
+      if (local == null || !local.stringOrEnum()) {
+        return null;
+      }
+      return new ContentOperand(
+          Smt.sym(local.valueSymbol()),
+          Smt.sym(local.definedSymbol()),
+          local.enumeratedValues(),
+          false);
+    }
+    if (e instanceof ExpConstString s) {
+      return new ContentOperand(
+          Smt.intLit(BigInteger.ZERO), Smt.bool(true), List.of(s.value()), true);
+    }
+    if (e instanceof ExpConstEnum en) {
+      return new ContentOperand(
+          Smt.intLit(BigInteger.ZERO), Smt.bool(true), List.of(en.value()), true);
+    }
+    if (e instanceof ExpAttrOp a) {
+      AttributeValues vals;
+      AttributeDomain domain;
+      if (a.objExp() instanceof ExpVariable v && !localBindings.containsKey(v.getVarname())) {
+        VariableBinding b = context.binding(v.getVarname());
+        vals = context.attributeValues(b.className(), a.attr().name());
+        domain = context.attributeDomain(b.className(), a.attr().name());
+      } else if (a.objExp() instanceof ExpNavigation nav
+          && !nav.getDestination().isCollection()
+          && nav.getObjectExpression() instanceof ExpVariable sv
+          && !localBindings.containsKey(sv.getVarname())) {
+        VariableBinding source = context.binding(sv.getVarname());
+        MNavigableElement destination =
+            resolveRedefinedDestination(nav.getDestination(), source);
+        String destClass = destination.cls().name();
+        vals = context.attributeValues(destClass, a.attr().name());
+        domain = context.attributeDomain(destClass, a.attr().name());
+      } else {
+        return null;
+      }
+      if (vals.type() != AttributeType.STRING && vals.type() != AttributeType.ENUM) {
+        return null;
+      }
+      guardAgainstUncertainAttribute(vals);
+      TranslatedExpression translated = argResult(a);
+      return new ContentOperand(
+          translated.value(), translated.defined(), domain.enumeratedValues(), false);
+    }
+    return null;
+  }
+
+  /**
+   * "The two values are equal" as a disjunction over every (left-index, right-index) pair whose
+   * configured literals actually match, each conjunct pinning both operands to that pair's index.
+   * Logically equivalent to raw index equality whenever the two candidate lists are identical in
+   * content and order; differing from it exactly where raw equality was unsound. A literal operand
+   * carries its content at index 0 of its own singleton list, so it is pinned directly to the
+   * matching index of the other side (or the match is simply false when the content is absent)
+   * instead of contributing a trivial {@code (= 0 0)} conjunct.
+   */
+  private static SmtTerm contentMatches(ContentOperand lo, ContentOperand ro) {
+    if (lo.enumeratedValues() == null || ro.enumeratedValues() == null) {
+      // Only an oclUndefined-rooted let can lack its candidate list; its definedness is always
+      // false, so useEquality never consults this term.
+      return Smt.bool(false);
+    }
+    if (lo.literal() && ro.literal()) {
+      return Smt.bool(lo.enumeratedValues().get(0).equals(ro.enumeratedValues().get(0)));
+    }
+    if (lo.literal() || ro.literal()) {
+      ContentOperand literal = lo.literal() ? lo : ro;
+      ContentOperand other = lo.literal() ? ro : lo;
+      int idx = other.enumeratedValues().indexOf(literal.enumeratedValues().get(0));
+      if (idx < 0) {
+        return Smt.bool(false);
+      }
+      return Smt.eq(other.value(), Smt.intLit(BigInteger.valueOf(idx)));
+    }
+    List<SmtTerm> matches = new ArrayList<>();
+    for (int i = 0; i < lo.enumeratedValues().size(); i++) {
+      for (int j = 0; j < ro.enumeratedValues().size(); j++) {
+        if (lo.enumeratedValues().get(i).equals(ro.enumeratedValues().get(j))) {
+          matches.add(
+              Smt.and(
+                  List.of(
+                      Smt.eq(lo.value(), Smt.intLit(BigInteger.valueOf(i))),
+                      Smt.eq(ro.value(), Smt.intLit(BigInteger.valueOf(j))))));
+        }
+      }
+    }
+    return Smt.or(matches);
+  }
+
+  /**
+   * One side of a {@link #contentAwareEquality} comparison: an SMT value term that is an index
+   * into {@code enumeratedValues()} (in the same order as the configured candidate list), the
+   * operand's definedness, and the candidate list itself. A literal is its own singleton list.
+   */
+  private record ContentOperand(
+      SmtTerm value,
+      SmtTerm defined,
+      List<String> enumeratedValues,
+      boolean literal) {
+    TranslatedExpression translated() {
+      return new TranslatedExpression(defined, value);
+    }
   }
 
   /**
@@ -2240,6 +2393,16 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * collections are finite guarded populations, neither a first-class SMT value, so accepting
    * either here would require inventing a representation. Those shapes fail before their bound or
    * body expression is visited, with a message that identifies the let variable and its type.
+   *
+   * <p>A String or Enum let additionally records its initializer's configured candidate list (its
+   * value is an index POSITIONAL within that one list, so every comparison involving the variable
+   * must be built by content -- see {@link #contentAwareEquality}). A literal initializer is its
+   * own singleton candidate list (free-standing literals have no attribute to resolve against,
+   * which is precisely why {@code visitConstString}/{@code visitConstEnum} refuse them outside a
+   * comparison); an {@code oclUndefined} initializer records no list at all, which
+   * {@link #contentMatches} treats as "this value can never be consulted". Every OTHER initializer
+   * shape is refused here rather than admitted without a list, so a list-less local is PROVEN
+   * never-defined and can safely take the ordinary comparison fallback.
    */
   @Override
   public void visitLet(ExpLet e) {
@@ -2247,25 +2410,39 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       result = objectAnyLet(e);
       return;
     }
+    boolean stringOrEnum =
+        e.getVarType().isTypeOfString() || e.getVarType().isTypeOfEnum();
     if (!e.getVarType().isTypeOfInteger()
         && !e.getVarType().isTypeOfBoolean()
         && !e.getVarType().isTypeOfReal()
-        && !e.getVarType().isTypeOfString()) {
+        && !stringOrEnum) {
       throw unsupported(
           FragmentBoundary.TIER_3,
           "let-bound variable '"
               + e.getVarname()
               + "' of type "
               + e.getVarType()
-              + ": only primitive Integer, Boolean, Real, and String let bindings are supported;"
-              + " object- and collection-typed bindings require a finite object/collection"
-              + " representation that this translation slice does not have");
+              + ": only primitive Integer, Boolean, Real, String, and Enum let bindings are"
+              + " supported; object- and collection-typed bindings require a finite"
+              + " object/collection representation that this translation slice does not have");
     }
 
-    TranslatedExpression bound = argResult(e.getVarExpression());
+    TranslatedExpression bound;
+    List<String> enumeratedValues = null;
+    if (stringOrEnum) {
+      enumeratedValues = initializerEnumeratedValues(e);
+      bound =
+          e.getVarExpression() instanceof ExpConstString
+                  || e.getVarExpression() instanceof ExpConstEnum
+              ? defined(Smt.intLit(BigInteger.ZERO))
+              : argResult(e.getVarExpression());
+    } else {
+      bound = argResult(e.getVarExpression());
+    }
     String symbolStem = "|ocl-let-" + e.getVarname();
     LocalBinding binding =
-        new LocalBinding(symbolStem + "-defined|", symbolStem + "-value|");
+        new LocalBinding(symbolStem + "-defined|", symbolStem + "-value|", stringOrEnum,
+            enumeratedValues);
     Map<String, LocalBinding> extended = new LinkedHashMap<>(localBindings);
     extended.put(e.getVarname(), binding);
     TranslatedExpression body =
@@ -2279,7 +2456,82 @@ public final class ExpressionTranslator implements ExpressionVisitor {
             Smt.let(bindings, body.defined()), Smt.let(bindings, body.value()));
   }
 
-  private record LocalBinding(String definedSymbol, String valueSymbol) {}
+  /**
+   * A scalar {@code let}'s local environment entry. {@code stringOrEnum} marks a String/Enum-typed
+   * variable, whose SMT value is an index positional within {@code enumeratedValues} -- the
+   * initializer's configured candidate list (a literal initializer's own singleton list). {@code
+   * enumeratedValues} is null exactly when the value can never be consulted: a non-String/Enum
+   * let, or one rooted in {@code oclUndefined} ({@link #visitLet} refuses every other list-less
+   * initializer shape, so null is always comparison-safe).
+   */
+  private record LocalBinding(
+      String definedSymbol, String valueSymbol, boolean stringOrEnum,
+      List<String> enumeratedValues) {}
+
+  /**
+   * The configured candidate list a String/Enum let's initializer draws its value indices from:
+   * the attribute's own domain for a bare or single-hop-navigated attribute access, the source
+   * let's list for a chained let variable, the literal's own content for a literal, and null for
+   * an {@code oclUndefined}-rooted chain. Any other initializer shape is refused rather than
+   * admitted without a list -- a String/Enum local without one could only fall back to raw index
+   * comparison, the exact unsoundness {@link #contentAwareEquality} exists to prevent.
+   */
+  private List<String> initializerEnumeratedValues(ExpLet e) {
+    Expression init = e.getVarExpression();
+    if (init instanceof ExpConstString s) {
+      return List.of(s.value());
+    }
+    if (init instanceof ExpConstEnum en) {
+      return List.of(en.value());
+    }
+    if (init instanceof ExpUndefined) {
+      return null;
+    }
+    if (init instanceof ExpVariable v && localBindings.containsKey(v.getVarname())) {
+      return localBindings.get(v.getVarname()).enumeratedValues();
+    }
+    if (init instanceof ExpAttrOp a) {
+      String className;
+      if (a.objExp() instanceof ExpVariable v && !localBindings.containsKey(v.getVarname())) {
+        className = context.binding(v.getVarname()).className();
+      } else if (a.objExp() instanceof ExpNavigation nav
+          && !nav.getDestination().isCollection()
+          && nav.getObjectExpression() instanceof ExpVariable sv
+          && !localBindings.containsKey(sv.getVarname())) {
+        className =
+            resolveRedefinedDestination(nav.getDestination(), context.binding(sv.getVarname()))
+                .cls()
+                .name();
+      } else {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            "let-bound variable '"
+                + e.getVarname()
+                + "': its initializer's attribute receiver is not a bare context variable or a"
+                + " single-hop navigation");
+      }
+      AttributeValues vals = context.attributeValues(className, a.attr().name());
+      if (vals.type() != AttributeType.STRING && vals.type() != AttributeType.ENUM) {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            "let-bound variable '"
+                + e.getVarname()
+                + "': initializer attribute "
+                + className
+                + "."
+                + a.attr().name()
+                + " is not String/Enum-typed");
+      }
+      guardAgainstUncertainAttribute(vals);
+      return context.attributeDomain(className, a.attr().name()).enumeratedValues();
+    }
+    throw unsupported(
+        FragmentBoundary.TIER_3,
+        "let-bound variable '"
+            + e.getVarname()
+            + "': its initializer is not a String/Enum attribute access, another let-bound"
+            + " variable, a literal, or oclUndefined");
+  }
 
   /**
    * Translates the finite object-selection shape {@code let x = T.allInstances()->any(p) in body}

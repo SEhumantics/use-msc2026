@@ -45,6 +45,14 @@ public class FragmentLedgerBoundaryTest {
    * shape stopped refusing at all, so it was changed to a type-mismatched if-then-else (Integer
    * vs Real), which still hits {@code BEYOND_FIRST_FRAGMENT} via visitIf()'s own type guard,
    * preserving this fixture's role without depending on if-then-else staying wholly unsupported.
+   *
+   * <p>{@code Tier2EnumLiteralVersusOclUndefined} was originally {@code Color::red = Color::green}
+   * -- once String/Enum equality became content-aware for every describable operand (including
+   * literal-vs-literal, resolved as a Java-level content check), that exact shape stopped refusing
+   * at all: it is now genuinely supported, closing the free-standing-literal gap the
+   * {@code prim.enum-literals-equality} row names. It was changed to literal-vs-undefined, which
+   * still refuses at {@code TIER_2} via the free-standing-literal guard. Same precedent, same
+   * fixture role.
    */
   private static final String BOUNDARY_MODEL =
       """
@@ -63,8 +71,8 @@ public class FragmentLedgerBoundaryTest {
         Sample.allInstances()->exists(x, y, z | x.n > 0)
       context self : Sample inv Tier2TypeTest:
         self.oclAsType(Sample).oclIsTypeOf(Sample)
-      context self : Sample inv Tier2EnumLiteralVersusEnumLiteral:
-        Color::red = Color::green
+      context self : Sample inv Tier2EnumLiteralVersusOclUndefined:
+        Color::red = oclUndefined(Color)
       context self : Sample inv Tier3SetLiteral:
         Set{1,2} = Set{1}
       context self : Sample inv BeyondFirstFragmentConditional:
@@ -85,7 +93,7 @@ public class FragmentLedgerBoundaryTest {
     expected.put("Sample::Tier1ForAllThreeVariables", FragmentBoundary.TIER_1);
     expected.put("Sample::Tier2ExistsThreeVariables", FragmentBoundary.TIER_2);
     expected.put("Sample::Tier2TypeTest", FragmentBoundary.TIER_2);
-    expected.put("Sample::Tier2EnumLiteralVersusEnumLiteral", FragmentBoundary.TIER_2);
+    expected.put("Sample::Tier2EnumLiteralVersusOclUndefined", FragmentBoundary.TIER_2);
     expected.put("Sample::Tier3SetLiteral", FragmentBoundary.TIER_3);
     expected.put("Sample::BeyondFirstFragmentConditional", FragmentBoundary.BEYOND_FIRST_FRAGMENT);
     expected.put("Sample::UTypeCoreLiteral", FragmentBoundary.UTYPE_CORE);
