@@ -2038,6 +2038,25 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         if (!stringValues.contains(constant.value())) {
           stringValues.add(constant.value());
         }
+      } else if (element instanceof ExpRange range) {
+        // Integer range literal Set{a..b}: expand to its element constants.
+        Expression lo = range.getStart();
+        Expression hi = range.getEnd();
+        if (lo instanceof ExpConstInteger loInt && hi != null && hi instanceof ExpConstInteger hiInt) {
+          sawInt = true;
+          long cur = loInt.value();
+          long end = hiInt.value();
+          while (cur <= end) {
+            BigInteger v = BigInteger.valueOf(cur);
+            if (!intValues.contains(v)) intValues.add(v);
+            cur++;
+          }
+        } else {
+          throw unsupported(
+              FragmentBoundary.TIER_3,
+              "range literal with non-constant bounds ("
+                  + lo + ".." + hi + ") is not yet supported");
+        }
       } else {
         throw unsupported(
             FragmentBoundary.TIER_3,
