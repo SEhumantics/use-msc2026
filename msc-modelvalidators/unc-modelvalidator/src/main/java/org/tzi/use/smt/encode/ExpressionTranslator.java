@@ -355,6 +355,19 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           case "includesAll" -> collectionIncludesAll(a[0], a[1]);
           case "isEmpty" -> collectionEmptiness(a[0], true);
           case "notEmpty" -> collectionEmptiness(a[0], false);
+          // USE's Op_real_round accepts any number, but on a crisp Integer it is the IDENTITY
+          // (Math.round(intValue) is the same int -- confirmed against the use-core source, not
+          // inferred), so the encoding is the operand's own value with its definedness. Real and
+          // UReal round() carry genuinely different rounding semantics and stay refused.
+          case "round" -> {
+            if (a.length == 1 && a[0].type().isTypeOfInteger()) {
+              yield argResult(a[0]);
+            }
+            throw unsupported(
+                boundaryOfOperator(e.opname()),
+                "operator 'round' over a non-Integer operand (Real/UReal rounding semantics are"
+                    + " not in this slice)");
+          }
           default ->
               throw unsupported(boundaryOfOperator(e.opname()), "operator '" + e.opname() + "'");
         };

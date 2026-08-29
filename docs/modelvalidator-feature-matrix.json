@@ -1389,13 +1389,13 @@
               "coverageNote": "zero coverage - no scenario exercises Integer.round()/toString()"
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "grep across ExpressionTranslator.java for 'round'/'toString' returns zero hits; both Integer.round() and Integer.toString() would be dispatched as either an ExpStdOp with an opname the visitStdOp switch (lines 67-79) does not recognise (falling to the default throw at line 78) or as an ExpQuery, which visitQuery (lines 338-341) unconditionally rejects with `throw unsupported(\"query\")`.",
-              "notes": "Neither operation has any dedicated visitor method or switch case anywhere in the file; there is no Integer-to-String conversion machinery of any kind (also see prim.string-operations -- there is no String operation support at all in this slice).",
+              "status": "degraded",
+              "evidence": "2026-08-29: Integer.round() is now implemented -- visitStdOp's switch gained a 'round' case: USE's Op_real_round accepts any number, but on a crisp Integer it is the IDENTITY (Math.round(intValue) is the same int, confirmed against the use-core source), so the encoding is the operand's own value with its definedness (IntegerRoundTest, 2 end-to-end real-Z3 tests: round() carries the operand's value -- i.round()=5 is SAT with domain {5} and UNSAT with domain {3} -- and i.round()=j is satisfiable exactly when the two domains share a value; adversarially verified). Real.round() and UReal.round() carry genuinely different rounding semantics and stay refused with a located message. Integer.toString() remains unimplemented: there is no Integer-to-String synthesis machinery of any kind in this encoding (String values are positional indices into per-attribute configured domains, so producing a String VALUE from an Integer would need either a canonical string table or per-site domain synthesis -- neither exists; see prim.string-operations).",
+              "notes": "Status stays degraded, deliberately: the row names BOTH operations and toString() has no implementation path in this slice. round() moved from 'no dedicated visitor or switch case anywhere' to implemented-and-tested; the round() case's refusal for Real/UReal operands is located and intentional, not a fallback.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
-              "coverageNote": "zero coverage -- no scenario in the manifest tags this feature id at all, and none of the six real-verdict scenarios' active invariants use round()/toString(); verdict is source-only."
+              "coverageNote": "Coverage for the round() half is IntegerRoundTest's 2 dedicated real-Z3 tests; no corpus scenario uses round() yet, so no scenario ids changed."
             }
           }
         },
