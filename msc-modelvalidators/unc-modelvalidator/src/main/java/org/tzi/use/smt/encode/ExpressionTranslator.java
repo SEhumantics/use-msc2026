@@ -2898,13 +2898,16 @@ public final class ExpressionTranslator implements ExpressionVisitor {
               + "': it has no OCL expression body to inline");
     }
     Expression[] arguments = objOp.getArguments();
-    if (arguments.length != 1) {
+    if (arguments.length != 1 + operation.paramList().size()) {
       throw unsupported(
           FragmentBoundary.TIER_2,
           "operation '"
               + operation.name()
-              + "' with parameters; only zero-argument query operations are supported in this"
-              + " slice");
+              + "' called with "
+              + (arguments.length - 1)
+              + " argument(s) but declares "
+              + operation.paramList().size()
+              + " parameter(s)");
     }
     if (!(arguments[0] instanceof ExpVariable targetVar)) {
       throw unsupported(
@@ -2925,17 +2928,60 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (dispatched != null) {
       operation = dispatched;
     }
+    boolean parameterized = operation.paramList().size() > 0;
     TranslationContext selfContext = context.withBinding("self", selfBinding);
     Set<MOperation> inProgress = new java.util.HashSet<>(operationsInProgress);
     inProgress.add(operation);
-    result =
+    // Parameterized calls: each parameter is bound through a per-call SMT let to the
+    // translated ARGUMENT's value and definedness -- constants carry their literal, attribute
+    // arguments carry the attribute's own symbol, so the body computes over the caller's
+    // actual state. Crisp parameters only: a String/Enum-typed parameter's value is a domain
+    // INDEX, and binding one to a caller-side symbol without the canonical string table would
+    // reintroduce the positional-index unsoundness the content-aware comparison slices fixed.
+    List<SmtTerm.Binding> parameterBindings = new ArrayList<>();
+    Map<String, LocalBinding> bodyLocalBindings = localBindings;
+    if (parameterized) {
+      for (int i = 0; i < operation.paramList().size(); i++) {
+        String parameterName = operation.paramList().varDecl(i).name();
+        org.tzi.use.uml.ocl.type.Type parameterType =
+            operation.paramList().varDecl(i).type();
+        if (parameterType.isTypeOfString() || parameterType.isTypeOfEnum()) {
+          throw unsupported(
+              FragmentBoundary.TIER_3,
+              "operation '"
+                  + operation.name()
+                  + "': String/Enum-typed parameter '"
+                  + parameterName
+                  + "' is not supported in this slice");
+        }
+        TranslatedExpression argument = argResult(arguments[i + 1]);
+        String stem = "|ocl-param-" + operation.name() + "-" + parameterName;
+        LocalBinding parameterBinding =
+            new LocalBinding(stem + "-defined|", stem + "-value|", false, null);
+        parameterBindings.add(
+            new SmtTerm.Binding(parameterBinding.definedSymbol(), argument.defined()));
+        parameterBindings.add(
+            new SmtTerm.Binding(parameterBinding.valueSymbol(), argument.value()));
+        Map<String, LocalBinding> extended = new LinkedHashMap<>(bodyLocalBindings);
+        extended.put(parameterName, parameterBinding);
+        bodyLocalBindings = Map.copyOf(extended);
+      }
+    }
+    TranslatedExpression body =
         translate(
             operation.expression(),
             selfContext,
             mode,
             positivePolarity,
-            localBindings,
+            bodyLocalBindings,
             inProgress);
+    result = body;
+    if (parameterized) {
+      result =
+          new TranslatedExpression(
+              Smt.let(parameterBindings, body.defined()),
+              Smt.let(parameterBindings, body.value()));
+    }
   }
 
   @Override
