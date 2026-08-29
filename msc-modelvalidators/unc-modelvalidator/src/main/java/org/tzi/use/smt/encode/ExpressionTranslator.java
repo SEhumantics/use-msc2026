@@ -457,8 +457,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           // so unparseable candidates are excluded -- a total-equality comparison never
           // matches them, and an all-unparseable domain is the constant-false expression.
           case "indexOf" -> {
-            if (a.length == 2 && a[0].type().isTypeOfString() && a[1] instanceof ExpConstString needle) {
-              yield stringIndexOf(a[0], needle);
+            if (a.length == 2 && a[0].type().isTypeOfString() && stringCandidates(a[1]) != null) {
+              yield stringIndexOf(a[0], a[1]);
             }
             throw unsupported(
                 FragmentBoundary.TIER_2,
@@ -3234,23 +3234,30 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   private TranslatedExpression virtualStringComparison(Expression l, Expression r) {
     Expression virtual = isVirtualStringOp(l) ? l : r;
     Expression other = virtual == l ? r : l;
-    if (!(other instanceof ExpConstString literal)) {
+    EnumerableString expanded = expandVirtualString((ExpStdOp) virtual);
+    EnumerableString comparands = stringCandidates(other);
+    if (comparands == null) {
       throw unsupported(
           FragmentBoundary.TIER_2,
-          "concat/substring compared against anything other than a string literal is not"
-              + " supported in this slice");
+          "concat/substring compared against anything other than a string literal or a"
+              + " configured-candidate string (attribute or let variable) is not supported in"
+              + " this slice");
     }
-    EnumerableString expanded = expandVirtualString((ExpStdOp) virtual);
+    // Cross-domain content cases: per (result, comparand) pair the compile-time Java equality
+    // decides the match, and each match contributes the CONJUNCTION of both sides' guards --
+    // the contentAwareEquality pattern extended to computed results. The result is a defined
+    // Boolean (USE's total equality makes a non-matching pair merely false).
     List<SmtTerm> admitted = new ArrayList<>();
-    for (StringCandidateCase candidate : expanded.candidates) {
-      if (candidate.spelling.equals(literal.value())) {
-        admitted.add(candidate.guard);
+    for (StringCandidateCase result : expanded.candidates) {
+      for (StringCandidateCase comparand : comparands.candidates) {
+        if (result.spelling.equals(comparand.spelling)) {
+          admitted.add(Smt.and(List.of(result.guard, comparand.guard)));
+        }
       }
     }
-    SmtTerm value =
-        admitted.isEmpty() ? Smt.bool(false) : Smt.or(admitted);
+    SmtTerm value = admitted.isEmpty() ? Smt.bool(false) : Smt.or(admitted);
     return new TranslatedExpression(
-        Smt.bool(true), Smt.and(List.of(expanded.defined, value)));
+        Smt.bool(true), Smt.and(List.of(expanded.defined, comparands.defined, value)));
   }
 
 /**
@@ -3339,7 +3346,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * a non-empty receiver yields 1. Every candidate is defined (the operation always answers an
    * Int), so the ite chain needs no exclusion.
    */
-  private TranslatedExpression stringIndexOf(Expression receiver, ExpConstString needle) {
+  private TranslatedExpression stringIndexOf(Expression receiver, Expression needleExpr) {
     EnumerableString source = stringCandidates(receiver);
     if (source == null) {
       throw unsupported(
@@ -3347,19 +3354,40 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           "indexOf over anything other than a configured-candidate string attribute, a String"
               + " let variable, or a string literal");
     }
-    List<StringCandidateCase> cases = source.candidates;
-    int last = cases.size() - 1;
-    SmtTerm value =
-        Smt.intLit(
-            BigInteger.valueOf(indexOfResult(cases.get(last).spelling, needle.value())));
-    for (int i = last - 1; i >= 0; i--) {
-      value =
-          Smt.ite(
-              cases.get(i).guard,
-              Smt.intLit(BigInteger.valueOf(indexOfResult(cases.get(i).spelling, needle.value()))),
-              value);
+    EnumerableString needles = stringCandidates(needleExpr);
+    if (needles == null) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "indexOf with a needle that is neither a string literal nor a configured-candidate"
+              + " string (attribute or let variable)");
     }
-    return new TranslatedExpression(source.defined, value);
+    // Per (receiver, needle) candidate pair the 1-based answer is compile-time; the ite chain
+    // selects the pair both guards point at. The cap mirrors UBooleanProbability's expansion
+    // cap: the finite enumeration is what keeps the answer exact without string theory.
+    List<SmtTerm> pairGuards = new ArrayList<>();
+    List<Integer> pairValues = new ArrayList<>();
+    for (StringCandidateCase receiverCase : source.candidates) {
+      for (StringCandidateCase needleCase : needles.candidates) {
+        pairGuards.add(Smt.and(List.of(receiverCase.guard, needleCase.guard)));
+        pairValues.add(indexOfResult(receiverCase.spelling, needleCase.spelling));
+      }
+    }
+    if (pairGuards.size() > 256) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "indexOf over "
+              + source.candidates.size()
+              + " x "
+              + needles.candidates.size()
+              + " configured candidate pairs exceeds the 256-combination expansion cap");
+    }
+    int last = pairGuards.size() - 1;
+    SmtTerm value = Smt.intLit(BigInteger.valueOf(pairValues.get(last)));
+    for (int i = last - 1; i >= 0; i--) {
+      value = Smt.ite(pairGuards.get(i), Smt.intLit(BigInteger.valueOf(pairValues.get(i))), value);
+    }
+    return new TranslatedExpression(
+        Smt.and(List.of(source.defined, needles.defined)), value);
   }
 
   /** Op_string_indexOf's exact answer table, per the use-core bytecode. */
