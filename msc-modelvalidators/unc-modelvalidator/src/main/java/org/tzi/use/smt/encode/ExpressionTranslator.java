@@ -3498,9 +3498,12 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (!(e instanceof ExpStdOp op) || !"split".equals(op.opname())) {
       return false;
     }
+    // BOTH the source and the separator may be any enumerable string source (literal,
+    // configured-candidate attribute, or String let variable); the expansion crosses their
+    // candidate lists.
     return op.args().length == 2
-        && op.args()[1] instanceof ExpConstString
-        && stringCandidates(op.args()[0]) != null;
+        && stringCandidates(op.args()[0]) != null
+        && stringCandidates(op.args()[1]) != null;
   }
 
   /** One candidate of an expanded split: its part list and its guard. */
@@ -3508,10 +3511,25 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
   private List<SplitCase> expandVirtualSplit(ExpStdOp split) {
     EnumerableString source = stringCandidates(split.args()[0]);
-    String sep = ((ExpConstString) split.args()[1]).value();
+    EnumerableString separators = stringCandidates(split.args()[1]);
     List<SplitCase> cases = new ArrayList<>();
-    for (StringCandidateCase candidate : source.candidates) {
-      cases.add(new SplitCase(List.of(candidate.spelling.split(sep)), candidate.guard));
+    for (StringCandidateCase sourceCase : source.candidates) {
+      for (StringCandidateCase separatorCase : separators.candidates) {
+        // The same java String.split call USE's evaluator makes -- exact by construction.
+        cases.add(
+            new SplitCase(
+                List.of(sourceCase.spelling.split(separatorCase.spelling)),
+                Smt.and(List.of(sourceCase.guard, separatorCase.guard))));
+      }
+    }
+    if (cases.size() > 256) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "split over "
+              + source.candidates.size()
+              + " x "
+              + separators.candidates.size()
+              + " configured candidate pairs exceeds the 256-combination expansion cap");
     }
     return cases;
   }
