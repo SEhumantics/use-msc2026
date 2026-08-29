@@ -500,6 +500,24 @@ public final class ExpressionTranslator implements ExpressionVisitor {
             // undefined (USE confirms) -> the scenario is unsatisfiable.
             yield new TranslatedExpression(Smt.bool(false), Smt.bool(false));
           }
+          // toString() on a crisp Integer: USE's Op_number_toString is Math.toString(int),
+          // and the decimal representation is injective, so the encoding is the operand's
+          // own value term -- the identity on the value, definedness included. A comparison
+          // against a String literal resolves through {@link #resolve(ExpConstString,
+          // Expression)} parsing the literal back to the Integer; every OTHER consumer is
+          // guarded to refuse (see isIntegerToString's call sites): a String/Enum-encoded
+          // operand would compare a domain INDEX against this VALUE, and an ordered
+          // comparison would read lexicographic decimal order as Integer order
+          // ('9' < '10' lexicographically).
+          case "toString" -> {
+            if (a.length == 1 && a[0].type().isTypeOfInteger()) {
+              yield argResult(a[0]);
+            }
+            throw unsupported(
+                FragmentBoundary.TIER_2,
+                "operator 'toString' over a non-Integer operand is not supported in this"
+                    + " slice");
+          }
           case "round" -> {
             if (a.length == 1 && a[0].type().isTypeOfInteger()) {
               yield argResult(a[0]);
@@ -555,6 +573,16 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
   private TranslatedExpression orderedComparison(
       String operator, Expression left, Expression right) {
+    // A toString() side makes the operand's Integer VALUE flow into a comparison whose
+    // semantics over its String result would be lexicographic -- and lexicographic decimal
+    // order is genuinely a different order ('9' < '10'), not an encoding artifact, so this
+    // is refused rather than approximated.
+    if (isIntegerToString(left) || isIntegerToString(right)) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "ordered comparison against toString() of an Integer: lexicographic decimal string"
+              + " order is not Integer order");
+    }
     TranslatedExpression l = argResult(left);
     TranslatedExpression r = argResult(right);
     return new TranslatedExpression(
@@ -1221,7 +1249,38 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && !rn.getDestination().isCollection()
         && l instanceof ExpVariable lv
         && !localBindings.containsKey(lv.getVarname())) return navigationEqualsVariable(rn, lv);
+    // toString()'s identity encoding yields the Integer VALUE, so any comparison against a
+    // String/Enum-ENCODED operand (a domain INDEX) would silently equate unrelated things --
+    // e.g. `x.s = x.a.toString()` with s's domain {'7','42'} and a = 2 would hold because the
+    // literal at index 2... does not even exist. Only value-encoded operands (Integer-typed)
+    // and String literals (resolved by parsing, above) are sound here.
+    Expression toStringSide =
+        isIntegerToString(l) ? l : isIntegerToString(r) ? r : null;
+    if (toStringSide != null) {
+      Expression other = toStringSide == l ? r : l;
+      if (other instanceof ExpConstEnum
+          || other.type().isTypeOfString()
+          || other.type().isTypeOfEnum()) {
+        throw unsupported(
+            FragmentBoundary.TIER_2,
+            "toString() over an Integer compared against a String- or Enum-encoded operand:"
+                + " the value-identity encoding only supports String literals and Integer"
+                + " operands");
+      }
+    }
     return useEquality(argResult(l), argResult(r));
+  }
+
+  /**
+   * Exactly the shape visitStdOp's toString case encodes as the operand's own Integer value:
+   * a unary {@code toString()} over a crisp Integer. The predicate the guards on every
+   * non-literal consumer of that encoding dispatch on.
+   */
+  private static boolean isIntegerToString(Expression e) {
+    return e instanceof ExpStdOp op
+        && "toString".equals(op.opname())
+        && op.args().length == 1
+        && op.args()[0].type().isTypeOfInteger();
   }
 
   /**
@@ -1770,6 +1829,28 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   }
 
   private SmtTerm resolve(ExpConstString literal, Expression other) {
+    // `x.a.toString() = '42'`: the operand's value term IS the Integer (see visitStdOp's
+    // toString case), and the decimal representation is injective, so the literal resolves
+    // by parsing back to that Integer -- the comparison degenerates to `a = 42`. A literal
+    // that is not a decimal integer can never be any Integer's decimal string; refusing it
+    // (rather than emitting a never-equal term) keeps the slice's promise exact, since no
+    // domain-independent out-of-range sentinel exists for an arbitrary configured domain.
+    if (other instanceof ExpStdOp op
+        && "toString".equals(op.opname())
+        && op.args().length == 1
+        && op.args()[0].type().isTypeOfInteger()) {
+      BigInteger parsed;
+      try {
+        parsed = new BigInteger(literal.value());
+      } catch (NumberFormatException e) {
+        throw unsupported(
+            FragmentBoundary.TIER_2,
+            "string literal '"
+                + literal.value()
+                + "' that is not a decimal integer compared against toString() of an Integer");
+      }
+      return Smt.intLit(parsed);
+    }
     if (!(other instanceof ExpAttrOp a))
       throw unsupported(
           FragmentBoundary.TIER_2, "string literal compared against a non-attribute expression");
