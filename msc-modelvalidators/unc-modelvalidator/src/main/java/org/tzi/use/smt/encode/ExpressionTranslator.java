@@ -3039,6 +3039,29 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    */
   private TranslatedExpression membershipTest(
       Expression collectionExpr, Expression elementExpr, boolean wantIncludes) {
+    // The corpus's chained form desugars to a COLLECT of per-member closures:
+    // `p.contained()->collect($e | $e.containedPlus())->excludes(p)`. p sits in that union
+    // exactly when p sits on a containment cycle through itself (every opC(m) for m one hop
+    // from p is subsumed by opC(p), and a cycle through p passes through a member), which is
+    // precisely the DIRECT form p.containedPlus()->excludes(p) -- so the collect is rewritten
+    // to the direct call and handled by the branch below.
+    if (collectionExpr instanceof ExpCollect collect
+        && collect.getRangeExpression() instanceof ExpObjOp rangeOp
+        && rangeOp.getArguments().length == 1
+        && rangeOp.getArguments()[0] instanceof ExpVariable memberVar
+        && collect.getQueryExpression() instanceof ExpObjOp collectBodyOp
+        && collectBodyOp.getArguments().length == 1
+        && collectBodyOp.getArguments()[0] instanceof ExpVariable collectIteratorVar) {
+      try {
+        Expression direct =
+            new ExpObjOp(collectBodyOp.getOperation(), new Expression[] {memberVar});
+        return membershipTest(direct, elementExpr, wantIncludes);
+      } catch (org.tzi.use.uml.ocl.expr.ExpInvalidException impossible) {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            "collect-of-operations rewrite failed: " + impossible.getMessage());
+      }
+    }
     // A zero-arg query operation whose body is a closure (CompanyERSchema's containedPlus():
     // `self.contained()->closure(p|p.contained())`) is inlined structurally: the operation's
     // body IS the closure, with the operation's receiver bound as `self` for the whole

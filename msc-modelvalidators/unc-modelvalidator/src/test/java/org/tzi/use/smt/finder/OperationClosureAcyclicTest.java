@@ -68,6 +68,9 @@ public class OperationClosureAcyclicTest {
       context c:Component inv acyclic:
         let p=Part.allInstances()->any(pname=c.containername) in
         p.containedPlus()->excludes(p)
+      context c:Component inv acyclicChained:
+        let p=Part.allInstances()->any(pname=c.containername) in
+        p.contained().containedPlus()->excludes(p)
       """;
 
   /**
@@ -98,6 +101,51 @@ public class OperationClosureAcyclicTest {
         "contained(P1) = {P1} is a self-loop, so containedPlus(P1) reaches P1 and excludes"
             + " cannot hold",
         result.satisfiable());
+  }
+
+  /**
+   * The CORPUS's exact chained form: `p.contained().containedPlus()` desugars (confirmed by
+   * AST dump) into `p.contained()->collect($e | $e.containedPlus())` -- a collect of per-member
+   * closures. p sits in that union exactly when p sits on a containment cycle through itself,
+   * which is also `p.containedPlus()` -- so the chained form must agree with the direct form in
+   * both polarities.
+   */
+  @Test
+  public void chainedCorpusFormSatisfiesTheExclusionOnAnAcyclicChain() throws Exception {
+    ModelFinderResult result = findChained(List.of("P1"), List.of("P2"), 1);
+
+    assertTrue(result.satisfiable());
+    assertTrue(verdictFor(result, "Component::acyclicChained").holds());
+  }
+
+  @Test
+  public void chainedCorpusFormDetectsTheForcedSelfLoop() throws Exception {
+    ModelFinderResult result = findChained(List.of("P1"), List.of("P1"), 1);
+
+    assertFalse(
+        "the chained (collect-desugared) form must detect the self-loop exactly like the"
+            + " direct form",
+        result.satisfiable());
+  }
+
+  private static ModelFinderResult findChained(
+      List<String> containerDomain, List<String> containedDomain, int componentCount)
+      throws Exception {
+    MModel model = compile();
+    AnalysisConfiguration config =
+        new AnalysisConfiguration(
+            List.of(new ClassScope("Part", 2, 2, List.of("P1", "P2")),
+                new ClassScope("Component", componentCount, componentCount)),
+            List.of(new AssociationScope("Contains", 0, -1)),
+            List.of(
+                new AttributeDomain("Part", "pname", null, List.of("P1", "P2"), null, null),
+                new AttributeDomain("Component", "containername", null, containerDomain, null, null),
+                new AttributeDomain("Component", "containedname", null, containedDomain, null, null)),
+            Set.of("Component::acyclicChained"),
+            QueryParser.parse("satisfy", ConfigurationVocabulary.fromModel(model)),
+            Duration.ofSeconds(30),
+            1);
+    return SmtModelFinder.find(model, config);
   }
 
   private static ModelFinderResult find(

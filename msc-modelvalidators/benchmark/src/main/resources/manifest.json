@@ -129,6 +129,7 @@
         "ocl.forAll",
         "ocl.let",
         "ocl.one",
+        "ocl.query-operation-inlining",
         "ocl.select",
         "prim.boolean-literals-ops",
         "prim.integer-arithmetic",
@@ -897,7 +898,8 @@
       "provenanceDetail": "Paired UNSAT mutation of CompanyERSchema, authored and verified this session (msc-4, Trong-Nghia Be / agent-assisted) as part of closing the review's SAT/UNSAT-balance critique -- same .use model as CompanyERSchema, new [pkcollision] properties section adding one deliberate, identifiable contradiction while every other bound/invariant stays exactly as satisfiable as the paired SAT section. Verified UNSATISFIABLE independently twice: once via a real use-gui.jar -nogui subprocess during authoring, once more via this benchmark's own BenchmarkRunner across all 5 solvers during integration.",
       "provenanceCitation": null,
       "features": [
-        "cmd.validate"
+        "cmd.validate",
+        "ocl.query-operation-inlining"
       ],
       "question": "Can CompanyER's ProjectPart, Project, and Part populations be scaled so every foreign-key-derived link stays legal, if Project's own primary-key candidate set is shrunk to a single value while ProjectPart is still required to instantiate more compound-key tuples than that shrunk Project count times Part's (unshrunk) count of achievable distinct part names can supply?",
       "expected": {
