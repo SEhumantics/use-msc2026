@@ -1376,9 +1376,15 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * value. Single-valued navigation is exactly that case: it names a linked object rather than a
    * value, so {@link #visitNavigation} cannot translate it at all -- but "is there a link?" is
    * precisely what an {@code oclUndefined} comparison asks, and the link grid already answers it (a
-   * link implies both endpoints exist; see {@code AssociationLinkEncoder}). Every other shape goes
-   * through the ordinary translator, so an operand outside the supported fragment still fails
-   * closed with its own located reason.
+   * link implies both endpoints exist; see {@code AssociationLinkEncoder}). A CONTEXT-BOUND object
+   * variable (the invariant's own context, a quantifier iterator, or an object-any let binding --
+   * all Java-side {@link VariableBinding}s, never {@link LocalBinding}s) is the sibling case: it
+   * names a slot rather than a value, and its definedness is that slot's own exists symbol, which
+   * {@code c = oclUndefined(C)} / {@code c <> oclUndefined(C)} / {@code c.isDefined()} /
+   * {@code c.oclIsUndefined()} all reduce to. Scalar {@link LocalBinding}s (a let-bound Integer or
+   * String, which DO have standalone value terms) keep the ordinary translator path. Every other
+   * shape goes through the ordinary translator, so an operand outside the supported fragment still
+   * fails closed with its own located reason.
    */
   private SmtTerm definednessOf(Expression e) {
     if (e instanceof ExpNavigation navigation && !navigation.getDestination().isCollection()) {
@@ -1390,6 +1396,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       // use-core semantics this mirrors. No link search needed at all, unlike the ExpNavigation
       // branch above.
       return Smt.bool(true);
+    }
+    if (e instanceof ExpVariable v && !localBindings.containsKey(v.getVarname())) {
+      VariableBinding b = context.binding(v.getVarname());
+      return Smt.sym(context.slotsFor(b.className()).existsNames().get(b.slotIndex()));
     }
     return argResult(e).defined();
   }
