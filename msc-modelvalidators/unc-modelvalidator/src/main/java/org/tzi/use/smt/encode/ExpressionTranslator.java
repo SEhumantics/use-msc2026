@@ -456,6 +456,15 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           // Double.parseDouble) yield UNDEFINED on NumberFormatException (use-core bytecode),
           // so unparseable candidates are excluded -- a total-equality comparison never
           // matches them, and an all-unparseable domain is the constant-false expression.
+          case "indexOf" -> {
+            if (a.length == 2 && a[0].type().isTypeOfString() && a[1] instanceof ExpConstString needle) {
+              yield stringIndexOf(a[0], needle);
+            }
+            throw unsupported(
+                FragmentBoundary.TIER_2,
+                "operator 'indexOf' over a non-String receiver or a non-literal needle is not"
+                    + " supported in this slice");
+          }
           case "toInteger", "toReal" -> {
             if (a.length == 1 && a[0].type().isTypeOfString()) {
               yield stringNumericConversion(a[0], "toInteger".equals(e.opname()));
@@ -3083,6 +3092,11 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       case "toUpper", "toLower" -> {
         return op.args().length == 1 && stringCandidates(op.args()[0]) != null;
       }
+      case "at" -> {
+        return op.args().length == 2
+            && op.args()[1] instanceof ExpConstInteger
+            && stringCandidates(op.args()[0]) != null;
+      }
       case "concat" -> {
         return op.args().length == 2
             && op.args()[1] instanceof ExpConstString
@@ -3164,6 +3178,19 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     EnumerableString source = stringCandidates(op.args()[0]);
     EnumerableString result = new EnumerableString();
     result.defined = source.defined;
+    if ("at".equals(op.opname())) {
+      int position = ((ExpConstInteger) op.args()[1]).value();
+      for (StringCandidateCase candidate : source.candidates) {
+        // USE's Op_string_at: i < 1 or i > length is UNDEFINED -- the candidate is excluded
+        // from the comparison entirely (never matched), unlike substring's empty string.
+        if (position >= 1 && position <= candidate.spelling.length()) {
+          result.candidates.add(
+              new StringCandidateCase(
+                  String.valueOf(candidate.spelling.charAt(position - 1)), candidate.guard));
+        }
+      }
+      return result;
+    }
     if ("toUpper".equals(op.opname()) || "toLower".equals(op.opname())) {
       // Locale.ROOT: USE calls the default-locale String.toUpperCase(); the pinned test
       // fixtures are ASCII, where the two agree, and ROOT keeps the encoding reproducible.
@@ -3303,6 +3330,47 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       return Smt.intLit(BigInteger.valueOf(Integer.parseInt(candidate.spelling.trim())));
     }
     return Smt.realLit(java.math.BigDecimal.valueOf(Double.parseDouble(candidate.spelling.trim())));
+  }
+
+/**
+   * {@code indexOf(sub)} over a configured-candidate string with a literal needle. USE's
+   * Op_string_indexOf (use-core bytecode) is the 1-based position -- java indexOf + 1 -- with
+   * two quirks read off the same bytecode: an EMPTY receiver yields 0, and an EMPTY needle over
+   * a non-empty receiver yields 1. Every candidate is defined (the operation always answers an
+   * Int), so the ite chain needs no exclusion.
+   */
+  private TranslatedExpression stringIndexOf(Expression receiver, ExpConstString needle) {
+    EnumerableString source = stringCandidates(receiver);
+    if (source == null) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "indexOf over anything other than a configured-candidate string attribute, a String"
+              + " let variable, or a string literal");
+    }
+    List<StringCandidateCase> cases = source.candidates;
+    int last = cases.size() - 1;
+    SmtTerm value =
+        Smt.intLit(
+            BigInteger.valueOf(indexOfResult(cases.get(last).spelling, needle.value())));
+    for (int i = last - 1; i >= 0; i--) {
+      value =
+          Smt.ite(
+              cases.get(i).guard,
+              Smt.intLit(BigInteger.valueOf(indexOfResult(cases.get(i).spelling, needle.value()))),
+              value);
+    }
+    return new TranslatedExpression(source.defined, value);
+  }
+
+  /** Op_string_indexOf's exact answer table, per the use-core bytecode. */
+  private static int indexOfResult(String receiver, String needle) {
+    if (receiver.isEmpty()) {
+      return 0;
+    }
+    if (needle.isEmpty()) {
+      return 1;
+    }
+    return receiver.indexOf(needle) + 1;
   }
 
   private TranslatedExpression stringSize(Expression receiver) {
