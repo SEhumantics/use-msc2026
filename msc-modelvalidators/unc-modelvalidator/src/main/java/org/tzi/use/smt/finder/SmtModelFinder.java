@@ -31,9 +31,15 @@ import org.tzi.use.smt.encode.FragmentChecker;
 import org.tzi.use.smt.encode.FragmentCoverageLedger;
 import org.tzi.use.smt.encode.Multiplicity;
 import org.tzi.use.smt.encode.ObjectSlotEncoder;
+import org.tzi.use.smt.encode.ExpressionTranslator;
+import org.tzi.use.smt.solver.Smt;
 import org.tzi.use.smt.encode.VariableBinding;
+import org.tzi.use.smt.solver.SmtTerm;
 import org.tzi.use.smt.encode.ObjectSlots;
+import org.tzi.use.smt.encode.ExpressionTranslator;
+import org.tzi.use.smt.solver.Smt;
 import org.tzi.use.smt.encode.VariableBinding;
+import org.tzi.use.smt.solver.SmtTerm;
 import org.tzi.use.smt.encode.PredefinedLinkEncoder;
 import org.tzi.use.smt.encode.QueryCompiler;
 import org.tzi.use.smt.encode.ScenarioSpace;
@@ -1015,6 +1021,7 @@ public final class SmtModelFinder {
       TranslationContext context =
           new TranslationContext(
               Map.of(), attributes, attributeDomainByKey, slotsByClass, linksByAssociation);
+      assertDerivedAttributeValues(script, model, context, attributes);
       FragmentChecker.ReifiedResult checked =
           FragmentChecker.checkAndReify(
               requestedInvariants,
@@ -1445,6 +1452,65 @@ public final class SmtModelFinder {
       concreteBindings.addAll(part.concreteBindings());
     }
     return new ObjectSlots(endClass.name(), slotNames, existsNames, objectNames, concreteBindings);
+  }
+
+  /**
+   * Asserts every derived Integer attribute's value symbol equal to its derivation, translated
+   * with {@code self} bound to each slot of the attribute's own view. A derivation is a
+   * CONSTRAINT, not decoration: without this assertion a witness could carry values contradicting
+   * the model's own derivation (e.g. {@code doubled = 7} while {@code base = 3} under
+   * {@code doubled derive: self.base * 2} -- USE's dynamic re-evaluation would report 6 for that
+   * same object, so the witness was not a valid instance). Runs per scenario copy, after every
+   * attribute and association registration, so the derivation expression sees the complete
+   * encoding; an expression outside the supported fragment fails closed with its located
+   * translation error. Only crisp Integer derived attributes are supported (Real/UReal rounding
+   * and String synthesis do not exist in this slice).
+   */
+  private static void assertDerivedAttributeValues(
+      SmtScript script,
+      MModel model,
+      TranslationContext context,
+      Map<String, AttributeValues> attributes) {
+    for (Map.Entry<String, AttributeValues> entry : attributes.entrySet()) {
+      int dot = entry.getKey().indexOf('.');
+      String className = entry.getKey().substring(0, dot);
+      String attributeName = entry.getKey().substring(dot + 1);
+      // U-type component registrations (Class.attr.value / .confidence) are keyed WITH their
+      // component suffix; skip them -- their parent attribute key resolves normally below.
+      if (attributeName.indexOf('.') >= 0) {
+        continue;
+      }
+      MClass cls = model.getClass(className);
+      MAttribute attribute = cls == null ? null : cls.attribute(attributeName, true);
+      if (attribute == null || !attribute.isDerived()) {
+        continue;
+      }
+      if (!attribute.type().isTypeOfInteger()) {
+        throw new org.tzi.use.smt.encode.SmtTranslationException(
+            org.tzi.use.smt.encode.FragmentBoundary.TIER_3,
+            "derived attribute "
+                + className
+                + "."
+                + attributeName
+                + " is "
+                + attribute.type()
+                + ": only Integer derived attributes are supported in this slice");
+      }
+      org.tzi.use.uml.ocl.expr.Expression deriveExpression = attribute.getDeriveExpression();
+      if (deriveExpression == null) {
+        throw new IllegalArgumentException(
+            "derived attribute " + className + "." + attributeName + " has no derive expression");
+      }
+      ObjectSlots owner = context.slotsFor(className);
+      for (int slot = 0; slot < owner.capacity(); slot++) {
+        TranslationContext selfContext =
+            context.withBinding("self", new VariableBinding(className, slot));
+        SmtTerm derivedValue =
+            ExpressionTranslator.translate(deriveExpression, selfContext);
+        script.assertThat(
+            Smt.eq(Smt.sym(entry.getValue().valueNames().get(slot)), derivedValue));
+      }
+    }
   }
 
   /**
