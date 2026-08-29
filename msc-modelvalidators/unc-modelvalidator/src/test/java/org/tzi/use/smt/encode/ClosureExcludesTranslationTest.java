@@ -77,7 +77,7 @@ public class ClosureExcludesTranslationTest {
   }
 
   @Test
-  public void freeStandingExcludesOverANonClosureCollectionIsRefused() throws Exception {
+  public void excludesOverARangeLiteralCollectionIsRefused() throws Exception {
     String source =
         """
         model NonClosureScope
@@ -87,7 +87,7 @@ public class ClosureExcludesTranslationTest {
         end
         constraints
         context p : Person inv notInSet:
-          Set{1,2,3}->excludes(p.age)
+          Set{1..3}->excludes(p.age)
         """;
     PrintWriter err = new PrintWriter(System.err);
     MModel model = USECompiler.compileSpecification(source, "NonClosureScope", err, new ModelFactory());

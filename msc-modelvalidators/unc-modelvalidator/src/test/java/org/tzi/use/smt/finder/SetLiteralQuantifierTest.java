@@ -45,6 +45,14 @@ public class SetLiteralQuantifierTest {
         Set{2,4}->exists(k | k = x.i)
       context x : X inv SetForAllHolds:
         Set{2,4}->forAll(k | k <= x.i)
+      context x : X inv SetSizeTwo:
+        Set{2,4,2}->size() = 2
+      context x : X inv SetSizeThree:
+        Set{2,4,2}->size() = 3
+      context x : X inv SetIncludesTwo:
+        Set{2,4}->includes(x.i)
+      context x : X inv SetExcludesThree:
+        Set{2,4}->excludes(x.i)
       """;
 
   /**
@@ -71,6 +79,39 @@ public class SetLiteralQuantifierTest {
     ModelFinderResult fails = find("SetForAllHolds", List.of("3"));
     assertFalse("i = 3 violates k = 2's conjunct, so the forAll is genuinely unsatisfiable",
         fails.satisfiable());
+  }
+
+  /**
+   * size() over a set literal is the DISTINCT element count (Set semantics collapse the
+   * duplicated 2): {2,4,2} has size 2, never 3.
+   */
+  @Test
+  public void setSizeIsTheDistinctElementCount() throws Exception {
+    ModelFinderResult two = find("SetSizeTwo", List.of("9"));
+    assertTrue("the duplicated 2 collapses, so the size is 2", two.satisfiable());
+    assertTrue(verdictFor(two, "X::SetSizeTwo").holds());
+
+    ModelFinderResult three = find("SetSizeThree", List.of("9"));
+    assertFalse("{2,4,2} cannot have size 3", three.satisfiable());
+  }
+
+  /** includes/excludes over a set literal track the caller attribute's membership. */
+  @Test
+  public void includesAndExcludesOverASetLiteralTrackMembership() throws Exception {
+    ModelFinderResult included = find("SetIncludesTwo", List.of("2"));
+    assertTrue("i = 2 is a member of {2,4}", included.satisfiable());
+    assertTrue(verdictFor(included, "X::SetIncludesTwo").holds());
+
+    ModelFinderResult notMember = find("SetIncludesTwo", List.of("3"));
+    assertFalse("i = 3 is not a member of {2,4}", notMember.satisfiable());
+
+    ModelFinderResult excluded = find("SetExcludesThree", List.of("3"));
+    assertTrue("i = 3 is not a member of {2,4}, so excludes holds", excluded.satisfiable());
+    assertTrue(verdictFor(excluded, "X::SetExcludesThree").holds());
+
+    ModelFinderResult memberExcluded = find("SetExcludesThree", List.of("2"));
+    assertFalse("i = 2 IS a member of {2,4}, so excludes cannot hold",
+        memberExcluded.satisfiable());
   }
 
   private static ModelFinderResult find(String invariantName, List<String> iDomain)

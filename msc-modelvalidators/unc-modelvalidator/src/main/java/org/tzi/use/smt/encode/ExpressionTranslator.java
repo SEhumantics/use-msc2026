@@ -2388,6 +2388,11 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && isSupportedSelectSource(query)) {
       return defined(sizeTerm(selectedAllInstancesPopulation(query)));
     }
+    if (receiver instanceof ExpSetLiteral set) {
+      // The distinct element count is a compile-time constant (Set semantics collapse
+      // duplicates), matching the incumbent's set-literal cardinality.
+      return defined(Smt.intLit(BigInteger.valueOf(distinctIntegerConstants(set).size())));
+    }
     // ExpSelectByType EXTENDS ExpSelectByKind: test the exact-type subclass FIRST (see
     // populationOf's own note).
     if (receiver instanceof ExpSelectByType selectByType
@@ -3147,6 +3152,18 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       SmtTerm reachable = closureReachabilityWithReceiver(closure, elementExpr, receiver);
       return defined(wantIncludes ? reachable : Smt.not(reachable));
     }
+    if (collectionExpr instanceof ExpSetLiteral set) {
+      // Membership in an Integer-constant set literal: the element's value equals one of the
+      // DISTINCT literal constants (total -- a literal is always defined).
+      List<BigInteger> constants = distinctIntegerConstants(set);
+      TranslatedExpression element = argResult(elementExpr);
+      List<SmtTerm> matches = new ArrayList<>();
+      for (BigInteger constant : constants) {
+        matches.add(Smt.eq(element.value(), Smt.intLit(constant)));
+      }
+      SmtTerm member = Smt.and(List.of(element.defined(), Smt.or(matches)));
+      return defined(wantIncludes ? member : Smt.not(member));
+    }
     if (!(collectionExpr instanceof ExpClosure closure)) {
       throw unsupported(
           FragmentBoundary.TIER_3,
@@ -3155,6 +3172,28 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     SmtTerm reachable = closureReachability(closure, elementExpr);
     return defined(wantIncludes ? reachable : Smt.not(reachable));
+  }
+
+  /**
+   * The DISTINCT Integer constants of a set literal, in declaration order (duplicates
+   * collapsed per Set semantics).
+   */
+  private static List<BigInteger> distinctIntegerConstants(ExpSetLiteral set) {
+    List<BigInteger> values = new ArrayList<>();
+    for (Expression element : set.getElemExpr()) {
+      if (!(element instanceof ExpConstInteger constant)) {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            "Set literal with a non-constant or non-Integer element ("
+                + element
+                + "); only Integer constants are supported in this slice");
+      }
+      BigInteger value = BigInteger.valueOf(constant.value());
+      if (!values.contains(value)) {
+        values.add(value);
+      }
+    }
+    return values;
   }
 
   /** Runs {@link #closureReachability} with {@code self} aliased to the operation's receiver. */
