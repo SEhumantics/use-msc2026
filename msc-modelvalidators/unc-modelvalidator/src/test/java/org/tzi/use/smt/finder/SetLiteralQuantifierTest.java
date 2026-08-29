@@ -1,0 +1,109 @@
+package org.tzi.use.smt.finder;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import java.io.PrintWriter;
+import java.time.Duration;
+import java.util.List;
+import java.util.Set;
+import org.junit.Test;
+import org.tzi.use.parser.use.USECompiler;
+import org.tzi.use.smt.config.AnalysisConfiguration;
+import org.tzi.use.smt.config.AttributeDomain;
+import org.tzi.use.smt.config.ClassScope;
+import org.tzi.use.smt.config.ConfigurationVocabulary;
+import org.tzi.use.smt.config.QueryParser;
+import org.tzi.use.uml.mm.MModel;
+import org.tzi.use.uml.mm.ModelFactory;
+
+/**
+ * End-to-end regression for the FIRST supported use of a {@code Set{...}} literal: an
+ * Integer-constant set literal ({@code Set{2,4}}) as the direct range of {@code forAll}/{@code
+ * exists}. The set literal used to be an unconditional refusal; this slice gives it a genuine
+ * finite-population reading -- each literal element is one quantifier candidate, bound to its
+ * constant value through a per-element SMT {@code let}, exactly the reading OCL's own
+ * {@code forAll}/{@code exists} over an explicit enumeration has.
+ *
+ * <p>Deliberately narrow (matching the {@code select()}/{@code one()} slice precedent): only
+ * Integer-CONSTANT elements are supported (a non-constant element like {@code Set{2..x}} or a
+ * String element needs machinery this slice does not add), only a single loop variable, and only
+ * as a quantifier range -- a set literal standing alone, or consumed by {@code size()}/{@code
+ * includes}, is still refused.
+ */
+public class SetLiteralQuantifierTest {
+
+  private static final String MODEL =
+      """
+      model SetLiteralQuantifier
+      class X
+      attributes
+        i : Integer
+      end
+      constraints
+      context x : X inv SetExistsMatches:
+        Set{2,4}->exists(k | k = x.i)
+      context x : X inv SetForAllHolds:
+        Set{2,4}->forAll(k | k <= x.i)
+      """;
+
+  /**
+   * exists over {2,4}: satisfiable exactly when i can be one of the literal elements, and USE's
+   * own re-evaluation confirms the witness's i really is one of them.
+   */
+  @Test
+  public void existsOverASetLiteralMatchesAnElementOfTheLiteral() throws Exception {
+    ModelFinderResult match = find("SetExistsMatches", List.of("4"));
+    assertTrue("i can be 4, a member of the literal", match.satisfiable());
+    assertTrue(verdictFor(match, "X::SetExistsMatches").holds());
+
+    ModelFinderResult miss = find("SetExistsMatches", List.of("3"));
+    assertFalse("i can only be 3, which is not in {2,4}", miss.satisfiable());
+  }
+
+  /** forAll over {2,4}: every literal element must satisfy the body. */
+  @Test
+  public void forAllOverASetLiteralRequiresEveryElementToSatisfyTheBody() throws Exception {
+    ModelFinderResult holds = find("SetForAllHolds", List.of("9"));
+    assertTrue("i = 9 satisfies k <= 9 for both k = 2 and k = 4", holds.satisfiable());
+    assertTrue(verdictFor(holds, "X::SetForAllHolds").holds());
+
+    ModelFinderResult fails = find("SetForAllHolds", List.of("3"));
+    assertFalse("i = 3 violates k = 2's conjunct, so the forAll is genuinely unsatisfiable",
+        fails.satisfiable());
+  }
+
+  private static ModelFinderResult find(String invariantName, List<String> iDomain)
+      throws Exception {
+    MModel model = compile();
+    AnalysisConfiguration config =
+        new AnalysisConfiguration(
+            List.of(new ClassScope("X", 1, 1)),
+            List.of(),
+            List.of(new AttributeDomain("X", "i", null, iDomain, null, null)),
+            Set.of("X::" + invariantName),
+            QueryParser.parse("satisfy", ConfigurationVocabulary.fromModel(model)),
+            Duration.ofSeconds(30),
+            1);
+    return SmtModelFinder.find(model, config);
+  }
+
+  private static org.tzi.use.smt.verify.InvariantVerdict verdictFor(
+      ModelFinderResult result, String invariantName) {
+    return result.verdicts().stream()
+        .filter(v -> v.invariantName().equals(invariantName))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("no verdict for " + invariantName));
+  }
+
+  private static MModel compile() {
+    ModelFactory factory = new ModelFactory();
+    PrintWriter err = new PrintWriter(System.err);
+    MModel model = USECompiler.compileSpecification(MODEL, "SetLiteralQuantifier", err, factory);
+    err.flush();
+    if (model == null) {
+      throw new AssertionError("fixture model did not compile");
+    }
+    return model;
+  }
+}

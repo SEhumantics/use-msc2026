@@ -1817,6 +1817,11 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (variableCount != 1 && variableCount != 2) {
       throw unsupported(FragmentBoundary.TIER_2, "exists with more than two loop variables");
     }
+    if (e.getRangeExpression() instanceof ExpSetLiteral setLiteral && variableCount == 1) {
+      result = setLiteralQuantifier(setLiteral, e.getVariableDeclarations().varDecl(0).name(),
+          e.getQueryExpression(), false);
+      return;
+    }
     List<PopulationMember> population = populationOf(e.getRangeExpression(), "exists");
     List<SmtTerm> trueCandidates = new ArrayList<>();
     List<SmtTerm> definedCandidates = new ArrayList<>();
@@ -1860,6 +1865,11 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (variableCount != 1 && variableCount != 2) {
       throw unsupported(FragmentBoundary.TIER_1, "forAll with more than two loop variables");
     }
+    if (e.getRangeExpression() instanceof ExpSetLiteral setLiteral && variableCount == 1) {
+      result = setLiteralQuantifier(setLiteral, e.getVariableDeclarations().varDecl(0).name(),
+          e.getQueryExpression(), true);
+      return;
+    }
     List<PopulationMember> population = populationOf(e.getRangeExpression(), "forAll");
     List<SmtTerm> valueConjuncts = new ArrayList<>();
     List<SmtTerm> definedConjuncts = new ArrayList<>();
@@ -1897,6 +1907,71 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * {@code variableCount==1} this degenerates to one singleton tuple per member, so the loop below
    * is a strict generalisation of the pre-existing single-variable case, not a parallel code path.
    */
+  /**
+   * {@code Set{c1,...,cn}->forAll(k | body)} / {@code ->exists(k | body)} over an
+   * Integer-CONSTANT set literal: each literal element is one quantifier candidate, and the loop
+   * variable is bound to that constant through a per-element SMT {@code let} (fresh
+   * {@link LocalBinding} symbols per element, so the conjuncts cannot capture each other).
+   *
+   * <p>This is the narrowest honest reading of "collections as values" for this encoding: the
+   * elements are compile-time integers, so no collection representation is invented -- the
+   * literal IS its enumeration. Non-constant or non-Integer elements, more than one loop
+   * variable, and any other consumption of a set literal stay refused. Empty literals cannot
+   * reach here ({@code Set{}} parses to {@link ExpEmptyCollection}); duplicated elements
+   * collapse ({@code Set} semantics), matching {@code SetValue}.
+   */
+  private TranslatedExpression setLiteralQuantifier(
+      ExpSetLiteral set, String iterator, Expression bodyExpr, boolean forAll) {
+    List<BigInteger> values = new ArrayList<>();
+    for (Expression element : set.getElemExpr()) {
+      if (!(element instanceof ExpConstInteger constant)) {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            "Set literal with a non-constant or non-Integer element ("
+                + element
+                + "); only Integer constants are supported in this slice");
+      }
+      BigInteger value = BigInteger.valueOf(constant.value());
+      if (!values.contains(value)) {
+        values.add(value);
+      }
+    }
+    List<SmtTerm> definedTerms = new ArrayList<>();
+    List<SmtTerm> valueTerms = new ArrayList<>();
+    for (BigInteger element : values) {
+      // No closing pipe in the stem: the -defined/-value suffixes complete the quoted symbol.
+      String stem = "|ocl-set-" + iterator + "-" + element;
+      LocalBinding binding =
+          new LocalBinding(stem + "-defined|", stem + "-value|", false, null);
+      Map<String, LocalBinding> extended = new LinkedHashMap<>(localBindings);
+      extended.put(iterator, binding);
+      TranslatedExpression body =
+          translate(bodyExpr, context, mode, positivePolarity, Map.copyOf(extended));
+      List<SmtTerm.Binding> bindings =
+          List.of(
+              new SmtTerm.Binding(binding.definedSymbol(), Smt.bool(true)),
+              new SmtTerm.Binding(binding.valueSymbol(), Smt.intLit(element)));
+      definedTerms.add(Smt.let(bindings, body.defined()));
+      valueTerms.add(Smt.let(bindings, body.value()));
+    }
+    if (forAll) {
+      // Vacuously defined and true over an empty literal -- and an empty literal cannot reach
+      // here (Set{} parses to ExpEmptyCollection), so both lists are non-empty in practice.
+      return new TranslatedExpression(Smt.and(definedTerms), Smt.and(valueTerms));
+    }
+    SmtTerm anyTrue = Smt.or(zipConjunct(definedTerms, valueTerms));
+    return new TranslatedExpression(
+        Smt.or(List.of(anyTrue, Smt.and(definedTerms))), anyTrue);
+  }
+
+  private static List<SmtTerm> zipConjunct(List<SmtTerm> defined, List<SmtTerm> value) {
+    List<SmtTerm> result = new ArrayList<>();
+    for (int i = 0; i < defined.size(); i++) {
+      result.add(Smt.and(List.of(defined.get(i), value.get(i))));
+    }
+    return result;
+  }
+
   private static List<List<PopulationMember>> tuplesOf(
       List<PopulationMember> population, int variableCount) {
     List<List<PopulationMember>> tuples = new ArrayList<>();
