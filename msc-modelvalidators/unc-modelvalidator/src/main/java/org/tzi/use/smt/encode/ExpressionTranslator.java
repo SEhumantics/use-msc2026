@@ -2917,6 +2917,14 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           "operation call on a let-bound scalar receiver is not supported");
     }
     VariableBinding selfBinding = context.binding(targetVar.getVarname());
+    // Polymorphic dispatch: the receiver's CONCRETE class (a folded slot's own class, or the
+    // static class for unfolded views) may REDEFINE the operation -- use its most specific
+    // body, exactly the incumbent's runtime-type dispatch resolved at translation time via
+    // the slot's concrete binding.
+    MOperation dispatched = context.dispatchOperation(selfBinding.className(), operation.name());
+    if (dispatched != null) {
+      operation = dispatched;
+    }
     TranslationContext selfContext = context.withBinding("self", selfBinding);
     Set<MOperation> inProgress = new java.util.HashSet<>(operationsInProgress);
     inProgress.add(operation);

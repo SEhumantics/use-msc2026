@@ -64,6 +64,7 @@ import org.tzi.use.uml.mm.MAssociationEnd;
 import org.tzi.use.uml.mm.MAttribute;
 import org.tzi.use.uml.mm.MClass;
 import org.tzi.use.uml.mm.MClassInvariant;
+import org.tzi.use.uml.mm.MOperation;
 import org.tzi.use.uml.mm.MClassifier;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.MMultiplicity;
@@ -1010,6 +1011,8 @@ public final class SmtModelFinder {
     QueryExpr core = QueryCompiler.desugared(config.query(), config.activeInvariants());
     QueryCompiler.requireTargetDeterminate(core, profileOf(config.query()));
 
+    Map<String, Map<String, MOperation>> operationDispatch =
+        buildOperationDispatch(model, slotsByClass);
     List<Copy> copies = new ArrayList<>();
     FragmentCoverageLedger ledger = null;
     int copyCount = scenarios == null ? 1 : scenarios.size();
@@ -1020,7 +1023,8 @@ public final class SmtModelFinder {
       }
       TranslationContext context =
           new TranslationContext(
-              Map.of(), attributes, attributeDomainByKey, slotsByClass, linksByAssociation);
+              Map.of(), attributes, attributeDomainByKey, slotsByClass, linksByAssociation,
+              operationDispatch);
       assertDerivedAttributeValues(script, model, context, attributes);
       FragmentChecker.ReifiedResult checked =
           FragmentChecker.checkAndReify(
@@ -1511,6 +1515,35 @@ public final class SmtModelFinder {
             Smt.eq(Smt.sym(entry.getValue().valueNames().get(slot)), derivedValue));
       }
     }
+  }
+
+  /**
+   * For every configured class C, the most specific zero-argument OCL-bodied operation per
+   * operation NAME visible on C -- the model's own vtable, resolved with
+   * {@code MClass.operation(name, searchInherited = true)} ("walks up the generalization
+   * hierarchy and selects the first matching operation", so a redefinition wins over the
+   * ancestor's declaration). This is what lets {@code visitInstanceOp} dispatch a call on a
+   * super-typed receiver to the receiver's concrete class's body -- the incumbent resolves the
+   * same dispatch at solve time by runtime-type tests over its inheritance-folded relations.
+   */
+  private static Map<String, Map<String, MOperation>> buildOperationDispatch(
+      MModel model, Map<String, ObjectSlots> slotsByClass) {
+    Map<String, Map<String, MOperation>> dispatch = new LinkedHashMap<>();
+    for (String className : slotsByClass.keySet()) {
+      MClass cls = model.getClass(className);
+      if (cls == null) {
+        continue;
+      }
+      Map<String, MOperation> byName = new LinkedHashMap<>();
+      for (MOperation candidate : cls.allOperations()) {
+        if (!candidate.isCallableFromOCL() || candidate.paramList().size() != 0) {
+          continue;
+        }
+        byName.putIfAbsent(candidate.name(), cls.operation(candidate.name(), true));
+      }
+      dispatch.put(className, byName);
+    }
+    return dispatch;
   }
 
   /**
