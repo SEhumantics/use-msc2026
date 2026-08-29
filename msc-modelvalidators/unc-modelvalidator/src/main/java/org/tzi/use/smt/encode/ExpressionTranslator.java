@@ -488,16 +488,20 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           // treatment. A zero divisor is genuinely undefined for every value -> the
           // assertion is false (the invariant is violated everywhere).
           case "mod" -> {
-            if (a.length == 2
-                && a[1] instanceof ExpConstInteger divisor
-                && divisor.value() != 0) {
+            if (a.length == 2 && a[1] instanceof ExpConstInteger divisor) {
+              if (divisor.value() == 0) {
+                // Mod by zero: the value is undefined for every input, so the assertion is
+                // undefined (USE confirms) -> the scenario is unsatisfiable.
+                yield new TranslatedExpression(Smt.bool(false), Smt.bool(false));
+              }
               requireCrispInteger(a[0], "mod");
               TranslatedExpression dividend = argResult(a[0]);
               yield defined(
                   truncModTerm(dividend.value(), divisor.value()));
             }
-            // Mod by zero: the value is undefined for every input, so the assertion is
-            // undefined (USE confirms) -> the scenario is unsatisfiable.
+            if (a.length == 2) {
+              yield divisionByFiniteDomain(a, "mod");
+            }
             yield new TranslatedExpression(Smt.bool(false), Smt.bool(false));
           }
           // toString() on a crisp Integer: USE's Op_number_toString is Math.toString(int),
@@ -688,6 +692,87 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * {@code ArithmeticException}-to-{@code Undefined} conversion this project already relies on
    * elsewhere (see {@code Op_integer_idiv}/{@code Op_uInteger_div} in use-core).
    */
+/**
+   * mod / div with a VARIABLE divisor whose value is provably one of finitely many literals: a
+   * crisp Integer attribute's configured domain. The candidates case-split the divisor exactly
+   * the way {@link #integerDivision}'s population-count split does -- each branch is a
+   * numeral-divisor rem/div, linear in the pinned QF_LIA logic, where the split over a symbolic
+   * divisor itself would be nonlinear and refused. A domain containing 0 keeps the established
+   * zero semantics: the value is undefined under that branch, so the emitted definedness
+   * excludes it (a zero-only domain therefore yields the constant-false expression, and an
+   * invariant mentioning the operation is violated whenever the solver picks 0 -- fail-closed,
+   * matching the constant-zero-divisor treatment). The configured domain is the PROOF of the
+   * candidate set: AttributeEncoder's domain guard pins the divisor symbol to exactly these
+   * values, so the ite chain's impossible fallback is never consulted.
+   */
+  private TranslatedExpression divisionByFiniteDomain(Expression[] arguments, String opname) {
+    requireCrispInteger(arguments[0], opname);
+    requireCrispInteger(arguments[1], opname);
+    if (!(arguments[1] instanceof ExpAttrOp attr)
+        || !(attr.objExp() instanceof ExpVariable receiver)
+        || localBindings.containsKey(receiver.getVarname())) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "operator '"
+              + opname
+              + "' with a divisor that is neither a compile-time Integer literal nor a crisp"
+              + " Integer attribute with a finite configured domain");
+    }
+    VariableBinding b = context.binding(receiver.getVarname());
+    AttributeValues values = context.attributeValues(b.className(), attr.attr().name());
+    guardAgainstUncertainAttribute(values);
+    AttributeDomain domain = context.attributeDomain(b.className(), attr.attr().name());
+    java.util.LinkedHashSet<BigInteger> candidates = new java.util.LinkedHashSet<>();
+    for (String candidate : domain.enumeratedValues()) {
+      try {
+        candidates.add(new BigInteger(candidate.trim()));
+      } catch (NumberFormatException e) {
+        throw unsupported(
+            FragmentBoundary.TIER_2,
+            "operator '"
+                + opname
+                + "' by a divisor whose configured domain entry '"
+                + candidate
+                + "' is not an Integer literal");
+      }
+    }
+    if (candidates.isEmpty()) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "operator '" + opname + "' by a divisor with an empty configured domain");
+    }
+    TranslatedExpression dividend = argResult(arguments[0]);
+    TranslatedExpression divisor = argResult(arguments[1]);
+    java.util.List<BigInteger> nonzero =
+        candidates.stream().filter(c -> c.signum() != 0).toList();
+    if (nonzero.isEmpty()) {
+      return new TranslatedExpression(Smt.bool(false), Smt.bool(false));
+    }
+    int last = nonzero.size() - 1;
+    SmtTerm value =
+        opname.equals("mod")
+            ? truncModTerm(dividend.value(), nonzero.get(last).intValue())
+            : truncDivTerm(dividend.value(), nonzero.get(last).intValue());
+    for (int i = last - 1; i >= 0; i--) {
+      BigInteger candidate = nonzero.get(i);
+      SmtTerm branch =
+          opname.equals("mod")
+              ? truncModTerm(dividend.value(), candidate.intValue())
+              : truncDivTerm(dividend.value(), candidate.intValue());
+      value = Smt.ite(Smt.eq(divisor.value(), Smt.intLit(candidate)), branch, value);
+    }
+    SmtTerm defined =
+        Smt.and(List.of(dividend.defined(), divisor.defined()));
+    if (nonzero.size() < candidates.size()) {
+      defined =
+          Smt.and(
+              List.of(
+                  defined,
+                  Smt.not(Smt.eq(divisor.value(), Smt.intLit(BigInteger.ZERO)))));
+    }
+    return new TranslatedExpression(defined, value);
+  }
+
   private TranslatedExpression integerDivision(Expression[] arguments) {
     // CONSTANT nonzero divisor: Java truncation toward zero. (x - rem(x,d)) is exactly
     // divisible by d, so SMT-LIB div of it is the exact truncated quotient regardless of
@@ -701,6 +786,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       TranslatedExpression numerator = argResult(arguments[0]);
       SmtTerm quotient = truncDivTerm(numerator.value(), constantDivisor.value());
       return new TranslatedExpression(numerator.defined(), quotient);
+    }
+    if (arguments.length == 2 && arguments[1] instanceof ExpAttrOp) {
+      return divisionByFiniteDomain(arguments, "div");
     }
     if (arguments.length != 2
         || !(arguments[1] instanceof ExpStdOp size)
