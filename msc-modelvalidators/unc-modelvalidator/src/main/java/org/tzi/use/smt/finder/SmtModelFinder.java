@@ -928,9 +928,9 @@ public final class SmtModelFinder {
               script,
               scope.associationName(),
               aEnd,
-              toMultiplicity(ends.get(0).multiplicity()),
+              toMultiplicities(ends.get(0).multiplicity()),
               bEnd,
-              toMultiplicity(ends.get(1).multiplicity()),
+              toMultiplicities(ends.get(1).multiplicity()),
               scope);
       // The tuples a bare `AssociationName` key configured are FORCED links, so they are asserted
       // straight after the grid they live in. The declared end classes travel with them: see
@@ -1246,9 +1246,9 @@ public final class SmtModelFinder {
             script,
             associationClassSlots,
             end0Slots,
-            toMultiplicity(ends.get(1).multiplicity()),
+            toEnclosingMultiplicity(ends.get(1).multiplicity()),
             end1Slots,
-            toMultiplicity(ends.get(0).multiplicity()));
+            toEnclosingMultiplicity(ends.get(0).multiplicity()));
     String end0Key =
         associationClass.name() + "." + AssociationClassPointerEncoder.END0_POINTER_ATTRIBUTE;
     String end1Key =
@@ -1401,12 +1401,33 @@ public final class SmtModelFinder {
     return pinned;
   }
 
-  private static Multiplicity toMultiplicity(MMultiplicity multiplicity) {
-    if (multiplicity.getRanges().size() != 1) {
-      throw new IllegalArgumentException(
-          "multi-range association end multiplicities are not yet supported: " + multiplicity);
-    }
-    MMultiplicity.Range range = multiplicity.getRanges().get(0);
-    return new Multiplicity(range.getLower(), range.getUpper());
+  /**
+   * An association end's declared multiplicity as one {@link Multiplicity} per declared range
+   * ({@code 1,3..5} = two entries, {@code *} = one unbounded entry). The encoder asserts the
+   * DISJUNCTION of the ranges per slot, matching the incumbent's OR of its own per-range
+   * formulas.
+   */
+  private static List<Multiplicity> toMultiplicities(MMultiplicity multiplicity) {
+    return multiplicity.getRanges().stream()
+        .map(range -> new Multiplicity(range.getLower(), range.getUpper()))
+        .toList();
+  }
+
+  /**
+   * The enclosing single bound of a (possibly multi-range) end multiplicity: the smallest lower
+   * and the largest upper, unbounded when any range is. Used ONLY by the association-class
+   * pointer encoder, whose {@code sharedByAtMost} bound consumes an upper bound alone (sharing
+   * fewer instances than allowed is never a violation), for which the enclosing upper is exact.
+   */
+  private static Multiplicity toEnclosingMultiplicity(MMultiplicity multiplicity) {
+    List<MMultiplicity.Range> ranges = multiplicity.getRanges();
+    int lower = ranges.stream().mapToInt(MMultiplicity.Range::getLower).min().orElse(0);
+    boolean unbounded =
+        ranges.stream().anyMatch(range -> range.getUpper() == MMultiplicity.MANY);
+    int upper =
+        unbounded
+            ? -1
+            : ranges.stream().mapToInt(MMultiplicity.Range::getUpper).max().orElse(0);
+    return new Multiplicity(lower, upper);
   }
 }
