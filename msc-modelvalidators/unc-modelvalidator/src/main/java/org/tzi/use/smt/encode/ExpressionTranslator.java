@@ -481,6 +481,25 @@ public final class ExpressionTranslator implements ExpressionVisitor {
                     + "' over non-Integer or wrong-arity operands is not supported in this"
                     + " slice");
           }
+          // mod with a CONSTANT nonzero divisor: Java % semantics (sign follows the
+          // dividend), which SMT-LIB `rem` matches exactly. The divisor must be a
+          // compile-time constant: rem by a numeral is linear in the pinned QF_LIA logic,
+          // while rem by a variable symbol would need the deferred undefinedness/variable
+          // treatment. A zero divisor is genuinely undefined for every value -> the
+          // assertion is false (the invariant is violated everywhere).
+          case "mod" -> {
+            if (a.length == 2
+                && a[1] instanceof ExpConstInteger divisor
+                && divisor.value() != 0) {
+              requireCrispInteger(a[0], "mod");
+              TranslatedExpression dividend = argResult(a[0]);
+              yield defined(
+                  truncModTerm(dividend.value(), divisor.value()));
+            }
+            // Mod by zero: the value is undefined for every input, so the assertion is
+            // undefined (USE confirms) -> the scenario is unsatisfiable.
+            yield new TranslatedExpression(Smt.bool(false), Smt.bool(false));
+          }
           case "round" -> {
             if (a.length == 1 && a[0].type().isTypeOfInteger()) {
               yield argResult(a[0]);
@@ -642,6 +661,19 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * elsewhere (see {@code Op_integer_idiv}/{@code Op_uInteger_div} in use-core).
    */
   private TranslatedExpression integerDivision(Expression[] arguments) {
+    // CONSTANT nonzero divisor: Java truncation toward zero. (x - rem(x,d)) is exactly
+    // divisible by d, so SMT-LIB div of it is the exact truncated quotient regardless of
+    // signs; total (defined = the dividend's definedness).
+    if (arguments.length == 2 && arguments[1] instanceof ExpConstInteger constantDivisor) {
+      requireCrispInteger(arguments[0], "div");
+      if (constantDivisor.value() == 0) {
+        // Mod/div by zero is undefined for every value -> the invariant can never hold.
+        return new TranslatedExpression(Smt.bool(false), Smt.bool(false));
+      }
+      TranslatedExpression numerator = argResult(arguments[0]);
+      SmtTerm quotient = truncDivTerm(numerator.value(), constantDivisor.value());
+      return new TranslatedExpression(numerator.defined(), quotient);
+    }
     if (arguments.length != 2
         || !(arguments[1] instanceof ExpStdOp size)
         || !"size".equals(size.opname())
@@ -2106,6 +2138,38 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     return new TranslatedExpression(
         Smt.or(List.of(Smt.eq(count, oneCount), Smt.not(allDefined))),
         Smt.eq(count, oneCount));
+  }
+
+  /**
+   * Java-truncation division of x by a constant nonzero divisor d: the quotient's sign
+   * follows the product of the operand signs, magnitude = |x| / |d| truncated. x's sign
+   * selects the positive or negated positive quotient (the divisor's own sign cancels
+   * because the magnitude is the same either way).
+   */
+  private static SmtTerm truncDivTerm(SmtTerm x, int d) {
+    int absD = Math.abs(d);
+    SmtTerm absDLit = Smt.intLit(BigInteger.valueOf(absD));
+    SmtTerm posDiv = Smt.app("div", x, absDLit);
+    SmtTerm negDiv = Smt.app("-", Smt.app("div", Smt.app("-", x), absDLit));
+    return Smt.ite(
+        Smt.app(">=", x, Smt.intLit(BigInteger.ZERO)),
+        posDiv,
+        negDiv);
+  }
+
+  /**
+   * Java-truncation remainder of x by a constant nonzero divisor d: sign follows the
+   * dividend, magnitude = |x| mod |d|. Both ite branches use the absD magnitude so a
+   * negative divisor works identically (magnitude unaffected by the divisor's sign).
+   */
+  private static SmtTerm truncModTerm(SmtTerm x, int d) {
+    int absD = Math.abs(d);
+    SmtTerm posMod = Smt.app("mod", x, Smt.intLit(BigInteger.valueOf(absD)));
+    SmtTerm negMod = Smt.app("-", Smt.app("mod", Smt.app("-", x), Smt.intLit(BigInteger.valueOf(absD))));
+    return Smt.ite(
+        Smt.app(">=", x, Smt.intLit(BigInteger.ZERO)),
+        posMod,
+        negMod);
   }
 
   private static List<SmtTerm> zipConjunct(List<SmtTerm> defined, List<SmtTerm> value) {
