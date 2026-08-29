@@ -83,7 +83,22 @@ public final class UBooleanProbability {
    *     supported fragment.
    */
   public static List<Case> lower(Expression expression, TranslationContext context) {
-    return lower(expression, context, new LinkedHashSet<>(), false);
+    return lower(expression, context, new LinkedHashSet<>(), false, x -> null);
+  }
+
+  /**
+   * Lowering with U-type LET bindings: {@code resolver} maps an expression that IS a let
+   * variable (an {@code ExpVariable}) to its {@link LetBindingSource} -- the bare attribute the
+   * let initialized from plus its configured candidate domains -- and null for anything else.
+   * A resolved let variable enumerates cases over the SAME configured candidates and guards as
+   * the attribute itself (the SMT let makes the alias and the source interchangeable); the
+   * alias key keeps the read-once rule per let variable.
+   */
+  public static List<Case> lower(
+      Expression expression,
+      TranslationContext context,
+      java.util.function.Function<Expression, LetBindingSource> letResolver) {
+    return lower(expression, context, new LinkedHashSet<>(), false, letResolver);
   }
 
   /**
@@ -100,7 +115,15 @@ public final class UBooleanProbability {
    * input ({@code p >= 0.5}), so nothing changes for that family.
    */
   public static List<Case> lowerNominal(Expression expression, TranslationContext context) {
-    return lower(expression, context, new LinkedHashSet<>(), true);
+    return lower(expression, context, new LinkedHashSet<>(), true, x -> null);
+  }
+
+  /** {@link #lowerNominal} with U-type let bindings; see {@link #lower}. */
+  public static List<Case> lowerNominal(
+      Expression expression,
+      TranslationContext context,
+      java.util.function.Function<Expression, LetBindingSource> letResolver) {
+    return lower(expression, context, new LinkedHashSet<>(), true, letResolver);
   }
 
   /**
@@ -138,12 +161,22 @@ public final class UBooleanProbability {
   }
 
   private static List<Case> lower(
-      Expression expression, TranslationContext context, Set<String> alreadyRead, boolean nominal) {
+      Expression expression,
+      TranslationContext context,
+      Set<String> alreadyRead,
+      boolean nominal,
+      java.util.function.Function<Expression, LetBindingSource> letResolver) {
+    if (expression instanceof ExpVariable v) {
+      LetBindingSource source = letResolver.apply(expression);
+      if (source != null) {
+        return letVariableCases(v, source, context, alreadyRead);
+      }
+    }
     if (expression instanceof ExpAttrOp attribute) {
       return storedProbability(attribute, context, alreadyRead);
     }
     if (expression instanceof ExpStdOp operation) {
-      return operation(operation, context, alreadyRead, nominal);
+      return operation(operation, context, alreadyRead, nominal, letResolver);
     }
     throw unsupported(
         FragmentBoundary.UTYPE_CORE,
@@ -209,15 +242,107 @@ public final class UBooleanProbability {
     return cases;
   }
 
+/**
+   * A let-bound UBOOLEAN variable's cases: the stored probability IS the value, so the cases
+   * enumerate the source's configured probability candidates with the guard on the source's own
+   * probability symbol -- the SMT let binds the alias to that symbol, so reading the source
+   * directly is interchangeable with reading the alias. Nominal erasure needs no special case:
+   * a stored probability's erasure is the same p >= 0.5 rule in both modes.
+   */
+  private static List<Case> letVariableCases(
+      ExpVariable variable,
+      LetBindingSource source,
+      TranslationContext context,
+      Set<String> alreadyRead) {
+    if (source.secondDomain() != null) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "UBoolean composition over the let variable '"
+              + variable.getVarname()
+              + "' whose source is a UString: a spelling/confidence pair is not a probability");
+    }
+    if (!alreadyRead.add(source.aliasKey())) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "UBoolean composition reads the let variable '"
+              + variable.getVarname()
+              + "' more than once; the source rules assume INDEPENDENT operands, and USE's own"
+              + " UBoolean.and returns p rather than p*p for two reads of one value");
+    }
+    SmtTerm symbol = Smt.sym(source.values().valueNames().get(source.source().slotIndex()));
+    List<Case> cases = new ArrayList<>();
+    for (String candidate : source.firstDomain().enumeratedValues()) {
+      BigDecimal probability =
+          parse(candidate, source.values().className(), source.aliasKey());
+      cases.add(new Case(Smt.eq(symbol, Smt.realLit(probability)), probability.doubleValue()));
+    }
+    return cases;
+  }
+
+  /**
+   * A let-bound USTRING variable's candidates: the source's configured spellings crossed with
+   * its configured confidences (spelling-only under nominal erasure), guarded on the source's
+   * own symbols -- the SMT let makes that interchangeable with reading the alias.
+   */
+  private static Side letStringSide(
+      ExpVariable variable,
+      LetBindingSource source,
+      TranslationContext context,
+      Set<String> alreadyRead,
+      boolean nominal) {
+    if (!alreadyRead.add(source.aliasKey())) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "UString comparison reads the let variable '"
+              + variable.getVarname()
+              + "' more than once; USE's own UString.uEquals returns certainty rather than"
+              + " c_s * c_r for two references to one value, and the source's rules assume"
+              + " INDEPENDENT operands");
+    }
+    SmtTerm spellingSymbol =
+        Smt.sym(source.values().valueNames().get(source.source().slotIndex()));
+    List<Candidate> candidates = new ArrayList<>();
+    if (nominal) {
+      List<String> spellings = source.firstDomain().enumeratedValues();
+      for (int i = 0; i < spellings.size(); i++) {
+        candidates.add(
+            new Candidate(
+                spellings.get(i),
+                Double.NaN,
+                List.of(Smt.eq(spellingSymbol, Smt.intLit(java.math.BigInteger.valueOf(i))))));
+      }
+      return new Side(candidates);
+    }
+    SmtTerm confidenceSymbol =
+        Smt.sym(source.values().confidenceNames().get(source.source().slotIndex()));
+    for (int i = 0; i < source.firstDomain().enumeratedValues().size(); i++) {
+      for (String candidate : source.secondDomain().enumeratedValues()) {
+        BigDecimal confidence = parse(candidate, source.values().className(), source.aliasKey());
+        candidates.add(
+            new Candidate(
+                source.firstDomain().enumeratedValues().get(i),
+                confidence.doubleValue(),
+                List.of(
+                    Smt.eq(spellingSymbol, Smt.intLit(java.math.BigInteger.valueOf(i))),
+                    Smt.eq(confidenceSymbol, Smt.realLit(confidence)))));
+      }
+    }
+    return new Side(candidates);
+  }
+
   private static List<Case> operation(
-      ExpStdOp operation, TranslationContext context, Set<String> alreadyRead, boolean nominal) {
+      ExpStdOp operation,
+      TranslationContext context,
+      Set<String> alreadyRead,
+      boolean nominal,
+      java.util.function.Function<Expression, LetBindingSource> letResolver) {
     Expression[] args = operation.args();
     String name = operation.opname();
     if (isUStringComparison(args)) {
-      return uStringComparison(operation, context, alreadyRead, nominal);
+      return uStringComparison(operation, context, alreadyRead, nominal, letResolver);
     }
     if ("not".equals(name) && args.length == 1) {
-      List<Case> operand = lower(args[0], context, alreadyRead, nominal);
+      List<Case> operand = lower(args[0], context, alreadyRead, nominal, letResolver);
       List<Case> negated = new ArrayList<>(operand.size());
       for (Case candidate : operand) {
         negated.add(new Case(candidate.guard(), complement(candidate.probability())));
@@ -225,8 +350,8 @@ public final class UBooleanProbability {
       return negated;
     }
     if (List.of("and", "or", "implies").contains(name) && args.length == 2) {
-      List<Case> left = lower(args[0], context, alreadyRead, nominal);
-      List<Case> right = lower(args[1], context, alreadyRead, nominal);
+      List<Case> left = lower(args[0], context, alreadyRead, nominal, letResolver);
+      List<Case> right = lower(args[1], context, alreadyRead, nominal, letResolver);
       if ((long) left.size() * right.size() > MAX_CASES) {
         throw unsupported(
             FragmentBoundary.UTYPE_NONLINEAR_OR_TRANSCENDENTAL,
@@ -343,7 +468,11 @@ public final class UBooleanProbability {
    * proposal gives. Nothing is assumed that the source does not state.
    */
   private static List<Case> uStringComparison(
-      ExpStdOp operation, TranslationContext context, Set<String> alreadyRead, boolean nominal) {
+      ExpStdOp operation,
+      TranslationContext context,
+      Set<String> alreadyRead,
+      boolean nominal,
+      java.util.function.Function<Expression, LetBindingSource> letResolver) {
     String name = operation.opname();
     if (!"=".equals(name) && !"<>".equals(name)) {
       throw unsupported(
@@ -357,8 +486,8 @@ public final class UBooleanProbability {
               + " chains outside version 1");
     }
     Expression[] args = operation.args();
-    Side left = side(args[0], context, alreadyRead, nominal);
-    Side right = side(args[1], context, alreadyRead, nominal);
+    Side left = side(args[0], context, alreadyRead, nominal, letResolver);
+    Side right = side(args[1], context, alreadyRead, nominal, letResolver);
     long combinations = (long) left.candidates().size() * right.candidates().size();
     if (combinations > MAX_CASES) {
       throw unsupported(
@@ -429,7 +558,17 @@ public final class UBooleanProbability {
    * emitted guard. Anything else fails closed.
    */
   private static Side side(
-      Expression expression, TranslationContext context, Set<String> alreadyRead, boolean nominal) {
+      Expression expression,
+      TranslationContext context,
+      Set<String> alreadyRead,
+      boolean nominal,
+      java.util.function.Function<Expression, LetBindingSource> letResolver) {
+    if (expression instanceof ExpVariable v) {
+      LetBindingSource source = letResolver.apply(expression);
+      if (source != null) {
+        return letStringSide(v, source, context, alreadyRead, nominal);
+      }
+    }
     if (expression instanceof ExpConstString literal) {
       // UStringValue.valueOf(StringValue) constructs new UStringValue(value, 1), so an exact string
       // enters the rule as a certain UString. This is not a convention chosen here.

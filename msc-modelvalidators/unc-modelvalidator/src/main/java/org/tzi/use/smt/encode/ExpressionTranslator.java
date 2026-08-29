@@ -1277,6 +1277,17 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           "UBoolean confidence threshold outside [0,1] (USE yields UndefinedValue there), got "
               + confidence);
     }
+    // U-type let variables resolve through their LetBindingSource -- the bare attribute the
+    // let initialized from plus its configured candidate domains -- so the case enumeration
+    // below treats the alias exactly like the attribute.
+    java.util.function.Function<Expression, LetBindingSource> letResolver =
+        expr -> {
+          if (expr instanceof ExpVariable v) {
+            LocalBinding local = localBindings.get(v.getVarname());
+            return local != null ? local.letSource() : null;
+          }
+          return null;
+        };
     if (mode == TranslationMode.NOMINAL) {
       // The independent oracle's erasure is E(b.toBooleanC(theta)) = E_B(b), and
       // NominalErasureEvaluator defines E_B for exactly two shapes: "a STORED UBoolean probability
@@ -1289,9 +1300,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         // p >= 0.5 off the confidence rule, and at c < 0.5 with a matching spelling the two
         // genuinely disagree.
         return defined(
-            UBooleanProbability.select(UBooleanProbability.lowerNominal(operand, context), 0.5));
+            UBooleanProbability.select(
+                UBooleanProbability.lowerNominal(operand, context, letResolver), 0.5));
       }
-      if (!(operand instanceof ExpAttrOp)) {
+      if (!(operand instanceof ExpAttrOp) && letResolver.apply(operand) == null) {
         throw unsupported(
             FragmentBoundary.UTYPE_CORE,
             "nominal erasure of the composed UBoolean expression '"
@@ -1300,11 +1312,13 @@ public final class ExpressionTranslator implements ExpressionVisitor {
                 + " probability (p >= 0.5) and for a comparison erased to its crisp form, and"
                 + " NominalErasureEvaluator refuses the rest");
       }
-      return defined(UBooleanProbability.select(UBooleanProbability.lower(operand, context), 0.5));
+      return defined(
+          UBooleanProbability.select(
+              UBooleanProbability.lower(operand, context, letResolver), 0.5));
     }
     return defined(
         UBooleanProbability.select(
-            UBooleanProbability.lower(operand, context), confidence.doubleValue()));
+            UBooleanProbability.lower(operand, context, letResolver), confidence.doubleValue()));
   }
 
   /** True when either operand of a binary operation is UString-typed. */
@@ -3326,12 +3340,13 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       result = objectAnyLet(e);
       return;
     }
-    // Paired U-type families: the binding carries BOTH components of the pair (the Int/Real
-    // representative and the non-negative Real uncertainty), and the supported confidence-
-    // threshold consumer reads them from the binding exactly as it reads them from an
-    // attribute's own symbols. UString/UBoolean lets keep refusing (different encodings:
-    // content/confidence pairs, not value/uncertainty).
-    if (e.getVarType().isTypeOfUReal() || e.getVarType().isTypeOfUInteger()) {
+    // U-type families: the binding aliases the source attribute's symbol(s) and records the
+    // source's configured candidate domains (LetBindingSource), so the confidence-threshold
+    // consumers enumerate cases over the binding exactly as over the attribute.
+    if (e.getVarType().isTypeOfUReal()
+        || e.getVarType().isTypeOfUInteger()
+        || e.getVarType().isTypeOfUBoolean()
+        || e.getVarType().isTypeOfUString()) {
       result = uTypeLet(e);
       return;
     }
@@ -3348,8 +3363,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
               + "' of type "
               + e.getVarType()
               + ": only primitive Integer, Boolean, Real, String, and Enum let bindings, plus"
-              + " paired UReal/UInteger bindings over a bare attribute-access initializer, are"
-              + " supported; object- and collection-typed bindings require a finite"
+              + " U-typed bindings over a bare attribute-access initializer, are supported;"
+              + " object- and collection-typed bindings require a finite"
               + " object/collection representation that this translation slice does not have");
     }
 
@@ -3405,32 +3420,60 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     VariableBinding b = context.binding(source.getVarname());
     AttributeValues values = context.attributeValues(b.className(), attr.attr().name());
-    if (!values.type().isPairedUType()) {
+    String symbolStem = "|ocl-let-" + e.getVarname();
+    String aliasKey = "let:" + e.getVarname();
+    // Family-specific source: UReal/UInteger pair (representative + uncertainty), UBoolean
+    // (the probability IS the value -- its truth is the p >= 0.5 rule), UString (spelling index
+    // + confidence). The let source records the configured candidate domains the case-
+    // enumerating consumers read; the SMT aliases make the binding's symbols interchangeable
+    // with the source's own.
+    AttributeDomain firstDomain = null;
+    AttributeDomain secondDomain = null;
+    String uncertaintySymbol = null;
+    SmtTerm valueTerm;
+    SmtTerm uncertaintyTerm = null;
+    if (values.type().isPairedUType()) {
+      firstDomain = context.attributeDomain(b.className(), attr.attr().name(), "value");
+      secondDomain = context.attributeDomain(b.className(), attr.attr().name(), "uncertainty");
+      uncertaintySymbol = symbolStem + "-uncertainty|";
+      valueTerm = Smt.sym(values.valueNames().get(b.slotIndex()));
+      uncertaintyTerm = Smt.sym(values.uncertaintyNames().get(b.slotIndex()));
+    } else if (values.type() == AttributeType.UBOOLEAN) {
+      firstDomain = context.attributeDomain(b.className(), attr.attr().name(), "probability");
+      valueTerm = Smt.sym(values.valueNames().get(b.slotIndex()));
+    } else if (values.type() == AttributeType.USTRING) {
+      firstDomain = context.attributeDomain(b.className(), attr.attr().name(), "value");
+      secondDomain = context.attributeDomain(b.className(), attr.attr().name(), "confidence");
+      uncertaintySymbol = symbolStem + "-uncertainty|";
+      valueTerm = Smt.sym(values.valueNames().get(b.slotIndex()));
+      uncertaintyTerm = Smt.sym(values.confidenceNames().get(b.slotIndex()));
+    } else {
       throw unsupported(
           FragmentBoundary.UTYPE_CORE,
-          "U-type let without paired value/uncertainty SMT terms");
+          "U-type let over "
+              + values.type()
+              + " with no supported candidate-enumerable encoding");
     }
-    String symbolStem = "|ocl-let-" + e.getVarname();
+    LetBindingSource letSource =
+        new LetBindingSource(aliasKey, b, values, firstDomain, secondDomain);
     LocalBinding binding =
         new LocalBinding(
             symbolStem + "-defined|",
             symbolStem + "-value|",
             false,
             null,
-            symbolStem + "-uncertainty|");
+            uncertaintySymbol,
+            letSource);
     Map<String, LocalBinding> extended = new LinkedHashMap<>(localBindings);
     extended.put(e.getVarname(), binding);
     TranslatedExpression body =
         translate(e.getInExpression(), context, mode, positivePolarity, Map.copyOf(extended));
-    List<SmtTerm.Binding> bindings =
-        List.of(
-            new SmtTerm.Binding(
-                binding.definedSymbol(), Smt.bool(true)),
-            new SmtTerm.Binding(
-                binding.valueSymbol(), Smt.sym(values.valueNames().get(b.slotIndex()))),
-            new SmtTerm.Binding(
-                binding.uncertaintySymbol(),
-                Smt.sym(values.uncertaintyNames().get(b.slotIndex()))));
+    java.util.List<SmtTerm.Binding> bindings = new java.util.ArrayList<>();
+    bindings.add(new SmtTerm.Binding(binding.definedSymbol(), Smt.bool(true)));
+    bindings.add(new SmtTerm.Binding(binding.valueSymbol(), valueTerm));
+    if (uncertaintySymbol != null) {
+      bindings.add(new SmtTerm.Binding(uncertaintySymbol, uncertaintyTerm));
+    }
     return new TranslatedExpression(
         Smt.let(bindings, body.defined()), Smt.let(bindings, body.value()));
   }
@@ -3445,12 +3488,20 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    */
   private record LocalBinding(
       String definedSymbol, String valueSymbol, boolean stringOrEnum,
-      List<String> enumeratedValues, String uncertaintySymbol) {
-    /** The scalar (non-U-typed) form: no uncertainty component. */
+      List<String> enumeratedValues, String uncertaintySymbol,
+      LetBindingSource letSource) {
+    /** The scalar (non-U-typed) form: no uncertainty component, no let source. */
     private LocalBinding(
         String definedSymbol, String valueSymbol, boolean stringOrEnum,
         List<String> enumeratedValues) {
-      this(definedSymbol, valueSymbol, stringOrEnum, enumeratedValues, null);
+      this(definedSymbol, valueSymbol, stringOrEnum, enumeratedValues, null, null);
+    }
+
+    /** The paired UReal/UInteger form: uncertainty without an enumerated source. */
+    private LocalBinding(
+        String definedSymbol, String valueSymbol, boolean stringOrEnum,
+        List<String> enumeratedValues, String uncertaintySymbol) {
+      this(definedSymbol, valueSymbol, stringOrEnum, enumeratedValues, uncertaintySymbol, null);
     }
   }
 
