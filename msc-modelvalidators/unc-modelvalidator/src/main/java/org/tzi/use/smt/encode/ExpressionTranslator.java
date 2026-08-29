@@ -4040,50 +4040,44 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     AssociationLinks links = context.linksFor(destination.association().name());
     ObjectSlots destSlots = destinationEndView(links, destination);
-    for (VariableBinding concrete : destSlots.concreteBindings()) {
-      if (!concrete.className().equals(destSlots.className())) {
-        throw unsupported(
-            FragmentBoundary.UTYPE_CORE,
-            "U-type let over the folded end view of "
-                + destSlots.className()
-                + ": the configured subclasses carry per-concrete-class candidate domains,"
-                + " which is a slice of its own");
-      }
-    }
     AttributeValues declaredValues =
         context.attributeValues(destSlots.className(), attr.attr().name());
     // NOTE: guardAgainstUncertainAttribute must NOT run here -- it refuses exactly the U-typed
     // attribute this slice exists to let over. Missing per-class registrations fail closed on
     // their own when the per-slot symbol helpers resolve them.
-    AttributeDomain firstDomain;
-    AttributeDomain secondDomain = null;
     boolean paired = declaredValues.type().isPairedUType();
-    if (paired) {
-      firstDomain = context.attributeDomain(destSlots.className(), attr.attr().name(), "value");
-      secondDomain =
-          context.attributeDomain(destSlots.className(), attr.attr().name(), "uncertainty");
-    } else if (declaredValues.type() == AttributeType.UBOOLEAN) {
-      firstDomain =
-          context.attributeDomain(destSlots.className(), attr.attr().name(), "probability");
-    } else if (declaredValues.type() == AttributeType.USTRING) {
-      firstDomain = context.attributeDomain(destSlots.className(), attr.attr().name(), "value");
-      secondDomain =
-          context.attributeDomain(destSlots.className(), attr.attr().name(), "confidence");
-    } else {
+    boolean uboolean = declaredValues.type() == AttributeType.UBOOLEAN;
+    boolean ustring = declaredValues.type() == AttributeType.USTRING;
+    if (!paired && !uboolean && !ustring) {
       throw unsupported(
           FragmentBoundary.UTYPE_CORE,
           "U-type let over "
               + declaredValues.type()
               + " with no supported candidate-enumerable encoding");
     }
+    // Per-SLOT candidate domains: a FOLDED end view's slots belong to different concrete
+    // classes, each with its own registered configured domains -- the enumerating consumers
+    // read the slot's own domain, so the let preserves exactly the per-concrete-class content
+    // spaces. An unfolded view's slots all reuse the declared class's domains, byte-identical
+    // to the single-class behavior.
+    String firstComponent = paired || ustring ? "value" : "probability";
+    String secondComponent = ustring ? "confidence" : paired ? "uncertainty" : null;
     List<LetBindingSource.LetSlot> slots = new ArrayList<>();
     for (int k = 0; k < destSlots.capacity(); k++) {
+      VariableBinding concrete = destSlots.concreteBindings().get(k);
+      String concreteClass = concrete.className();
+      AttributeDomain firstDomain =
+          context.attributeDomain(concreteClass, attr.attr().name(), firstComponent);
+      AttributeDomain secondDomain =
+          secondComponent == null
+              ? null
+              : context.attributeDomain(concreteClass, attr.attr().name(), secondComponent);
       SmtTerm guard = linkTerm(links, destination, navSource, k);
       SmtTerm first = valueSymbolForEndSlot(destSlots, declaredValues, attr.attr(), k);
       SmtTerm second = null;
       if (paired) {
         second = uncertaintySymbolForEndSlot(destSlots, declaredValues, attr.attr(), k);
-      } else if (declaredValues.type() == AttributeType.USTRING) {
+      } else if (ustring) {
         second = confidenceSymbolForEndSlot(destSlots, declaredValues, attr.attr(), k);
       }
       slots.add(new LetBindingSource.LetSlot(first, second, guard, firstDomain, secondDomain));
