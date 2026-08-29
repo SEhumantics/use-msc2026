@@ -27,10 +27,13 @@ import org.tzi.use.uml.mm.ModelFactory;
  * witness was not a valid instance of the model at all.
  *
  * <p>The fix asserts, per slot, {@code attributeSymbol = <derive expression translated with
- * self bound to that slot>}, for every derived Integer attribute registration (including the
- * per-subclass registrations of an inherited derived attribute). A configured domain that
- * contradicts the derivation therefore becomes a genuine UNSATISFIABLE, which is the correct
- * reading: no instance satisfies both the configuration and the model.
+ * self bound to that slot>}, for every derived Integer AND Boolean attribute registration
+ * (including the per-subclass registrations of an inherited derived attribute). A configured
+ * domain that contradicts the derivation therefore becomes a genuine UNSATISFIABLE, which is
+ * the correct reading: no instance satisfies both the configuration and the model. The Boolean
+ * attribute's own domain is unconstraining by design (AttributeEncoder's BOOLEAN case is a
+ * documented no-op), so the flag's value comes ENTIRELY from its derivation -- which is what
+ * these tests assert.
  */
 public class DerivedAttributeTest {
 
@@ -41,10 +44,17 @@ public class DerivedAttributeTest {
       attributes
         base : Integer
         doubled : Integer derive: self.base * 2
+        flag : Boolean derive: self.base = 3
       end
       constraints
       context x : X inv BaseIsThree:
         x.base = 3
+      context x : X inv BaseIsFive:
+        x.base = 5
+      context x : X inv FlagHolds:
+        x.flag
+      context x : X inv FlagNegated:
+        not x.flag
       """;
 
   /**
@@ -55,7 +65,7 @@ public class DerivedAttributeTest {
   @Test
   public void aDerivedAttributeIsConstrainedByItsDerivationAgainstTheConfiguredDomain()
       throws Exception {
-    ModelFinderResult result = find(List.of("3"), List.of("7"));
+    ModelFinderResult result = find("BaseIsThree", List.of("3"), List.of("7"), List.of("true"));
 
     assertFalse(
         "base = 3 forces doubled = 6 by derivation, but the domain only offers 7: genuinely"
@@ -68,35 +78,78 @@ public class DerivedAttributeTest {
   @Test
   public void aConsistentConfigurationFindsAWitnessWhoseDerivedValueIsTheDerivedOne()
       throws Exception {
-    ModelFinderResult result = find(List.of("3"), List.of("6"));
+    ModelFinderResult result = find("BaseIsThree", List.of("3"), List.of("6"), List.of("true"));
 
     assertTrue(result.satisfiable());
     assertTrue(verdictFor(result, "X::BaseIsThree").holds());
-    var witnessState = result.witnesses().get(0).system().state();
-    var x = witnessState.objectsOfClass(
-        result.witnesses().get(0).system().model().getClass("X")).iterator().next();
-    int doubled = ((org.tzi.use.uml.ocl.value.IntegerValue)
-        x.state(witnessState).attributeValue("doubled")).value();
-    assertEquals("the reconstructed doubled must be the DERIVED value 6", 6, doubled);
+    assertEquals("the reconstructed doubled must be the DERIVED value 6",
+        6, intValueOf(result, "doubled"));
   }
 
   /** A superset domain: the derivation eliminates the non-derivable candidate. */
   @Test
   public void theDerivationEliminatesNonDerivableCandidatesFromASupersetDomain()
       throws Exception {
-    ModelFinderResult result = find(List.of("3"), List.of("6", "7"));
+    ModelFinderResult result = find(
+        "BaseIsThree", List.of("3"), List.of("6", "7"), List.of("true"));
 
     assertTrue("doubled = 6 is derivable", result.satisfiable());
     assertTrue(verdictFor(result, "X::BaseIsThree").holds());
+    assertEquals("the derivation must eliminate 7 from the domain",
+        6, intValueOf(result, "doubled"));
+  }
+
+  /**
+   * A Boolean derived attribute pins its symbol to the derivation's truth value: with base
+   * forced to 3, flag holds; with base forced to 5, flag is false and the demanding invariant
+   * is genuinely unsatisfiable.
+   */
+  @Test
+  public void booleanDerivedAttributeFollowsItsDerivation() throws Exception {
+    ModelFinderResult three = find(
+        "FlagHolds", List.of("3"), List.of("6"), List.of("true"));
+    assertTrue("base = 3 makes the derived flag true", three.satisfiable());
+    assertTrue(verdictFor(three, "X::FlagHolds").holds());
+
+    ModelFinderResult five = find(
+        "FlagHolds", List.of("5"), List.of("6"), List.of("true"));
+    assertFalse("base = 5 makes the derived flag false, so FlagHolds cannot hold",
+        five.satisfiable());
+  }
+
+  /** The negation polarity: not flag holds exactly when the derivation makes flag false. */
+  @Test
+  public void booleanDerivedAttributeNegationFollowsItsDerivation() throws Exception {
+    ModelFinderResult negated = find(
+        "FlagNegated", List.of("5"), List.of("10"), List.of("true"));
+    assertTrue("base = 5 makes the derived flag false, so not flag holds",
+        negated.satisfiable());
+    assertTrue(verdictFor(negated, "X::FlagNegated").holds());
+
+    ModelFinderResult three = find(
+        "FlagNegated", List.of("3"), List.of("6"), List.of("true"));
+    assertFalse("base = 3 makes the flag true, so not flag cannot hold", three.satisfiable());
+  }
+
+  private static int intValueOf(ModelFinderResult result, String attributeName) {
     var witnessState = result.witnesses().get(0).system().state();
     var x = witnessState.objectsOfClass(
         result.witnesses().get(0).system().model().getClass("X")).iterator().next();
-    int doubled = ((org.tzi.use.uml.ocl.value.IntegerValue)
-        x.state(witnessState).attributeValue("doubled")).value();
-    assertEquals("the derivation must eliminate 7 from the domain", 6, doubled);
+    return ((org.tzi.use.uml.ocl.value.IntegerValue)
+        x.state(witnessState).attributeValue(attributeName)).value();
   }
 
-  private static ModelFinderResult find(List<String> baseDomain, List<String> doubledDomain)
+  /**
+   * Shared runner: X pinned to baseDomain/doubledDomain/flagDomain candidate values with the
+   * named invariant active. The Boolean attribute's domain is unconstraining by design
+   * (AttributeEncoder's BOOLEAN case is a documented no-op), so the flag's value comes ENTIRELY
+   * from its derivation -- which is what these tests assert.
+   */
+  private static ModelFinderResult find(
+      String invariantName,
+      List<String> baseDomain,
+      List<String> doubledDomain,
+      List<String> flagDomain)
       throws Exception {
     MModel model = compile();
     AnalysisConfiguration config =
@@ -105,8 +158,9 @@ public class DerivedAttributeTest {
             List.of(),
             List.of(
                 new AttributeDomain("X", "base", null, baseDomain, null, null),
-                new AttributeDomain("X", "doubled", null, doubledDomain, null, null)),
-            Set.of("X::BaseIsThree"),
+                new AttributeDomain("X", "doubled", null, doubledDomain, null, null),
+                new AttributeDomain("X", "flag", null, flagDomain, null, null)),
+            Set.of("X::" + invariantName),
             QueryParser.parse("satisfy", ConfigurationVocabulary.fromModel(model)),
             Duration.ofSeconds(30),
             1);

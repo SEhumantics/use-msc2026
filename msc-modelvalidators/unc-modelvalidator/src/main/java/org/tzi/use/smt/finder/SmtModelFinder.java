@@ -1489,7 +1489,7 @@ public final class SmtModelFinder {
       if (attribute == null || !attribute.isDerived()) {
         continue;
       }
-      if (!attribute.type().isTypeOfInteger()) {
+      if (!attribute.type().isTypeOfInteger() && !attribute.type().isTypeOfBoolean()) {
         throw new org.tzi.use.smt.encode.SmtTranslationException(
             org.tzi.use.smt.encode.FragmentBoundary.TIER_3,
             "derived attribute "
@@ -1498,7 +1498,7 @@ public final class SmtModelFinder {
                 + attributeName
                 + " is "
                 + attribute.type()
-                + ": only Integer derived attributes are supported in this slice");
+                + ": only Integer and Boolean derived attributes are supported in this slice");
       }
       org.tzi.use.uml.ocl.expr.Expression deriveExpression = attribute.getDeriveExpression();
       if (deriveExpression == null) {
