@@ -254,13 +254,6 @@ public final class UBooleanProbability {
       LetBindingSource source,
       TranslationContext context,
       Set<String> alreadyRead) {
-    if (source.secondDomain() != null) {
-      throw unsupported(
-          FragmentBoundary.UTYPE_CORE,
-          "UBoolean composition over the let variable '"
-              + variable.getVarname()
-              + "' whose source is a UString: a spelling/confidence pair is not a probability");
-    }
     if (!alreadyRead.add(source.aliasKey())) {
       throw unsupported(
           FragmentBoundary.UTYPE_CORE,
@@ -269,12 +262,15 @@ public final class UBooleanProbability {
               + "' more than once; the source rules assume INDEPENDENT operands, and USE's own"
               + " UBoolean.and returns p rather than p*p for two reads of one value");
     }
-    SmtTerm symbol = Smt.sym(source.values().valueNames().get(source.source().slotIndex()));
     List<Case> cases = new ArrayList<>();
-    for (String candidate : source.firstDomain().enumeratedValues()) {
-      BigDecimal probability =
-          parse(candidate, source.values().className(), source.aliasKey());
-      cases.add(new Case(Smt.eq(symbol, Smt.realLit(probability)), probability.doubleValue()));
+    for (LetBindingSource.LetSlot slot : source.slots()) {
+      for (String candidate : slot.firstDomain().enumeratedValues()) {
+        BigDecimal probability = parse(candidate, source.aliasKey(), variable.getVarname());
+        cases.add(
+            new Case(
+                Smt.and(List.of(slot.guard(), Smt.eq(slot.firstSymbol(), Smt.realLit(probability)))),
+                probability.doubleValue()));
+      }
     }
     return cases;
   }
@@ -299,32 +295,38 @@ public final class UBooleanProbability {
               + " c_s * c_r for two references to one value, and the source's rules assume"
               + " INDEPENDENT operands");
     }
-    SmtTerm spellingSymbol =
-        Smt.sym(source.values().valueNames().get(source.source().slotIndex()));
     List<Candidate> candidates = new ArrayList<>();
-    if (nominal) {
-      List<String> spellings = source.firstDomain().enumeratedValues();
-      for (int i = 0; i < spellings.size(); i++) {
-        candidates.add(
-            new Candidate(
-                spellings.get(i),
-                Double.NaN,
-                List.of(Smt.eq(spellingSymbol, Smt.intLit(java.math.BigInteger.valueOf(i))))));
+    for (LetBindingSource.LetSlot slot : source.slots()) {
+      List<String> spellings = slot.firstDomain().enumeratedValues();
+      if (nominal) {
+        for (int i = 0; i < spellings.size(); i++) {
+          candidates.add(
+              new Candidate(
+                  spellings.get(i),
+                  Double.NaN,
+                  List.of(
+                      Smt.and(
+                          List.of(
+                              slot.guard(),
+                              Smt.eq(slot.firstSymbol(), Smt.intLit(java.math.BigInteger.valueOf(i))))))));
+        }
+        continue;
       }
-      return new Side(candidates);
-    }
-    SmtTerm confidenceSymbol =
-        Smt.sym(source.values().confidenceNames().get(source.source().slotIndex()));
-    for (int i = 0; i < source.firstDomain().enumeratedValues().size(); i++) {
-      for (String candidate : source.secondDomain().enumeratedValues()) {
-        BigDecimal confidence = parse(candidate, source.values().className(), source.aliasKey());
-        candidates.add(
-            new Candidate(
-                source.firstDomain().enumeratedValues().get(i),
-                confidence.doubleValue(),
-                List.of(
-                    Smt.eq(spellingSymbol, Smt.intLit(java.math.BigInteger.valueOf(i))),
-                    Smt.eq(confidenceSymbol, Smt.realLit(confidence)))));
+      for (int i = 0; i < spellings.size(); i++) {
+        for (String candidate : slot.secondDomain().enumeratedValues()) {
+          BigDecimal confidence = parse(candidate, source.aliasKey(), variable.getVarname());
+          candidates.add(
+              new Candidate(
+                  spellings.get(i),
+                  confidence.doubleValue(),
+                  List.of(
+                      Smt.and(
+                          List.of(
+                              slot.guard(),
+                              Smt.eq(
+                                  slot.firstSymbol(), Smt.intLit(java.math.BigInteger.valueOf(i))),
+                              Smt.eq(slot.secondSymbol(), Smt.realLit(confidence)))))));
+        }
       }
     }
     return new Side(candidates);

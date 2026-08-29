@@ -3408,25 +3408,56 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * binding would have to be threaded both components, which no consumer needs yet).
    */
   private TranslatedExpression uTypeLet(ExpLet e) {
-    // Two supported initializer shapes: a bare U-typed attribute access on a context variable
-    // (the source of every family's symbols and configured candidate domains), and a CHAINED
-    // U-type let variable -- let u2 = u1 -- which aliases its predecessor's symbol(s) and
-    // INHERITS its let source, so the case-enumerating consumers treat the whole chain as the
-    // one value it is and the read-once aliasing rule spans the chain.
+    // Three supported initializer shapes: a bare U-typed attribute access on a context variable
+    // (one slot, guard true), a CHAINED U-type let variable (aliases its predecessor's symbols
+    // and INHERITS its let source -- alias key included, so the read-once rule spans the chain),
+    // and a single-valued NAVIGATED attribute access (one slot per destination slot of the end
+    // view, symbols selected per slot with concrete-class dispatch, each guarded by the slot's
+    // link term; unfolded views only -- folded ends carry per-concrete-class configured domains,
+    // a slice of their own).
     Expression initializer = e.getVarExpression();
-    boolean chained = false;
-    VariableBinding b = null;
-    AttributeValues values = null;
-    AttributeDomain firstDomain = null;
-    AttributeDomain secondDomain = null;
-    LocalBinding prevBinding = null;
-    String attributeName = null;
+    String symbolStem = "|ocl-let-" + e.getVarname();
+    String aliasKey = "let:" + e.getVarname();
+    List<LetBindingSource.LetSlot> slots = null;
+    String uncertaintySymbol = null;
+    SmtTerm valueTerm;
+    SmtTerm uncertaintyTerm = null;
+    SmtTerm definedTerm = Smt.bool(true);
+    LetBindingSource letSource = null;
+
     if (initializer instanceof ExpAttrOp attr
         && attr.objExp() instanceof ExpVariable source
         && !localBindings.containsKey(source.getVarname())) {
-      b = context.binding(source.getVarname());
-      attributeName = attr.attr().name();
-      values = context.attributeValues(b.className(), attributeName);
+      // BARE ATTRIBUTE ACCESS: one slot, guard true, the attribute's own symbols.
+      VariableBinding b = context.binding(source.getVarname());
+      String attributeName = attr.attr().name();
+      AttributeValues values = context.attributeValues(b.className(), attributeName);
+      AttributeDomain firstDomain;
+      AttributeDomain secondDomain = null;
+      SmtTerm firstSymbol = Smt.sym(values.valueNames().get(b.slotIndex()));
+      if (values.type().isPairedUType()) {
+        firstDomain = context.attributeDomain(b.className(), attributeName, "value");
+        secondDomain = context.attributeDomain(b.className(), attributeName, "uncertainty");
+        uncertaintySymbol = symbolStem + "-uncertainty|";
+        uncertaintyTerm = Smt.sym(values.uncertaintyNames().get(b.slotIndex()));
+      } else if (values.type() == AttributeType.UBOOLEAN) {
+        firstDomain = context.attributeDomain(b.className(), attributeName, "probability");
+      } else if (values.type() == AttributeType.USTRING) {
+        firstDomain = context.attributeDomain(b.className(), attributeName, "value");
+        secondDomain = context.attributeDomain(b.className(), attributeName, "confidence");
+        uncertaintySymbol = symbolStem + "-uncertainty|";
+        uncertaintyTerm = Smt.sym(values.confidenceNames().get(b.slotIndex()));
+      } else {
+        throw unsupported(
+            FragmentBoundary.UTYPE_CORE,
+            "U-type let over "
+                + values.type()
+                + " with no supported candidate-enumerable encoding");
+      }
+      slots =
+          List.of(
+              new LetBindingSource.LetSlot(firstSymbol, uncertaintyTerm, Smt.bool(true), firstDomain, secondDomain));
+      valueTerm = firstSymbol;
     } else if (initializer instanceof ExpVariable prevVar
         && localBindings.containsKey(prevVar.getVarname())) {
       LocalBinding prev = localBindings.get(prevVar.getVarname());
@@ -3437,60 +3468,33 @@ public final class ExpressionTranslator implements ExpressionVisitor {
                 + prevVar.getVarname()
                 + "': the source binding carries no U-type encoding (only U-type lets chain)");
       }
-      chained = true;
-      prevBinding = prev;
+      // Alias the predecessor's symbols; inherit its let source UNCHANGED -- the inherited
+      // alias key is what makes the read-once rule treat the whole chain as one value.
+      valueTerm = Smt.sym(prev.valueSymbol());
+      if (prev.uncertaintySymbol() != null) {
+        uncertaintySymbol = symbolStem + "-uncertainty|";
+        uncertaintyTerm = Smt.sym(prev.uncertaintySymbol());
+      }
+      letSource = prev.letSource();
+    } else if (initializer instanceof ExpAttrOp navAttr
+        && navAttr.objExp() instanceof ExpNavigation navigation
+        && !navigation.getDestination().isCollection()
+        && navigation.getObjectExpression() instanceof ExpVariable navSource
+        && !localBindings.containsKey(navSource.getVarname())) {
+      // NAVIGATED ATTRIBUTE ACCESS: one slot per destination slot of the end view.
+      return navigatedUTypeLet(e, navAttr, navigation, navSource.getVarname(), symbolStem, aliasKey);
     } else {
       throw unsupported(
           FragmentBoundary.UTYPE_CORE,
           "let-bound U-type variable '"
               + e.getVarname()
-              + "': only a bare U-typed attribute access on a context variable, or another U-type"
-              + " let variable, is supported as the initializer");
+              + "': only a bare U-typed attribute access on a context variable, another U-type"
+              + " let variable, or a single-valued navigated U-typed attribute access is"
+              + " supported as the initializer");
     }
-    String symbolStem = "|ocl-let-" + e.getVarname();
-    String aliasKey = "let:" + e.getVarname();
-    // Family-specific source: UReal/UInteger pair (representative + uncertainty), UBoolean
-    // (the probability IS the value -- its truth is the p >= 0.5 rule), UString (spelling index
-    // + confidence). The let source records the configured candidate domains the case-
-    // enumerating consumers read; the SMT aliases make the binding's symbols interchangeable
-    // with the source's own. A CHAINED let aliases its predecessor's symbols and inherits its
-    // let source UNCHANGED -- the inherited alias key is what makes the read-once rule treat
-    // the whole chain as one value.
-    String uncertaintySymbol = null;
-    SmtTerm valueTerm;
-    SmtTerm uncertaintyTerm = null;
-    LetBindingSource letSource;
-    if (chained) {
-      valueTerm = Smt.sym(prevBinding.valueSymbol());
-      if (prevBinding.uncertaintySymbol() != null) {
-        uncertaintySymbol = symbolStem + "-uncertainty|";
-        uncertaintyTerm = Smt.sym(prevBinding.uncertaintySymbol());
-      }
-      letSource = prevBinding.letSource();
-    } else if (values.type().isPairedUType()) {
-      firstDomain = context.attributeDomain(b.className(), attributeName, "value");
-      secondDomain = context.attributeDomain(b.className(), attributeName, "uncertainty");
-      uncertaintySymbol = symbolStem + "-uncertainty|";
-      valueTerm = Smt.sym(values.valueNames().get(b.slotIndex()));
-      uncertaintyTerm = Smt.sym(values.uncertaintyNames().get(b.slotIndex()));
-      letSource = new LetBindingSource(aliasKey, b, values, firstDomain, secondDomain);
-    } else if (values.type() == AttributeType.UBOOLEAN) {
-      firstDomain = context.attributeDomain(b.className(), attributeName, "probability");
-      valueTerm = Smt.sym(values.valueNames().get(b.slotIndex()));
-      letSource = new LetBindingSource(aliasKey, b, values, firstDomain, secondDomain);
-    } else if (values.type() == AttributeType.USTRING) {
-      firstDomain = context.attributeDomain(b.className(), attributeName, "value");
-      secondDomain = context.attributeDomain(b.className(), attributeName, "confidence");
-      uncertaintySymbol = symbolStem + "-uncertainty|";
-      valueTerm = Smt.sym(values.valueNames().get(b.slotIndex()));
-      uncertaintyTerm = Smt.sym(values.confidenceNames().get(b.slotIndex()));
-      letSource = new LetBindingSource(aliasKey, b, values, firstDomain, secondDomain);
-    } else {
-      throw unsupported(
-          FragmentBoundary.UTYPE_CORE,
-          "U-type let over "
-              + values.type()
-              + " with no supported candidate-enumerable encoding");
+
+    if (letSource == null) {
+      letSource = new LetBindingSource(aliasKey, slots);
     }
     LocalBinding binding =
         new LocalBinding(
@@ -3505,13 +3509,189 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     TranslatedExpression body =
         translate(e.getInExpression(), context, mode, positivePolarity, Map.copyOf(extended));
     java.util.List<SmtTerm.Binding> bindings = new java.util.ArrayList<>();
-    bindings.add(new SmtTerm.Binding(binding.definedSymbol(), Smt.bool(true)));
+    bindings.add(new SmtTerm.Binding(binding.definedSymbol(), definedTerm));
     bindings.add(new SmtTerm.Binding(binding.valueSymbol(), valueTerm));
     if (uncertaintySymbol != null) {
       bindings.add(new SmtTerm.Binding(uncertaintySymbol, uncertaintyTerm));
     }
     return new TranslatedExpression(
         Smt.let(bindings, body.defined()), Smt.let(bindings, body.value()));
+  }
+
+  /**
+   * The NAVIGATED U-type initializer: {@code let u : UReal = x.gauge.speed in body}. The
+   * binding's definedness is the navigation itself (the or of the end view's link terms -- an
+   * unlinked navigation is undefined), its value and uncertainty are the per-slot selections
+   * over the end view (concrete-class dispatch, exactly what the ordinary navigated attribute
+   * read selects for the value), and its let source records one slot per destination slot so the
+   * candidate-enumerating consumers guard each configured choice under that slot's link term.
+   * UNFOLDED end views only: a folded view's slots carry per-concrete-class configured domains,
+   * and enumerating candidates over them is a slice of its own.
+   */
+  private TranslatedExpression navigatedUTypeLet(
+      ExpLet e,
+      ExpAttrOp attr,
+      ExpNavigation navigation,
+      String sourceName,
+      String symbolStem,
+      String aliasKey) {
+    VariableBinding navSource = context.binding(sourceName);
+    MNavigableElement destination =
+        resolveRedefinedDestination(navigation.getDestination(), navSource);
+    if (destination.association() instanceof MAssociationClass) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "U-type let whose initializer navigates an association class is not yet supported");
+    }
+    AssociationLinks links = context.linksFor(destination.association().name());
+    ObjectSlots destSlots = destinationEndView(links, destination);
+    for (VariableBinding concrete : destSlots.concreteBindings()) {
+      if (!concrete.className().equals(destSlots.className())) {
+        throw unsupported(
+            FragmentBoundary.UTYPE_CORE,
+            "U-type let over the folded end view of "
+                + destSlots.className()
+                + ": the configured subclasses carry per-concrete-class candidate domains,"
+                + " which is a slice of its own");
+      }
+    }
+    AttributeValues declaredValues =
+        context.attributeValues(destSlots.className(), attr.attr().name());
+    // NOTE: guardAgainstUncertainAttribute must NOT run here -- it refuses exactly the U-typed
+    // attribute this slice exists to let over. Missing per-class registrations fail closed on
+    // their own when the per-slot symbol helpers resolve them.
+    AttributeDomain firstDomain;
+    AttributeDomain secondDomain = null;
+    boolean paired = declaredValues.type().isPairedUType();
+    if (paired) {
+      firstDomain = context.attributeDomain(destSlots.className(), attr.attr().name(), "value");
+      secondDomain =
+          context.attributeDomain(destSlots.className(), attr.attr().name(), "uncertainty");
+    } else if (declaredValues.type() == AttributeType.UBOOLEAN) {
+      firstDomain =
+          context.attributeDomain(destSlots.className(), attr.attr().name(), "probability");
+    } else if (declaredValues.type() == AttributeType.USTRING) {
+      firstDomain = context.attributeDomain(destSlots.className(), attr.attr().name(), "value");
+      secondDomain =
+          context.attributeDomain(destSlots.className(), attr.attr().name(), "confidence");
+    } else {
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "U-type let over "
+              + declaredValues.type()
+              + " with no supported candidate-enumerable encoding");
+    }
+    List<LetBindingSource.LetSlot> slots = new ArrayList<>();
+    for (int k = 0; k < destSlots.capacity(); k++) {
+      SmtTerm guard = linkTerm(links, destination, navSource, k);
+      SmtTerm first = valueSymbolForEndSlot(destSlots, declaredValues, attr.attr(), k);
+      SmtTerm second = null;
+      if (paired) {
+        second = uncertaintySymbolForEndSlot(destSlots, declaredValues, attr.attr(), k);
+      } else if (declaredValues.type() == AttributeType.USTRING) {
+        second = confidenceSymbolForEndSlot(destSlots, declaredValues, attr.attr(), k);
+      }
+      slots.add(new LetBindingSource.LetSlot(first, second, guard, firstDomain, secondDomain));
+    }
+    boolean hasUncertainty = paired;
+    String uncertaintySymbol = hasUncertainty ? symbolStem + "-uncertainty|" : null;
+    SmtTerm valueTerm = selectLinkedValue(links, destination, navSource, destSlots, attr.attr(), declaredValues);
+    SmtTerm uncertaintyTerm =
+        hasUncertainty
+            ? selectLinkedUncertainty(links, destination, navSource, destSlots, attr.attr(), declaredValues)
+            : null;
+    SmtTerm defined = Smt.or(linkTargets(links, destination, navSource, destSlots.capacity()));
+
+    LetBindingSource letSource = new LetBindingSource(aliasKey, slots);
+    LocalBinding binding =
+        new LocalBinding(
+            symbolStem + "-defined|",
+            symbolStem + "-value|",
+            false,
+            null,
+            uncertaintySymbol,
+            letSource);
+    Map<String, LocalBinding> extended = new LinkedHashMap<>(localBindings);
+    extended.put(e.getVarname(), binding);
+    TranslatedExpression body =
+        translate(e.getInExpression(), context, mode, positivePolarity, Map.copyOf(extended));
+    java.util.List<SmtTerm.Binding> bindings = new ArrayList<>();
+    bindings.add(new SmtTerm.Binding(binding.definedSymbol(), defined));
+    bindings.add(new SmtTerm.Binding(binding.valueSymbol(), valueTerm));
+    if (uncertaintySymbol != null) {
+      bindings.add(new SmtTerm.Binding(uncertaintySymbol, uncertaintyTerm));
+    }
+    // USE's ExpLet.eval is STRICT: an undefined bound value makes the whole let undefined, so
+    // the navigation's definedness gates the body's, not just the variable's reads.
+    return new TranslatedExpression(
+        Smt.let(bindings, Smt.and(List.of(defined, body.defined()))),
+        Smt.let(bindings, body.value()));
+  }
+
+  /** The link terms of one end view, in slot order (the navigation's definedness disjuncts). */
+  private List<SmtTerm> linkTargets(
+      AssociationLinks links, MNavigableElement destination, VariableBinding source, int capacity) {
+    List<SmtTerm> targets = new ArrayList<>();
+    for (int k = 0; k < capacity; k++) {
+      targets.add(linkTerm(links, destination, source, k));
+    }
+    return targets;
+  }
+
+  /**
+   * The uncertainty symbol at one destination slot of a (possibly folded) end view -- the twin
+   * of {@link #valueSymbolForEndSlot} for the paired families' second component.
+   */
+  private SmtTerm uncertaintySymbolForEndSlot(
+      ObjectSlots destSlots, AttributeValues declaredValues, MAttribute attribute, int k) {
+    VariableBinding concrete = destSlots.concreteBindings().get(k);
+    if (concrete.className().equals(destSlots.className())) {
+      return Smt.sym(declaredValues.uncertaintyNames().get(k));
+    }
+    return Smt.sym(
+        context.attributeValues(concrete.className(), attribute.name())
+            .uncertaintyNames()
+            .get(concrete.slotIndex()));
+  }
+
+  /** The confidence symbol at one destination slot -- the UString twin of the above. */
+  private SmtTerm confidenceSymbolForEndSlot(
+      ObjectSlots destSlots, AttributeValues declaredValues, MAttribute attribute, int k) {
+    VariableBinding concrete = destSlots.concreteBindings().get(k);
+    if (concrete.className().equals(destSlots.className())) {
+      return Smt.sym(declaredValues.confidenceNames().get(k));
+    }
+    return Smt.sym(
+        context.attributeValues(concrete.className(), attribute.name())
+            .confidenceNames()
+            .get(concrete.slotIndex()));
+  }
+
+  /**
+   * The selected UNCERTAINTY at whichever destination slot {@code source} links to -- the same
+   * nested-ite shape {@link #selectLinkedValue} builds for the value, applied to the paired
+   * families' uncertainty component.
+   */
+  private SmtTerm selectLinkedUncertainty(
+      AssociationLinks links,
+      MNavigableElement destination,
+      VariableBinding source,
+      ObjectSlots destSlots,
+      MAttribute attribute,
+      AttributeValues v) {
+    int capacity = destSlots.capacity();
+    if (capacity == 0) {
+      return Smt.realLit(java.math.BigDecimal.ZERO);
+    }
+    SmtTerm value = uncertaintySymbolForEndSlot(destSlots, v, attribute, capacity - 1);
+    for (int k = capacity - 2; k >= 0; k--) {
+      value =
+          Smt.ite(
+              linkTerm(links, destination, source, k),
+              uncertaintySymbolForEndSlot(destSlots, v, attribute, k),
+              value);
+    }
+    return value;
   }
 
   /**
