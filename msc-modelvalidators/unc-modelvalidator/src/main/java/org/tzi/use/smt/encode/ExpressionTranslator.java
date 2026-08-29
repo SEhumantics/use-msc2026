@@ -1972,6 +1972,18 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       }
       return population;
     }
+    // ExpSelectByType EXTENDS ExpSelectByKind, so the exact-type branch MUST be tested first or
+    // the instanceof below would swallow selectByType expressions as kind-of.
+    if (range instanceof ExpSelectByType selectByType
+        && selectByType.getSourceExpression() instanceof ExpAllInstances all) {
+      return typeFilteredAllInstancesPopulation(
+          all, ((org.tzi.use.uml.ocl.type.CollectionType) selectByType.type()).elemType(), false, construct);
+    }
+    if (range instanceof ExpSelectByKind selectByKind
+        && selectByKind.getSourceExpression() instanceof ExpAllInstances all) {
+      return typeFilteredAllInstancesPopulation(
+          all, ((org.tzi.use.uml.ocl.type.CollectionType) selectByKind.type()).elemType(), true, construct);
+    }
     if (range instanceof ExpQuery query
         && (query instanceof ExpSelect || query instanceof ExpReject)
         && isSupportedSelectSource(query)) {
@@ -2084,6 +2096,44 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   private record PopulationMember(VariableBinding binding, SmtTerm memberGuard) {}
 
   /**
+   * The population of {@code X.allInstances()->selectByKind(T)} / {@code ->selectByType(T)}: the
+   * ordinary polymorphic {@link PolymorphicRange} slots of X, filtered by each slot's CONCRETE
+   * class. Semantics mirror USE's own evaluators exactly -- {@code ExpSelectByKind#includeElement}
+   * accepts a runtime type that {@code conformsTo} T (T itself or any descendant, the same
+   * matching {@link #isTypeCheck} performs with subtypes included), {@code ExpSelectByType} exact
+   * runtime-type equality -- and since every slot carries its own concrete class name, the filter
+   * is resolved entirely at translation time, the same way {@link #isTypeCheck} is. A filter that
+   * keeps nothing is a genuinely empty population (every consumer's empty-population convention
+   * applies), not a refusal. Only the {@code X.allInstances()} source is supported, matching
+   * {@code select()}'s own restriction.
+   */
+  private List<PopulationMember> typeFilteredAllInstancesPopulation(
+      ExpAllInstances all,
+      org.tzi.use.uml.ocl.type.Type targetType,
+      boolean includeSubtypes,
+      String construct) {
+    if (!targetType.isTypeOfClass()) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "selectByKind/selectByType against a non-class target type " + targetType);
+    }
+    org.tzi.use.uml.mm.MClassifier targetClass = (org.tzi.use.uml.mm.MClassifier) targetType;
+    List<PopulationMember> population = new ArrayList<>();
+    for (PolymorphicRange.Slot slot : PolymorphicRange.slotsOf(all.getSourceType(), context)) {
+      String className = slot.binding().className();
+      boolean matches =
+          className.equals(targetClass.name())
+              || (includeSubtypes
+                  && targetClass.allChildren().stream()
+                      .anyMatch(child -> child.name().equals(className)));
+      if (matches) {
+        population.add(new PopulationMember(slot.binding(), Smt.sym(slot.existsName())));
+      }
+    }
+    return population;
+  }
+
+  /**
    * Shared "population -> pairwise distinctness" core for BOTH supported {@code isUnique} source
    * shapes: {@code isUnique} holds iff no two DISTINCT, actually-present population members have
    * {@code useEquality}-equal body values. Pairs are unordered ({@code i < j} only) since {@code
@@ -2156,6 +2206,22 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && (query instanceof ExpSelect || query instanceof ExpReject)
         && isSupportedSelectSource(query)) {
       return defined(sizeTerm(selectedAllInstancesPopulation(query)));
+    }
+    // ExpSelectByType EXTENDS ExpSelectByKind: test the exact-type subclass FIRST (see
+    // populationOf's own note).
+    if (receiver instanceof ExpSelectByType selectByType
+        && selectByType.getSourceExpression() instanceof ExpAllInstances all) {
+      return defined(
+          sizeTerm(
+              typeFilteredAllInstancesPopulation(
+                  all, ((org.tzi.use.uml.ocl.type.CollectionType) selectByType.type()).elemType(), false, "size()")));
+    }
+    if (receiver instanceof ExpSelectByKind selectByKind
+        && selectByKind.getSourceExpression() instanceof ExpAllInstances all) {
+      return defined(
+          sizeTerm(
+              typeFilteredAllInstancesPopulation(
+                  all, ((org.tzi.use.uml.ocl.type.CollectionType) selectByKind.type()).elemType(), true, "size()")));
     }
     if (receiver instanceof ExpObjAsSet objAsSet
         && objAsSet.getObjectExpression() instanceof ExpNavigation navigation
