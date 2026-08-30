@@ -133,41 +133,58 @@ public class ParityTableTest {
 	 * The figures the gate demands be stated plainly, pinned against a real run rather than asserted
 	 * in prose.
 	 *
-	 * <p><b>What completing Study B did and did not move.</b> The parity CLAIM is untouched: Kodkod
-	 * still reaches a real verdict on 33 parity-population rows, the intersection is still 6, and it
-	 * is still 6 agreements and 0 undeclared disagreements. What moved is bookkeeping that follows
-	 * mechanically from the existing rule that a declared divergence leaves the parity population:
-	 * the two {@code URealThreshold} false-accept rows became Study B rows, so declared divergences
-	 * went 2 -> 4, the parity population 43 -> 41, and OUR real-verdict count 16 -> 14. That last one
-	 * moves against this project (two rows where we answered and the incumbent did not are no longer
-	 * counted in our favour), which is the direction an honest reclassification is allowed to move.
+	 * <p><b>Provenance of the pinned numbers.</b> Regenerated 2026-08-31 from the full 78-row corpus
+	 * run at commit {@code 6c181299} (the first Study A snapshot to cover the whole corpus -- the
+	 * previous pin, 45 rows / intersection 6, predated every scenario added since the August-27 gate).
+	 * What the new snapshot shows: the intersection grew 6 -> 42 with agreement on everything EXCEPT
+	 * one row -- {@code DerivedAttr-UNSAT}, where the incumbent accepts a model whose derived
+	 * attribute contradicts its configured domain (ground truth and our backend both refute). That
+	 * row is left as an UNDECLARED disagreement: promoting it to a declared Study B divergence needs
+	 * a supersession block in the manifest and an explicit go-ahead, per the guard rail that created
+	 * the current six.
 	 */
 	@Test
 	public void theHonestDenominatorOverTheRealCorpusRun() {
-		assertEquals("corpus finding rows", 45, table.summary.corpusRows);
-		assertEquals("Study B rows are declared divergences, not parity evidence", 4,
+		assertEquals("corpus finding rows", 78, table.summary.corpusRows);
+		assertEquals("Study B rows are declared divergences, not parity evidence", 6,
 				table.summary.declaredDivergenceRows);
-		assertEquals("parity population", 41, table.summary.parityPopulation);
-		assertEquals("Kodkod real verdicts", 33, table.summary.kodkodRealVerdicts);
-		assertEquals("SMT real verdicts", 14, table.summary.smtRealVerdicts);
-		assertEquals("intersection -- the only honest parity denominator", 6, table.summary.intersection);
-		assertEquals("agreements", 6, table.summary.agreements);
-		assertEquals("undeclared disagreements", 0, table.summary.disagreements);
+		assertEquals("parity population", 72, table.summary.parityPopulation);
+		assertEquals("Kodkod real verdicts", 44, table.summary.kodkodRealVerdicts);
+		assertEquals("SMT real verdicts", 70, table.summary.smtRealVerdicts);
+		assertEquals("intersection -- the only honest parity denominator", 42, table.summary.intersection);
+		assertEquals("agreements", 41, table.summary.agreements);
+		assertEquals("undeclared disagreements", 1, table.summary.disagreements);
 		assertEquals("unclassified disagreements", 0, table.summary.unclassifiedDisagreements);
 	}
 
-	/** The exact six rows the intersection consists of, named, so it cannot silently change shape. */
+	/**
+	 * The intersection is no longer six rows but its SHAPE is still pinned: 42 members, the six
+	 * original members still in it (continuity of the parity claim), the Set-attribute corpus rows
+	 * now in it too, and exactly one member -- {@code DerivedAttr-UNSAT} -- disagreeing.
+	 */
 	@Test
-	public void theIntersectionIsTheSixNamedRows() {
+	public void theIntersectionIsFortyTwoRowsWithExactlyOneDisagreement() {
 		List<String> inIntersection = new ArrayList<>();
+		List<String> disagreeing = new ArrayList<>();
 		for (ParityTable.Row row : table.rows) {
 			if (row.inIntersection) {
 				inIntersection.add(row.exampleId);
+				if (Boolean.FALSE.equals(row.agree)) {
+					disagreeing.add(row.exampleId);
+				}
 			}
 		}
 
-		assertEquals(List.of("Library", "Inheritance", "MultipleInheritance", "Library-UNSAT", "Inheritance-UNSAT",
-				"MultipleInheritance-UNSAT"), inIntersection);
+		assertEquals(42, inIntersection.size());
+		for (String original : List.of("Library", "Inheritance", "MultipleInheritance", "Library-UNSAT",
+				"Inheritance-UNSAT", "MultipleInheritance-UNSAT")) {
+			assertTrue("the original parity rows must still be in the intersection: " + original,
+					inIntersection.contains(original));
+		}
+		assertTrue("the Set(Integer)-attribute rows must be parity evidence now",
+				inIntersection.containsAll(List.of("SetAttr", "SetAttr-UNSAT")));
+		assertEquals("exactly one intersection member disagrees",
+				List.of("DerivedAttr-UNSAT"), disagreeing);
 	}
 
 	/**
@@ -185,8 +202,8 @@ public class ParityTableTest {
 			}
 		}
 
-		assertEquals("45 corpus rows, one table row each -- nothing collapsed", 45, table.rows.size());
-		assertEquals("39 rows are not plain agreements and each is retained", 39, nonAgreeing);
+		assertEquals("78 corpus rows, one table row each -- nothing collapsed", 78, table.rows.size());
+		assertEquals("37 rows are not plain agreements and each is retained", 37, nonAgreeing);
 	}
 
 	/**
@@ -220,7 +237,7 @@ public class ParityTableTest {
 
 	@Test
 	public void studyBRowsComeFromTheCorpusWithAllSixColumnsFilled() {
-		assertEquals("spec S9 lists four Study B cases", 4, table.studyB.size());
+		assertEquals("spec S9's four cases plus the two 2026-08-30 promotions", 6, table.studyB.size());
 		for (ParityTable.StudyBRow row : table.studyB) {
 			assertTrue(row.exampleId, notBlank(row.kodkodOutcome));
 			assertTrue(row.exampleId, notBlank(row.kodkodReason));
@@ -276,11 +293,11 @@ public class ParityTableTest {
 		}
 
 		assertEquals("the incumbent wrongly REFUTES these", List.of("IntegerBitwidth-DailyCap",
-				"RealGrid-UnitInterval"), falseRejects);
+				"RealGrid-UnitInterval", "AggregationComposition-SelfCycle"), falseRejects);
 		assertEquals("the incumbent wrongly ACCEPTS these", List.of("URealThreshold-Below",
-				"URealThreshold-NominalErasure"), falseAccepts);
-		assertEquals("false rejects, counted in the summary", 2, table.summary.falseRejectRows);
-		assertEquals("false accepts, counted in the summary", 2, table.summary.falseAcceptRows);
+				"URealThreshold-NominalErasure", "Redefines-TranslationGap"), falseAccepts);
+		assertEquals("false rejects, counted in the summary", 3, table.summary.falseRejectRows);
+		assertEquals("false accepts, counted in the summary", 3, table.summary.falseAcceptRows);
 	}
 
 	/**
@@ -302,7 +319,7 @@ public class ParityTableTest {
 			assertTrue(row.exampleId + ": ground truth must state the refutation",
 					row.groundTruth.startsWith("UNSATISFIABLE"));
 		}
-		assertEquals(2, checked);
+		assertEquals(3, checked);
 	}
 
 	/**
@@ -324,9 +341,9 @@ public class ParityTableTest {
 	public void markdownStatesAllThreeDenominatorFiguresAndOneLinePerCorpusRow() {
 		String md = ParityTable.toMarkdown(table);
 
-		assertTrue("Kodkod denominator", md.contains("33"));
-		assertTrue("SMT denominator", md.contains("14"));
-		assertTrue("intersection denominator", md.contains("6 of 45"));
+		assertTrue("Kodkod denominator", md.contains("44"));
+		assertTrue("SMT denominator", md.contains("70"));
+		assertTrue("intersection denominator", md.contains("42 of 78"));
 		for (ParityTable.Row row : table.rows) {
 			assertTrue("missing row " + row.exampleId, md.contains("| " + row.exampleId + " |"));
 		}
@@ -362,7 +379,7 @@ public class ParityTableTest {
 		assertTrue("a false-sat row must render as FALSE_ACCEPT",
 				studyB.contains("| false-sat | FALSE_ACCEPT |"));
 		for (String id : List.of("IntegerBitwidth-DailyCap", "RealGrid-UnitInterval", "URealThreshold-Below",
-				"URealThreshold-NominalErasure")) {
+				"URealThreshold-NominalErasure", "AggregationComposition-SelfCycle", "Redefines-TranslationGap")) {
 			assertTrue("missing Study B row " + id, studyB.contains("| " + id + " |"));
 		}
 	}
