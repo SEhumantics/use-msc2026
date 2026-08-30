@@ -586,6 +586,25 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           case "includesAll" -> collectionIncludesAll(a[0], a[1]);
           case "isEmpty" -> collectionEmptiness(a[0], true);
           case "notEmpty" -> collectionEmptiness(a[0], false);
+          case "at" -> {
+            // COLLECTION at(i) over a constant-content ordered literal/let-bound collection
+            // (Sequence/OrderedSet; Bag and Set are unordered and USE's type checker never
+            // produces the expression). The STRING at is handled by the virtual-string
+            // machinery inside comparisons and never reaches this case with a String
+            // receiver; a non-collection receiver here keeps its refusal.
+            if (a.length == 2
+                && constantCollectionContent(a[0]) != null
+                && a[0].type().isTypeOfSequence()
+                || (a.length == 2
+                    && constantCollectionContent(a[0]) != null
+                    && a[0].type().isTypeOfOrderedSet())) {
+              yield collectionAt(a[0], a[1]);
+            }
+            throw unsupported(
+                FragmentBoundary.TIER_3,
+                "at over a non-string, non-ordered-collection receiver is not supported in"
+                    + " this slice");
+          }
           case "sum" -> {
             if (a.length == 1) {
               yield collectionSum(a[0]);
@@ -4802,6 +4821,46 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         ? content.integers().get(0)
         : content.integers().get(content.integers().size() - 1);
     return defined(Smt.intLit(element));
+  }
+
+  /**
+   * {@code ->at(i)} over a constant-content ORDERED collection (Sequence/OrderedSet). Semantics
+   * per {@code Op_sequence_at} (use-core): 1-based; an out-of-range index yields UNDEFINED, so
+   * the definedness requires the index within 1..size and the value is an ite chain over the
+   * in-range positions. A constant index folds to the element (or the constant-undefined
+   * expression when out of range).
+   */
+  private TranslatedExpression collectionAt(Expression receiver, Expression indexExpr) {
+    SetContent content = constantCollectionContent(receiver);
+    if (content == null || content.integers() == null) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "at over a non-Integer-valued collection content is not supported in this slice");
+    }
+    List<BigInteger> elements = content.integers();
+    TranslatedExpression index = argResult(indexExpr);
+    if (indexExpr instanceof ExpConstInteger constantIndex) {
+      int position = constantIndex.value();
+      if (position >= 1 && position <= elements.size()) {
+        return defined(Smt.intLit(elements.get(position - 1)));
+      }
+      // Op_sequence_at: out of range is UNDEFINED for every index value.
+      return new TranslatedExpression(Smt.bool(false), Smt.intLit(BigInteger.ZERO));
+    }
+    // Symbolic index: value = ite chain over the 1-based positions with an out-of-range
+    // (constant-undefined) fallback; definedness = the index is one of the in-range positions.
+    SmtTerm value = Smt.intLit(BigInteger.ZERO);
+    for (int position = elements.size(); position >= 1; position--) {
+      SmtTerm matches = Smt.eq(index.value(), Smt.intLit(BigInteger.valueOf(position)));
+      value = Smt.ite(matches, Smt.intLit(elements.get(position - 1)), value);
+    }
+    SmtTerm defined =
+        Smt.and(
+            List.of(
+                index.defined(),
+                Smt.app(">=", index.value(), Smt.intLit(BigInteger.ONE)),
+                Smt.app("<=", index.value(), Smt.intLit(BigInteger.valueOf(elements.size())))));
+    return new TranslatedExpression(defined, value);
   }
 
   private TranslatedExpression collectionIncludesAll(Expression collectionExpr, Expression otherExpr) {

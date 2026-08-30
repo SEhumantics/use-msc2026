@@ -2761,7 +2761,7 @@
             },
             "unc-modelvalidator": {
               "status": "degraded",
-              "evidence": "2026-08-30, FIRST/LAST SLICE: ->first() and ->last() over a constant-content ORDERED collection literal (or let-bound one) fold to the element constant; an empty ordered collection yields the constant-UNDEFINED element (matching the evaluators' undefined-on-empty). collectionEnd (ExpressionTranslator). Covered by CollectionSumReductionsTest. at(i) with a symbolic index, append/prepend/insertAt/subSequence, and the as* coercions remain refused with located messages.",
+              "evidence": "APPEND:2026-08-30, AT(i) SLICE: ->at(i) over a constant-content ordered collection (Sequence/OrderedSet literal, or let-bound) -- semantics per Op_sequence_at (1-based, out-of-range UNDEFINED). A constant index folds to the element (or constant-undefined when out of range); a symbolic index becomes an ite chain over the positions with definedness requiring 1 <= i <= size. collectionAt (ExpressionTranslator). SequenceAtTest (4 end-to-end real-Z3 tests: constant fold, out-of-range undefined, symbolic index selection incl. a wrong-value refutation and an out-of-range refutation, OrderedSet at). The String at(i) keeps its own virtual-string handling and is unaffected.",
               "notes": "unsupported -> degraded: first/last over constant ordered literals supported; symbolic-index and mutation operations remain open.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
