@@ -3656,75 +3656,112 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     return receiver.indexOf(needle) + 1;
   }
 
-/**
-   * The representative term of a U-type arithmetic operand (crisp numeric literal, or a bare
-   * paired-U attribute's representative symbol), or null when unsupported.
+  /**
+   * One resolved U-type arithmetic operand: its representative term, whether that representative
+   * is Int-sorted (UInteger family), its configured uncertainty candidates, and the SMT symbol
+   * those candidates are guarded on. A crisp numeric literal carries an EMPTY candidate list and
+   * no symbol -- it contributes zero uncertainty. Null signals the operand is unsupported for
+   * arithmetic.
    */
-  private SmtTerm uArithRepresentative(Expression e) {
+  private record UArithOperand(
+      SmtTerm representative, boolean integer, List<Double> sigmas, SmtTerm sigmaSymbol) {}
+
+  /**
+   * Resolves a U-type arithmetic operand: a crisp numeric literal, or a bare paired-U attribute
+   * access on a context variable with a NON-EMPTY configured uncertainty domain (any candidate
+   * count -- the composed quadrature enumerates the candidate PAIRS, each pair's quadrature a
+   * compile-time constant guarded on both uncertainty symbols, so a symbolic-sigma nonlinearity
+   * is never emitted).
+   */
+  private UArithOperand uArithOperand(Expression e) {
     if (e instanceof ExpConstInteger ci) {
-      return Smt.intLit(BigInteger.valueOf(ci.value()));
+      return new UArithOperand(
+          Smt.intLit(BigInteger.valueOf(ci.value())), true, List.of(), null);
     }
     if (e instanceof ExpConstReal cr) {
-      return Smt.realLit(BigDecimal.valueOf(cr.value()));
+      return new UArithOperand(
+          Smt.realLit(BigDecimal.valueOf(cr.value())), false, List.of(), null);
     }
     if (e instanceof ExpAttrOp attr
         && attr.objExp() instanceof ExpVariable source
         && !localBindings.containsKey(source.getVarname())) {
       VariableBinding b = context.binding(source.getVarname());
       AttributeValues values = context.attributeValues(b.className(), attr.attr().name());
-      if (values.type().isPairedUType()) {
-        return Smt.sym(values.valueNames().get(b.slotIndex()));
+      if (!values.type().isPairedUType()) {
+        return null;
       }
-    }
-    return null;
-  }
-
-  /**
-   * The UNCERTAINTY of a U-type arithmetic operand: zero for crisp literals; for a paired-U
-   * attribute, the single configured candidate -- a PROVEN SINGLETON, which is what lets the
-   * composed quadrature be a compile-time constant. A negative return signals the operand is
-   * unsupported for arithmetic; a multi-candidate uncertainty refuses (the composed quadrature
-   * over symbolic sigmas is nonlinear).
-   */
-  private double uArithUncertainty(Expression e) {
-    if (e instanceof ExpConstInteger || e instanceof ExpConstReal) {
-      return 0.0;
-    }
-    if (e instanceof ExpAttrOp attr
-        && attr.objExp() instanceof ExpVariable source
-        && !localBindings.containsKey(source.getVarname())) {
-      VariableBinding b = context.binding(source.getVarname());
       AttributeDomain domain =
           context.attributeDomain(b.className(), attr.attr().name(), "uncertainty");
-      if (domain.enumeratedValues().size() != 1) {
+      if (domain.enumeratedValues().isEmpty()) {
         throw unsupported(
             FragmentBoundary.UTYPE_CORE,
             "U-type arithmetic over "
                 + b.className()
                 + "."
                 + attr.attr().name()
-                + ": the uncertainty must be a proven singleton (exactly one configured"
-                + " candidate) -- the composed quadrature over a symbolic sigma is nonlinear");
+                + ": the uncertainty domain has no configured candidates to enumerate");
       }
-      return Double.parseDouble(domain.enumeratedValues().get(0));
+      List<Double> sigmas = new ArrayList<>();
+      for (String candidate : domain.enumeratedValues()) {
+        sigmas.add(Double.parseDouble(candidate));
+      }
+      return new UArithOperand(
+          Smt.sym(values.valueNames().get(b.slotIndex())),
+          attr.type().isTypeOfUInteger(),
+          List.copyOf(sigmas),
+          Smt.sym(values.uncertaintyNames().get(b.slotIndex())));
     }
-    return -1.0;
+    return null;
   }
 
-  /** Whether a U-type arithmetic operand's representative is Int-sorted (UInteger family). */
-  private boolean isUArithInteger(Expression e) {
-    if (e instanceof ExpConstInteger) {
-      return true;
+  /**
+   * The COMPOSED uncertainty term of a U-type +/-: the quadrature
+   * {@code sqrt(sigma1^2 + sigma2^2)} USE computes, enumerated over the operands' configured
+   * candidate PAIRS -- each pair's quadrature is a compile-time constant guarded by BOTH
+   * uncertainty symbols (an ite chain over the pair guards, in the stable candidate order), so
+   * the emitted term stays linear in the pinned logic no matter how many candidates either side
+   * configures. Two crisp operands compose to the constant zero. More candidate pairs than the
+   * 256-combination convention refuses rather than emitting a quadratic expansion.
+   */
+  private SmtTerm composedUArithUncertainty(UArithOperand left, UArithOperand right, String letVar) {
+    if (left.sigmas().isEmpty() && right.sigmas().isEmpty()) {
+      return Smt.realLit(BigDecimal.ZERO);
     }
-    if (e instanceof ExpConstReal) {
-      return false;
+    List<Double> leftSigmas = left.sigmas().isEmpty() ? List.of(0.0) : left.sigmas();
+    List<Double> rightSigmas = right.sigmas().isEmpty() ? List.of(0.0) : right.sigmas();
+    if ((long) leftSigmas.size() * rightSigmas.size() > 256) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_NONLINEAR_OR_TRANSCENDENTAL,
+          "let-bound U-type variable '"
+              + letVar
+              + "': composing "
+              + left.sigmas().size()
+              + " x "
+              + right.sigmas().size()
+              + " configured uncertainty candidates exceeds the 256-combination expansion cap;"
+              + " the per-pair enumeration is what keeps the composed quadrature linear");
     }
-    if (e instanceof ExpAttrOp attr
-        && attr.objExp() instanceof ExpVariable source
-        && !localBindings.containsKey(source.getVarname())) {
-      return attr.type().isTypeOfUInteger();
+    List<SmtTerm> pairGuards = new ArrayList<>();
+    List<Double> pairValues = new ArrayList<>();
+    for (double sigmaL : leftSigmas) {
+      for (double sigmaR : rightSigmas) {
+        List<SmtTerm> guards = new ArrayList<>();
+        if (!left.sigmas().isEmpty()) {
+          guards.add(Smt.eq(left.sigmaSymbol(), Smt.realLit(BigDecimal.valueOf(sigmaL))));
+        }
+        if (!right.sigmas().isEmpty()) {
+          guards.add(Smt.eq(right.sigmaSymbol(), Smt.realLit(BigDecimal.valueOf(sigmaR))));
+        }
+        pairGuards.add(guards.isEmpty() ? Smt.bool(true) : Smt.and(guards));
+        pairValues.add(Math.sqrt(sigmaL * sigmaL + sigmaR * sigmaR));
+      }
     }
-    return false;
+    int last = pairValues.size() - 1;
+    SmtTerm composed = Smt.realLit(BigDecimal.valueOf(pairValues.get(last)));
+    for (int i = last - 1; i >= 0; i--) {
+      composed = Smt.ite(pairGuards.get(i), Smt.realLit(BigDecimal.valueOf(pairValues.get(i))), composed);
+    }
+    return composed;
   }
 
 /** True for exactly the navigated-UString-size shape the equality branch supports. */
@@ -4379,36 +4416,26 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     } else if (initializer instanceof ExpStdOp arith
         && ("+".equals(arith.opname()) || "-".equals(arith.opname()))
         && arith.args().length == 2
-        && uArithUncertainty(arith.args()[0]) >= 0
-        && uArithUncertainty(arith.args()[1]) >= 0) {
-      // U-TYPE ARITHMETIC: +/- over two operands whose uncertainties are PROVEN SINGLETONS
-      // (exactly one configured candidate each). USE composes uncertainties by quadrature
-      // (sqrt(s1^2 + s2^2) on doubles); with singleton uncertainties that quadrature is a
-      // COMPILE-TIME constant, the composed representative stays a linear sum/difference of
+        && uArithOperand(arith.args()[0]) != null
+        && uArithOperand(arith.args()[1]) != null) {
+      // U-TYPE ARITHMETIC: +/- over crisp numeric literals and paired-U attribute accesses.
+      // USE composes uncertainties by quadrature (sqrt(s1^2 + s2^2) on doubles); the composed
+      // uncertainty ENUMERATES the operands' configured candidate pairs (each pair's quadrature
+      // a compile-time constant guarded on both uncertainty symbols -- see
+      // composedUArithUncertainty), the composed representative stays a linear sum/difference of
       // symbols, and the threshold boundary arithmetic stays linear. A mixed-family sum
-      // (UInteger + UReal) refuses: the widening needs an audit of its own.
-      double sigmaL = uArithUncertainty(arith.args()[0]);
-      double sigmaR = uArithUncertainty(arith.args()[1]);
-      SmtTerm repL = uArithRepresentative(arith.args()[0]);
-      SmtTerm repR = uArithRepresentative(arith.args()[1]);
-      boolean leftInt = isUArithInteger(arith.args()[0]);
-      boolean rightInt = isUArithInteger(arith.args()[1]);
-      if (repL == null || repR == null) {
-        throw unsupported(
-            FragmentBoundary.UTYPE_CORE,
-            "let-bound U-type variable '"
-                + e.getVarname()
-                + "': composed initializers must combine U-typed attribute accesses or crisp"
-                + " numeric literals");
-      }
-      // MIXED FAMILY (UInteger + UReal): USE widens the UInteger operand through UReal, so the
-      // Int-sorted part lifts with to_real and the composed family is UREAL (no representative
-      // lift at the consumer).
-      if (leftInt != rightInt) {
-        if (leftInt) {
+      // (UInteger + UReal) lifts the Int-sorted representative: USE widens the UInteger operand
+      // through UReal, so the composed family is UREAL.
+      UArithOperand left = uArithOperand(arith.args()[0]);
+      UArithOperand right = uArithOperand(arith.args()[1]);
+      SmtTerm repL = left.representative();
+      SmtTerm repR = right.representative();
+      // MIXED FAMILY (UInteger + UReal): the Int-sorted part lifts with to_real.
+      if (left.integer() != right.integer()) {
+        if (left.integer()) {
           repL = Smt.app("to_real", repL);
         }
-        if (rightInt) {
+        if (right.integer()) {
           repR = Smt.app("to_real", repR);
         }
       }
@@ -4416,8 +4443,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           "+".equals(arith.opname())
               ? Smt.app("+", repL, repR)
               : Smt.app("-", repL, repR);
-      double composed = Math.sqrt(sigmaL * sigmaL + sigmaR * sigmaR);
-      uncertaintyTerm = Smt.realLit(BigDecimal.valueOf(composed));
+      uncertaintyTerm = composedUArithUncertainty(left, right, e.getVarname());
       uncertaintySymbol = symbolStem + "-uncertainty|";
     } else if (initializer instanceof ExpAttrOp navAttr
         && navAttr.objExp() instanceof ExpNavigation navigation
