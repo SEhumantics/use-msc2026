@@ -2725,51 +2725,23 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    */
   private TranslatedExpression setLiteralQuantifier(
       ExpSetLiteral set, String iterator, Expression bodyExpr, boolean forAll) {
-    // Elements: Integer constants bind the loop variable to their literal VALUE; String
-    // constants bind it to a singleton CONTENT candidate (stringOrEnum LocalBinding whose
-    // candidate list is the literal), so body comparisons resolve by content. Mixing kinds in
-    // one literal is refused.
+    // Elements: Integer constants and constant-bounds ranges bind the loop variable to their
+    // literal VALUE; String constants bind it to a singleton CONTENT candidate (stringOrEnum
+    // LocalBinding whose candidate list is the literal), so body comparisons resolve by
+    // content. Mixing kinds in one literal is refused.
     boolean sawInt = false;
     boolean sawString = false;
     List<BigInteger> intValues = new ArrayList<>();
     List<String> stringValues = new ArrayList<>();
     for (Expression element : set.getElemExpr()) {
-      if (element instanceof ExpConstInteger constant) {
-        sawInt = true;
-        BigInteger value = BigInteger.valueOf(constant.value());
-        if (!intValues.contains(value)) {
-          intValues.add(value);
-        }
-      } else if (element instanceof ExpConstString constant) {
+      if (element instanceof ExpConstString constant) {
         sawString = true;
         if (!stringValues.contains(constant.value())) {
           stringValues.add(constant.value());
         }
-      } else if (element instanceof ExpRange range) {
-        // Integer range literal Set{a..b}: expand to its element constants.
-        Expression lo = range.getStart();
-        Expression hi = range.getEnd();
-        if (lo instanceof ExpConstInteger loInt && hi != null && hi instanceof ExpConstInteger hiInt) {
-          sawInt = true;
-          long cur = loInt.value();
-          long end = hiInt.value();
-          while (cur <= end) {
-            BigInteger v = BigInteger.valueOf(cur);
-            if (!intValues.contains(v)) intValues.add(v);
-            cur++;
-          }
-        } else {
-          throw unsupported(
-              FragmentBoundary.TIER_3,
-              "range literal with non-constant bounds ("
-                  + lo + ".." + hi + ") is not yet supported");
-        }
       } else {
-        throw unsupported(
-            FragmentBoundary.TIER_3,
-            "Set literal with a non-constant or non-Integer/non-String element ("
-                + element
-                + ")");
+        sawInt = true;
+        appendIntegerElementValues(element, intValues);
       }
     }
     if (sawInt && sawString) {
@@ -2824,6 +2796,67 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   }
 
   /**
+   * A single constant-bounds range literal ({@code Set{lo..hi}}) may expand to at most this
+   * many elements. The expansion is compile-time, so this caps translation-time blowup (and
+   * the term size handed to the solver), not a semantic boundary -- a model wanting more
+   * elements than the cap must write them out or narrow the bounds.
+   */
+  private static final int MAX_RANGE_EXPANSION = 4096;
+
+  /**
+   * Appends the Integer value(s) of one set-literal ELEMENT to {@code out} -- an Integer
+   * constant contributes its value; a constant-bounds range {@code lo..hi} contributes every
+   * integer in the closed interval (an inverted interval {@code hi < lo} contributes none).
+   * Values already present are skipped, so the caller's list stays the literal's DISTINCT
+   * element set (Set semantics). Non-constant bounds refuse: QF_LIA has no scalar
+   * quantifier-variable binding for a range end, and no real corpus shape needs one.
+   */
+  private static void appendIntegerElementValues(Expression element, List<BigInteger> out) {
+    if (element instanceof ExpConstInteger constant) {
+      BigInteger value = BigInteger.valueOf(constant.value());
+      if (!out.contains(value)) {
+        out.add(value);
+      }
+      return;
+    }
+    if (element instanceof ExpRange range) {
+      Expression lo = range.getStart();
+      Expression hi = range.getEnd();
+      if (!(lo instanceof ExpConstInteger loInt)
+          || hi == null
+          || !(hi instanceof ExpConstInteger hiInt)) {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            "range literal with non-constant bounds ("
+                + lo + ".." + hi + ") is not yet supported");
+      }
+      long span = (long) hiInt.value() - (long) loInt.value() + 1;
+      if (span <= 0) {
+        return;
+      }
+      if (span > MAX_RANGE_EXPANSION) {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            "range literal " + loInt.value() + ".." + hiInt.value() + " expands to "
+                + span + " elements, above the " + MAX_RANGE_EXPANSION
+                + "-element expansion cap; narrow the bounds");
+      }
+      for (long cur = loInt.value(); cur <= hiInt.value(); cur++) {
+        BigInteger v = BigInteger.valueOf(cur);
+        if (!out.contains(v)) {
+          out.add(v);
+        }
+      }
+      return;
+    }
+    throw unsupported(
+        FragmentBoundary.TIER_3,
+        "Set literal with a non-constant or non-Integer/non-String element ("
+            + element
+            + ")");
+  }
+
+  /**
    * {@code Set{c1,...,cn}->one(k | body)} over an Integer-constant set literal: EXACTLY ONE
    * element satisfies the body. Each literal binds the loop variable as a singleton-content
    * candidate (per setLiteralQuantifier), the body translates once per distinct element, and
@@ -2834,10 +2867,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     String loopVariable = e.getVariableDeclarations().varDecl(0).name();
     List<BigInteger> values = new ArrayList<>();
     for (Expression element : set.getElemExpr()) {
-      BigInteger value = BigInteger.valueOf(((ExpConstInteger) element).value());
-      if (!values.contains(value)) {
-        values.add(value);
-      }
+      appendIntegerElementValues(element, values);
     }
     SmtTerm zero = Smt.intLit(BigInteger.ZERO);
     SmtTerm oneCount = Smt.intLit(BigInteger.ONE);
@@ -4134,9 +4164,13 @@ public final class ExpressionTranslator implements ExpressionVisitor {
             && navigation.getDestination().isCollection())) {
       population = populationOf(receiver, construct);
     } else if (receiver instanceof ExpSetLiteral set && set.getElemExpr().length > 0) {
-      // A non-empty String set literal always has elements: isEmpty = false, notEmpty = true.
+      // Emptiness from the EXPANDED distinct element count: a constant-bounds range with an
+      // inverted interval (Set{5..4}) contributes no elements, so it really is empty -- the
+      // pre-expansion shortcut ("a literal always has elements") answered isEmpty wrongly for
+      // that shape.
+      boolean nonEmpty = distinctLiteralElementCount(set) > 0;
       return new TranslatedExpression(
-          Smt.bool(true), wantEmpty ? Smt.bool(false) : Smt.bool(true));
+          Smt.bool(true), wantEmpty ? Smt.bool(!nonEmpty) : Smt.bool(nonEmpty));
     } else {
       throw unsupported(
           FragmentBoundary.TIER_3,
@@ -5162,7 +5196,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (e.getRangeExpression() instanceof ExpSetLiteral set
         && set.getElemExpr().length > 0) {
       Expression first = set.getElemExpr()[0];
-      if (first instanceof ExpConstInteger) {
+      if (first instanceof ExpConstInteger || first instanceof ExpRange) {
         result = oneOverIntegerSetLiteral(e, set);
         return;
       }
@@ -5361,24 +5395,49 @@ public final class ExpressionTranslator implements ExpressionVisitor {
 
   /**
    * The DISTINCT Integer constants of a set literal, in declaration order (duplicates
-   * collapsed per Set semantics).
+   * collapsed per Set semantics). A constant-bounds range element contributes its whole
+   * closed interval (see {@link #appendIntegerElementValues}); String or non-constant
+   * elements refuse.
    */
   private static List<BigInteger> distinctIntegerConstants(ExpSetLiteral set) {
     List<BigInteger> values = new ArrayList<>();
     for (Expression element : set.getElemExpr()) {
-      if (!(element instanceof ExpConstInteger constant)) {
+      if (element instanceof ExpConstString) {
         throw unsupported(
             FragmentBoundary.TIER_3,
             "Set literal with a non-constant or non-Integer element ("
                 + element
                 + "); only Integer constants are supported in this slice");
       }
-      BigInteger value = BigInteger.valueOf(constant.value());
-      if (!values.contains(value)) {
-        values.add(value);
-      }
+      appendIntegerElementValues(element, values);
     }
     return values;
+  }
+
+  /**
+   * The DISTINCT element count of a set literal mixing String constants with Integer
+   * constants / constant-bounds ranges (the emptiness consumer only needs the count, and an
+   * empty range contributes none -- {@code Set{5..4}} really is empty). Mixed Integer/String
+   * content refuses, exactly as in every other set-literal consumer.
+   */
+  private static int distinctLiteralElementCount(ExpSetLiteral set) {
+    List<BigInteger> ints = new ArrayList<>();
+    List<String> strings = new ArrayList<>();
+    for (Expression element : set.getElemExpr()) {
+      if (element instanceof ExpConstString constant) {
+        if (!strings.contains(constant.value())) {
+          strings.add(constant.value());
+        }
+      } else {
+        appendIntegerElementValues(element, ints);
+      }
+    }
+    if (!ints.isEmpty() && !strings.isEmpty()) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "Set literal mixes Integer and String constants; not supported in this slice");
+    }
+    return ints.size() + strings.size();
   }
 
   /** Runs {@link #closureReachability} with {@code self} aliased to the operation's receiver. */

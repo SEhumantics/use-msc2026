@@ -2548,13 +2548,17 @@
               "coverageNote": "zero coverage - the sole scenario citing this (CivilStatus's nameCapitalThenSmallLetters invariant) never completes transformation for an unrelated reason (String.substring/size are unsupported), so the range literal itself is never actually reached by any scenario."
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "ExpressionTranslator.visitRange() (lines 423-426): `throw unsupported(\"range\")`, unconditional.",
-              "notes": "No Set{a..b} support of any kind.",
-              "satScenarioIds": [],
-              "unsatScenarioIds": [],
+              "status": "supported",
+              "evidence": "2026-08-30: SUPPORTED (constant bounds) -- same slice as collection.range-literal, which this row shares its construct with: Set{a..b} as a set-literal element expands through appendIntegerElementValues in every consumer (quantifier ranges, size(), includes/excludes, one(), emptiness). RangeLiteralQuantifierTest (pre-existing quantifier coverage) plus RangeLiteralConsumersTest (9 end-to-end real-Z3 tests, USE-evaluator-confirmed, adversarially verified). NEW corpus scenario RangeLiteral / RangeLiteral-UNSAT (Set{1..5} over ->includes/->size()/->one; the UNSAT variant forces level 7 outside the band).",
+              "notes": "Non-constant bounds refuse with a located TIER_3 message (no scalar quantifier-variable binding in QF_LIA); Kodkod's comprehension accepts them, so the row is honest about that residual gap even though no scenario on either side ever exercised it. A bare/standalone range outside a Set literal still refuses.",
+              "satScenarioIds": [
+                "RangeLiteral"
+              ],
+              "unsatScenarioIds": [
+                "RangeLiteral-UNSAT"
+              ],
               "validationOracleScenarioIds": [],
-              "coverageNote": "zero coverage -- no scenario tags this feature id; verdict is source-only."
+              "coverageNote": ""
             }
           }
         }
@@ -2704,13 +2708,17 @@
               "coverageNote": "zero coverage - CivilStatus was previously cited, but its only range literal sits in an invariant clause (nameCapitalThenSmallLetters) whose left operand (name.substring) throws TransformationException before the range literal is ever reached -- confirmed live. Removed in the 2026-08-23 audit; status is based on source-code reading alone."
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "ExpressionTranslator.java:423-426 visitRange(ExpRange e) -- unconditional `throw unsupported(\"range\")`.",
-              "notes": "CivilStatus's (inactive) nameCapitalThenSmallLetters invariant also contains a range literal (`Set{2..name.size}`), for the same reason discussed under collection.set-literal -- the whole invariant is configured `inactive` in CivilStatus.properties and is never handed to the translator, so this construct is never reached by any real run either.",
-              "satScenarioIds": [],
-              "unsatScenarioIds": [],
+              "status": "supported",
+              "evidence": "2026-08-30: SUPPORTED (constant bounds). appendIntegerElementValues (ExpressionTranslator) expands a constant-bounds ExpRange element into its closed interval for EVERY set-literal consumer through one shared helper: setLiteralQuantifier (forAll/exists, RangeLiteralQuantifierTest), collectionSize (->size()), includes/excludes, one() (oneOverIntegerSetLiteral via visitOne's ExpRange dispatch), and collectionEmptiness (distinctLiteralElementCount -- an inverted interval Set{5..4} contributes NO elements, so it really is empty; the pre-expansion shortcut 'a literal always has elements' answered isEmpty wrongly for that shape, a wrong-answer bug this slice fixes). Duplicates collapse across constants and ranges per Set semantics ({2,1..3,9} has 4 distinct elements). Non-constant bounds (Set{1..x.i}) refuse with a located TIER_3 message (QF_LIA has no scalar quantifier-variable binding for a range end), and a range wider than the 4096-element expansion cap refuses at translation time instead of exploding the term. RangeLiteralConsumersTest (9 end-to-end real-Z3 tests, USE-evaluator-confirmed); both adversarial reverts caught (duplicate-check drop flips the mixed-literal size discriminator; cap removal flips the wide-range refusal). NEW corpus scenario RangeLiteral / RangeLiteral-UNSAT exercises ->includes, ->size() and ->one over Set{1..5} through the real pipeline -- the construct previously had zero actual coverage on EITHER tool (Kodkod's sole citing scenario, CivilStatus's inactive nameCapitalThenSmallLetters, never completes transformation).",
+              "notes": "Narrower than the incumbent in exactly one documented way: Kodkod's mkSetRange is a genuine Kodkod comprehension and also accepts NON-constant bounds; this encoding's QF_LIA fragment cannot bind a range end to a solver variable, so that shape refuses with a located message. A bare/standalone ExpRange (outside a Set literal) still refuses via visitRange.",
+              "satScenarioIds": [
+                "RangeLiteral"
+              ],
+              "unsatScenarioIds": [
+                "RangeLiteral-UNSAT"
+              ],
               "validationOracleScenarioIds": [],
-              "coverageNote": "zero coverage - no manifest scenario tags this feature id; the suite's one live occurrence (inside CivilStatus's inactive nameCapitalThenSmallLetters invariant) is never handed to the translator."
+              "coverageNote": ""
             }
           }
         },

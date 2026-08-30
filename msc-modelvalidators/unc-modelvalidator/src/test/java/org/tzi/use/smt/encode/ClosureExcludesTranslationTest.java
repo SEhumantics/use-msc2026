@@ -76,8 +76,19 @@ public class ClosureExcludesTranslationTest {
     assertHolds(Set.of(edge(0, 0)), 0, false);
   }
 
+  /**
+   * INVERTED PIN (was: excludes over a range literal collection is refused): constant-bounds
+   * range literals are now supported in every set-literal consumer, includes/excludes included
+   * (RangeLiteralConsumersTest pins the end-to-end SAT/UNSAT behavior over a real
+   * configuration). The tripwire stays so the OLD blanket range refusal cannot silently
+   * return: translation of the range-literal collection itself must not fail with a
+   * range-related refusal. (With this test's deliberately empty TranslationContext the
+   * translate call still cannot complete -- attribute lookup needs a registered scope, hence
+   * ENCODING_SCOPE -- so the assertion admits both a clean translation and any
+   * NON-range-related refusal.)
+   */
   @Test
-  public void excludesOverARangeLiteralCollectionIsRefused() throws Exception {
+  public void excludesOverARangeLiteralCollectionIsNoLongerRefusedAsARange() throws Exception {
     String source =
         """
         model NonClosureScope
@@ -93,15 +104,17 @@ public class ClosureExcludesTranslationTest {
     MModel model = USECompiler.compileSpecification(source, "NonClosureScope", err, new ModelFactory());
     err.flush();
     MClassInvariant inv = findInvariant(model, "notInSet");
-    SmtTranslationException thrown =
-        assertThrows(
-            SmtTranslationException.class,
-            () ->
-                ExpressionTranslator.translate(
-                    invariantBody(inv),
-                    new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of(), Map.of()),
-                    TranslationMode.UNCERTAIN));
-    assertEquals(FragmentBoundary.TIER_3, thrown.boundary());
+    try {
+      ExpressionTranslator.translate(
+          invariantBody(inv),
+          new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of(), Map.of()),
+          TranslationMode.UNCERTAIN);
+    } catch (SmtTranslationException thrown) {
+      org.junit.Assert.assertFalse(
+          "the range literal itself must not be the refusal: " + thrown.getMessage(),
+          thrown.getMessage().contains("non-constant")
+              || thrown.getMessage().contains("range"));
+    }
   }
 
   private static int[] edge(int parentSlot, int childSlot) {

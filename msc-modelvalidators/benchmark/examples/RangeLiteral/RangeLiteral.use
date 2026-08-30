@@ -1,0 +1,39 @@
+model RangeLiteral
+
+-- Authored specifically to give unc-modelvalidator's constant-bounds Integer
+-- range literal (Set{a..b}) a real, wired benchmark scenario. Before this the
+-- construct had ZERO coverage on EITHER tool: Kodkod's own sole citing scenario
+-- (CivilStatus's inactive nameCapitalThenSmallLetters) never completes
+-- transformation for an unrelated String reason, and no shipped .use model
+-- anywhere exercises a range literal that is ever actually encoded. This model's
+-- only job is to exercise the range literal through its real consumers --
+-- ->includes, ->size(), ->one(...) -- in one small, honestly-checkable domain,
+-- through the real .use/.properties/manifest pipeline every other corpus
+-- scenario goes through.
+
+class Sensor
+attributes
+  level : Integer
+  calib : Integer
+end
+
+constraints
+
+-- The level must sit inside the closed band 1..5, expressed as membership in a
+-- range literal rather than two ordered comparisons: the literal IS its
+-- enumeration (1,2,3,4,5), duplicate-collapsed, so includes resolves exactly as
+-- against a hand-written Set{1,2,3,4,5}.
+context s : Sensor inv levelWithinSafeBand:
+  Set{1..5}->includes(s.level)
+
+-- The band's distinct element count is a compile-time constant of the literal.
+context s : Sensor inv bandSizeIsFive:
+  Set{1..5}->size() = 5
+
+-- Exactly one band element doubles to the calibration value: over {1..5} the
+-- doubled values {2,4,6,8,10} are pairwise distinct, so one() holds precisely
+-- for calib in {2,4,6,8,10} and fails for anything else (0 matches or 2+
+-- matches -- the latter unreachable here, but the count-based encoding checks
+-- it, not mere existence).
+context s : Sensor inv calibrationValueIsSingletonInBand:
+  Set{1..5}->one(c | c * 2 = s.calib)

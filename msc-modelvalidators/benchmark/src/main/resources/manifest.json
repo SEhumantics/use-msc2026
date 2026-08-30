@@ -2309,6 +2309,67 @@
         "any-match-selection",
         "paired-unsat-mutation"
       ]
+    },
+    {
+      "id": "RangeLiteral",
+      "directory": "RangeLiteral",
+      "useFile": "RangeLiteral.use",
+      "propertiesFile": "RangeLiteral.properties",
+      "section": "main",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Authored for this thesis project (msc-4, Trong-Nghia Be) specifically to give the constant-bounds Integer range literal (Set{a..b}) and its real consumers (->includes, ->size(), ->one) a wired benchmark scenario -- the construct had zero actual coverage on EITHER tool before this (Kodkod's sole citing scenario, CivilStatus's inactive nameCapitalThenSmallLetters, never completes transformation for an unrelated String.substring reason, so its range literal is never reached).",
+      "provenanceCitation": null,
+      "features": [
+        "collection.range-literal",
+        "collection.set-literal",
+        "ocl.one",
+        "ocl.range-literal",
+        "ocl.size",
+        "prim.integer-arithmetic"
+      ],
+      "question": "Does a constant-bounds range literal (Set{1..5}) behave exactly as its enumeration across ->includes, ->size(), and ->one(c | c*2 = s.calib) -- membership inside the band, the literal's distinct element count, and exactly-one doubled match?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "scenarioTags": [
+        "range-literal",
+        "set-literal-consumers",
+        "authored"
+      ]
+    },
+    {
+      "id": "RangeLiteral-UNSAT",
+      "directory": "RangeLiteral",
+      "useFile": "RangeLiteral.use",
+      "propertiesFile": "RangeLiteral.properties",
+      "section": "unsat",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "UNSAT counterpart of RangeLiteral: level's domain {7} sits outside the band Set{1..5}, so the includes-based invariant is genuinely violated while the model stays fully populated.",
+      "provenanceCitation": null,
+      "features": [
+        "collection.range-literal",
+        "collection.set-literal",
+        "ocl.range-literal"
+      ],
+      "question": "Does the range-literal membership invariant correctly REFUTE a configuration whose only level value (7) falls outside the band Set{1..5}?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "scenarioTags": [
+        "range-literal",
+        "set-literal-consumers",
+        "authored"
+      ]
     }
   ]
 }
