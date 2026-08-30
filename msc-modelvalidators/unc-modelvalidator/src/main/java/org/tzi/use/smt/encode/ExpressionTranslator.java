@@ -2897,6 +2897,14 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           e.getQueryExpression(), false);
       return;
     }
+    if (variableCount == 1) {
+      SetContent letSet = localCollection(e.getRangeExpression());
+      if (letSet != null) {
+        result = setQuantifierOver(letSet.integers(), letSet.strings(),
+            e.getVariableDeclarations().varDecl(0).name(), e.getQueryExpression(), false);
+        return;
+      }
+    }
     List<PopulationMember> population = populationOf(e.getRangeExpression(), "exists");
     List<SmtTerm> trueCandidates = new ArrayList<>();
     List<SmtTerm> definedCandidates = new ArrayList<>();
@@ -2944,6 +2952,14 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       result = setLiteralQuantifier(setLiteral, e.getVariableDeclarations().varDecl(0).name(),
           e.getQueryExpression(), true);
       return;
+    }
+    if (variableCount == 1) {
+      SetContent letSet = localCollection(e.getRangeExpression());
+      if (letSet != null) {
+        result = setQuantifierOver(letSet.integers(), letSet.strings(),
+            e.getVariableDeclarations().varDecl(0).name(), e.getQueryExpression(), true);
+        return;
+      }
     }
     List<PopulationMember> population = populationOf(e.getRangeExpression(), "forAll");
     List<SmtTerm> valueConjuncts = new ArrayList<>();
@@ -3021,6 +3037,26 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           FragmentBoundary.TIER_3,
           "Set literal mixes Integer and String constants; not supported in this slice");
     }
+    return setQuantifierOver(intValues, stringValues, iterator, bodyExpr, forAll);
+  }
+
+  /**
+   * The per-element quantifier emission shared by the direct set-literal ranges and the
+   * let-bound set variables: each Integer element (or String content candidate) binds the loop
+   * variable through a per-element SMT let, exactly as {@code setLiteralQuantifier} has always
+   * done. {@code intValues} carries the distinct Integer elements, {@code stringValues} the
+   * distinct String contents; exactly one is non-null.
+   */
+  private TranslatedExpression setQuantifierOver(
+      List<BigInteger> intValues,
+      List<String> stringValues,
+      String iterator,
+      Expression bodyExpr,
+      boolean forAll) {
+    // Callers carrying only one element kind pass null for the other (the SetContent record's
+    // convention); the loops below want plain empty lists.
+    if (intValues == null) intValues = List.of();
+    if (stringValues == null) stringValues = List.of();
     List<SmtTerm> definedTerms = new ArrayList<>();
     List<SmtTerm> valueTerms = new ArrayList<>();
     for (BigInteger element : intValues) {
@@ -4476,6 +4512,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (isVirtualStringSplit(receiver)) {
       return defined(virtualSplitSizeChain((ExpStdOp) receiver));
     }
+    SetContent letSet = localCollection(receiver);
+    if (letSet != null) {
+      return defined(Smt.intLit(BigInteger.valueOf(letSet.size())));
+    }
     if (receiver instanceof ExpNavigation navigation
         && isCollectionValuedNavigation(navigation)) {
       return defined(sizeTerm(populationOf(navigation, "size()")));
@@ -4613,6 +4653,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && (query instanceof ExpSelect || query instanceof ExpReject)
         && isSupportedSelectSource(query)) {
       population = selectedAllInstancesPopulation(query);
+    } else if (localCollection(receiver) != null) {
+      boolean nonEmpty = localCollection(receiver).size() > 0;
+      return new TranslatedExpression(
+          Smt.bool(true), wantEmpty ? Smt.bool(!nonEmpty) : Smt.bool(nonEmpty));
     } else if (receiver instanceof ExpAllInstances
         || (receiver instanceof ExpNavigation navigation
             && isCollectionValuedNavigation(navigation))) {
@@ -4814,6 +4858,13 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       result = uTypeLet(e);
       return;
     }
+    // NOTE: SetType.isTypeOfCollection() is FALSE in USE's own type lattice (that predicate
+    // names the abstract Collection type exactly); CollectionType is the right arbiter.
+    if (e.getVarType() instanceof org.tzi.use.uml.ocl.type.CollectionType
+        && e.getVarExpression() instanceof ExpSetLiteral set) {
+      result = setLiteralLet(e, set);
+      return;
+    }
     boolean stringOrEnum =
         e.getVarType().isTypeOfString() || e.getVarType().isTypeOfEnum();
     if (!e.getVarType().isTypeOfInteger()
@@ -4871,6 +4922,49 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * attribute forms translates anyway; chained let variables are refused here (the source
    * binding would have to be threaded both components, which no consumer needs yet).
    */
+  /**
+   * {@code let s : Set(Integer) = Set{...} in body} (String likewise): the FIRST-CLASS
+   * collection binding. The literal IS the collection's representation -- duplicates collapsed,
+   * constant-bounds ranges expanded -- so the binding carries the constant element set
+   * ({@link SetContent}) and no solver-side collection value is invented. Every element kind
+   * the direct set-literal consumers accept (Integer constants, constant-bounds ranges, String
+   * constants; no mixing) is accepted here through the same extraction.
+   */
+  private TranslatedExpression setLiteralLet(ExpLet e, ExpSetLiteral set) {
+    boolean sawString = false;
+    List<BigInteger> intValues = new ArrayList<>();
+    List<String> stringValues = new ArrayList<>();
+    for (Expression element : set.getElemExpr()) {
+      if (element instanceof ExpConstString constant) {
+        sawString = true;
+        if (!stringValues.contains(constant.value())) {
+          stringValues.add(constant.value());
+        }
+      } else {
+        appendIntegerElementValues(element, intValues);
+      }
+    }
+    SetContent content =
+        sawString ? new SetContent(null, stringValues) : new SetContent(intValues, null);
+    String symbolStem = "|ocl-let-" + e.getVarname();
+    LocalBinding binding =
+        new LocalBinding(
+            symbolStem + "-defined|", symbolStem + "-value|", false, null, null, null, content);
+    Map<String, LocalBinding> extended = new LinkedHashMap<>(localBindings);
+    extended.put(e.getVarname(), binding);
+    // A literal is always defined, so the let's definedness is the body's own.
+    return translate(e.getInExpression(), context, mode, positivePolarity, Map.copyOf(extended));
+  }
+
+  /** The constant set content a variable binding carries, or null. */
+  private SetContent localCollection(Expression e) {
+    if (e instanceof ExpVariable v) {
+      LocalBinding binding = localBindings.get(v.getVarname());
+      return binding == null ? null : binding.collection();
+    }
+    return null;
+  }
+
   private TranslatedExpression uTypeLet(ExpLet e) {
     // Three supported initializer shapes: a bare U-typed attribute access on a context variable
     // (one slot, guard true), a CHAINED U-type let variable (aliases its predecessor's symbols
@@ -5198,19 +5292,40 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   private record LocalBinding(
       String definedSymbol, String valueSymbol, boolean stringOrEnum,
       List<String> enumeratedValues, String uncertaintySymbol,
-      LetBindingSource letSource) {
+      LetBindingSource letSource, SetContent collection) {
     /** The scalar (non-U-typed) form: no uncertainty component, no let source. */
     private LocalBinding(
         String definedSymbol, String valueSymbol, boolean stringOrEnum,
         List<String> enumeratedValues) {
-      this(definedSymbol, valueSymbol, stringOrEnum, enumeratedValues, null, null);
+      this(definedSymbol, valueSymbol, stringOrEnum, enumeratedValues, null, null, null);
     }
 
     /** The paired UReal/UInteger form: uncertainty without an enumerated source. */
     private LocalBinding(
         String definedSymbol, String valueSymbol, boolean stringOrEnum,
         List<String> enumeratedValues, String uncertaintySymbol) {
-      this(definedSymbol, valueSymbol, stringOrEnum, enumeratedValues, uncertaintySymbol, null);
+      this(definedSymbol, valueSymbol, stringOrEnum, enumeratedValues, uncertaintySymbol, null, null);
+    }
+
+    /** The let-source form (scalar and inlined-operation parameters). */
+    private LocalBinding(
+        String definedSymbol, String valueSymbol, boolean stringOrEnum,
+        List<String> enumeratedValues, String uncertaintySymbol,
+        LetBindingSource letSource) {
+      this(definedSymbol, valueSymbol, stringOrEnum, enumeratedValues, uncertaintySymbol,
+          letSource, null);
+    }
+  }
+
+  /**
+   * The CONSTANT element set of a let-bound Set literal ({@code let s : Set(Integer) =
+   * Set{1,2,3} in ...}): the literal IS the collection's representation, duplicates collapsed
+   * and constant ranges expanded, exactly as for the direct set-literal consumers. Exactly one
+   * list is non-null; a Set(String) binds by CONTENT (the strings), a Set(Integer) by value.
+   */
+  private record SetContent(List<BigInteger> integers, List<String> strings) {
+    int size() {
+      return integers != null ? integers.size() : strings.size();
     }
   }
 
@@ -5812,6 +5927,33 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       List<SmtTerm> matches = new ArrayList<>();
       for (BigInteger constant : constants) {
         matches.add(Smt.eq(element.value(), Smt.intLit(constant)));
+      }
+      SmtTerm member = Smt.and(List.of(element.defined(), Smt.or(matches)));
+      return defined(wantIncludes ? member : Smt.not(member));
+    }
+    SetContent letSet = localCollection(collectionExpr);
+    if (letSet != null) {
+      TranslatedExpression element = argResult(elementExpr);
+      List<SmtTerm> matches = new ArrayList<>();
+      if (letSet.integers() != null) {
+        for (BigInteger constant : letSet.integers()) {
+          matches.add(Smt.eq(element.value(), Smt.intLit(constant)));
+        }
+      } else {
+        ContentOperand elementContent = contentOperand(elementExpr);
+        if (elementContent == null || elementContent.enumeratedValues() == null) {
+          throw unsupported(
+              FragmentBoundary.TIER_3,
+              (wantIncludes ? "includes" : "excludes")
+                  + " over a let-bound String set requires a String-typed element with a"
+                  + " registered domain");
+        }
+        for (String constant : letSet.strings()) {
+          int idx = elementContent.enumeratedValues().indexOf(constant);
+          if (idx >= 0) {
+            matches.add(Smt.eq(elementContent.value(), Smt.intLit(BigInteger.valueOf(idx))));
+          }
+        }
       }
       SmtTerm member = Smt.and(List.of(element.defined(), Smt.or(matches)));
       return defined(wantIncludes ? member : Smt.not(member));
