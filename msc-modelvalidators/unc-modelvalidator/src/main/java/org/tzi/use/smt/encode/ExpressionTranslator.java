@@ -3559,10 +3559,44 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    */
   private TranslatedExpression isTypeCheck(
       Expression sourceExpr, org.tzi.use.uml.ocl.type.Type targetType, boolean includeSubtypes) {
+    // NON-CLASS targets (Integer/Real/String/UInteger/...): USE's ExpIsTypeOf compares the
+    // value's runtime type EXACTLY (equals) and ExpIsKindOf uses conformsTo -- both are total
+    // over the value's DECLARED type, which for a crisp scalar attribute is the compile-time
+    // declared attribute type. Delegate to USE's own Type.equals/conformsTo rather than a
+    // hand-maintained conformance matrix: the lattice facts are surprising (Integer
+    // conformsTo Real AND UInteger/UReal via isKindOfNumber; Real does NOT conformTo
+    // Integer), and delegating keeps the encoding bit-exact against the evaluator by
+    // construction.
     if (!targetType.isTypeOfClass()) {
+      if (sourceExpr instanceof ExpAttrOp attr
+          && attr.objExp() instanceof ExpVariable v
+          && !localBindings.containsKey(v.getVarname())) {
+        org.tzi.use.uml.ocl.type.Type runtime = attr.type();
+        if (runtime.isTypeOfUReal() || runtime.isTypeOfUInteger()
+            || runtime.isTypeOfUBoolean() || runtime.isTypeOfUString()) {
+          throw unsupported(
+              FragmentBoundary.UTYPE_CORE,
+              "type test of an uncertain attribute (" + runtime + "): the runtime type of a"
+                  + " projected uncertain value is not modeled in this slice");
+        }
+        boolean result = includeSubtypes
+            ? runtime.conformsTo(targetType)
+            : runtime.equals(targetType);
+        // Type tests are TOTAL (an undefined source tests FALSE, never undefined).
+        return defined(Smt.bool(result));
+      }
+      if (sourceExpr instanceof ExpVariable v && !localBindings.containsKey(v.getVarname())) {
+        // A context OBJECT variable: its runtime type is its class, which neither equals nor
+        // conforms to a basic type -- compile-time false, both flavors.
+        boolean result = includeSubtypes
+            ? v.type().conformsTo(targetType)
+            : v.type().equals(targetType);
+        return defined(Smt.bool(result));
+      }
       throw unsupported(
           FragmentBoundary.TIER_2,
-          "isTypeOf/isKindOf against a non-class target type " + targetType);
+          "isTypeOf/isKindOf against a non-class target type " + targetType
+              + " with a source that is neither a scalar attribute nor a variable");
     }
     org.tzi.use.uml.mm.MClassifier targetClass = (org.tzi.use.uml.mm.MClassifier) targetType;
     // A cast source ({@code v.oclAsType(Truck).oclIsKindOf(Truck)}): the type test stays

@@ -70,7 +70,7 @@ public class FragmentLedgerBoundaryTest {
       context self : Sample inv Tier2ExistsThreeVariables:
         Sample.allInstances()->exists(x, y, z | x.n > 0)
       context self : Sample inv Tier2TypeTest:
-        self.oclIsTypeOf(Integer)
+        self.speed.oclIsTypeOf(Integer)
       context self : Sample inv Tier2EnumLiteralVersusOclUndefined:
         Color::red = oclUndefined(Color)
       context self : Sample inv Tier3SetLiteral:
@@ -92,7 +92,7 @@ public class FragmentLedgerBoundaryTest {
     Map<String, FragmentBoundary> expected = new LinkedHashMap<>();
     expected.put("Sample::Tier1ForAllThreeVariables", FragmentBoundary.TIER_1);
     expected.put("Sample::Tier2ExistsThreeVariables", FragmentBoundary.TIER_2);
-    expected.put("Sample::Tier2TypeTest", FragmentBoundary.TIER_2);
+    expected.put("Sample::Tier2TypeTest", FragmentBoundary.UTYPE_CORE);
     expected.put("Sample::Tier2EnumLiteralVersusOclUndefined", FragmentBoundary.TIER_2);
     expected.put("Sample::Tier3SetLiteral", FragmentBoundary.TIER_3);
     expected.put("Sample::BeyondFirstFragmentConditional", FragmentBoundary.BEYOND_FIRST_FRAGMENT);
@@ -160,16 +160,18 @@ public class FragmentLedgerBoundaryTest {
     // TIER_3, and the located reason names the nested element (the established
     // fixture-replacement precedent, applied here for the third time).
     assertTrue("the construct must still be named", message.contains("nested collection element"));
-    // Tier2TypeTest's body changed twice as casts/type tests became genuinely supported:
+    // Tier2TypeTest's body changed three times as type tests became genuinely supported:
     // from `self.oclIsTypeOf(Sample)` (supported by isTypeCheck's translation-time dispatch)
     // to `self.oclAsType(Sample).oclIsTypeOf(Sample)` (also supported since the oclAsType
-    // slice -- a cast over a bare context variable resolves per variant), and now to
-    // `self.oclIsTypeOf(Integer)`, which still refuses at TIER_2 inside isTypeCheck itself
-    // (non-class target type) -- so the fixture keeps pinning the boundary at its honest
-    // remaining gap rather than at a shape that no longer refuses at all.
+    // slice), then `self.oclIsTypeOf(Integer)` (supported since the basic-type slice -- a
+    // crisp scalar attribute's declared type IS its runtime type, so the test is a
+    // compile-time fact via USE's own Type.equals/conformsTo), and now to
+    // `self.speed.oclIsTypeOf(Integer)` -- a U-TYPED source, whose projected runtime type is
+    // not modeled, refusing at UTYPE_CORE inside isTypeCheck. The fixture keeps pinning the
+    // boundary at its honest remaining gap rather than at a shape that no longer refuses.
     assertTrue(
         "the construct must still be named",
-        message.contains("non-class target type"));
+        message.contains("type test of an uncertain attribute"));
     // The message text changed since this assertion was first written: `self.speed > self.other`
     // now reaches uTypeSymmetricThreshold (both operands are UReal attributes), which names the
     // REAL reason for the refusal (uncertainty not provably equal) instead of the old, less
