@@ -160,11 +160,19 @@ public final class ExpressionTranslator implements ExpressionVisitor {
               navigation.getObjectExpression(), navigation.getDestination(), e.attr());
       return;
     }
-    if (e.objExp() instanceof ExpAsType cast
-        && cast.getSourceExpr() instanceof ExpVariable srcVar
-        && !localBindings.containsKey(srcVar.getVarname())) {
-      result = castReceiverAttribute(cast, srcVar.getVarname(), e.attr());
-      return;
+    if (e.objExp() instanceof ExpAsType cast) {
+      if (cast.getSourceExpr() instanceof ExpVariable srcVar
+          && !localBindings.containsKey(srcVar.getVarname())) {
+        result = castReceiverAttribute(cast, srcVar.getVarname(), e.attr());
+        return;
+      }
+      if (cast.getSourceExpr() instanceof ExpNavigation nav
+          && !nav.getDestination().isCollection()
+          && nav.getObjectExpression() instanceof ExpVariable navSource
+          && !localBindings.containsKey(navSource.getVarname())) {
+        result = navigatedCastAttribute(cast, nav, navSource.getVarname(), e.attr());
+        return;
+      }
     }
     VariableBinding b = context.binding(variableNameOf(e.objExp()));
     AttributeValues v = context.attributeValues(b.className(), e.attr().name());
@@ -3686,6 +3694,51 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     AttributeValues v = context.attributeValues(b.className(), attribute.name());
     guardAgainstUncertainAttribute(v);
     return defined(Smt.sym(v.valueNames().get(b.slotIndex())));
+  }
+
+  /**
+   * Attribute access through a cast of a SINGLE-VALUED NAVIGATION ({@code
+   * x.vehicle.oclAsType(Truck).payload}): the guarded downcast one hop out. Per destination
+   * slot, the concrete class is a translation-time fact, so ExpAsType#eval's conformance check
+   * filters slots: a conforming slot contributes its link-guarded attribute symbol; a
+   * non-conforming slot contributes NOTHING (the cast is undefined through it), and its
+   * attribute is never looked up. Definedness is the OR of the contributing slots' links -- an
+   * unlinked navigation or a linked non-conforming slot leaves the read undefined, exactly the
+   * sequential-evaluation semantics.
+   */
+  private TranslatedExpression navigatedCastAttribute(
+      ExpAsType cast, ExpNavigation navigation, String sourceVariableName, MAttribute attribute) {
+    VariableBinding source = context.binding(sourceVariableName);
+    MNavigableElement destination =
+        resolveRedefinedDestination(navigation.getDestination(), source);
+    AssociationLinks links = context.linksFor(destination.association().name());
+    ObjectSlots destSlots = destinationEndView(links, destination);
+    org.tzi.use.uml.mm.MClassifier castTarget =
+        (org.tzi.use.uml.mm.MClassifier) cast.type();
+    // The VALUE nests as ite selections (the selectLinkedValue shape -- and() over an Int
+    // symbol is a sort error); the DEFINEDNESS is the OR of the contributing slots' links.
+    List<SmtTerm> contributingLinks = new ArrayList<>();
+    List<SmtTerm> contributingValues = new ArrayList<>();
+    for (int k = 0; k < destSlots.capacity(); k++) {
+      VariableBinding concrete = destSlots.concreteBindings().get(k);
+      if (!bindingConformsTo(concrete, castTarget)) {
+        continue;
+      }
+      AttributeValues v = context.attributeValues(concrete.className(), attribute.name());
+      guardAgainstUncertainAttribute(v);
+      SmtTerm link = linkTerm(links, destination, source, k);
+      contributingLinks.add(link);
+      contributingValues.add(Smt.sym(v.valueNames().get(concrete.slotIndex())));
+    }
+    if (contributingLinks.isEmpty()) {
+      // No configured slot can ever conform: the cast is undefined for every instance.
+      return new TranslatedExpression(Smt.bool(false), crispPlaceholder(attribute.type()));
+    }
+    SmtTerm value = contributingValues.get(contributingValues.size() - 1);
+    for (int i = contributingLinks.size() - 2; i >= 0; i--) {
+      value = Smt.ite(contributingLinks.get(i), contributingValues.get(i), value);
+    }
+    return new TranslatedExpression(Smt.or(contributingLinks), value);
   }
 
   /** A well-sorted, never-consulted filler for a use-core attribute {@link Type}. */
