@@ -3399,6 +3399,16 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         return result;
       }
     }
+    // RECURSIVE COMPOSITION: a virtual-string operation whose source(s) resolve is itself a
+    // candidate source -- each of its expanded results is a candidate guarded by the choices
+    // that produced it. This is what lets concat/substring/at/case operations CHAIN
+    // (x.s.concat(x.t).concat('!'), size of a composed result, ...).
+    if (isVirtualStringOp(e)) {
+      EnumerableString expanded = expandVirtualString((ExpStdOp) e);
+      result.candidates.addAll(expanded.candidates);
+      result.defined = expanded.defined;
+      return result;
+    }
     return null;
   }
 
@@ -3783,34 +3793,27 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   }
 
   private TranslatedExpression stringSize(Expression receiver) {
-    if (receiver instanceof ExpConstString literal) {
-      return defined(Smt.intLit(BigInteger.valueOf(literal.value().length())));
+    // One resolver for every supported source shape (literal, configured-candidate attribute,
+    // String let variable, and -- since the composition slice -- any virtual string): the
+    // candidates carry their own guards, so the size chain is guard -> length per candidate.
+    EnumerableString source = stringCandidates(receiver);
+    if (source == null || source.candidates.isEmpty()) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "size() over anything other than a configured-candidate string source (literal, crisp"
+              + " String attribute, String let variable, or a composed virtual string)");
     }
-    if (receiver instanceof ExpAttrOp attr
-        && attr.objExp() instanceof ExpVariable source
-        && !localBindings.containsKey(source.getVarname())) {
-      VariableBinding b = context.binding(source.getVarname());
-      AttributeValues values = context.attributeValues(b.className(), attr.attr().name());
-      guardAgainstUncertainAttribute(values);
-      AttributeDomain domain = context.attributeDomain(b.className(), attr.attr().name());
-      if (domain.enumeratedValues().isEmpty()) {
-        throw unsupported(
-            FragmentBoundary.TIER_2,
-            "size() over a string attribute with an empty configured domain");
-      }
-      SmtTerm symbol = Smt.sym(values.valueNames().get(b.slotIndex()));
-      return defined(lengthChain(symbol, domain.enumeratedValues()));
+    List<StringCandidateCase> cases = source.candidates;
+    int last = cases.size() - 1;
+    SmtTerm length = Smt.intLit(BigInteger.valueOf(cases.get(last).spelling.length()));
+    for (int i = last - 1; i >= 0; i--) {
+      length =
+          Smt.ite(
+              cases.get(i).guard,
+              Smt.intLit(BigInteger.valueOf(cases.get(i).spelling.length())),
+              length);
     }
-    if (receiver instanceof ExpVariable v) {
-      LocalBinding local = localBindings.get(v.getVarname());
-      if (local != null && local.stringOrEnum() && local.enumeratedValues() != null) {
-        return defined(lengthChain(Smt.sym(local.valueSymbol()), local.enumeratedValues()));
-      }
-    }
-    throw unsupported(
-        FragmentBoundary.TIER_2,
-        "size() over anything other than a configured-candidate string attribute, a String let"
-            + " variable, or a string literal");
+    return new TranslatedExpression(source.defined, length);
   }
 
   /** The ite chain spelling-to-length over the configured candidates, last-candidate fallback. */
