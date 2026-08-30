@@ -4,6 +4,8 @@ class Sensor
 attributes
   speedA : UReal
   speedB : UReal
+  countA : UInteger
+  countB : UInteger
 end
 
 constraints
@@ -19,3 +21,9 @@ context s : Sensor inv aAtMostB:
 
 context s : Sensor inv tightSigma:
   (s.speedA < s.speedB).toBooleanC(0.999)
+
+context s : Sensor inv uCountBelow:
+  (s.countA < s.countB).toBooleanC(0.8)
+
+context s : Sensor inv uCountTight:
+  (s.countA < s.countB).toBooleanC(0.9)

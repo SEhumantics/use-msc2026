@@ -97,6 +97,33 @@ public class URealPairwiseComparisonTest {
         () -> find("rangeUncertainty", "Sensor::aBelowB"));
   }
 
+  /**
+   * UInteger joins the pairwise enumeration through the SAME USE widening
+   * ({@code UIntegerValue.lt = toUReal().lt}): theta 0.8 admits exactly the crisp
+   * u_A = 0 pair (P ~ 0.841 vs 0.383 for u_A = 1), and the witness must carry it.
+   */
+  @Test
+  public void uintegerPairwiseForcesTheSatisfyingUncertaintyChoice() throws Exception {
+    ModelFinderResult result = find("uintegerChoice", "Sensor::uCountBelow");
+    assertTrue(result.satisfiable());
+    assertTrue(verdict(result, "Sensor::uCountBelow").holds());
+
+    MModel model = compile(resourcePath("URealPairwise.use"));
+    var state = result.system().state();
+    var sensor = state.objectsOfClass(model.getClass("Sensor")).iterator().next();
+    var countA = (org.tzi.use.uml.ocl.value.UIntegerValue)
+        sensor.state(state).attributeValue("countA");
+    assertEquals("the witness must carry the crisp u_A = 0 candidate",
+        0.0, countA.uncertainty(), 1.0e-12);
+  }
+
+  /** Theta 0.9 excludes both UInteger pairs: UNSAT. */
+  @Test
+  public void uintegerTightThresholdIsUnsat() throws Exception {
+    ModelFinderResult result = find("uintegerTight", "Sensor::uCountTight");
+    assertFalse("both pairs sit below 0.9", result.satisfiable());
+  }
+
   private static org.tzi.use.smt.verify.InvariantVerdict verdict(
       ModelFinderResult result, String invariantName) {
     return result.verdicts().stream()

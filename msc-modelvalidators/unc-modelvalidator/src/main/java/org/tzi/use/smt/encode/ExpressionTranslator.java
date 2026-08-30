@@ -1281,8 +1281,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     if (attribute != null
         && comparisonArgs[1] instanceof ExpAttrOp rightAttribute
-        && attribute.type().isTypeOfUReal()
-        && rightAttribute.type().isTypeOfUReal()
+        && isUncertainNumericType(attribute.type())
+        && isUncertainNumericType(rightAttribute.type())
         && List.of("<", ">", "<=", ">=").contains(comparison.opname())) {
       return uTypeUncertainVsUncertain(comparison, attribute, rightAttribute, projectionArgs[1]);
     }
@@ -1482,6 +1482,11 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * {@code <=}/{@code >=} (the "eq" probability mass this crossing-point model assigns needs its own
    * derivation this task did not attempt).
    */
+  /** UReal or UInteger: the two families whose ordered comparison widens to the UReal evaluator. */
+  private static boolean isUncertainNumericType(org.tzi.use.uml.ocl.type.Type type) {
+    return type.isTypeOfUReal() || type.isTypeOfUInteger();
+  }
+
   /**
    * The dispatcher for EVERY uncertain-vs-uncertain ordered comparison of two UReal attribute
    * accesses. Two encodings, in descending order of generality of their INPUT domains:
@@ -1555,10 +1560,18 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     VariableBinding rightBinding = context.binding(variableNameOf(rightAttribute.objExp()));
     AttributeValues rightValues =
         context.attributeValues(rightBinding.className(), rightAttribute.attr().name());
-    if (leftValues.type() != AttributeType.UREAL || rightValues.type() != AttributeType.UREAL) {
+    // UInteger participates through its own USE widening (UIntegerValue.lt is
+    // toUReal().lt, the same crossing-point evaluator), so the pair enumeration is identical:
+    // only the REPRESENTATIVE symbol's sort differs (Int, not Real), which the guard literals
+    // below honour.
+    boolean leftIsInt = leftValues.type() == AttributeType.UINTEGER;
+    boolean rightIsInt = rightValues.type() == AttributeType.UINTEGER;
+    if (leftValues.type() != AttributeType.UREAL && leftValues.type() != AttributeType.UINTEGER
+        || rightValues.type() != AttributeType.UREAL
+            && rightValues.type() != AttributeType.UINTEGER) {
       throw unsupported(
           FragmentBoundary.UTYPE_UNCERTAIN_VERSUS_UNCERTAIN,
-          "uncertain-vs-uncertain comparison outside the UReal/UReal shape");
+          "uncertain-vs-uncertain comparison outside the UReal/UInteger shape");
     }
     List<BigDecimal> leftValueCandidates =
         enumeratedDecimals(context.attributeDomain(leftBinding.className(), leftAttribute.attr().name(), "value"));
@@ -1587,8 +1600,12 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     SmtTerm rightUncSym = Smt.sym(rightValues.uncertaintyNames().get(rightBinding.slotIndex()));
     if (mode == TranslationMode.NOMINAL) {
       // The nominal-erasure oracle evaluates the crisp comparison of the representatives;
-      // the erasure rule removes the confidence projection entirely.
-      return defined(Smt.app(comparison.opname(), leftValueSym, rightValueSym));
+      // the erasure rule removes the confidence projection entirely. A mixed
+      // UInteger/UReal pair lifts the Int-sorted side (the same widening the UNCERTAIN
+      // pairs below encode).
+      SmtTerm nominalLeft = leftIsInt && !rightIsInt ? Smt.app("to_real", leftValueSym) : leftValueSym;
+      SmtTerm nominalRight = rightIsInt && !leftIsInt ? Smt.app("to_real", rightValueSym) : rightValueSym;
+      return defined(Smt.app(comparison.opname(), nominalLeft, nominalRight));
     }
     double theta = confidence.doubleValue();
     List<SmtTerm> satisfying = new ArrayList<>();
@@ -1602,16 +1619,23 @@ public final class ExpressionTranslator implements ExpressionVisitor {
               satisfying.add(
                   Smt.and(
                       List.of(
-                          Smt.eq(leftValueSym, Smt.realLit(v1)),
-                          Smt.eq(leftUncSym, Smt.realLit(u1)),
-                          Smt.eq(rightValueSym, Smt.realLit(v2)),
-                          Smt.eq(rightUncSym, Smt.realLit(u2)))));
+                          Smt.eq(leftValueSym, repLiteral(v1, leftIsInt)),
+                          Smt.eq(leftUncSym, repLiteral(u1, leftIsInt)),
+                          Smt.eq(rightValueSym, repLiteral(v2, rightIsInt)),
+                          Smt.eq(rightUncSym, repLiteral(u2, rightIsInt)))));
             }
           }
         }
       }
     }
     return defined(Smt.or(satisfying));
+  }
+
+  /** The selection literal for a representative candidate: Int-sorted for UInteger, Real otherwise. */
+  private static SmtTerm repLiteral(BigDecimal candidate, boolean integerSorted) {
+    return integerSorted
+        ? Smt.intLit(candidate.toBigIntegerExact())
+        : Smt.realLit(candidate);
   }
 
   /**
