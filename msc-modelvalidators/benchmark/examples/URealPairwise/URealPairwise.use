@@ -1,0 +1,26 @@
+model URealPairwise
+
+-- Authored specifically to give unc-modelvalidator's general uncertain-vs-uncertain
+-- ordered comparison (UReal vs UReal over MULTI-CANDIDATE value and uncertainty
+-- domains) a real, wired benchmark scenario. The proven-equal-singleton slice
+-- refused every configuration where the two sides' uncertainties were not the
+-- same singleton constant; the pairwise enumeration evaluates each candidate
+-- pair with USE'S OWN evaluator classes (bit-exact, crossing-point model
+-- included) and admits exactly the pairs whose probability clears theta.
+--
+-- The discriminating shape: A's uncertainty candidates {0.0, 0.05} straddle
+-- theta = 0.999. With u_A = 0.05 the equal-sigma crossing model gives
+-- P(A < B) ~ 0.9973 (below theta); with u_A = 0.0 the degenerate branch gives
+-- P = 1 - CNDF(-6) ~ 1.0 (above it). So exactly one candidate pair satisfies,
+-- and a correct encoding must force the witness to carry u_A = 0.0.
+
+class Sensor
+attributes
+  speedA : UReal
+  speedB : UReal
+end
+
+constraints
+
+context s : Sensor inv aBelowBTight:
+  (s.speedA < s.speedB).toBooleanC(0.999)

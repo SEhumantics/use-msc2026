@@ -2682,6 +2682,64 @@
         "tolerance-check",
         "authored"
       ]
+    },
+    {
+      "id": "URealPairwise",
+      "directory": "URealPairwise",
+      "useFile": "URealPairwise.use",
+      "propertiesFile": "URealPairwise.properties",
+      "section": "main",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Authored for this thesis project (msc-4, Trong-Nghia Be) to give the general uncertain-vs-uncertain ordered comparison (UReal vs UReal over multi-candidate domains) its wired benchmark coverage: A's uncertainty candidates {0.0, 0.05} straddle theta = 0.999, so exactly one candidate pair satisfies and the witness must carry u_A = 0.0.",
+      "provenanceCitation": null,
+      "features": [
+        "utype.ureal-attribute-roundtrip",
+        "utype.ureal-confidence-threshold",
+        "utype.ureal-other-expressions"
+      ],
+      "question": "Does the pairwise uncertain-vs-uncertain enumeration admit exactly the candidate pair whose USE-evaluated probability clears theta -- forcing the witness to carry the degenerate u_A = 0.0 uncertainty?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "scenarioTags": [
+        "ureal-comparison",
+        "uncertainty-choice",
+        "pairwise-enumeration",
+        "authored"
+      ]
+    },
+    {
+      "id": "URealPairwise-UNSAT",
+      "directory": "URealPairwise",
+      "useFile": "URealPairwise.use",
+      "propertiesFile": "URealPairwise.properties",
+      "section": "unsat",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceDetail": "UNSAT counterpart of URealPairwise: A's uncertainty domain narrows to {0.05}, so the single pair's probability ~0.9973 sits below theta = 0.999 and nothing satisfies the invariant.",
+      "provenanceCitation": null,
+      "features": [
+        "utype.ureal-other-expressions",
+        "utype.ureal-confidence-threshold"
+      ],
+      "question": "Does the pairwise enumeration correctly refute the configuration whose only candidate pair's probability (0.9973) sits below the demanded confidence (0.999)?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "scenarioTags": [
+        "ureal-comparison",
+        "uncertainty-choice",
+        "pairwise-enumeration",
+        "authored"
+      ]
     }
   ]
 }

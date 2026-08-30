@@ -1283,8 +1283,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && comparisonArgs[1] instanceof ExpAttrOp rightAttribute
         && attribute.type().isTypeOfUReal()
         && rightAttribute.type().isTypeOfUReal()
-        && List.of("<", ">").contains(comparison.opname())) {
-      return uTypeSymmetricThreshold(comparison, attribute, rightAttribute, projectionArgs[1]);
+        && List.of("<", ">", "<=", ">=").contains(comparison.opname())) {
+      return uTypeUncertainVsUncertain(comparison, attribute, rightAttribute, projectionArgs[1]);
     }
 
     BigDecimal literal =
@@ -1482,6 +1482,177 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * {@code <=}/{@code >=} (the "eq" probability mass this crossing-point model assigns needs its own
    * derivation this task did not attempt).
    */
+  /**
+   * The dispatcher for EVERY uncertain-vs-uncertain ordered comparison of two UReal attribute
+   * accesses. Two encodings, in descending order of generality of their INPUT domains:
+   *
+   * <ol>
+   *   <li>Proven-equal singleton uncertainties with a strict comparator: the verified symbolic
+   *       boundary ({@link #uTypeSymmetricThreshold}) -- it accepts UNENUMERATED value domains
+   *       because its boundary is a formula over the value symbols, and is kept byte-identical
+   *       for the shape it was verified on.</li>
+   *   <li>Finite enumerated (value, uncertainty) domains on both sides: the pairwise enumeration
+   *       ({@link #uTypePairEnumeration}) -- each candidate pair's probability is a
+   *       compile-time double obtained from USE'S OWN evaluator classes, so the pair filter is
+   *       bit-exact against USE no matter how idiosyncratic the crossing-point model is.</li>
+   * </ol>
+   * Anything else (range-bound uncertainties, over-cap pair counts) refuses with a located
+   * message rather than approximating.
+   */
+  private TranslatedExpression uTypeUncertainVsUncertain(
+      ExpStdOp comparison, ExpAttrOp leftAttribute, ExpAttrOp rightAttribute, Expression confidenceArg) {
+    if (List.of("<", ">").contains(comparison.opname())) {
+      VariableBinding leftBinding = context.binding(variableNameOf(leftAttribute.objExp()));
+      AttributeValues leftValues =
+          context.attributeValues(leftBinding.className(), leftAttribute.attr().name());
+      VariableBinding rightBinding = context.binding(variableNameOf(rightAttribute.objExp()));
+      AttributeValues rightValues =
+          context.attributeValues(rightBinding.className(), rightAttribute.attr().name());
+      if (leftValues.type() == AttributeType.UREAL && rightValues.type() == AttributeType.UREAL) {
+        BigDecimal leftUncertainty =
+            singletonValue(
+                context.attributeDomain(leftBinding.className(), leftAttribute.attr().name(), "uncertainty"));
+        BigDecimal rightUncertainty =
+            singletonValue(
+                context.attributeDomain(rightBinding.className(), rightAttribute.attr().name(), "uncertainty"));
+        if (leftUncertainty != null
+            && rightUncertainty != null
+            && leftUncertainty.compareTo(rightUncertainty) == 0) {
+          return uTypeSymmetricThreshold(comparison, leftAttribute, rightAttribute, confidenceArg);
+        }
+      }
+    }
+    return uTypePairEnumeration(comparison, leftAttribute, rightAttribute, confidenceArg);
+  }
+
+  /** The pair-count cap, the project's established 256-combination convention. */
+  private static final int MAX_U_TYPE_PAIRS = 256;
+
+  /**
+   * The GENERAL uncertain-vs-uncertain ordered comparison as a per-candidate-pair enumeration.
+   * Both operands' value and uncertainty domains must be finite enumerations; for each of the
+   * at-most-{@value #MAX_U_TYPE_PAIRS} candidate 4-tuples, the comparison probability is a
+   * COMPILE-TIME double obtained by calling USE'S OWN evaluator ({@code URealValue.lt/gt/le/ge}
+   * over {@code UReal} values built from the exact configured candidate strings) -- bit-exact
+   * against USE by construction, crossing-point model included. A pair is admitted iff its
+   * probability clears theta (the same {@code >=} {@code Op_uBoolean_toBooleanC} applies), and
+   * its guard pins all four selections so a witness can only carry a combination the
+   * probability actually holds for. The comparison of two defined UReals is total and
+   * {@code toBooleanC} is defined for theta in [0, 1] (confirmed against
+   * {@code Op_uBoolean_toBooleanC#eval}), so the result's definedness is the operands'.
+   */
+  private TranslatedExpression uTypePairEnumeration(
+      ExpStdOp comparison, ExpAttrOp leftAttribute, ExpAttrOp rightAttribute, Expression confidenceArg) {
+    BigDecimal confidence =
+        decimalLiteral(confidenceArg, "confidence threshold", FragmentBoundary.UTYPE_CORE);
+    if (confidence.compareTo(BigDecimal.ZERO) < 0 || confidence.compareTo(BigDecimal.ONE) > 0) {
+      // Op_uBoolean_toBooleanC: a confidence outside [0, 1] makes the projection UNDEFINED.
+      return new TranslatedExpression(Smt.bool(false), Smt.bool(false));
+    }
+    VariableBinding leftBinding = context.binding(variableNameOf(leftAttribute.objExp()));
+    AttributeValues leftValues =
+        context.attributeValues(leftBinding.className(), leftAttribute.attr().name());
+    VariableBinding rightBinding = context.binding(variableNameOf(rightAttribute.objExp()));
+    AttributeValues rightValues =
+        context.attributeValues(rightBinding.className(), rightAttribute.attr().name());
+    if (leftValues.type() != AttributeType.UREAL || rightValues.type() != AttributeType.UREAL) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_UNCERTAIN_VERSUS_UNCERTAIN,
+          "uncertain-vs-uncertain comparison outside the UReal/UReal shape");
+    }
+    List<BigDecimal> leftValueCandidates =
+        enumeratedDecimals(context.attributeDomain(leftBinding.className(), leftAttribute.attr().name(), "value"));
+    List<BigDecimal> leftUncertaintyCandidates =
+        enumeratedDecimals(context.attributeDomain(leftBinding.className(), leftAttribute.attr().name(), "uncertainty"));
+    List<BigDecimal> rightValueCandidates =
+        enumeratedDecimals(context.attributeDomain(rightBinding.className(), rightAttribute.attr().name(), "value"));
+    List<BigDecimal> rightUncertaintyCandidates =
+        enumeratedDecimals(context.attributeDomain(rightBinding.className(), rightAttribute.attr().name(), "uncertainty"));
+    if (leftValueCandidates == null || leftUncertaintyCandidates == null
+        || rightValueCandidates == null || rightUncertaintyCandidates == null
+        || (long) leftValueCandidates.size() * leftUncertaintyCandidates.size()
+            * rightValueCandidates.size() * rightUncertaintyCandidates.size()
+            > MAX_U_TYPE_PAIRS) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_UNCERTAIN_VERSUS_UNCERTAIN,
+          "uncertain-vs-uncertain comparison needs finite enumerated value and uncertainty"
+              + " domains on both sides (at most "
+              + MAX_U_TYPE_PAIRS
+              + " candidate pairs); a range-bound domain or an over-cap cross product is"
+              + " outside this slice rather than approximated");
+    }
+    SmtTerm leftValueSym = Smt.sym(leftValues.valueNames().get(leftBinding.slotIndex()));
+    SmtTerm leftUncSym = Smt.sym(leftValues.uncertaintyNames().get(leftBinding.slotIndex()));
+    SmtTerm rightValueSym = Smt.sym(rightValues.valueNames().get(rightBinding.slotIndex()));
+    SmtTerm rightUncSym = Smt.sym(rightValues.uncertaintyNames().get(rightBinding.slotIndex()));
+    if (mode == TranslationMode.NOMINAL) {
+      // The nominal-erasure oracle evaluates the crisp comparison of the representatives;
+      // the erasure rule removes the confidence projection entirely.
+      return defined(Smt.app(comparison.opname(), leftValueSym, rightValueSym));
+    }
+    double theta = confidence.doubleValue();
+    List<SmtTerm> satisfying = new ArrayList<>();
+    for (BigDecimal v1 : leftValueCandidates) {
+      for (BigDecimal u1 : leftUncertaintyCandidates) {
+        for (BigDecimal v2 : rightValueCandidates) {
+          for (BigDecimal u2 : rightUncertaintyCandidates) {
+            double probability =
+                useRealComparisonProbability(comparison.opname(), v1, u1, v2, u2);
+            if (probability >= theta) {
+              satisfying.add(
+                  Smt.and(
+                      List.of(
+                          Smt.eq(leftValueSym, Smt.realLit(v1)),
+                          Smt.eq(leftUncSym, Smt.realLit(u1)),
+                          Smt.eq(rightValueSym, Smt.realLit(v2)),
+                          Smt.eq(rightUncSym, Smt.realLit(u2)))));
+            }
+          }
+        }
+      }
+    }
+    return defined(Smt.or(satisfying));
+  }
+
+  /**
+   * The comparison probability of one compile-time candidate pair, obtained from USE'S OWN
+   * evaluator ({@code URealValue.lt/gt/le/ge} over {@code UReal}s built through the same String
+   * constructor the configuration parse feeds) -- bit-exact against USE by construction,
+   * including the crossing-point model's every degenerate branch.
+   */
+  private static double useRealComparisonProbability(
+      String opname, BigDecimal v1, BigDecimal u1, BigDecimal v2, BigDecimal u2) {
+    org.tzi.use.uml.ocl.value.URealValue left =
+        new org.tzi.use.uml.ocl.value.URealValue(
+            new org.tzi.use.uncertainty.datatypes.UReal(v1.toPlainString(), u1.toPlainString()));
+    org.tzi.use.uml.ocl.value.URealValue right =
+        new org.tzi.use.uml.ocl.value.URealValue(
+            new org.tzi.use.uncertainty.datatypes.UReal(v2.toPlainString(), u2.toPlainString()));
+    return switch (opname) {
+      case "<" -> left.lt(right).probability();
+      case ">" -> left.gt(right).probability();
+      case "<=" -> left.le(right).probability();
+      case ">=" -> left.ge(right).probability();
+      default -> throw new IllegalStateException("not an ordered comparison: " + opname);
+    };
+  }
+
+  /** The parsed candidates of a finite enumerated domain, or null when it is not one. */
+  private static List<BigDecimal> enumeratedDecimals(AttributeDomain domain) {
+    if (domain == null || domain.enumeratedValues().isEmpty()) {
+      return null;
+    }
+    List<BigDecimal> values = new ArrayList<>();
+    for (String candidate : domain.enumeratedValues()) {
+      try {
+        values.add(new BigDecimal(candidate.trim()));
+      } catch (NumberFormatException notNumeric) {
+        return null;
+      }
+    }
+    return values;
+  }
+
   private TranslatedExpression uTypeSymmetricThreshold(
       ExpStdOp comparison, ExpAttrOp leftAttribute, ExpAttrOp rightAttribute, Expression confidenceArg) {
     BigDecimal confidence =

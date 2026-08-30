@@ -170,9 +170,15 @@ public class FragmentLedgerBoundaryTest {
     // REAL reason for the refusal (uncertainty not provably equal) instead of the old, less
     // precise "not a crisp numeric literal" -- a genuine improvement in the located reason, not a
     // weakened assertion; the boundary itself (asserted below) is unchanged.
+    // The located reason changed with the pairwise slice: the fixture's RANGE-bound
+    // uncertainty domains now refuse because they are not FINITE ENUMERATED candidate lists
+    // (the general enumerated case is genuinely translated -- URealPairwiseComparisonTest) --
+    // a narrowing of the honest refusal, not a weakened assertion; the boundary itself
+    // (asserted below) is unchanged.
     assertTrue(
         "the located reason must survive",
-        message.contains("uncertain-vs-uncertain comparison whose two operands' uncertainty"));
+        message.contains("uncertain-vs-uncertain comparison needs finite enumerated value"
+            + " and uncertainty domains"));
     assertTrue(message, message.contains(FragmentBoundary.TIER_3.name()));
     assertTrue(message, message.contains(FragmentBoundary.UTYPE_UNCERTAIN_VERSUS_UNCERTAIN.name()));
   }

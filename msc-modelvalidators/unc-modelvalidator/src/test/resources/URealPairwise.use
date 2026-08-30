@@ -1,0 +1,21 @@
+model URealPairwise
+
+class Sensor
+attributes
+  speedA : UReal
+  speedB : UReal
+end
+
+constraints
+
+context s : Sensor inv aBelowB:
+  (s.speedA < s.speedB).toBooleanC(0.9)
+
+context s : Sensor inv aAboveB:
+  (s.speedA > s.speedB).toBooleanC(0.9)
+
+context s : Sensor inv aAtMostB:
+  (s.speedA <= s.speedB).toBooleanC(0.9)
+
+context s : Sensor inv tightSigma:
+  (s.speedA < s.speedB).toBooleanC(0.999)

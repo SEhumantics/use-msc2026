@@ -59,18 +59,25 @@ public class UncertainVersusUncertainTest {
         enforced.satisfiable());
   }
 
+  /**
+   * INVERTED PIN (was: unequal configured uncertainty is refused, not silently compared): the
+   * general pairwise enumeration (URealPairwiseComparisonTest) evaluates every candidate pair
+   * with USE'S OWN evaluator, so unequal uncertainties are now genuinely COMPARED, not refused.
+   * This configuration (A=(0.30,0.05), B=(0.60,0.07), enforced `A > B` at confidence 0.9) has
+   * P(A > B) ~ 0 for its single pair -- the crossing-point model gives gt = 0 whenever the
+   * means and sigmas put no crossing above the smaller mean -- so enforcing it is genuinely
+   * UNSAT, which is what the old refusal was conservatively protecting against getting wrong.
+   */
   @Test
-  public void unequalConfiguredUncertaintyIsRefusedNotSilentlyCompared() throws Exception {
+  public void unequalConfiguredUncertaintyIsNowComparedAndCorrectlyRefuted() throws Exception {
     MModel model = compile(resourcePath("UncertainComparison.use"));
     AnalysisConfiguration config = configuration(model, "unequalUncertainty");
 
-    SmtTranslationException thrown =
-        assertThrows(SmtTranslationException.class, () -> SmtModelFinder.find(model, config));
+    ModelFinderResult result = SmtModelFinder.find(model, config);
 
-    assertTrue(
-        "must name the real reason, not a generic message: " + thrown.getMessage(),
-        thrown.getMessage().contains("not a proven-equal")
-            || thrown.getMessage().contains("uncertain-vs-uncertain"));
+    assertFalse(
+        "P(A > B) ~ 0 at every candidate pair, so enforcing must be UNSAT",
+        result.satisfiable());
   }
 
   private static InvariantVerdict verdict(ModelFinderResult result, String invariantName) {
