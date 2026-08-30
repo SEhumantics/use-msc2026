@@ -70,7 +70,7 @@ public class FragmentLedgerBoundaryTest {
       context self : Sample inv Tier2ExistsThreeVariables:
         Sample.allInstances()->exists(x, y, z | x.n > 0)
       context self : Sample inv Tier2TypeTest:
-        self.oclAsType(Sample).oclIsTypeOf(Sample)
+        self.oclIsTypeOf(Integer)
       context self : Sample inv Tier2EnumLiteralVersusOclUndefined:
         Color::red = oclUndefined(Color)
       context self : Sample inv Tier3SetLiteral:
@@ -155,14 +155,16 @@ public class FragmentLedgerBoundaryTest {
     assertTrue(message, message.contains("Sample::Tier3SetLiteral"));
     assertTrue(message, message.contains("[UNCERTAIN]"));
     assertTrue("the construct must still be named", message.contains("Set literal"));
-    // Tier2TypeTest's body changed from `self.oclIsTypeOf(Sample)` (now genuinely supported --
-    // see isTypeCheck's own javadoc) to `self.oclAsType(Sample).oclIsTypeOf(Sample)`, refused by
-    // variableNameOf because the receiver is no longer a bare variable, not by isTypeCheck's own
-    // logic -- so its message no longer says "isTypeOf" by name; it says why the RECEIVER is
-    // unsupported instead, which is now the real, accurate reason.
+    // Tier2TypeTest's body changed twice as casts/type tests became genuinely supported:
+    // from `self.oclIsTypeOf(Sample)` (supported by isTypeCheck's translation-time dispatch)
+    // to `self.oclAsType(Sample).oclIsTypeOf(Sample)` (also supported since the oclAsType
+    // slice -- a cast over a bare context variable resolves per variant), and now to
+    // `self.oclIsTypeOf(Integer)`, which still refuses at TIER_2 inside isTypeCheck itself
+    // (non-class target type) -- so the fixture keeps pinning the boundary at its honest
+    // remaining gap rather than at a shape that no longer refuses at all.
     assertTrue(
         "the construct must still be named",
-        message.contains("attribute access on a non-variable receiver"));
+        message.contains("non-class target type"));
     // The message text changed since this assertion was first written: `self.speed > self.other`
     // now reaches uTypeSymmetricThreshold (both operands are UReal attributes), which names the
     // REAL reason for the refusal (uncertainty not provably equal) instead of the old, less

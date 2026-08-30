@@ -153,6 +153,12 @@ public final class ExpressionTranslator implements ExpressionVisitor {
               navigation.getObjectExpression(), navigation.getDestination(), e.attr());
       return;
     }
+    if (e.objExp() instanceof ExpAsType cast
+        && cast.getSourceExpr() instanceof ExpVariable srcVar
+        && !localBindings.containsKey(srcVar.getVarname())) {
+      result = castReceiverAttribute(cast, srcVar.getVarname(), e.attr());
+      return;
+    }
     VariableBinding b = context.binding(variableNameOf(e.objExp()));
     AttributeValues v = context.attributeValues(b.className(), e.attr().name());
     guardAgainstUncertainAttribute(v);
@@ -1738,6 +1744,19 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && !localBindings.containsKey(rv.getVarname()))
       return defined(
           Smt.bool(context.binding(lv.getVarname()).equals(context.binding(rv.getVarname()))));
+    // Cast identity: {@code v.oclAsType(T) = w} (either side cast, over bare context
+    // variables). A defined cast denotes the SAME object as its source, so the identity is
+    // the compile-time binding equality; the result's definedness is both sides' --
+    // slot-exists, plus the cast's own conformance gate on the cast side.
+    {
+      VariableBinding lb = castOrVariableBinding(l);
+      VariableBinding rb = castOrVariableBinding(r);
+      if (lb != null && rb != null) {
+        return new TranslatedExpression(
+            Smt.and(List.of(castOrVariableDefinedness(l, lb), castOrVariableDefinedness(r, rb))),
+            Smt.bool(lb.equals(rb)));
+      }
+    }
     if ((l instanceof ExpVariable cl && localBindings.containsKey(cl.getVarname()))
         || (r instanceof ExpVariable cr && localBindings.containsKey(cr.getVarname()))) {
       TranslatedExpression local = contentAwareEquality(l, r);
@@ -2203,7 +2222,57 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       VariableBinding b = context.binding(v.getVarname());
       return Smt.sym(context.slotsFor(b.className()).existsNames().get(b.slotIndex()));
     }
+    if (e instanceof ExpAsType cast
+        && cast.getSourceExpr() instanceof ExpVariable srcVar
+        && !localBindings.containsKey(srcVar.getVarname())) {
+      // A cast is defined iff its object exists AND the runtime class conforms to the target
+      // (ExpAsType#eval); per variant the conformance is a compile-time fact.
+      VariableBinding b = context.binding(srcVar.getVarname());
+      SmtTerm exists = Smt.sym(context.slotsFor(b.className()).existsNames().get(b.slotIndex()));
+      if (bindingConformsTo(b, (org.tzi.use.uml.mm.MClassifier) cast.type())) {
+        return exists;
+      }
+      return Smt.bool(false);
+    }
     return argResult(e).defined();
+  }
+
+  /**
+   * The context binding {@code e} denotes when it is a bare context variable or a cast of
+   * one ({@code v}, {@code v.oclAsType(T)}), or null for anything else -- the identity
+   * comparison's own resolution, shared by both sides.
+   */
+  private VariableBinding castOrVariableBinding(Expression e) {
+    Expression source = e;
+    if (e instanceof ExpAsType cast) {
+      if (!(cast.getSourceExpr() instanceof ExpVariable variable)
+          || localBindings.containsKey(variable.getVarname())) {
+        return null;
+      }
+      source = variable;
+    }
+    if (source instanceof ExpVariable variable && !localBindings.containsKey(variable.getVarname())) {
+      return context.binding(variable.getVarname());
+    }
+    return null;
+  }
+
+  /**
+   * The definedness of one identity-comparison side already resolved by {@link
+   * #castOrVariableBinding}: a bare variable's slot-exists symbol; a cast additionally gated
+   * by its compile-time conformance ({@code ExpAsType#eval}'s undefined-on-nonconformance).
+   */
+  private SmtTerm castOrVariableDefinedness(Expression e, VariableBinding binding) {
+    SmtTerm exists =
+        Smt.sym(context.slotsFor(binding.className()).existsNames().get(binding.slotIndex()));
+    if (e instanceof ExpAsType cast
+        && bindingConformsTo(binding, (org.tzi.use.uml.mm.MClassifier) cast.type())) {
+      return exists;
+    }
+    if (e instanceof ExpAsType) {
+      return Smt.bool(false);
+    }
+    return exists;
   }
 
   /**
@@ -3077,6 +3146,23 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           "isTypeOf/isKindOf against a non-class target type " + targetType);
     }
     org.tzi.use.uml.mm.MClassifier targetClass = (org.tzi.use.uml.mm.MClassifier) targetType;
+    // A cast source ({@code v.oclAsType(Truck).oclIsKindOf(Truck)}): the type test stays
+    // TOTAL -- ExpIsKindOf/ExpIsTypeOf eval read the runtime type off the cast's RESULT, and
+    // an undefined cast's type test is FALSE, never undefined. Per translation variant the
+    // source's concrete class is fixed, so "cast defined AND runtime class matches" is a
+    // compile-time fact.
+    if (sourceExpr instanceof ExpAsType cast
+        && cast.getSourceExpr() instanceof ExpVariable srcVar
+        && !localBindings.containsKey(srcVar.getVarname())) {
+      VariableBinding source = context.binding(srcVar.getVarname());
+      boolean castDefined = bindingConformsTo(source, (org.tzi.use.uml.mm.MClassifier) cast.type());
+      boolean runtimeMatches =
+          source.className().equals(targetClass.name())
+              || (includeSubtypes
+                  && targetClass.allChildren().stream()
+                      .anyMatch(child -> child.name().equals(source.className())));
+      return defined(Smt.bool(castDefined && runtimeMatches));
+    }
     VariableBinding binding = context.binding(variableNameOf(sourceExpr));
     boolean matches =
         binding.className().equals(targetClass.name())
@@ -3084,6 +3170,51 @@ public final class ExpressionTranslator implements ExpressionVisitor {
                 && targetClass.allChildren().stream()
                     .anyMatch(child -> child.name().equals(binding.className())));
     return defined(Smt.bool(matches));
+  }
+
+  /**
+   * The compile-time conformance of a binding's CONCRETE class to a target classifier: the
+   * same class, or a (transitive) descendant -- exactly the runtime check {@code ExpAsType#eval}
+   * performs ({@code obj.cls().conformsTo(targetType)}) before it hands the object back.
+   */
+  private static boolean bindingConformsTo(
+      VariableBinding binding, org.tzi.use.uml.mm.MClassifier target) {
+    return binding.className().equals(target.name())
+        || target.allChildren().stream().anyMatch(child -> child.name().equals(binding.className()));
+  }
+
+  /**
+   * Attribute access through a cast of a bare context variable ({@code
+   * v.oclAsType(Truck).payloadCapacity}) -- the guarded-downcast idiom superclass-context
+   * invariants use to reach subclass attributes. Per translation variant the variable's
+   * concrete class is FIXED, so {@code ExpAsType#eval}'s runtime conformance check is a
+   * compile-time fact: conforming, the cast is defined (given the slot exists -- the
+   * quantifier guards already establish that) and the attribute is the plain per-slot read
+   * (inherited attributes are registered per concrete subclass); non-conforming, the cast is
+   * UNDEFINED and this variant is the constant-undefined expression -- the target attribute's
+   * registration is never even looked up (it may not exist on this class, and inventing a
+   * value would be worse than refusing).
+   */
+  private TranslatedExpression castReceiverAttribute(
+      ExpAsType cast, String sourceVariableName, MAttribute attribute) {
+    VariableBinding b = context.binding(sourceVariableName);
+    if (!bindingConformsTo(b, (org.tzi.use.uml.mm.MClassifier) cast.type())) {
+      return new TranslatedExpression(Smt.bool(false), crispPlaceholder(attribute.type()));
+    }
+    AttributeValues v = context.attributeValues(b.className(), attribute.name());
+    guardAgainstUncertainAttribute(v);
+    return defined(Smt.sym(v.valueNames().get(b.slotIndex())));
+  }
+
+  /** A well-sorted, never-consulted filler for a use-core attribute {@link Type}. */
+  private static SmtTerm crispPlaceholder(org.tzi.use.uml.ocl.type.Type type) {
+    return type.isTypeOfString()
+        ? Smt.intLit(BigInteger.ZERO)
+        : type.isTypeOfReal()
+            ? Smt.realLit(BigDecimal.ZERO)
+            : type.isTypeOfBoolean()
+                ? Smt.bool(false)
+                : Smt.intLit(BigInteger.ZERO);
   }
 
   /**

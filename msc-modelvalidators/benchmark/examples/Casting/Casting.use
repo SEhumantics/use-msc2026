@@ -1,0 +1,38 @@
+model Casting
+
+-- Authored specifically to give unc-modelvalidator's oclAsType downcast (against
+-- a bare context variable) a real, wired benchmark scenario: the classic
+-- guarded-downcast idiom real OCL uses on a SUPERCLASS context to reach
+-- subclass attributes -- v.oclIsKindOf(Truck) implies v.oclAsType(Truck)
+-- .payloadCapacity > 0. The corpus's own Inheritance model only mentions
+-- oclAsType in comments and post-solve queries; no shipped invariant anywhere
+-- exercised the cast. Semantics are ExpAsType#eval's: the cast of an object is
+-- defined iff the object exists and its runtime class conformsTo the target,
+-- so for a Car slot the cast (and the whole guarded consequent) is undefined --
+-- which the implies antecedent guards against, exactly why the idiom exists.
+
+abstract class Vehicle
+attributes
+  licensePlate : String
+end
+
+class Car < Vehicle
+attributes
+  numDoors : Integer
+end
+
+class Truck < Vehicle
+attributes
+  payloadCapacity : Integer
+end
+
+constraints
+
+context v : Vehicle inv TruckPayloadPositiveWhenTruck:
+  v.oclIsKindOf(Truck) implies v.oclAsType(Truck).payloadCapacity > 0
+
+context v : Vehicle inv CarDoorsNonNegWhenCar:
+  v.oclIsKindOf(Car) implies v.oclAsType(Car).numDoors >= 0
+
+context v : Vehicle inv CastIsKindOfTarget:
+  v.oclIsKindOf(Truck) implies v.oclAsType(Truck).oclIsKindOf(Truck)

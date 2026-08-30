@@ -2370,6 +2370,123 @@
         "set-literal-consumers",
         "authored"
       ]
+    },
+    {
+      "id": "Casting",
+      "directory": "Casting",
+      "useFile": "Casting.use",
+      "propertiesFile": "Casting.properties",
+      "section": "main",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Authored for this thesis project (msc-4, Trong-Nghia Be) specifically to give the oclAsType downcast against a bare context variable (the guarded-downcast idiom: oclIsKindOf implies oclAsType(...).attr check) a wired benchmark scenario -- no shipped invariant anywhere exercised the cast before this; the Inheritance corpus model mentions oclAsType only in comments and post-solve queries.",
+      "provenanceCitation": null,
+      "features": [
+        "ocl.type-tests-casts",
+        "ocl.attribute-access",
+        "prim.boolean-literals-ops",
+        "prim.integer-comparisons"
+      ],
+      "question": "Does the guarded downcast (v.oclIsKindOf(Truck) implies v.oclAsType(Truck).payloadCapacity > 0) over a superclass context behave per ExpAsType#eval -- defined only when the runtime class conforms, so the idiom holds exactly when every conforming slot's attribute is positive and a successful cast tests kindOf its own target?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "scenarioTags": [
+        "oclastype",
+        "downcast-guard",
+        "inheritance",
+        "authored"
+      ]
+    },
+    {
+      "id": "Casting-UNSAT",
+      "directory": "Casting",
+      "useFile": "Casting.use",
+      "propertiesFile": "Casting.properties",
+      "section": "unsat",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceDetail": "UNSAT counterpart of Casting: payloadCapacity's domain narrowed to {0,-1}, so the forced Truck violates the guarded downcast while the population stays exactly 1 Car + 1 Truck.",
+      "provenanceCitation": null,
+      "features": [
+        "ocl.type-tests-casts",
+        "prim.integer-comparisons"
+      ],
+      "question": "Does the guarded downcast correctly REFUTE a configuration whose forced Truck has only non-positive payload candidates?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "scenarioTags": [
+        "oclastype",
+        "downcast-guard",
+        "inheritance",
+        "authored"
+      ]
+    },
+    {
+      "id": "DerivedAttr",
+      "directory": "DerivedAttr",
+      "useFile": "DerivedAttr.use",
+      "propertiesFile": "DerivedAttr.properties",
+      "section": "main",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Authored for this thesis project (msc-4, Trong-Nghia Be) to give the derived-attribute constraint (derive:) and the derived-attribute READ path their first wired corpus coverage -- no shipped model declared a derive: attribute before this; the derivation slices (crisp Integer, Boolean, Real-with-lift, String alias/literal) previously had only dedicated unit fixtures.",
+      "provenanceCitation": null,
+      "features": [
+        "attr.derived",
+        "ocl.attribute-access-derived",
+        "prim.integer-arithmetic",
+        "prim.string-operations"
+      ],
+      "question": "Does a derive: attribute act as a real constraint -- total pinned to qty*unitPrice by the derivation, read by an invariant, with a String alias derivation (mirror derive: self.nickname) holding over equal singleton domains?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "scenarioTags": [
+        "derived-attribute",
+        "derive-constraint",
+        "authored"
+      ]
+    },
+    {
+      "id": "DerivedAttr-UNSAT",
+      "directory": "DerivedAttr",
+      "useFile": "DerivedAttr.use",
+      "propertiesFile": "DerivedAttr.properties",
+      "section": "unsat",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceDetail": "UNSAT counterpart of DerivedAttr: unitPrice {-3} pins the derivation to 2*-3 = -6 while total's domain stays {6} -- the derivation constraint and the attribute domain genuinely contradict (and positiveTotal fails on the forced -6 besides), over a fully populated model.",
+      "provenanceCitation": null,
+      "features": [
+        "attr.derived",
+        "ocl.attribute-access-derived",
+        "prim.integer-arithmetic"
+      ],
+      "question": "Does the derivation constraint genuinely contradict a disagreeing configured domain -- refuting the configuration instead of silently ignoring the derive: expression (the pre-fix behavior returned SAT with a derivation-violating witness)?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "scenarioTags": [
+        "derived-attribute",
+        "derive-constraint",
+        "authored"
+      ]
     }
   ]
 }

@@ -41,7 +41,7 @@ public class CorpusConfigurationCompatibilityTest {
    * DerivedAssociationEncoder's any()-match idiom a real corpus scenario -- also ordinary
    * satisfiability questions, no query key.
    */
-  private static final int QUERYLESS_SCENARIOS = 56;
+  private static final int QUERYLESS_SCENARIOS = 62; // +6: RangeLiteral/-UNSAT, Casting/-UNSAT, DerivedAttr/-UNSAT (2026-08-30)
 
   /** The Milestone 4.6 scenario-profile rows, the first corpus entries to configure a query. */
   private static final int QUERY_CARRYING_SCENARIOS = 6;

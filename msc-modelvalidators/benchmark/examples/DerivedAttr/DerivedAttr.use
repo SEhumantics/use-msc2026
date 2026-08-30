@@ -1,0 +1,31 @@
+model DerivedAttr
+
+-- Authored specifically to give unc-modelvalidator's derived-attribute
+-- constraint (derive:) a real, wired benchmark scenario. No shipped model in
+-- the corpus declared a derive: attribute before this -- the derivation slices
+-- (crisp Integer, Boolean, Real-with-lift, and the String alias/literal form)
+-- each had only dedicated unit fixtures. This model exercises the three
+-- families together in one small, honestly-checkable domain: a crisp Integer
+-- derivation over arithmetic (total), a String alias (mirror), and an
+-- invariant that READS the derived attribute (the ocl.attribute-access-derived
+-- path), so the derivation acts as a real constraint the solver and USE's own
+-- re-evaluation both check.
+
+class Invoice
+attributes
+  qty : Integer
+  unitPrice : Integer
+  total : Integer derive: self.qty + self.unitPrice
+  nickname : String
+  mirror : String derive: self.nickname
+end
+
+constraints
+
+-- Reads the DERIVED attribute: the derivation constraint pins total to
+-- qty+unitPrice, so this invariant is really a check on the composed value.
+context i : Invoice inv positiveTotal: i.total > 0
+
+-- A trivial body keeps the scenario focused on the derivation constraint
+-- (which runs unconditionally for every slot) while the model stays valid.
+context i : Invoice inv nicknamePresent: i.nickname.size() > 0
