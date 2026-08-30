@@ -1,6 +1,7 @@
 package org.tzi.use.smt.finder;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.PrintWriter;
@@ -14,6 +15,7 @@ import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.ClassScope;
 import org.tzi.use.smt.config.ConfigurationVocabulary;
 import org.tzi.use.smt.config.QueryParser;
+import org.tzi.use.smt.encode.SmtTranslationException;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
 
@@ -53,6 +55,8 @@ public class SetOperationsTest {
         Set{1,2} = Set{2,1}
       context x : X inv SetLiteralEqualityContent:
         Set{1,2} = Set{1,3}
+      context x : X inv BagEqualityRefuses:
+        Bag{1,1,2} = Bag{1,2,2}
       """;
 
   /** excluding removes the element: {1,2,3} minus {2} has size 2. */
@@ -128,6 +132,35 @@ public class SetOperationsTest {
   public void setEqualityRefutesDifferentContent() throws Exception {
     ModelFinderResult miss = find("SetLiteralEqualityContent", List.of("1"), List.of("1"));
     assertFalse("{1,2} and {1,3} differ", miss.satisfiable());
+  }
+
+  /**
+   * SOUNDNESS REGRESSION: the standalone-equality guard was briefly {@code instanceof
+   * CollectionType} (too broad -- it matched Bag/Sequence), and {@code sameElements} compares
+   * DUPLICATE-COLLAPSED content, so {@code Bag{1,1,2} = Bag{1,2,2}} evaluated TRUE -- silently
+   * accepting an equality that multiset semantics answers FALSE. The guard is now SetType-only;
+   * a Bag equality must FAIL CLOSED (translation refusal), never silently compare deduplicated.
+   */
+  @Test
+  public void bagEqualityFailsClosedInsteadOfComparingDeduplicated() throws Exception {
+    MModel model = compile();
+    AnalysisConfiguration config =
+        new AnalysisConfiguration(
+            List.of(new ClassScope("X", 1, 1)),
+            List.of(),
+            List.of(
+                new AttributeDomain("X", "n", null, List.of("2"), null, null),
+                new AttributeDomain("X", "i", null, List.of("1"), null, null)),
+            Set.of("X::BagEqualityRefuses"),
+            QueryParser.parse("satisfy", ConfigurationVocabulary.fromModel(model)),
+            Duration.ofSeconds(30),
+            1);
+    SmtTranslationException thrown =
+        assertThrows(SmtTranslationException.class, () -> SmtModelFinder.find(model, config));
+    assertTrue(
+        "the refusal must name the unhandled Bag literal, not approximate it: "
+            + thrown.getMessage(),
+        thrown.getMessage().contains("Bag literal"));
   }
 
   private static ModelFinderResult find(

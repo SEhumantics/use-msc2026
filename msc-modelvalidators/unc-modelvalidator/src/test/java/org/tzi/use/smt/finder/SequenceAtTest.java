@@ -43,6 +43,8 @@ public class SequenceAtTest {
         Sequence{10,20,30}->at(x.i) = x.n
       context x : X inv OrderedSetAt:
         OrderedSet{10,20,30}->at(1) = x.n
+      context x : X inv OutOfOrderAt:
+        Sequence{30,10,20}->at(2) = x.n
       """;
 
   /** A constant in-range index folds to the element. */
@@ -80,6 +82,20 @@ public class SequenceAtTest {
     ModelFinderResult match = find("OrderedSetAt", List.of("1"), List.of("10"));
     assertTrue(match.satisfiable());
     assertTrue(verdictFor(match, "X::OrderedSetAt").holds());
+  }
+
+  /**
+   * DECLARATION ORDER, NOT SORTED ORDER: at(2) of {30,10,20} is the second DECLARED element
+   * (10), not the second-smallest (20). A sorted-order implementation would answer 20.
+   */
+  @Test
+  public void atUsesDeclarationOrderNotSortedOrder() throws Exception {
+    ModelFinderResult match = find("OutOfOrderAt", List.of("2"), List.of("10"));
+    assertTrue("at(2) of {30,10,20} is the declared second element 10", match.satisfiable());
+    assertTrue(verdictFor(match, "X::OutOfOrderAt").holds());
+
+    ModelFinderResult sorted = find("OutOfOrderAt", List.of("2"), List.of("20"));
+    assertFalse("the sorted second-smallest (20) is NOT what at(2) means", sorted.satisfiable());
   }
 
   private static ModelFinderResult find(

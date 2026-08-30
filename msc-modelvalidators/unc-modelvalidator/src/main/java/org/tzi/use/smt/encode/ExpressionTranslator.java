@@ -2134,12 +2134,17 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       TranslatedExpression local = contentAwareEquality(l, r);
       if (local != null) return local;
     }
-    // STANDALONE SET EQUALITY: both sides constant-content collections -> compile-time set
-    // equality (order-insensitive, duplicate-collapsed per Set semantics).
+    // STANDALONE SET EQUALITY: both sides constant-content SET-kind collections -> compile-time
+    // set equality (order-insensitive, duplicate-collapsed per Set semantics). Deliberately
+    // SetType ONLY: Bag/Sequence content keeps duplicates, which sameElements' deduplicated
+    // comparison would silently drop -- Bag{1,1,2} = Bag{1,2,2} must REFUSE (fail-closed), not
+    // compare equal. OrderedSet is not a SetType subtype in USE's lattice and is likewise
+    // refused here (it could be admitted later -- it collapses duplicates -- but refused is the
+    // conservative reading).
     // NOTE: isTypeOfCollection() is FALSE for Set/Bag/Sequence in USE's lattice (it names the
     // abstract Collection type exactly -- the same trap the let dispatch documented).
-    if (l.type() instanceof org.tzi.use.uml.ocl.type.CollectionType
-        && r.type() instanceof org.tzi.use.uml.ocl.type.CollectionType) {
+    if (l.type() instanceof org.tzi.use.uml.ocl.type.SetType
+        && r.type() instanceof org.tzi.use.uml.ocl.type.SetType) {
       SetContent lc = constantCollectionContent(l);
       SetContent rc = constantCollectionContent(r);
       if (lc != null && rc != null) {

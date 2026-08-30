@@ -45,6 +45,8 @@ public class FlattenLiteralTest {
         Set{Set{1,2},Set{3}}->flatten()->includes(x.i)
       context x : X inv FlattenForAll:
         Set{Set{1,2},Set{3}}->flatten()->forAll(k | k <= x.i)
+      context x : X inv CrossNestedDuplicateFlatten:
+        Set{Set{1,2},Set{2,3}}->flatten()->size() = x.n
       """;
 
   /** Set-of-Sets flattens to {1,2,3}: size 3. */
@@ -92,6 +94,21 @@ public class FlattenLiteralTest {
 
     ModelFinderResult fails = find("FlattenForAll", List.of("9"), List.of("3"), List.of("2"));
     assertFalse("leaf 3 is not <= 2", fails.satisfiable());
+  }
+
+  /**
+   * THE DEDUPE-POLICY DISCRIMINATOR the first slice missed: the leaf 2 appears in BOTH inner
+   * sets, so Set-outer flatten collapses it -- {1,2,3}, size 3. A wrong policy that keeps the
+   * cross-nested duplicate (Bag-style) answers 4.
+   */
+  @Test
+  public void setFlattenCollapsesCrossNestedDuplicates() throws Exception {
+    ModelFinderResult match = find("CrossNestedDuplicateFlatten", List.of("3"), List.of("3"), List.of("9"));
+    assertTrue("Set-outer flatten collapses the shared leaf: size 3", match.satisfiable());
+    assertTrue(verdictFor(match, "X::CrossNestedDuplicateFlatten").holds());
+
+    ModelFinderResult kept = find("CrossNestedDuplicateFlatten", List.of("4"), List.of("3"), List.of("9"));
+    assertFalse("the shared 2 must count ONCE, not twice", kept.satisfiable());
   }
 
   private static ModelFinderResult find(
