@@ -505,18 +505,27 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           // slice does not model) stay refused. USE's own evaluators confirm the semantics:
           // Op_integer_abs is Math.abs, Op_number_min/max the smaller/larger operand.
           case "abs" -> {
-            if (a.length == 1 && a[0].type().isTypeOfInteger()) {
+            if (a.length == 1
+                && (a[0].type().isTypeOfInteger() || a[0].type().isTypeOfReal())) {
+              // Crisp Real abs joins the Integer case: USE's Op_real_abs is Math.abs over
+              // doubles with a Real result -- total, no rounding, so the same linear ite
+              // shape applies with a Real-sorted zero. UReal keeps its refusal (the
+              // uncertainty composition is a different, unsolved problem).
               TranslatedExpression operand = argResult(a[0]);
+              boolean real = a[0].type().isTypeOfReal();
               yield new TranslatedExpression(
                   operand.defined(),
                   Smt.ite(
-                      Smt.app(">=", operand.value(), Smt.intLit(BigInteger.ZERO)),
+                      Smt.app(
+                          ">=",
+                          operand.value(),
+                          real ? Smt.realLit(BigDecimal.ZERO) : Smt.intLit(BigInteger.ZERO)),
                       operand.value(),
                       Smt.app("-", operand.value())));
             }
             throw unsupported(
                 FragmentBoundary.TIER_2,
-                "operator 'abs' over a non-Integer operand (Real/UReal rounding semantics are"
+                "operator 'abs' over a non-number operand (UReal uncertainty composition is"
                     + " not in this slice)");
           }
           case "min", "max" -> {
@@ -533,12 +542,35 @@ public final class ExpressionTranslator implements ExpressionVisitor {
                   Smt.and(List.of(left.defined(), right.defined())),
                   Smt.ite(comparison, left.value(), right.value()));
             }
+            // The Real widening, mirroring arithmetic()'s +/- widening exactly: USE's
+            // ArithOperation.matches returns Real when EITHER side is Real (via
+            // getLeastCommonSupertype) and Op_number_min/max then compute Math.min/max over
+            // doubles -- so a mixed Integer/Real pair widens to a Real result, the Int-sorted
+            // side lifts with to_real, and the ite is Real-sorted end to end. Still linear.
+            if (a.length == 2
+                && (a[0].type().isTypeOfInteger() || a[0].type().isTypeOfReal())
+                && (a[1].type().isTypeOfInteger() || a[1].type().isTypeOfReal())
+                && (a[0].type().isTypeOfReal() || a[1].type().isTypeOfReal())) {
+              TranslatedExpression left = argResult(a[0]);
+              TranslatedExpression right = argResult(a[1]);
+              SmtTerm leftValue =
+                  a[0].type().isTypeOfInteger() ? Smt.app("to_real", left.value()) : left.value();
+              SmtTerm rightValue =
+                  a[1].type().isTypeOfInteger() ? Smt.app("to_real", right.value()) : right.value();
+              SmtTerm comparison =
+                  "min".equals(e.opname())
+                      ? Smt.app("<=", leftValue, rightValue)
+                      : Smt.app(">=", leftValue, rightValue);
+              yield new TranslatedExpression(
+                  Smt.and(List.of(left.defined(), right.defined())),
+                  Smt.ite(comparison, leftValue, rightValue));
+            }
             throw unsupported(
                 FragmentBoundary.TIER_2,
                 "operator '"
                     + e.opname()
-                    + "' over non-Integer or wrong-arity operands is not supported in this"
-                    + " slice");
+                    + "' over non-number (UReal uncertainty composition is not in this"
+                    + " slice) or wrong-arity operands is not supported");
           }
           // mod with a CONSTANT nonzero divisor: Java % semantics (sign follows the
           // dividend), which SMT-LIB `rem` matches exactly. The divisor must be a

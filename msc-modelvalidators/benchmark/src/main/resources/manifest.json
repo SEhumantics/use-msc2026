@@ -2625,6 +2625,63 @@
         "groundTruth": "UNSATISFIABLE. Under the model's own declared semantics, C::b redefines A::b to navigate CD, so for the only configured C object (c1, linked to d1 through CD) the navigation yields exactly d1, whose tagD is 'NOT-child-d' -- the forAll is FALSE, the invariant is violated, and since the configuration pins every object and link, no satisfying state exists. USE's own evaluator establishes this with no solver: RedefinesCorpusRoundTripTest evaluates the identical invariant on the identical configuration through USE and confirms the refutation.",
         "divergenceClass": "false-sat"
       }
+    },
+    {
+      "id": "RealOps",
+      "directory": "RealOps",
+      "useFile": "RealOps.use",
+      "propertiesFile": "RealOps.properties",
+      "section": "main",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Authored for this thesis project (msc-4, Trong-Nghia Be) to give the Real-widened abs/min/max -- the last shape of the prim.integer-arithmetic arithmetic surface -- a wired benchmark scenario: a tolerance check written as |value - reference| <= tolerance plus a min-based ordering invariant, over exact-real attribute domains.",
+      "provenanceCitation": null,
+      "features": [
+        "prim.integer-arithmetic",
+        "prim.integer-comparisons"
+      ],
+      "question": "Does the Real-widened abs/min/max solve an engineer-shaped tolerance model -- |value - reference| <= tolerance and min(value, reference) = value -- over exact-real configured domains?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "scenarioTags": [
+        "real-arithmetic",
+        "abs-min-max",
+        "tolerance-check",
+        "authored"
+      ]
+    },
+    {
+      "id": "RealOps-UNSAT",
+      "directory": "RealOps",
+      "useFile": "RealOps.use",
+      "propertiesFile": "RealOps.properties",
+      "section": "unsat",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceDetail": "UNSAT counterpart of RealOps: the tolerance narrows to {0.2} so |3.0 - 3.5| = 0.5 > 0.2 -- withinTolerance genuinely violated over a fully populated model.",
+      "provenanceCitation": null,
+      "features": [
+        "prim.integer-arithmetic",
+        "prim.integer-comparisons"
+      ],
+      "question": "Does the abs-based tolerance invariant correctly REFUTE a configuration whose tolerance (0.2) is below the forced absolute difference (0.5)?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "scenarioTags": [
+        "real-arithmetic",
+        "abs-min-max",
+        "tolerance-check",
+        "authored"
+      ]
     }
   ]
 }
