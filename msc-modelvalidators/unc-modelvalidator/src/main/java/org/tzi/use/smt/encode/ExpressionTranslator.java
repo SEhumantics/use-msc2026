@@ -3297,11 +3297,15 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       // distinction, since every consuming construct needs it exactly as much as select() does.
       return selectedAllInstancesPopulation(query);
     }
-    if (range instanceof ExpNavigation navigation && navigation.getDestination().isCollection()) {
+    if (range instanceof ExpNavigation navigation && isCollectionValuedNavigation(navigation)) {
       if (navigation.getObjectExpression() instanceof ExpVariable sourceVar) {
         VariableBinding source = context.binding(sourceVar.getVarname());
         MNavigableElement destination =
             resolveRedefinedDestination(navigation.getDestination(), source);
+        NaryAssociationLinks naryLinks = context.naryLinks(destination.association().name());
+        if (naryLinks != null) {
+          return naryNavigationPopulation(naryLinks, destination, source, construct);
+        }
         AssociationLinks links = context.linksFor(destination.association().name());
         ObjectSlots destSlots = destinationEndView(links, destination);
         List<PopulationMember> population = new ArrayList<>();
@@ -3320,6 +3324,122 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         construct
             + " over a range other than X.allInstances() or a collection-valued association"
             + " navigation is not yet supported");
+  }
+
+  /**
+   * True when {@code navigation} denotes a collection: the usual single-valued/collection-valued
+   * role-multiplicity test, OR the n-ary case -- an end of an N-ARY association (arity &ge; 3)
+   * projects a BAG even when the end's own multiplicity is single-valued (the navigation ranges
+   * over the remaining tuple positions), so the static TYPE is the arbiter there.
+   */
+  private static boolean isCollectionValuedNavigation(ExpNavigation navigation) {
+    return navigation.getDestination().isCollection()
+        || navigation.type().isKindOfCollection(
+            org.tzi.use.uml.ocl.type.Type.VoidHandling.EXCLUDE_VOID);
+  }
+
+  /**
+   * The membership/predicate population consumers an N-ARY navigation may feed. USE types an
+   * n-ary end navigation as a BAG over the projected tuples (duplicate tuples COUNT -- two
+   * tuples {@code (s,p,j1)}, {@code (s,p,j2)} put {@code p} in {@code s.part} twice), while this
+   * encoder's population is one member per destination slot. forAll/exists/isEmpty/notEmpty
+   * depend only on per-element truth and existence, so the deduplication is sound for them;
+   * size()/isUnique/one()/includesAll answer COUNT questions a deduplicated population would
+   * answer WRONGLY (the Set question instead of the Bag question), so each refuses with this
+   * located message rather than approximating.
+   */
+  private static final java.util.Set<String> NARY_NAVIGATION_CONSTRUCTS =
+      java.util.Set.of("forAll", "exists", "isEmpty", "notEmpty");
+
+  /**
+   * The population one end of an N-ARY association (arity &ge; 3) projects from a fixed source
+   * object at another end: per destination slot, the member guard is the disjunction of the link
+   * terms over the cross product of the REMAINING N-2 positions' slots -- "reachable via SOME
+   * tuple through the source", the n-ary generalization of the binary navigation population.
+   * Source and destination ends are resolved structurally (the destination by its declared-end
+   * identity, the source by slot-binding lookup); a REFLEXIVE n-ary association (the same class
+   * at two ends) is refused rather than guessed at.
+   */
+  private List<PopulationMember> naryNavigationPopulation(
+      NaryAssociationLinks links,
+      MNavigableElement destination,
+      VariableBinding source,
+      String construct) {
+    if (!NARY_NAVIGATION_CONSTRUCTS.contains(construct)) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          construct
+              + " over an n-ary association navigation: USE's n-ary end navigation is a Bag"
+              + " (duplicate tuples count) while this population is per-slot deduplicated, so"
+              + " only forAll/exists/isEmpty/notEmpty are supported -- the count-based"
+              + " constructs would answer a different (Set-based) question");
+    }
+    int arity = links.arity();
+    int destEnd = -1;
+    List<MAssociationEnd> declaredEnds = destination.association().associationEnds();
+    for (int e = 0; e < arity; e++) {
+      if (declaredEnds.get(e).equals(destination)) {
+        destEnd = e;
+        break;
+      }
+    }
+    if (destEnd < 0) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "navigation destination is not a declared end of n-ary association "
+              + links.associationName());
+    }
+    int sourceEnd = -1;
+    for (int e = 0; e < arity; e++) {
+      if (e != destEnd && links.endView(e).indexOf(source) >= 0) {
+        sourceEnd = e;
+        break;
+      }
+    }
+    if (sourceEnd < 0) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "association "
+              + links.associationName()
+              + " does not connect class "
+              + source.className());
+    }
+    List<Integer> existentialPositions = new ArrayList<>();
+    for (int e = 0; e < arity; e++) {
+      if (e != sourceEnd && e != destEnd) {
+        existentialPositions.add(e);
+      }
+    }
+    int sourceIndex = links.endView(sourceEnd).indexOf(source);
+    ObjectSlots destView = links.endView(destEnd);
+    List<PopulationMember> population = new ArrayList<>();
+    for (int d = 0; d < destView.capacity(); d++) {
+      int[] indices = new int[arity];
+      indices[sourceEnd] = sourceIndex;
+      indices[destEnd] = d;
+      List<SmtTerm> options = new ArrayList<>();
+      crossProductTerms(links, existentialPositions, 0, indices, options);
+      population.add(new PopulationMember(destView.concreteBindings().get(d), Smt.or(options)));
+    }
+    return population;
+  }
+
+  /** Recursively enumerates the existential positions' cross product, one link term per tuple. */
+  private static void crossProductTerms(
+      NaryAssociationLinks links,
+      List<Integer> positions,
+      int position,
+      int[] indices,
+      List<SmtTerm> options) {
+    if (position == positions.size()) {
+      options.add(Smt.sym(links.linkName(indices.clone())));
+      return;
+    }
+    int e = positions.get(position);
+    for (int slot = 0; slot < links.endView(e).capacity(); slot++) {
+      indices[e] = slot;
+      crossProductTerms(links, positions, position + 1, indices, options);
+    }
   }
 
   /**
@@ -4154,7 +4274,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       return defined(virtualSplitSizeChain((ExpStdOp) receiver));
     }
     if (receiver instanceof ExpNavigation navigation
-        && navigation.getDestination().isCollection()) {
+        && isCollectionValuedNavigation(navigation)) {
       return defined(sizeTerm(populationOf(navigation, "size()")));
     }
     if (receiver instanceof ExpQuery query
@@ -4292,7 +4412,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       population = selectedAllInstancesPopulation(query);
     } else if (receiver instanceof ExpAllInstances
         || (receiver instanceof ExpNavigation navigation
-            && navigation.getDestination().isCollection())) {
+            && isCollectionValuedNavigation(navigation))) {
       population = populationOf(receiver, construct);
     } else if (receiver instanceof ExpSetLiteral set && set.getElemExpr().length > 0) {
       // Emptiness from the EXPANDED distinct element count: a constant-bounds range with an

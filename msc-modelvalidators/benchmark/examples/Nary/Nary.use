@@ -1,0 +1,45 @@
+model Nary
+
+-- Authored specifically to give unc-modelvalidator's n-ary association slice
+-- (arity >= 3 link grids) a real, wired benchmark scenario. Kodkod's own
+-- n-ary support was source-evidenced for years but never empirically
+-- exercised by ANY shipped example on either tool; the kk side is now pinned
+-- by NaryAssociationProbeTest (a ternary Supplies association transforms,
+-- configures, and solves correctly on the real kk pipeline). This model is
+-- the unc counterpart: a ternary association whose 3-tuple link bound is
+-- forced, navigated from two different ends through the projected
+-- collection-valued ends (USE types an n-ary end navigation as a Bag).
+
+class Supplier
+attributes
+  name : String
+end
+
+class Part
+attributes
+  sku : String
+end
+
+class Project
+attributes
+  title : String
+end
+
+association Supplies between
+  Supplier[0..2] role supplier
+  Part[0..2] role part
+  Project[0..2] role project
+end
+
+constraints
+
+-- Navigating the ternary association from the Supplier end projects a Bag of
+-- Parts (one per tuple through this supplier); with exactly one forced tuple
+-- the projection is non-empty.
+context s : Supplier inv navigatedPartPresent:
+  s.part->notEmpty()
+
+-- The same grid navigated from the Project end onto Part: the projection is
+-- per-tuple, so whichever project participates in a tuple sees the part.
+context j : Project inv navigatedPartPresentFromProject:
+  j.part->notEmpty()

@@ -11,6 +11,7 @@ import org.tzi.use.smt.encode.AssociationClassPointerEncoder;
 import org.tzi.use.smt.encode.AssociationLinks;
 import org.tzi.use.smt.encode.AttributeType;
 import org.tzi.use.smt.encode.AttributeValues;
+import org.tzi.use.smt.encode.NaryAssociationLinks;
 import org.tzi.use.smt.encode.ObjectSlots;
 import org.tzi.use.smt.encode.TranslationContext;
 import org.tzi.use.smt.solver.SmtValue;
@@ -238,6 +239,9 @@ public final class SystemStateReconstructor {
       Map<String, SmtValue> modelValues,
       Map<String, MObject> objectsBySlot)
       throws UseApiException {
+    for (NaryAssociationLinks naryLinks : context.naryLinksByAssociation().values()) {
+      createNaryLinks(api, model, naryLinks, modelValues, objectsBySlot);
+    }
     for (AssociationLinks links : context.linksByAssociation().values()) {
       MAssociation association = model.getAssociation(links.associationName());
       List<MAssociationEnd> declaredEnds = association.associationEnds();
@@ -275,6 +279,42 @@ public final class SystemStateReconstructor {
             api.createLinkEx(association, order);
           }
         }
+      }
+    }
+  }
+
+  /**
+   * N-ARY link reconstruction (arity &ge; 3): every TRUE tuple of the flattened grid becomes one
+   * USE link with the participating objects in the association's DECLARED end order -- the exact
+   * order {@link NaryAssociationLinks}' end views were built in, so no orientation resolution is
+   * needed. USE's createLinkEx is arity-agnostic (it takes an object array in declared end
+   * order); the per-slot CONCRETE-class resolution is the same slotKeyAt read the binary path
+   * uses, so folded end views reconstruct correctly.
+   */
+  private static void createNaryLinks(
+      UseSystemApi api,
+      MModel model,
+      NaryAssociationLinks naryLinks,
+      Map<String, SmtValue> modelValues,
+      Map<String, MObject> objectsBySlot)
+      throws UseApiException {
+    MAssociation association = model.getAssociation(naryLinks.associationName());
+    int arity = naryLinks.arity();
+    int[] indices = new int[arity];
+    for (int flat = 0; flat < naryLinks.tupleCount(); flat++) {
+      // Decode the row-major flat index into per-end slot indices (the inverse of
+      // NaryAssociationLinks.linkName's stride arithmetic).
+      int remainder = flat;
+      for (int e = arity - 1; e >= 0; e--) {
+        indices[e] = remainder % naryLinks.capacities()[e];
+        remainder /= naryLinks.capacities()[e];
+      }
+      if (isTrue(modelValues, naryLinks.linkName(indices))) {
+        MObject[] order = new MObject[arity];
+        for (int e = 0; e < arity; e++) {
+          order[e] = objectsBySlot.get(naryLinks.endView(e).slotKeyAt(indices[e]));
+        }
+        api.createLinkEx(association, order);
       }
     }
   }

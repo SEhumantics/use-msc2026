@@ -342,10 +342,12 @@ public final class ConfigurationReader {
    *
    * <p>Mirrors {@code PropertyConfigurationVisitor.readComplexElements} (lines 438-476): strip the
    * {@code Set&#123;...&#125;} wrapper, split on {@code )}, take everything after the {@code (},
-   * and split the remainder on commas, trimming each element. Only binary tuples are accepted --
-   * the incumbent's three-element form prepends an association-CLASS link object (line 462-464),
-   * which the SMT link grid has no counterpart for, so it is refused rather than silently read as a
-   * binary link.
+   * and split the remainder on commas, trimming each element. Tuple ARITY is checked against the
+   * association by the link encoders (which know the model), not here: this reader accepts any
+   * N-tuple with N &ge; 2 non-empty ends (the n-ary slice's ternary tuples parse exactly like the
+   * incumbent's; the incumbent's own three-element ASSOCIATION-CLASS form prepends the link
+   * object the same way an ordinary third end is spelled, and an arity mismatch is a located
+   * encoder refusal, not a silent binary read).
    */
   private static List<List<String>> linkTuples(String key, List<String> values) {
     String body = String.join(",", setBody(key, values));
@@ -364,13 +366,13 @@ public final class ConfigurationReader {
       }
       List<String> ends =
           List.of(part.substring(open + 1).split(",", -1)).stream().map(String::trim).toList();
-      if (ends.size() != 2 || ends.stream().anyMatch(String::isEmpty)) {
+      if (ends.size() < 2 || ends.stream().anyMatch(String::isEmpty)) {
         throw new ConfigurationReadException(
             "unsupported link tuple '("
                 + String.join(",", ends)
                 + ")' for '"
                 + key
-                + "': only binary association tuples are supported in this slice");
+                + "': link tuples need at least two non-empty ends");
       }
       tuples.add(ends);
     }

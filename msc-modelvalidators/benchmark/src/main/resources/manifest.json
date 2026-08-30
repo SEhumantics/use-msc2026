@@ -2449,7 +2449,7 @@
         "prim.integer-arithmetic",
         "prim.string-operations"
       ],
-      "question": "Does a derive: attribute act as a real constraint -- total pinned to qty*unitPrice by the derivation, read by an invariant, with a String alias derivation (mirror derive: self.nickname) holding over equal singleton domains?",
+      "question": "Does a derive: attribute act as a real constraint -- total pinned to qty+unitPrice by the (linear) derivation, read by an invariant, with a String alias derivation (mirror derive: self.nickname) holding over equal singleton domains?",
       "expected": {
         "classification": "sat",
         "outcome": "SATISFIABLE"
@@ -2470,14 +2470,14 @@
       "category": "expressiveness",
       "mode": "finding",
       "hasValidationTests": false,
-      "provenanceDetail": "UNSAT counterpart of DerivedAttr: unitPrice {-3} pins the derivation to 2*-3 = -6 while total's domain stays {6} -- the derivation constraint and the attribute domain genuinely contradict (and positiveTotal fails on the forced -6 besides), over a fully populated model.",
+      "provenanceDetail": "UNSAT counterpart of DerivedAttr: unitPrice {4} pins the linear derivation to 2+4 = 6 while total's domain stays {5} -- the derivation constraint and the attribute domain genuinely contradict, over a fully populated model.",
       "provenanceCitation": null,
       "features": [
         "attr.derived",
         "ocl.attribute-access-derived",
         "prim.integer-arithmetic"
       ],
-      "question": "Does the derivation constraint genuinely contradict a disagreeing configured domain -- refuting the configuration instead of silently ignoring the derive: expression (the pre-fix behavior returned SAT with a derivation-violating witness)?",
+      "question": "Does the derivation constraint genuinely contradict a disagreeing configured domain -- unitPrice {4} pins total to 6 while total's domain stays {5} -- refuting the configuration instead of silently ignoring the derive: expression (the pre-fix behavior returned SAT with a derivation-violating witness)?",
       "expected": {
         "classification": "unsat",
         "outcome": "UNSATISFIABLE"
@@ -2485,6 +2485,65 @@
       "scenarioTags": [
         "derived-attribute",
         "derive-constraint",
+        "authored"
+      ]
+    },
+    {
+      "id": "Nary",
+      "directory": "Nary",
+      "useFile": "Nary.use",
+      "propertiesFile": "Nary.properties",
+      "section": "main",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Authored for this thesis project (msc-4, Trong-Nghia Be) to give the n-ary association slice (arity >= 3) its first wired corpus coverage. Kodkod's own n-ary support was source-evidenced but never empirically exercised by any shipped example on either tool; NaryAssociationProbeTest pins the kk side (ternary transform + 3-tuple bound + navigation all work on the real kk pipeline), this scenario pins the unc side.",
+      "provenanceCitation": null,
+      "features": [
+        "assoc.nary",
+        "assoc.binary",
+        "assoc.predefined-links",
+        "config.association-bounds",
+        "prim.boolean-literals-ops"
+      ],
+      "question": "Does a ternary association behave as a real N-tuple link grid -- the forced 3-tuple Set{(sup,p1,j1)} honored, and both projected end navigations (Supplier->Part, Project->Part as Bags over the matching tuples) non-empty exactly when the tuple exists?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "scenarioTags": [
+        "nary-association",
+        "ternary-links",
+        "predefined-population",
+        "authored"
+      ]
+    },
+    {
+      "id": "Nary-UNSAT",
+      "directory": "Nary",
+      "useFile": "Nary.use",
+      "propertiesFile": "Nary.properties",
+      "section": "unsat",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceDetail": "UNSAT counterpart of Nary: the association's link-count bound is 0..0 and no tuple is forced, so both projected notEmpty navigations are genuinely violated over a fully populated model.",
+      "provenanceCitation": null,
+      "features": [
+        "assoc.nary",
+        "prim.boolean-literals-ops"
+      ],
+      "question": "Does the n-ary grid genuinely consult its links -- refuting the zero-link configuration where both projected navigations demand a tuple?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "scenarioTags": [
+        "nary-association",
+        "ternary-links",
         "authored"
       ]
     }

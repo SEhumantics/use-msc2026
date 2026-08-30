@@ -41,6 +41,8 @@ import org.tzi.use.smt.encode.ExpressionTranslator;
 import org.tzi.use.smt.solver.Smt;
 import org.tzi.use.smt.encode.VariableBinding;
 import org.tzi.use.smt.solver.SmtTerm;
+import org.tzi.use.smt.encode.NaryAssociationLinkEncoder;
+import org.tzi.use.smt.encode.NaryAssociationLinks;
 import org.tzi.use.smt.encode.PredefinedLinkEncoder;
 import org.tzi.use.smt.encode.QueryCompiler;
 import org.tzi.use.smt.encode.ScenarioSpace;
@@ -835,6 +837,7 @@ public final class SmtModelFinder {
         script, model, slotsByClass, attributeValuesByKey, attributeDomainByKey);
 
     Map<String, AssociationLinks> linksByAssociation = new LinkedHashMap<>();
+    Map<String, NaryAssociationLinks> naryLinksByAssociation = new LinkedHashMap<>();
     Map<String, List<AssociationLinks>> reflexiveCompositionsByClass = new LinkedHashMap<>();
     List<String> crossClassCompositionsWithNonzeroPopulation = new ArrayList<>();
     // Association-class pointer END VIEWS, folded over configured subclasses exactly like the
@@ -857,11 +860,65 @@ public final class SmtModelFinder {
         continue;
       }
       List<MAssociationEnd> ends = association.associationEnds();
+      if (ends.size() >= 3) {
+        // N-ARY SLICE (assoc.nary): arity >= 3 associations get a real N-tuple link grid
+        // (NaryAssociationLinkEncoder), membership-based population consumers over projected
+        // navigations, predefined tuple bounds, and n-ary reconstruction. Everything the
+        // binary machinery handles specially that has no n-ary counterpart refuses here,
+        // each with a located message -- decided in the design note before any code.
+        for (MAssociationEnd end : ends) {
+          if (end.isUnion()) {
+            throw new SmtTranslationException(
+                FragmentBoundary.TIER_3,
+                "association '"
+                    + scope.associationName()
+                    + "' is n-ary and declares a union end; n-ary union content is not modeled"
+                    + " (the binary union case is deliberately unmodeled too)");
+          }
+          if (end.isDerived()) {
+            throw new SmtTranslationException(
+                FragmentBoundary.TIER_3,
+                "association '"
+                    + scope.associationName()
+                    + "' is n-ary and declares a derived end; the any()-match derivation"
+                    + " encoder is binary-specific and n-ary derived content is not supported");
+          }
+        }
+        if (config.requireAggregationCycleFreedom()
+            && ends.stream().anyMatch(end -> end.aggregationKind() != MAggregationKind.NONE)) {
+          throw new SmtTranslationException(
+              FragmentBoundary.TIER_3,
+              "aggregationcyclefreeness = on, but association '"
+                  + scope.associationName()
+                  + "' is n-ary with an aggregation/composition end; the cycle machinery is"
+                  + " binary-relation based and cannot check an n-ary cycle soundly, so this is"
+                  + " refused rather than silently ignored");
+        }
+        List<ObjectSlots> endViews = new ArrayList<>();
+        List<List<Multiplicity>> endMultiplicities = new ArrayList<>();
+        for (MAssociationEnd end : ends) {
+          ObjectSlots view = endSlotsView(slotsByClass, end.cls());
+          if (view == null) {
+            throw new IllegalArgumentException(
+                "association '"
+                    + scope.associationName()
+                    + "' references a class with no configured scope");
+          }
+          endViews.add(view);
+          endMultiplicities.add(toMultiplicities(end.multiplicity()));
+        }
+        NaryAssociationLinks naryLinks =
+            NaryAssociationLinkEncoder.encode(
+                script, scope.associationName(), endViews, endMultiplicities, scope);
+        PredefinedLinkEncoder.encode(script, scope, naryLinks);
+        naryLinksByAssociation.put(scope.associationName(), naryLinks);
+        continue;
+      }
       if (ends.size() != 2) {
         throw new IllegalArgumentException(
             "association '"
                 + scope.associationName()
-                + "' does not have exactly two ends; not yet supported");
+                + "' does not have at least two ends; not supported");
       }
       if (ends.get(0).isUnion() || ends.get(1).isUnion()) {
         // A union-declared association's own content is entirely DERIVED from whichever
@@ -1034,7 +1091,7 @@ public final class SmtModelFinder {
       TranslationContext context =
           new TranslationContext(
               Map.of(), attributes, attributeDomainByKey, slotsByClass, linksByAssociation,
-              operationDispatch, assocClassEndViews);
+              operationDispatch, assocClassEndViews, naryLinksByAssociation);
       assertDerivedAttributeValues(script, model, context, attributes);
       FragmentChecker.ReifiedResult checked =
           FragmentChecker.checkAndReify(

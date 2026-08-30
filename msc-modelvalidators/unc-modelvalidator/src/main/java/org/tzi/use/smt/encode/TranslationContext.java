@@ -14,7 +14,8 @@ public record TranslationContext(
     Map<String, ObjectSlots> slotsByClass,
     Map<String, AssociationLinks> linksByAssociation,
     Map<String, Map<String, MOperation>> operationDispatch,
-    Map<String, List<ObjectSlots>> assocClassEndViews) {
+    Map<String, List<ObjectSlots>> assocClassEndViews,
+    Map<String, NaryAssociationLinks> naryLinksByAssociation) {
   /**
    * Convenience constructor for call sites that do not (yet) carry an operation-dispatch
    * table: operation dispatch then falls back to the statically-declared operation.
@@ -26,7 +27,7 @@ public record TranslationContext(
       Map<String, ObjectSlots> slotsByClass,
       Map<String, AssociationLinks> linksByAssociation) {
     this(variables, attributes, domains, slotsByClass, linksByAssociation, Collections.emptyMap(),
-        Collections.emptyMap());
+        Collections.emptyMap(), Collections.emptyMap());
   }
 
   /**
@@ -42,7 +43,17 @@ public record TranslationContext(
       Map<String, AssociationLinks> linksByAssociation,
       Map<String, Map<String, MOperation>> operationDispatch) {
     this(variables, attributes, domains, slotsByClass, linksByAssociation, operationDispatch,
-        Collections.emptyMap());
+        Collections.emptyMap(), Collections.emptyMap());
+  }
+
+  /**
+   * The N-ARY link grid (arity &ge; 3) registered for {@code associationName}, or null when the
+   * association is binary (its {@link #linksFor} grid applies) or not an association scope at
+   * all. N-ary grids live in their own map so every binary consumer's {@code linksFor} lookup
+   * keeps its exact type and semantics.
+   */
+  public NaryAssociationLinks naryLinks(String associationName) {
+    return naryLinksByAssociation.get(associationName);
   }
 
   /**
@@ -116,7 +127,7 @@ public record TranslationContext(
     extended.put(variableName, binding);
     return new TranslationContext(
         extended, attributes, domains, slotsByClass, linksByAssociation, operationDispatch,
-        assocClassEndViews);
+        assocClassEndViews, naryLinksByAssociation);
   }
 
   private static <T> T require(

@@ -50,6 +50,18 @@ public final class PredefinedLinkEncoder {
     }
     boolean swapped = resolveOrientation(scope, links, declaredEndClassNames);
     for (List<String> tuple : scope.links()) {
+      if (tuple.size() != 2) {
+        // The n-ary slice relaxed the CONFIG READER to any N-tuple; the arity check moved here,
+        // where the model is known: a binary association still refuses anything but a 2-tuple
+        // (a 3-tuple on a binary association is the incumbent's association-class spelling).
+        throw new SmtTranslationException(
+            FragmentBoundary.TIER_3,
+            "predefined link of '"
+                + scope.associationName()
+                + "' names "
+                + tuple.size()
+                + " objects but the association declares 2 ends");
+      }
       String rowName = swapped ? tuple.get(1) : tuple.get(0);
       String columnName = swapped ? tuple.get(0) : tuple.get(1);
       int row = slotOf(scope, links.aEnd(), rowName);
@@ -90,6 +102,36 @@ public final class PredefinedLinkEncoder {
             + b
             + " but the association declares ends "
             + declaredEndClassNames);
+  }
+
+  /**
+   * The n-ary counterpart (arity &ge; 3): {@link NaryAssociationLinks}' end views ARE in the
+   * association's declared end order by construction (the caller builds them that way), so each
+   * configured tuple position indexes its own end view directly -- no orientation resolution is
+   * possible or needed. What stays is the arity check and the per-position object-name check.
+   */
+  public static void encode(SmtScript script, AssociationScope scope, NaryAssociationLinks links) {
+    if (scope.links().isEmpty()) {
+      return;
+    }
+    for (List<String> tuple : scope.links()) {
+      if (tuple.size() != links.arity()) {
+        throw new SmtTranslationException(
+            FragmentBoundary.TIER_3,
+            "predefined link of '"
+                + scope.associationName()
+                + "' names "
+                + tuple.size()
+                + " objects but the association declares "
+                + links.arity()
+                + " ends");
+      }
+      int[] indices = new int[tuple.size()];
+      for (int e = 0; e < tuple.size(); e++) {
+        indices[e] = slotOf(scope, links.endView(e), tuple.get(e));
+      }
+      script.assertThat(Smt.sym(links.linkName(indices)));
+    }
   }
 
   private static int slotOf(AssociationScope scope, ObjectSlots slots, String objectName) {

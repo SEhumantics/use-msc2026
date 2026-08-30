@@ -88,7 +88,7 @@ public final class AssociationLinkEncoder {
    * on A[1]/B[0..1] with A pinned at 1 and B scoped 1..2, kk-modelvalidator reports SATISFIABLE
    * (the legal exactly-one-B instance) where the unguarded encoding reported UNSATISFIABLE.
    */
-  private static void degree(
+  static void degree(
       SmtScript s, List<SmtTerm> terms, SmtTerm exists, List<Multiplicity> ranges) {
     SmtTerm count = sum(terms);
     List<SmtTerm> allowed = new ArrayList<>();
@@ -105,7 +105,7 @@ public final class AssociationLinkEncoder {
     s.assertThat(Smt.app("=>", exists, Smt.or(allowed)));
   }
 
-  private static void degree(SmtScript s, List<SmtTerm> terms, Multiplicity m) {
+  static void degree(SmtScript s, List<SmtTerm> terms, Multiplicity m) {
     SmtTerm count = sum(terms);
     if (m.lower() > 0)
       s.assertThat(Smt.app(">=", count, Smt.intLit(BigInteger.valueOf(m.lower()))));
