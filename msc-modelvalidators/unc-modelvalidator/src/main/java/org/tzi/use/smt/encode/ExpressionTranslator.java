@@ -5306,6 +5306,19 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         result = navigationObjectLet(e, navigation);
         return;
       }
+      // CAST INITIALIZER: `let t : T = x.b.oclAsType(T) in ...` -- the bind-the-downcast-once
+      // idiom every guarded-downcast context wants. ExpAsType#eval is strict, so the binding's
+      // per-slot definedness is the link AND the destination slot's compile-time conformance
+      // to the cast target; a non-conforming slot contributes nothing.
+      if (e.getVarExpression() instanceof ExpAsType cast
+          && cast.getSourceExpr() instanceof ExpNavigation castNavigation
+          && !castNavigation.getDestination().isCollection()
+          && castNavigation.getObjectExpression() instanceof ExpVariable) {
+        result =
+            objectLetOverNavigation(
+                e, castNavigation, (org.tzi.use.uml.mm.MClassifier) cast.type());
+        return;
+      }
       // CHAINED OBJECT LET: the initializer names another OBJECT binding (an any-let or a
       // navigation let variable) -- the alias IS that binding, so every read through the new
       // variable reads the same slot's symbols and the chain's definedness is the
@@ -6115,6 +6128,19 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * -- the total-equality/closure consumers already handle that via the definedness term.
    */
   private TranslatedExpression navigationObjectLet(ExpLet e, ExpNavigation navigation) {
+    return objectLetOverNavigation(e, navigation, null);
+  }
+
+  /**
+   * Object let over a single-valued navigation initializer, optionally through a cast ({@code
+   * let t : T = x.b.oclAsType(T)}): per destination slot the let variable IS the linked
+   * object, so the slot's guard is the link term -- AND, when a cast target is present, the
+   * slot's compile-time conformance to that target ({@code ExpAsType#eval}'s runtime check,
+   * fixed per slot). A non-conforming slot contributes NOTHING: the cast is undefined there,
+   * and the slot's attribute registrations may not even exist on the wrong class.
+   */
+  private TranslatedExpression objectLetOverNavigation(
+      ExpLet e, ExpNavigation navigation, org.tzi.use.uml.mm.MClassifier castTarget) {
     VariableBinding source = context.binding(variableNameOf(navigation.getObjectExpression()));
     MNavigableElement destination = resolveRedefinedDestination(navigation.getDestination(), source);
     if (destination.association() instanceof MAssociationClass) {
@@ -6132,6 +6158,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     String stem = "|ocl-let-" + e.getVarname() + "-";
     for (int k = 0; k < destinationSlots.capacity(); k++) {
       VariableBinding slotBinding = destinationSlots.concreteBindings().get(k);
+      if (castTarget != null && !bindingConformsTo(slotBinding, castTarget)) {
+        continue;
+      }
       TranslationContext slotContext = context.withBinding(e.getVarname(), slotBinding);
       TranslatedExpression body =
           translate(
