@@ -1160,15 +1160,28 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     ExpAttrOp attribute = comparisonArgs[0] instanceof ExpAttrOp a ? a : null;
     ExpVariable letVariable = null;
     ExpStdOp sizeOperand = null;
+    ExpAttrOp usAttr = null;
+    boolean sizeNavigated = false;
     if (attribute == null
         && comparisonArgs[0] instanceof ExpStdOp candidate
         && "size".equals(candidate.opname())
         && candidate.args().length == 1
         && candidate.args()[0] instanceof ExpAttrOp sizeAttr
-        && sizeAttr.objExp() instanceof ExpVariable sizeVar
-        && !localBindings.containsKey(sizeVar.getVarname())
         && sizeAttr.type().isTypeOfUString()) {
-      sizeOperand = candidate;
+      usAttr = sizeAttr;
+      if (sizeAttr.objExp() instanceof ExpVariable bareVar
+          && !localBindings.containsKey(bareVar.getVarname())) {
+        sizeOperand = candidate;
+      } else if (sizeAttr.objExp() instanceof ExpNavigation sizeNav
+          && !sizeNav.getDestination().isCollection()
+          && sizeNav.getObjectExpression() instanceof ExpVariable navVar
+          && !localBindings.containsKey(navVar.getVarname())) {
+        // NAVIGATED (folded) UString size: the representative is the per-slot spelling length
+        // over the end view -- folded views included, each slot's lengths from its concrete
+        // class's configured spellings -- and the uncertainty the slot's confidence symbol.
+        sizeOperand = candidate;
+        sizeNavigated = true;
+      }
     }
     if (attribute == null && letVariable == null) {
       if (comparisonArgs[0] instanceof ExpVariable v && localBindings.containsKey(v.getVarname())) {
@@ -1205,6 +1218,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     SmtTerm declared = null;
     boolean integerRepresentative = false;
     SmtTerm uncertainty = null;
+    SmtTerm operandLinkGuard = null;
     if (attribute != null) {
       VariableBinding binding = context.binding(variableNameOf(attribute.objExp()));
       AttributeValues values = context.attributeValues(binding.className(), attribute.attr().name());
@@ -1226,16 +1240,16 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       declared = Smt.sym(local.valueSymbol());
       integerRepresentative = letVariable.type().isTypeOfUInteger();
       uncertainty = Smt.sym(local.uncertaintySymbol());
-    } else if (sizeOperand != null) {
-      // UString.size(): the representative is the SPELLING LENGTH -- a constant per configured
-      // spelling candidate, selected by the spelling symbol's ite chain -- and the uncertainty
-      // is the confidence symbol (UStringValue.uSize() carries the confidence through).
-      ExpAttrOp usAttr = (ExpAttrOp) sizeOperand.args()[0];
-      VariableBinding ub = context.binding(usAttr.objExp() instanceof ExpVariable uv ? uv.getVarname() : null);
+    } else if (sizeOperand != null && !sizeNavigated) {
+      // BARE UString.size(): the representative is the SPELLING LENGTH -- a constant per
+      // configured spelling candidate, selected by the spelling symbol's ite chain -- and the
+      // uncertainty is the confidence symbol (UStringValue.uSize() carries the confidence
+      // through).
+      VariableBinding ub =
+          context.binding(((ExpVariable) usAttr.objExp()).getVarname());
       AttributeValues uvalues = context.attributeValues(ub.className(), usAttr.attr().name());
       AttributeDomain spellings =
           context.attributeDomain(ub.className(), usAttr.attr().name(), "value");
-      context.attributeDomain(ub.className(), usAttr.attr().name(), "confidence");
       List<String> spellingList = spellings.enumeratedValues();
       if (spellingList.isEmpty()) {
         throw unsupported(
@@ -1254,6 +1268,70 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       declared = rep;
       integerRepresentative = true;
       uncertainty = Smt.sym(uvalues.confidenceNames().get(ub.slotIndex()));
+    } else {
+      // NAVIGATED (folded) UString.size(): the representative is the per-slot spelling length
+      // over the end view -- each slot's lengths from its concrete class's configured
+      // spellings -- nested under the slot link guards, and the uncertainty the per-slot
+      // confidence symbol under the same guards. The fallback is the last slot's block, never
+      // consulted while unlinked (the definedness is false there and the body is violated).
+      VariableBinding navSource =
+          context.binding(
+              ((ExpVariable) ((ExpNavigation) usAttr.objExp()).getObjectExpression())
+                  .getVarname());
+      MNavigableElement destination =
+          resolveRedefinedDestination(
+              ((ExpNavigation) usAttr.objExp()).getDestination(), navSource);
+      if (destination.association() instanceof MAssociationClass) {
+        throw unsupported(
+            FragmentBoundary.UTYPE_CORE,
+            "navigated UString size over an association class is not yet supported");
+      }
+      AssociationLinks links = context.linksFor(destination.association().name());
+      ObjectSlots destSlots = destinationEndView(links, destination);
+      List<SmtTerm> slotBlocks = new ArrayList<>();
+      List<SmtTerm> slotGuards = new ArrayList<>();
+      List<SmtTerm> slotUnc = new ArrayList<>();
+      for (int k = 0; k < destSlots.capacity(); k++) {
+        VariableBinding concrete = destSlots.concreteBindings().get(k);
+        String concreteClass = concrete.className();
+        AttributeValues vals = context.attributeValues(concreteClass, usAttr.attr().name());
+        AttributeDomain classSpellings =
+            context.attributeDomain(concreteClass, usAttr.attr().name(), "value");
+        context.attributeDomain(concreteClass, usAttr.attr().name(), "confidence");
+        List<String> classSpellingList = classSpellings.enumeratedValues();
+        if (classSpellingList.isEmpty()) {
+          throw unsupported(
+              FragmentBoundary.UTYPE_CORE,
+              "size over a UString attribute whose concrete class "
+                  + concreteClass
+                  + " has an empty configured spelling domain");
+        }
+        SmtTerm classSym = Smt.sym(vals.valueNames().get(concrete.slotIndex()));
+        SmtTerm classUnc = Smt.sym(vals.confidenceNames().get(concrete.slotIndex()));
+        SmtTerm block =
+            Smt.intLit(
+                BigInteger.valueOf(
+                    classSpellingList.get(classSpellingList.size() - 1).length()));
+        for (int i = classSpellingList.size() - 2; i >= 0; i--) {
+          block =
+              Smt.ite(
+                  Smt.eq(classSym, Smt.intLit(BigInteger.valueOf(i))),
+                  Smt.intLit(BigInteger.valueOf(classSpellingList.get(i).length())),
+                  block);
+        }
+        SmtTerm link = linkTerm(links, destination, navSource, k);
+        slotBlocks.add(block);
+        slotGuards.add(link);
+        slotUnc.add(classUnc);
+      }
+      declared = slotBlocks.get(slotBlocks.size() - 1);
+      uncertainty = slotUnc.get(slotUnc.size() - 1);
+      for (int k = slotBlocks.size() - 2; k >= 0; k--) {
+        declared = Smt.ite(slotGuards.get(k), slotBlocks.get(k), declared);
+        uncertainty = Smt.ite(slotGuards.get(k), slotUnc.get(k), uncertainty);
+      }
+      integerRepresentative = true;
+      operandLinkGuard = Smt.or(slotGuards);
     }
     // The representative is an Int for UInteger and a Real for UReal, while the boundary is always
     // a Real -- so the arithmetic comparison lifts it. The DECLARED symbol stays an Int, which is
@@ -1270,7 +1348,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     SmtTerm zero = Smt.realLit(BigDecimal.ZERO);
     SmtTerm exact = Smt.app(comparison.opname(), representative, Smt.realLit(literal));
     if (mode == TranslationMode.NOMINAL) {
-      return defined(exact);
+      return defined(operandLinkGuard == null ? exact : Smt.and(List.of(operandLinkGuard, exact)));
     }
     URealThresholdBoundary.Enclosure enclosure = URealThresholdBoundary.enclose(confidence);
     BigDecimal standardizedBoundary = positivePolarity ? enclosure.upper() : enclosure.lower();
@@ -1282,11 +1360,15 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     SmtTerm uncertain =
         Smt.app(
             comparison.opname().startsWith(">") ? ">=" : "<=", representative, uncertainBoundary);
-    return defined(
+    SmtTerm thresholdFormula =
         Smt.or(
             List.of(
                 Smt.and(List.of(Smt.eq(uncertainty, zero), exact)),
-                Smt.and(List.of(Smt.app(">", uncertainty, zero), uncertain)))));
+                Smt.and(List.of(Smt.app(">", uncertainty, zero), uncertain))));
+    return defined(
+        operandLinkGuard == null
+            ? thresholdFormula
+            : Smt.and(List.of(operandLinkGuard, thresholdFormula)));
   }
 
   /**
@@ -1419,6 +1501,28 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * closed.
    */
   private TranslatedExpression uBooleanThreshold(Expression operand, Expression confidenceArg) {
+    // NAVIGATED FOLDED-USTRING SIZE EQUALITY: `(x.gauge.tag.size() = n).toBooleanC(conf)`.
+    // The size of a UString over a (folded) end view enumerates per destination slot and per
+    // that slot's concrete class's configured spelling lengths, each guarded by the slot's link
+    // term; the equality against the literal keeps the matching cases. The projection over the
+    // crisp equality UBoolean is the equality itself (a crisp true/false UBoolean has p = 1/0,
+    // so any in-range confidence threshold yields the same answer).
+    if (operand instanceof ExpStdOp eqOp
+        && ("=".equals(eqOp.opname()) || "<>".equals(eqOp.opname()))
+        && eqOp.args().length == 2
+        && isNavigatedUStringSize(eqOp.args()[0])
+        && eqOp.args()[1] instanceof ExpConstInteger demanded) {
+      return navigatedUStringSizeEquality(
+          eqOp, (ExpStdOp) eqOp.args()[0], demanded.value(), "=".equals(eqOp.opname()));
+    }
+    if (operand instanceof ExpStdOp eqOp
+        && ("=".equals(eqOp.opname()) || "<>".equals(eqOp.opname()))
+        && eqOp.args().length == 2
+        && isNavigatedUStringSize(eqOp.args()[1])
+        && eqOp.args()[0] instanceof ExpConstInteger demanded) {
+      return navigatedUStringSizeEquality(
+          eqOp, (ExpStdOp) eqOp.args()[1], demanded.value(), "=".equals(eqOp.opname()));
+    }
     if (!operand.type().isTypeOfUBoolean()) {
       throw unsupported(
           FragmentBoundary.UTYPE_CORE,
@@ -3595,6 +3699,71 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       return attr.type().isTypeOfUInteger();
     }
     return false;
+  }
+
+/** True for exactly the navigated-UString-size shape the equality branch supports. */
+  private boolean isNavigatedUStringSize(Expression e) {
+    if (!(e instanceof ExpStdOp size)
+        || !"size".equals(size.opname())
+        || size.args().length != 1
+        || !(size.args()[0] instanceof ExpAttrOp attr)) {
+      return false;
+    }
+    if (!(attr.objExp() instanceof ExpNavigation navigation)
+        || navigation.getDestination().isCollection()
+        || !(navigation.getObjectExpression() instanceof ExpVariable source)
+        || localBindings.containsKey(source.getVarname())) {
+      return false;
+    }
+    return attr.type().isTypeOfUString();
+  }
+
+  /**
+   * {@code (x.gauge.tag.size() = n).toBooleanC(conf)} over a (folded) end view: the UString
+   * size enumerates per destination slot the configured spelling lengths of the slot's CONCRETE
+   * class, each guarded by the slot's link term; the equality keeps the cases whose length
+   * matches ({@code <>} keeps the complement). Unlinked, the navigation is undefined and the
+   * whole body is false -- USE's crisp equality over an undefined operand side.
+   */
+  private TranslatedExpression navigatedUStringSizeEquality(
+      ExpStdOp eqOp, ExpStdOp sizeExpr, int demanded, boolean wantEq) {
+    ExpAttrOp attr = (ExpAttrOp) sizeExpr.args()[0];
+    ExpNavigation navigation = (ExpNavigation) attr.objExp();
+    VariableBinding navSource =
+        context.binding(((ExpVariable) navigation.getObjectExpression()).getVarname());
+    MNavigableElement destination =
+        resolveRedefinedDestination(navigation.getDestination(), navSource);
+    if (destination.association() instanceof MAssociationClass) {
+      throw unsupported(
+          FragmentBoundary.UTYPE_CORE,
+          "navigated UString size over an association class is not yet supported");
+    }
+    AssociationLinks links = context.linksFor(destination.association().name());
+    ObjectSlots destSlots = destinationEndView(links, destination);
+    List<SmtTerm> admitted = new ArrayList<>();
+    List<SmtTerm> all = new ArrayList<>();
+    for (int k = 0; k < destSlots.capacity(); k++) {
+      VariableBinding concrete = destSlots.concreteBindings().get(k);
+      String concreteClass = concrete.className();
+      AttributeValues vals = context.attributeValues(concreteClass, attr.attr().name());
+      AttributeDomain spellings =
+          context.attributeDomain(concreteClass, attr.attr().name(), "value");
+      SmtTerm tagSym = Smt.sym(vals.valueNames().get(concrete.slotIndex()));
+      SmtTerm link = linkTerm(links, destination, navSource, k);
+      for (int i = 0; i < spellings.enumeratedValues().size(); i++) {
+        SmtTerm caseGuard =
+            Smt.and(List.of(link, Smt.eq(tagSym, Smt.intLit(BigInteger.valueOf(i)))));
+        all.add(caseGuard);
+        if (spellings.enumeratedValues().get(i).length() == demanded) {
+          admitted.add(caseGuard);
+        }
+      }
+    }
+    SmtTerm value =
+        wantEq
+            ? (admitted.isEmpty() ? Smt.bool(false) : Smt.or(admitted))
+            : Smt.not(Smt.or(admitted.isEmpty() ? List.of(Smt.bool(false)) : admitted));
+    return defined(value);
   }
 
   private TranslatedExpression stringSize(Expression receiver) {
