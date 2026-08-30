@@ -1604,6 +1604,29 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * {@code <=}/{@code >=} (the "eq" probability mass this crossing-point model assigns needs its own
    * derivation this task did not attempt).
    */
+  /**
+   * Compile-time SET equality of two constant contents: same kind, same distinct elements
+   * (order-insensitive, duplicate-collapsed).
+   */
+  private static boolean sameElements(SetContent a, SetContent b) {
+    if ((a.integers() == null) != (b.integers() == null)) {
+      return false;
+    }
+    if (a.integers() != null) {
+      return new java.util.TreeSet<>(a.integers()).equals(new java.util.TreeSet<>(b.integers()));
+    }
+    if ((a.strings() == null) != (b.strings() == null)) {
+      return false;
+    }
+    if (a.strings() != null) {
+      return new java.util.TreeSet<>(a.strings()).equals(new java.util.TreeSet<>(b.strings()));
+    }
+    if ((a.reals() == null) != (b.reals() == null)) {
+      return false;
+    }
+    return new java.util.TreeSet<>(a.reals()).equals(new java.util.TreeSet<>(b.reals()));
+  }
+
   /** UReal or UInteger: the two families whose ordered comparison widens to the UReal evaluator. */
   private static boolean isUncertainNumericType(org.tzi.use.uml.ocl.type.Type type) {
     return type.isTypeOfUReal() || type.isTypeOfUInteger();
@@ -2110,6 +2133,18 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         || (r instanceof ExpVariable cr && localBindings.containsKey(cr.getVarname()))) {
       TranslatedExpression local = contentAwareEquality(l, r);
       if (local != null) return local;
+    }
+    // STANDALONE SET EQUALITY: both sides constant-content collections -> compile-time set
+    // equality (order-insensitive, duplicate-collapsed per Set semantics).
+    // NOTE: isTypeOfCollection() is FALSE for Set/Bag/Sequence in USE's lattice (it names the
+    // abstract Collection type exactly -- the same trap the let dispatch documented).
+    if (l.type() instanceof org.tzi.use.uml.ocl.type.CollectionType
+        && r.type() instanceof org.tzi.use.uml.ocl.type.CollectionType) {
+      SetContent lc = constantCollectionContent(l);
+      SetContent rc = constantCollectionContent(r);
+      if (lc != null && rc != null) {
+        return defined(Smt.bool(sameElements(lc, rc)));
+      }
     }
     if (isVirtualStringOp(l) || isVirtualStringOp(r)) {
       return virtualStringComparison(l, r);
@@ -5319,6 +5354,64 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       // ->flatten() over a collection literal: the nesting resolves to the leaves, under the
       // OUTER literal's duplicate policy.
       return collectionLiteralContent(lit, true);
+    }
+    if (receiver instanceof ExpStdOp op && op.args().length == 2) {
+      // SET ALGEBRA over constant-content collections: including/excluding take a constant
+      // scalar element; union/intersection/symmetricDifference/infix-minus take a second
+      // constant-content collection. Set semantics: duplicate-collapsed results. The
+      // algebra is Integer-kind only in this slice (String/Real set algebra refuses via the
+      // null fall-through to the caller's refusal).
+      String name = op.opname();
+      if (name.equals("including") || name.equals("excluding")) {
+        SetContent left = constantCollectionContent(op.args()[0]);
+        if (left != null && left.integers() != null
+            && op.args()[1] instanceof ExpConstInteger element) {
+          List<BigInteger> result = new ArrayList<>(left.integers());
+          BigInteger v = BigInteger.valueOf(element.value());
+          if (name.equals("including")) {
+            if (!result.contains(v)) {
+              result.add(v);
+            }
+          } else {
+            result.removeIf(v::equals);
+          }
+          return new SetContent(null, result, null);
+        }
+        return null;
+      }
+      if (name.equals("union") || name.equals("intersection")
+          || name.equals("symmetricDifference") || name.equals("-")) {
+        SetContent left = constantCollectionContent(op.args()[0]);
+        SetContent right = constantCollectionContent(op.args()[1]);
+        if (left != null && right != null
+            && left.integers() != null && right.integers() != null) {
+          java.util.TreeSet<BigInteger> ls = new java.util.TreeSet<>(left.integers());
+          java.util.TreeSet<BigInteger> rs = new java.util.TreeSet<>(right.integers());
+          List<BigInteger> result =
+              switch (name) {
+                case "union" -> {
+                  ls.addAll(rs);
+                  yield new ArrayList<>(ls);
+                }
+                case "intersection" -> {
+                  ls.retainAll(rs);
+                  yield new ArrayList<>(ls);
+                }
+                case "symmetricDifference" -> {
+                  java.util.TreeSet<BigInteger> copy = new java.util.TreeSet<>(ls);
+                  ls.removeAll(rs);
+                  rs.removeAll(copy);
+                  ls.addAll(rs);
+                  yield new ArrayList<>(ls);
+                }
+                default -> {
+                  ls.removeAll(rs);
+                  yield new ArrayList<>(ls);
+                }
+              };
+          return new SetContent(null, result, null);
+        }
+      }
     }
     return null;
   }

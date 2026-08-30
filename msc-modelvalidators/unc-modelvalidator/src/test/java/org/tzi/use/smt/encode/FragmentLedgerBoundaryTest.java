@@ -74,7 +74,7 @@ public class FragmentLedgerBoundaryTest {
       context self : Sample inv Tier2EnumLiteralVersusOclUndefined:
         Color::red = oclUndefined(Color)
       context self : Sample inv Tier3SetLiteral:
-        Set{1,2} = Set{1}
+        Set{Set{1}} = Set{Set{1}}
       context self : Sample inv BeyondFirstFragmentConditional:
         (if true then 1 else 1.5 endif) > 0
       context self : Sample inv UTypeCoreLiteral:
@@ -154,7 +154,12 @@ public class FragmentLedgerBoundaryTest {
 
     assertTrue(message, message.contains("Sample::Tier3SetLiteral"));
     assertTrue(message, message.contains("[UNCERTAIN]"));
-    assertTrue("the construct must still be named", message.contains("Set literal"));
+    // Tier3SetLiteral's body changed with the set-literal work: `Set{1,2} = Set{1}` became
+    // genuinely supported (compile-time set equality), then `Set{Set{1}} = Set{Set{1}}` took
+    // over the fixture -- nested collection elements without ->flatten() still refuse at
+    // TIER_3, and the located reason names the nested element (the established
+    // fixture-replacement precedent, applied here for the third time).
+    assertTrue("the construct must still be named", message.contains("nested collection element"));
     // Tier2TypeTest's body changed twice as casts/type tests became genuinely supported:
     // from `self.oclIsTypeOf(Sample)` (supported by isTypeCheck's translation-time dispatch)
     // to `self.oclAsType(Sample).oclIsTypeOf(Sample)` (also supported since the oclAsType
