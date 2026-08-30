@@ -1475,16 +1475,19 @@ public final class SmtModelFinder {
   }
 
   /**
-   * Asserts every derived Integer attribute's value symbol equal to its derivation, translated
-   * with {@code self} bound to each slot of the attribute's own view. A derivation is a
-   * CONSTRAINT, not decoration: without this assertion a witness could carry values contradicting
-   * the model's own derivation (e.g. {@code doubled = 7} while {@code base = 3} under
-   * {@code doubled derive: self.base * 2} -- USE's dynamic re-evaluation would report 6 for that
-   * same object, so the witness was not a valid instance). Runs per scenario copy, after every
-   * attribute and association registration, so the derivation expression sees the complete
-   * encoding; an expression outside the supported fragment fails closed with its located
-   * translation error. Only crisp Integer derived attributes are supported (Real/UReal rounding
-   * and String synthesis do not exist in this slice).
+   * Asserts every derived numeric/Boolean attribute's value symbol equal to its derivation,
+   * translated with {@code self} bound to each slot of the attribute's own view. A derivation is
+   * a CONSTRAINT, not decoration: without this assertion a witness could carry {@code doubled =
+   * 7} while {@code base = 3} under {@code doubled derive: self.base * 2} -- USE's dynamic
+   * re-evaluation would report 6 for that same object, so the witness was not a valid instance).
+   * Runs per scenario copy, after every attribute and association registration, so the
+   * derivation expression sees the complete encoding; an expression outside the supported
+   * fragment fails closed with its located translation error. Crisp Real derived attributes are
+   * supported too: the value symbol is Real-sorted, so the equality is well-sorted for a
+   * Real-typed derivation, and an Integer-typed derivation lifts with {@code to_real} (the same
+   * widening USE applies when an Integer value feeds a Real slot). U-type derivations stay
+   * refused (they never translate as bare accesses anyway), as does String synthesis (a
+   * separate, narrower path).
    */
   private static void assertDerivedAttributeValues(
       SmtScript script,
@@ -1509,7 +1512,9 @@ public final class SmtModelFinder {
         assertStringDerivedAttribute(script, model, context, attributes, className, attributeName);
         continue;
       }
-      if (!attribute.type().isTypeOfInteger() && !attribute.type().isTypeOfBoolean()) {
+      if (!attribute.type().isTypeOfInteger()
+          && !attribute.type().isTypeOfBoolean()
+          && !attribute.type().isTypeOfReal()) {
         throw new org.tzi.use.smt.encode.SmtTranslationException(
             org.tzi.use.smt.encode.FragmentBoundary.TIER_3,
             "derived attribute "
@@ -1518,20 +1523,39 @@ public final class SmtModelFinder {
                 + attributeName
                 + " is "
                 + attribute.type()
-                + ": only Integer, Boolean, and String derived attributes are supported in this"
-                + " slice");
+                + ": only Integer, Boolean, Real, and String derived attributes are supported in"
+                + " this slice");
       }
       org.tzi.use.uml.ocl.expr.Expression deriveExpression = attribute.getDeriveExpression();
       if (deriveExpression == null) {
         throw new IllegalArgumentException(
             "derived attribute " + className + "." + attributeName + " has no derive expression");
       }
+      if (attribute.type().isTypeOfReal()
+          && !deriveExpression.type().isTypeOfReal()
+          && !deriveExpression.type().isTypeOfInteger()) {
+        throw new org.tzi.use.smt.encode.SmtTranslationException(
+            org.tzi.use.smt.encode.FragmentBoundary.TIER_3,
+            "derived attribute "
+                + className
+                + "."
+                + attributeName
+                + " is Real but its derivation is "
+                + deriveExpression.type()
+                + ": the value symbol is Real-sorted, so only a Real or Integer derivation"
+                + " (lifted) is well-sorted");
+      }
+      boolean liftDerivation =
+          attribute.type().isTypeOfReal() && deriveExpression.type().isTypeOfInteger();
       ObjectSlots owner = context.slotsFor(className);
       for (int slot = 0; slot < owner.capacity(); slot++) {
         TranslationContext selfContext =
             context.withBinding("self", new VariableBinding(className, slot));
         SmtTerm derivedValue =
             ExpressionTranslator.translate(deriveExpression, selfContext);
+        if (liftDerivation) {
+          derivedValue = Smt.app("to_real", derivedValue);
+        }
         script.assertThat(
             Smt.eq(Smt.sym(entry.getValue().valueNames().get(slot)), derivedValue));
       }
