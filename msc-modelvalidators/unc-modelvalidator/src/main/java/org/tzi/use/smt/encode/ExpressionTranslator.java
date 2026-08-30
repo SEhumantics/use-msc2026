@@ -2916,7 +2916,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (variableCount != 1 && variableCount != 2) {
       throw unsupported(FragmentBoundary.TIER_2, "exists with more than two loop variables");
     }
-    if (e.getRangeExpression() instanceof ExpSetLiteral setLiteral && variableCount == 1) {
+    if (e.getRangeExpression() instanceof ExpCollectionLiteral setLiteral && variableCount == 1) {
       result = setLiteralQuantifier(setLiteral, e.getVariableDeclarations().varDecl(0).name(),
           e.getQueryExpression(), false);
       return;
@@ -2972,7 +2972,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (variableCount != 1 && variableCount != 2) {
       throw unsupported(FragmentBoundary.TIER_1, "forAll with more than two loop variables");
     }
-    if (e.getRangeExpression() instanceof ExpSetLiteral setLiteral && variableCount == 1) {
+    if (e.getRangeExpression() instanceof ExpCollectionLiteral setLiteral && variableCount == 1) {
       result = setLiteralQuantifier(setLiteral, e.getVariableDeclarations().varDecl(0).name(),
           e.getQueryExpression(), true);
       return;
@@ -3036,32 +3036,13 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * collapse ({@code Set} semantics), matching {@code SetValue}.
    */
   private TranslatedExpression setLiteralQuantifier(
-      ExpSetLiteral set, String iterator, Expression bodyExpr, boolean forAll) {
+      ExpCollectionLiteral set, String iterator, Expression bodyExpr, boolean forAll) {
     // Elements: Integer constants and constant-bounds ranges bind the loop variable to their
     // literal VALUE; String constants bind it to a singleton CONTENT candidate (stringOrEnum
     // LocalBinding whose candidate list is the literal), so body comparisons resolve by
     // content. Mixing kinds in one literal is refused.
-    boolean sawInt = false;
-    boolean sawString = false;
-    List<BigInteger> intValues = new ArrayList<>();
-    List<String> stringValues = new ArrayList<>();
-    for (Expression element : set.getElemExpr()) {
-      if (element instanceof ExpConstString constant) {
-        sawString = true;
-        if (!stringValues.contains(constant.value())) {
-          stringValues.add(constant.value());
-        }
-      } else {
-        sawInt = true;
-        appendIntegerElementValues(element, intValues);
-      }
-    }
-    if (sawInt && sawString) {
-      throw unsupported(
-          FragmentBoundary.TIER_3,
-          "Set literal mixes Integer and String constants; not supported in this slice");
-    }
-    return setQuantifierOver(intValues, stringValues, iterator, bodyExpr, forAll);
+    SetContent content = collectionLiteralContent(set);
+    return setQuantifierOver(content.integers(), content.strings(), iterator, bodyExpr, forAll);
   }
 
   /**
@@ -3144,9 +3125,18 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * quantifier-variable binding for a range end, and no real corpus shape needs one.
    */
   private static void appendIntegerElementValues(Expression element, List<BigInteger> out) {
+    appendIntegerElementValues(element, out, true);
+  }
+
+  /**
+   * The duplicate policy: Set semantics collapse ({@code dedupe}), Bag/Sequence semantics keep
+   * every occurrence ({@code !dedupe}) so size() counts them.
+   */
+  private static void appendIntegerElementValues(
+      Expression element, List<BigInteger> out, boolean dedupe) {
     if (element instanceof ExpConstInteger constant) {
       BigInteger value = BigInteger.valueOf(constant.value());
-      if (!out.contains(value)) {
+      if (!dedupe || !out.contains(value)) {
         out.add(value);
       }
       return;
@@ -3175,7 +3165,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       }
       for (long cur = loInt.value(); cur <= hiInt.value(); cur++) {
         BigInteger v = BigInteger.valueOf(cur);
-        if (!out.contains(v)) {
+        if (!dedupe || !out.contains(v)) {
           out.add(v);
         }
       }
@@ -4549,16 +4539,11 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && isSupportedSelectSource(query)) {
       return defined(sizeTerm(selectedAllInstancesPopulation(query)));
     }
-    if (receiver instanceof ExpSetLiteral set
-        && set.getElemExpr().length > 0
-        && set.getElemExpr()[0] instanceof ExpConstString) {
-      List<String> constants = distinctStringConstants(set);
-      return defined(Smt.intLit(BigInteger.valueOf(constants.size())));
-    }
-    if (receiver instanceof ExpSetLiteral set) {
-      // The distinct element count is a compile-time constant (Set semantics collapse
-      // duplicates), matching the incumbent's set-literal cardinality.
-      return defined(Smt.intLit(BigInteger.valueOf(distinctIntegerConstants(set).size())));
+    if (receiver instanceof ExpCollectionLiteral set) {
+      // The element count is a compile-time constant: DISTINCT for Set/OrderedSet semantics,
+      // duplicate-COUNTING for Bag/Sequence (collectionLiteralContent keeps the occurrence).
+      SetContent content = collectionLiteralContent(set);
+      return defined(Smt.intLit(BigInteger.valueOf(content.size())));
     }
     // ExpSelectByType EXTENDS ExpSelectByKind: test the exact-type subclass FIRST (see
     // populationOf's own note).
@@ -4685,7 +4670,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         || (receiver instanceof ExpNavigation navigation
             && isCollectionValuedNavigation(navigation))) {
       population = populationOf(receiver, construct);
-    } else if (receiver instanceof ExpSetLiteral set && set.getElemExpr().length > 0) {
+    } else if (receiver instanceof ExpCollectionLiteral set && set.getElemExpr().length > 0) {
       // Emptiness from the EXPANDED distinct element count: a constant-bounds range with an
       // inverted interval (Set{5..4}) contributes no elements, so it really is empty -- the
       // pre-expansion shortcut ("a literal always has elements") answered isEmpty wrongly for
@@ -4885,7 +4870,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     // NOTE: SetType.isTypeOfCollection() is FALSE in USE's own type lattice (that predicate
     // names the abstract Collection type exactly); CollectionType is the right arbiter.
     if (e.getVarType() instanceof org.tzi.use.uml.ocl.type.CollectionType
-        && e.getVarExpression() instanceof ExpSetLiteral set) {
+        && e.getVarExpression() instanceof ExpCollectionLiteral set) {
       result = setLiteralLet(e, set);
       return;
     }
@@ -4954,22 +4939,38 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * the direct set-literal consumers accept (Integer constants, constant-bounds ranges, String
    * constants; no mixing) is accepted here through the same extraction.
    */
-  private TranslatedExpression setLiteralLet(ExpLet e, ExpSetLiteral set) {
+  /**
+   * The constant content of ANY collection literal: Set literals collapse duplicates,
+   * Bag/Sequence/OrderedSet literals keep every occurrence (a Bag's size counts them; an
+   * OrderedSet's insertion-ordered uniqueness still collapses -- the element order the SMT
+   * encoding never observes anyway). Integer constants and constant-bounds ranges take the
+   * shared expansion; String constants bind by content; mixing refuses.
+   */
+  private static SetContent collectionLiteralContent(ExpCollectionLiteral lit) {
+    boolean dedupe = lit instanceof ExpSetLiteral || lit instanceof ExpOrderedSetLiteral;
     boolean sawString = false;
     List<BigInteger> intValues = new ArrayList<>();
     List<String> stringValues = new ArrayList<>();
-    for (Expression element : set.getElemExpr()) {
+    for (Expression element : lit.getElemExpr()) {
       if (element instanceof ExpConstString constant) {
         sawString = true;
-        if (!stringValues.contains(constant.value())) {
+        if (!dedupe || !stringValues.contains(constant.value())) {
           stringValues.add(constant.value());
         }
       } else {
-        appendIntegerElementValues(element, intValues);
+        appendIntegerElementValues(element, intValues, dedupe);
       }
     }
-    SetContent content =
-        sawString ? new SetContent(null, stringValues) : new SetContent(intValues, null);
+    if (!intValues.isEmpty() && !stringValues.isEmpty()) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "Set literal mixes Integer and String constants; not supported in this slice");
+    }
+    return sawString ? new SetContent(null, stringValues) : new SetContent(intValues, null);
+  }
+
+  private TranslatedExpression setLiteralLet(ExpLet e, ExpCollectionLiteral set) {
+    SetContent content = collectionLiteralContent(set);
     String symbolStem = "|ocl-let-" + e.getVarname();
     LocalBinding binding =
         new LocalBinding(
@@ -5921,7 +5922,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     // String-constant set literal: membership by CONTENT against the element's own
     // registered domain (single domain, so no cross-domain index comparison arises).
-    if (collectionExpr instanceof ExpSetLiteral set
+    if (collectionExpr instanceof ExpCollectionLiteral set
         && set.getElemExpr().length > 0
         && set.getElemExpr()[0] instanceof ExpConstString) {
       List<String> constants = distinctStringConstants(set);
@@ -5943,9 +5944,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       SmtTerm stringMember = Smt.and(List.of(element.defined(), Smt.or(stringMatches)));
       return defined(wantIncludes ? stringMember : Smt.not(stringMember));
     }
-    if (collectionExpr instanceof ExpSetLiteral set) {
-      // Membership in an Integer-constant set literal: the element's value equals one of the
-      // DISTINCT literal constants (total -- a literal is always defined).
+    if (collectionExpr instanceof ExpCollectionLiteral set) {
+      // Membership in an Integer-constant collection literal: the element's value equals one of
+      // the DISTINCT literal constants (total -- a literal is always defined). Membership is
+      // duplicate-insensitive, so Bag/Sequence collapse is harmless HERE.
       List<BigInteger> constants = distinctIntegerConstants(set);
       TranslatedExpression element = argResult(elementExpr);
       List<SmtTerm> matches = new ArrayList<>();
@@ -5996,7 +5998,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * The DISTINCT String constants of a set literal, in declaration order (duplicates
    * collapsed per Set semantics).
    */
-  private static List<String> distinctStringConstants(ExpSetLiteral set) {
+  private static List<String> distinctStringConstants(ExpCollectionLiteral set) {
     List<String> values = new ArrayList<>();
     for (Expression element : set.getElemExpr()) {
       if (!(element instanceof ExpConstString constant)) {
@@ -6019,7 +6021,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * closed interval (see {@link #appendIntegerElementValues}); String or non-constant
    * elements refuse.
    */
-  private static List<BigInteger> distinctIntegerConstants(ExpSetLiteral set) {
+  private static List<BigInteger> distinctIntegerConstants(ExpCollectionLiteral set) {
     List<BigInteger> values = new ArrayList<>();
     for (Expression element : set.getElemExpr()) {
       if (element instanceof ExpConstString) {
@@ -6040,7 +6042,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * empty range contributes none -- {@code Set{5..4}} really is empty). Mixed Integer/String
    * content refuses, exactly as in every other set-literal consumer.
    */
-  private static int distinctLiteralElementCount(ExpSetLiteral set) {
+  private static int distinctLiteralElementCount(ExpCollectionLiteral set) {
     List<BigInteger> ints = new ArrayList<>();
     List<String> strings = new ArrayList<>();
     for (Expression element : set.getElemExpr()) {

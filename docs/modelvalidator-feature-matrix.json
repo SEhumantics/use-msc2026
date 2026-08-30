@@ -2634,9 +2634,9 @@
               "coverageNote": "zero coverage - no scenario uses an explicit Bag{...} literal (CollectionSemantics exercises Bag semantics via collect(), not the literal constructor)"
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "ExpressionTranslator.java:167-170 visitBagLiteral(ExpBagLiteral e) -- unconditional `throw unsupported(\"Bag literal\")`, no conditional logic.",
-              "notes": "Hard, unconditional rejection regardless of contents; there is no BagType/BagValue-equivalent representation anywhere in unc-modelvalidator's SMT encoding (confirmed by `find .../unc-modelvalidator/src/main/java/org/tzi/use/smt -name '*.java'`: the only enum resembling a value-type domain is AttributeType {STRING, INTEGER, REAL, BOOLEAN} -- no collection sort exists at all).",
+              "status": "degraded",
+              "evidence": "ExpressionTranslator.java:167-170 visitBagLiteral(ExpBagLiteral e) -- unconditional `throw unsupported(\"Bag literal\")`, no conditional logic. 2026-08-30, MULTISESET LITERAL SLICE (the collectionLiteralContent generalization): Bag{1,1,2} now translates through the SAME shared content extraction as Set literals, with DUPLICATE-PRESERVING semantics where it matters -- size() counts occurrences (3, not the Set collapse's 2; the incumbent's bagLiteral logs an unsupported-collection warning and delegates to setLiteral, silently collapsing, so a correct size here EXCEEDS parity), while the duplicate-insensitive consumers (includes/excludes, forAll/exists, isEmpty/notEmpty, both direct and let-bound) behave exactly like their Set counterparts. OrderedSet literals collapse duplicates (insertion order is never observed by the encoding). MultiSetLiteralTest (6 end-to-end real-Z3 tests, the bag-vs-orderedset size discriminators on both sides); the always-dedupe mutation (the incumbent's own collapse behavior) flips 2 tests.",
+              "notes": "unsupported -> degraded: membership/predicate/size consumers over direct and let-bound Bag literals are supported with duplicate-preserving size (exceeding the incumbent's silent Set collapse); Bag-typed ATTRIBUTES and the type-system representation remain open (collection.type-system-collapse).",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -2658,9 +2658,9 @@
               "coverageNote": "ZebraPuzzle/query.cmd:54 does write an explicit Sequence{...} literal, but it's evaluated via plain USE '?' (not 'mv ?', since it's paired with sortedBy(), itself unsupported) -- so the plugin's own Sequence-literal translator is still never actually invoked by any scenario."
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "ExpressionTranslator.java:358-361 visitSequenceLiteral(ExpSequenceLiteral e) -- unconditional `throw unsupported(\"Sequence literal\")`.",
-              "notes": "Same unconditional-rejection pattern as the other three collection literals. ZebraPuzzle/query.cmd's Sequence{...} literal (cited as evidence in kk-modelvalidator's own degraded entry for this feature) is in a query.cmd line evaluated via `mv ?`; unc-modelvalidator has no query-evaluation path at all regardless of this literal's own support status (ConfigurationReader.java:154 logs 'query parsing is scheduled for Phase 4'; ExpressionTranslator.java:338-341 visitQuery separately, unconditionally rejects any ExpQuery node too) -- so even a supported Sequence literal could never be reached through that code path in unc.",
+              "status": "degraded",
+              "evidence": "ExpressionTranslator.java:358-361 visitSequenceLiteral(ExpSequenceLiteral e) -- unconditional `throw unsupported(\"Sequence literal\")`. 2026-08-30, MULTISESET LITERAL SLICE: Sequence{1,1,2} translates exactly like Bag (duplicate-counting size, membership/predicate consumers), through the shared collectionLiteralContent extraction; sequence-specific position operations (first/last/at/append/...) remain the separate collection.sequence-specific-api row. MultiSetLiteralTest covers the Sequence size discriminator.",
+              "notes": "unsupported -> degraded: literals + membership/predicate/size consumers supported; position-sensitive sequence API remains open (collection.sequence-specific-api).",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -2682,9 +2682,9 @@
               "coverageNote": "zero coverage - no scenario uses an explicit OrderedSet{...} literal"
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "ExpressionTranslator.java:333-336 visitOrderedSetLiteral(ExpOrderedSetLiteral e) -- unconditional `throw unsupported(\"OrderedSet literal\")`.",
-              "notes": "Same unconditional-rejection pattern; no OrderedSet-equivalent SMT representation exists anywhere in unc-modelvalidator's source.",
+              "status": "degraded",
+              "evidence": "ExpressionTranslator.java:333-336 visitOrderedSetLiteral(ExpOrderedSetLiteral e) -- unconditional `throw unsupported(\"OrderedSet literal\")`. 2026-08-30, MULTISESET LITERAL SLICE: OrderedSet{1,1,2} translates through the shared extraction with SET semantics (insertion order collapses duplicates -- and the encoding never observes order), size 2 not 3, membership/predicate consumers as per Set. MultiSetLiteralTest pins the collapse discriminator against the Bag behavior.",
+              "notes": "unsupported -> degraded: literals + membership/predicate/size consumers supported; order-sensitive operations remain open.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
