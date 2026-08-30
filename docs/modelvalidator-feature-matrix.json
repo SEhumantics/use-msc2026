@@ -2760,9 +2760,9 @@
               "coverageNote": "zero coverage - no scenario calls first/last/at/append/prepend/insertAt/subSequence/asBag/asSequence/asOrderedSet"
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "first/last/at/append/prepend/insertAt/subSequence/asBag/asSequence/asOrderedSet are all USE 'standard operations' dispatched by name as ExpStdOp nodes (confirmed in use-core: StandardOperationsSequence.java and StandardOperationsOrderedSet.java define first/last/at/append/prepend/insertAt/subSequence; StandardOperationsCollection.java:792/848/876 register 'asBag'/'asSequence'/'asOrderedSet' by name) -- not distinct AST classes with their own visitor method. ExpressionTranslator.visitStdOp's switch (ExpressionTranslator.java:64-79) only special-cases the opnames 'and','or','not','implies','=','<>','>=','<=','>','<'; every other opname -- including all ten of these -- falls through to the `default -> throw unsupported(\"operator '\" + e.opname() + \"'\")` branch at line 78.",
-              "notes": "Consistent with collection.type-system-collapse: since there is no positional/ordering representation in the SMT encoding at all, none of these position-dependent operations could produce a meaningful result even if dispatched; the rejection is total and mechanical (same default-branch code path handles every one of them identically, no per-operation special-casing).",
+              "status": "degraded",
+              "evidence": "2026-08-30, FIRST/LAST SLICE: ->first() and ->last() over a constant-content ORDERED collection literal (or let-bound one) fold to the element constant; an empty ordered collection yields the constant-UNDEFINED element (matching the evaluators' undefined-on-empty). collectionEnd (ExpressionTranslator). Covered by CollectionSumReductionsTest. at(i) with a symbolic index, append/prepend/insertAt/subSequence, and the as* coercions remain refused with located messages.",
+              "notes": "unsupported -> degraded: first/last over constant ordered literals supported; symbolic-index and mutation operations remain open.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],
@@ -3147,9 +3147,9 @@
               "coverageNote": "zero coverage - no scenario in the benchmark calls sum() on a Bag/Sequence."
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "'sum' is a USE standard collection operation dispatched as an ExpStdOp node by name (use-core/src/main/java/org/tzi/use/uml/ocl/expr/operations/StandardOperationsCollection.java:613, `return \"sum\";`), not a distinct AST class with its own visitor method. ExpressionTranslator.visitStdOp's switch (ExpressionTranslator.java:64-79) only special-cases 'and','or','not','implies','=','<>','>=','<=','>','<'; 'sum' falls through to the `default -> throw unsupported(\"operator 'sum'\")` branch at line 78.",
-              "notes": "Since there is no collection-typed value representation at all (see collection.type-system-collapse), sum() could not meaningfully distinguish Set vs. Bag semantics even if it were dispatched -- the rejection is total, not a silent wrong-answer collapse the way kk-modelvalidator's degraded sum() is.",
+              "status": "degraded",
+              "evidence": "2026-08-30, CONSTANT-CONTENT SUM SLICE: ->sum() over a constant-content collection -- a Set/Bag/Sequence/OrderedSet literal or a let-bound one -- folds to a compile-time constant: duplicate-COUNTING for Bag/Sequence (Bag{1,1,2}->sum() = 4, the multiset semantics the multiset-literal slice pinned), exact-decimal for Real elements, and USE's own empty total (0). collectionSum (ExpressionTranslator). CollectionSumReductionsTest (4 end-to-end real-Z3 tests incl. the bag duplicate-sum discriminator). Sums over NAVIGATIONS or other non-constant sources need per-member value aggregation and refuse with a located message; the incumbent's own sum over collapsed bags under-counts duplicates, so the supported shape exceeds parity.",
+              "notes": "unsupported -> degraded: constant-content sums supported; navigation/member-aggregated sums remain open.",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],

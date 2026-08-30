@@ -495,6 +495,18 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           case "includesAll" -> collectionIncludesAll(a[0], a[1]);
           case "isEmpty" -> collectionEmptiness(a[0], true);
           case "notEmpty" -> collectionEmptiness(a[0], false);
+          case "sum" -> {
+            if (a.length == 1) {
+              yield collectionSum(a[0]);
+            }
+            yield new TranslatedExpression(Smt.bool(false), Smt.bool(false));
+          }
+          case "first", "last" -> {
+            if (a.length == 1) {
+              yield collectionEnd(a[0], "first".equals(e.opname()));
+            }
+            yield new TranslatedExpression(Smt.bool(false), Smt.bool(false));
+          }
           // USE's Op_real_round accepts any number, but on a crisp Integer it is the IDENTITY
           // (Math.round(intValue) is the same int -- confirmed against the use-core source, not
           // inferred), so the encoding is the operand's own value with its definedness. Real and
@@ -4603,6 +4615,76 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * {@code true}, matching every other empty-population convention in this class), matching OCL's
    * own {@code includesAll} semantics over an empty argument.
    */
+  /**
+   * {@code ->sum()} over a CONSTANT-CONTENT collection (a collection literal or a let-bound
+   * one): the total is a compile-time constant of the element set -- duplicate-COUNTING for
+   * Bag/Sequence (the multiset semantics the size() slice pinned), and USE's own total for the
+   * empty collection (0). Integer elements sum exactly; Real elements sum as exact decimals.
+   * Sums over navigations or other non-constant sources need per-member value aggregation and
+   * stay refused. NOTE: the empty-collection literal parses to {@link ExpEmptyCollection}, not
+   * ExpSetLiteral, so the empty case is a dispatch case of its own.
+   */
+  private TranslatedExpression collectionSum(Expression receiver) {
+    if (receiver instanceof ExpEmptyCollection) {
+      return defined(Smt.intLit(BigInteger.ZERO));
+    }
+    SetContent content = localCollection(receiver);
+    if (content == null && receiver instanceof ExpCollectionLiteral lit) {
+      content = collectionLiteralContent(lit);
+    }
+    if (content == null) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "sum over anything other than a constant-content collection literal or a let-bound"
+              + " set/bag/sequence is not yet supported (navigations need per-member value"
+              + " aggregation)");
+    }
+    if (content.reals() != null) {
+      BigDecimal total = BigDecimal.ZERO;
+      for (BigDecimal v : content.reals()) {
+        total = total.add(v);
+      }
+      return defined(Smt.realLit(total));
+    }
+    if (content.integers() != null) {
+      java.math.BigInteger total = java.math.BigInteger.ZERO;
+      for (java.math.BigInteger v : content.integers()) {
+        total = total.add(v);
+      }
+      return defined(Smt.intLit(total));
+    }
+    throw unsupported(
+        FragmentBoundary.TIER_3, "sum over a String-valued collection is not an OCL operation");
+  }
+
+  /**
+   * {@code ->first()}/{@code ->last()} over a constant-content ORDERED collection (Sequence,
+   * OrderedSet -- Bag and Set are unordered and USE's own type checker never produces the
+   * expression): the element is a compile-time constant; an empty ordered collection yields an
+   * UNDEFINED element (the constant-undefined expression). Integer elements only; String
+   * elements refuse (a String result needs the content-comparison consumers, not a value).
+   */
+  private TranslatedExpression collectionEnd(Expression receiver, boolean first) {
+    SetContent content = localCollection(receiver);
+    if (content == null && receiver instanceof ExpCollectionLiteral lit) {
+      content = collectionLiteralContent(lit);
+    }
+    if (content == null || content.integers() == null) {
+        throw unsupported(
+          FragmentBoundary.TIER_3,
+          (first ? "first" : "last")
+              + " over anything other than an Integer-valued ordered collection literal or a"
+              + " let-bound ordered collection is not yet supported");
+    }
+    if (content.integers().isEmpty()) {
+      return new TranslatedExpression(Smt.bool(false), Smt.intLit(BigInteger.ZERO));
+    }
+    BigInteger element = first
+        ? content.integers().get(0)
+        : content.integers().get(content.integers().size() - 1);
+    return defined(Smt.intLit(element));
+  }
+
   private TranslatedExpression collectionIncludesAll(Expression collectionExpr, Expression otherExpr) {
     if (!(collectionExpr instanceof ExpNavigation collectionNav)
         || !collectionNav.getDestination().isCollection()) {
@@ -4949,6 +5031,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   private static SetContent collectionLiteralContent(ExpCollectionLiteral lit) {
     boolean dedupe = lit instanceof ExpSetLiteral || lit instanceof ExpOrderedSetLiteral;
     boolean sawString = false;
+    boolean sawReal = false;
+    List<BigDecimal> realValues = new ArrayList<>();
     List<BigInteger> intValues = new ArrayList<>();
     List<String> stringValues = new ArrayList<>();
     for (Expression element : lit.getElemExpr()) {
@@ -4957,16 +5041,27 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         if (!dedupe || !stringValues.contains(constant.value())) {
           stringValues.add(constant.value());
         }
+      } else if (element instanceof ExpConstReal real) {
+        sawReal = true;
+        BigDecimal v = BigDecimal.valueOf(real.value());
+        if (!dedupe || !realValues.contains(v)) {
+          realValues.add(v);
+        }
       } else {
         appendIntegerElementValues(element, intValues, dedupe);
       }
     }
-    if (!intValues.isEmpty() && !stringValues.isEmpty()) {
+    if (sawReal && sawString) {
       throw unsupported(
           FragmentBoundary.TIER_3,
-          "Set literal mixes Integer and String constants; not supported in this slice");
+          "collection literal mixes Real and String constants; not supported in this slice");
     }
-    return sawString ? new SetContent(null, stringValues) : new SetContent(intValues, null);
+    if (sawReal) {
+      return new SetContent(realValues, null, null);
+    }
+    return sawString
+        ? new SetContent(null, null, stringValues)
+        : new SetContent(null, intValues, null);
   }
 
   private TranslatedExpression setLiteralLet(ExpLet e, ExpCollectionLiteral set) {
@@ -5348,8 +5443,11 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * and constant ranges expanded, exactly as for the direct set-literal consumers. Exactly one
    * list is non-null; a Set(String) binds by CONTENT (the strings), a Set(Integer) by value.
    */
-  private record SetContent(List<BigInteger> integers, List<String> strings) {
+  private record SetContent(
+      List<BigDecimal> reals, List<BigInteger> integers, List<String> strings) {
+    /** The element count: the active list's size (exactly one list is non-null). */
     int size() {
+      if (reals != null) return reals.size();
       return integers != null ? integers.size() : strings.size();
     }
   }
