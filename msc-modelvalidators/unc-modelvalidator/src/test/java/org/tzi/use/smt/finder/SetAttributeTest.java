@@ -49,6 +49,8 @@ public class SetAttributeTest {
         x.tags->size() = 1
       context x : X inv tagsEmpty:
         x.tags->isEmpty()
+      context x : X inv sizeBelowMin:
+        x.tags->size() < 2
       """;
 
   /** General case: pool {1,2,3}, size bounds [1,2], includes(1) — satisfiable. */
@@ -108,6 +110,20 @@ public class SetAttributeTest {
   public void singletonPoolRefutesForeignElement() throws Exception {
     ModelFinderResult miss = find(Set.of("X::hasTag"), "7", "1", "1");
     assertFalse("1 is outside the singleton pool {7}", miss.satisfiable());
+  }
+
+  /**
+   * MIN-SIZE FALSIFIER: bounds [2,3] force at least two members, so {@code size() < 2} is
+   * genuinely unsatisfiable. This isolates the min-size cardinality assertion specifically --
+   * the max-size assertion is already pinned by {@link #exactlyAtBoundSatisfies} and the
+   * empty-set-boundary pair; with the min-size assertion disabled the solver picks a
+   * one-element set and this test turns SAT.
+   */
+  @Test
+  public void minSizeBoundRefutesSubMinimumSizeDemand() throws Exception {
+    ModelFinderResult miss = find(Set.of("X::sizeBelowMin"), "1,2,3", "2", "3");
+    assertFalse("bounds [2,3] force >= 2 members: size() < 2 is impossible",
+        miss.satisfiable());
   }
 
   private static ModelFinderResult find(
