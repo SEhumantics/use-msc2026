@@ -176,6 +176,14 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     VariableBinding b = context.binding(variableNameOf(e.objExp()));
     AttributeValues v = context.attributeValues(b.className(), e.attr().name());
+    if (v.type() == AttributeType.SET_INTEGER) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "bare read of the collection-typed attribute '"
+              + e.attr().name()
+              + "': consume it through a supported collection operation (->includes,"
+              + " ->size, ->isEmpty, ->forAll, ...)");
+    }
     guardAgainstUncertainAttribute(v);
     result = defined(Smt.sym(v.valueNames().get(b.slotIndex())));
   }
@@ -276,6 +284,43 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     VariableBinding root = context.binding(rootVar.getVarname());
     return chainRead(root, hops, attribute, 0);
+  }
+
+  /**
+   * forAll/exists over a SET-typed attribute's pool: only pool elements that are actually
+   * MEMBERS are in the set, so forAll quantifies (member => body) and exists quantifies
+   * (member AND body) over each pool element, with the iterator bound to that element through
+   * the same per-element SMT let the constant-content quantifier uses.
+   */
+  private TranslatedExpression setAttrQuantifier(
+      SetAttrView setAttr, String iterator, Expression bodyExpr, boolean forAll) {
+    List<SmtTerm> definedTerms = new ArrayList<>();
+    List<SmtTerm> trueTerms = new ArrayList<>();
+    for (int j = 0; j < setAttr.poolSize(); j++) {
+      String stem = "|set-attr-" + iterator + "-" + j + "|";
+      LocalBinding binding =
+          new LocalBinding(stem + "-defined|", stem + "-value|", false, null);
+      Map<String, LocalBinding> extended = new LinkedHashMap<>(localBindings);
+      extended.put(iterator, binding);
+      TranslatedExpression body =
+          translate(bodyExpr, context, mode, positivePolarity, Map.copyOf(extended));
+      List<SmtTerm.Binding> bindings =
+          List.of(
+              new SmtTerm.Binding(binding.definedSymbol(), Smt.intLit(setAttr.pool().get(j))),
+              new SmtTerm.Binding(binding.valueSymbol(), Smt.intLit(setAttr.pool().get(j))));
+      SmtTerm member = setAttr.member(j);
+      if (forAll) {
+        definedTerms.add(Smt.app("=>", member, Smt.let(bindings, body.defined())));
+        trueTerms.add(Smt.app("=>", member, Smt.let(bindings, body.value())));
+      } else {
+        trueTerms.add(Smt.and(List.of(member, Smt.let(bindings, body.trueTerm()))));
+      }
+    }
+    if (forAll) {
+      return new TranslatedExpression(Smt.and(definedTerms), Smt.and(trueTerms));
+    }
+    SmtTerm any = trueTerms.isEmpty() ? Smt.bool(false) : Smt.or(trueTerms);
+    return new TranslatedExpression(Smt.bool(true), any);
   }
 
   /** The recursive hop-by-hop selection behind {@link #chainedAttributeValue}. */
@@ -3093,6 +3138,13 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           e.getVariableDeclarations().varDecl(0).name(), e.getQueryExpression(), false);
       return;
     }
+    SetAttrView existsSetAttr =
+        (variableCount == 1) ? setAttrRead(e.getRangeExpression()) : null;
+    if (existsSetAttr != null) {
+      result = setAttrQuantifier(existsSetAttr,
+          e.getVariableDeclarations().varDecl(0).name(), e.getQueryExpression(), false);
+      return;
+    }
     if (variableCount == 1) {
       SetContent letSet = localCollection(e.getRangeExpression());
       if (letSet != null) {
@@ -3148,6 +3200,13 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         (variableCount == 1) ? constantCollectionContent(e.getRangeExpression()) : null;
     if (rangeContent != null) {
       result = setQuantifierOver(rangeContent.integers(), rangeContent.strings(),
+          e.getVariableDeclarations().varDecl(0).name(), e.getQueryExpression(), true);
+      return;
+    }
+    SetAttrView forAllSetAttr =
+        (variableCount == 1) ? setAttrRead(e.getRangeExpression()) : null;
+    if (forAllSetAttr != null) {
+      result = setAttrQuantifier(forAllSetAttr,
           e.getVariableDeclarations().varDecl(0).name(), e.getQueryExpression(), true);
       return;
     }
@@ -4821,6 +4880,18 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && isSupportedSelectSource(query)) {
       return defined(sizeTerm(selectedAllInstancesPopulation(query)));
     }
+    SetAttrView sizeSetAttr = setAttrRead(receiver);
+    if (sizeSetAttr != null) {
+      SmtTerm count = null;
+      for (int j = 0; j < sizeSetAttr.poolSize(); j++) {
+        SmtTerm bit = sizeSetAttr.member(j);
+        SmtTerm one = Smt.intLit(BigInteger.ONE);
+        count = count == null
+            ? Smt.ite(bit, one, Smt.intLit(BigInteger.ZERO))
+            : Smt.app("+", count, Smt.ite(bit, one, Smt.intLit(BigInteger.ZERO)));
+      }
+      return defined(count == null ? Smt.intLit(BigInteger.ZERO) : count);
+    }
     SetContent literalContent = constantCollectionContent(receiver);
     if (literalContent != null) {
       // The element count is a compile-time constant: DISTINCT for Set/OrderedSet semantics,
@@ -5049,6 +5120,16 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && (query instanceof ExpSelect || query instanceof ExpReject)
         && isSupportedSelectSource(query)) {
       population = selectedAllInstancesPopulation(query);
+    } else if (setAttrRead(receiver) != null) {
+      // A SET-typed attribute is empty iff every pool membership is false.
+      SetAttrView setAttr = setAttrRead(receiver);
+      List<SmtTerm> someMember = new ArrayList<>();
+      for (int j = 0; j < setAttr.poolSize(); j++) {
+        someMember.add(setAttr.member(j));
+      }
+      SmtTerm any = Smt.or(someMember);
+      return new TranslatedExpression(
+          Smt.bool(true), wantEmpty ? Smt.not(any) : any);
     } else if (localCollection(receiver) != null) {
       boolean nonEmpty = localCollection(receiver).size() > 0;
       return new TranslatedExpression(
@@ -5506,6 +5587,54 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       }
     }
     return null;
+  }
+
+  /**
+   * A SET(Integer)-typed attribute read from a context variable: the pool (the configured
+   * element candidates, as BigIntegers in enumerated order) and the slot's membership Bool
+   * symbols (slot-major, matching the encoder's flattened declaration order).
+   */
+  private record SetAttrView(List<BigInteger> pool, List<String> members, int slot) {
+    SmtTerm member(int poolIndex) {
+      return Smt.sym(members().get(slot() * pool().size() + poolIndex));
+    }
+    int poolSize() {
+      return pool.size();
+    }
+  }
+
+  /**
+   * The SET-typed attribute view behind {@code x.tags}, or null when {@code e} is not a
+   * Set(Integer) attribute access on a context variable.
+   */
+  private SetAttrView setAttrRead(Expression e) {
+    if (!(e instanceof ExpAttrOp attr)
+        || !(attr.objExp() instanceof ExpVariable v)
+        || localBindings.containsKey(v.getVarname())) {
+      return null;
+    }
+    VariableBinding b;
+    AttributeValues vals;
+    try {
+      b = context.binding(v.getVarname());
+      vals = context.attributeValues(b.className(), attr.attr().name());
+    } catch (SmtTranslationException unregistered) {
+      return null;
+    }
+    if (vals.type() != AttributeType.SET_INTEGER) {
+      return null;
+    }
+    AttributeDomain domain;
+    try {
+      domain = context.attributeDomain(b.className(), attr.attr().name());
+    } catch (SmtTranslationException noDomain) {
+      return null;
+    }
+    List<BigInteger> pool = new ArrayList<>();
+    for (String candidate : domain.enumeratedValues()) {
+      pool.add(new BigInteger(candidate.trim()));
+    }
+    return new SetAttrView(pool, vals.valueNames(), b.slotIndex());
   }
 
   /** The constant set content a variable binding carries, or null. */
@@ -6478,6 +6607,20 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         for (BigInteger constant : literalSet.integers()) {
           matches.add(Smt.eq(element.value(), Smt.intLit(constant)));
         }
+      }
+      SmtTerm member = Smt.and(List.of(element.defined(), Smt.or(matches)));
+      return defined(wantIncludes ? member : Smt.not(member));
+    }
+    SetAttrView setAttr = setAttrRead(collectionExpr);
+    if (setAttr != null) {
+      TranslatedExpression element = argResult(elementExpr);
+      List<SmtTerm> matches = new ArrayList<>();
+      for (int j = 0; j < setAttr.poolSize(); j++) {
+        matches.add(
+            Smt.and(
+                List.of(
+                    setAttr.member(j),
+                    Smt.eq(element.value(), Smt.intLit(setAttr.pool().get(j))))));
       }
       SmtTerm member = Smt.and(List.of(element.defined(), Smt.or(matches)));
       return defined(wantIncludes ? member : Smt.not(member));

@@ -23,6 +23,9 @@ public final class AttributeEncoder {
       AttributeType type,
       AttributeDomain domain) {
     List<String> names = new ArrayList<>();
+    if (type == AttributeType.SET_INTEGER) {
+      return encodeSetInteger(script, owner, attributeName, domain);
+    }
     for (int i = 0; i < owner.capacity(); i++) {
       String name = owner.className() + "_" + i + "_" + attributeName;
       script.declareConst(name, sort(type));
@@ -348,7 +351,67 @@ public final class AttributeEncoder {
       case STRING, ENUM, INTEGER, UINTEGER, USTRING -> SmtSort.INT;
       case REAL, UREAL, UBOOLEAN -> SmtSort.REAL;
       case BOOLEAN -> SmtSort.BOOL;
+      default -> throw new IllegalArgumentException(
+          "no scalar sort for attribute type " + type);
     };
+  }
+
+  /**
+   * Encodes one SET(Integer)-typed attribute as a membership Bool per (slot, pool element):
+   * the configured pool ({@code domain.enumeratedValues()}) is the set's possible content, each
+   * Bool says whether that element is in THIS object's set, and the configured SIZE bounds
+   * ({@code domain.lowerBound()/upperBound()} — the incumbent's {@code attributeColSizeMin/
+   * Max} keys, defaulting 0/unbounded) constrain each existing slot's membership cardinality.
+   * There is deliberately NO scalar value symbol: the member Bools ARE the set, and the
+   * consumers read them through the translator's set-attribute branches.
+   */
+  private static AttributeValues encodeSetInteger(
+      SmtScript script, ObjectSlots owner, String attributeName, AttributeDomain domain) {
+    if (domain.enumeratedValues().isEmpty()) {
+      throw new IllegalArgumentException(
+          "Set-typed attribute '"
+              + owner.className()
+              + "."
+              + attributeName
+              + "' requires a non-empty configured element pool (Set{...})");
+    }
+    List<BigInteger> pool = new ArrayList<>();
+    for (String candidate : domain.enumeratedValues()) {
+      pool.add(new java.math.BigDecimal(candidate.trim()).toBigIntegerExact());
+    }
+    int poolSize = pool.size();
+    List<String> names = new ArrayList<>();
+    for (int i = 0; i < owner.capacity(); i++) {
+      for (int j = 0; j < poolSize; j++) {
+        String name = owner.className() + "_" + attributeName + "_" + i + "_" + j;
+        script.declareConst(name, SmtSort.BOOL);
+        names.add(name);
+      }
+    }
+    BigDecimal lower = domain.lowerBound(), upper = domain.upperBound();
+    for (int i = 0; i < owner.capacity(); i++) {
+      SmtTerm exists = Smt.sym(owner.existsNames().get(i));
+      SmtTerm count = null;
+      for (int j = 0; j < poolSize; j++) {
+        SmtTerm bit = Smt.sym(names.get(i * poolSize + j));
+        SmtTerm one = Smt.intLit(java.math.BigInteger.ONE);
+        count = count == null ? Smt.ite(bit, one, Smt.intLit(java.math.BigInteger.ZERO))
+            : Smt.app("+", count, Smt.ite(bit, one, Smt.intLit(java.math.BigInteger.ZERO)));
+      }
+      if (count == null) {
+        continue;
+      }
+      if (lower != null && lower.signum() > 0) {
+        script.assertThat(Smt.app("=>", exists,
+            Smt.app(">=", count, Smt.intLit(lower.toBigIntegerExact()))));
+      }
+      if (upper != null && upper.signum() >= 0) {
+        script.assertThat(Smt.app("=>", exists,
+            Smt.app("<=", count, Smt.intLit(upper.toBigIntegerExact()))));
+      }
+    }
+    return new AttributeValues(
+        owner.className(), attributeName, AttributeType.SET_INTEGER, names);
   }
 
   /**

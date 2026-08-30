@@ -1365,6 +1365,17 @@ public final class SmtModelFinder {
   }
 
   private static AttributeType attributeTypeOf(Type type) {
+    if (type.isTypeOfSet()) {
+      org.tzi.use.uml.ocl.type.Type elem =
+          ((org.tzi.use.uml.ocl.type.CollectionType) type).elemType();
+      if (!elem.isTypeOfInteger()) {
+        throw new IllegalArgumentException(
+            "collection-typed attribute with element type "
+                + elem
+                + ": only Set(Integer) is supported in this slice");
+      }
+      return AttributeType.SET_INTEGER;
+    }
     if (type.isTypeOfString()) {
       return AttributeType.STRING;
     }

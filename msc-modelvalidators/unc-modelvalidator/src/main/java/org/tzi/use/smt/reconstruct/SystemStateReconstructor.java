@@ -204,6 +204,11 @@ public final class SystemStateReconstructor {
       MAttribute attribute = cls.attribute(values.attributeName(), true);
       AttributeDomain domain = context.attributeDomain(className, values.attributeName());
       ObjectSlots slots = context.slotsFor(className);
+      if (values.type() == AttributeType.SET_INTEGER) {
+        assignSetIntegerAttributes(api, model, context, values, domain, modelValues,
+            objectsBySlot);
+        continue;
+      }
       for (int i = 0; i < slots.capacity(); i++) {
         MObject object = objectsBySlot.get(slotKey(className, i));
         if (object == null) {
@@ -316,6 +321,44 @@ public final class SystemStateReconstructor {
         }
         api.createLinkEx(association, order);
       }
+    }
+  }
+
+  /**
+   * SET-typed attribute reconstruction: every pool element whose membership Bool is true joins
+   * the slot's SetValue, assigned through USE's own SetValue assignment (collection-typed
+   * attributes are natively supported). The pool values come from the configured domain's
+   * enumerated pool, parsed as integers; member names are slot-major flattened.
+   */
+  private static void assignSetIntegerAttributes(
+      UseSystemApi api,
+      MModel model,
+      TranslationContext context,
+      AttributeValues values,
+      AttributeDomain domain,
+      Map<String, SmtValue> modelValues,
+      Map<String, MObject> objectsBySlot)
+      throws UseApiException {
+    MClass cls = model.getClass(values.className());
+    MAttribute attribute = cls.attribute(values.attributeName(), true);
+    int poolSize = domain.enumeratedValues().size();
+    ObjectSlots slots = context.slotsFor(values.className());
+    for (int i = 0; i < slots.capacity(); i++) {
+      MObject object = objectsBySlot.get(slotKey(values.className(), i));
+      if (object == null) {
+        continue;
+      }
+      List<org.tzi.use.uml.ocl.value.Value> elements = new java.util.ArrayList<>();
+      for (int j = 0; j < poolSize; j++) {
+        if (isTrue(modelValues, values.valueNames().get(i * poolSize + j))) {
+          elements.add(new org.tzi.use.uml.ocl.value.IntegerValue(
+              Integer.parseInt(domain.enumeratedValues().get(j).trim())));
+        }
+      }
+      org.tzi.use.uml.ocl.value.SetValue set = new org.tzi.use.uml.ocl.value.SetValue(
+          org.tzi.use.uml.ocl.type.TypeFactory.mkInteger(),
+          elements.toArray(new org.tzi.use.uml.ocl.value.Value[0]));
+      api.setAttributeValueEx(object, attribute, set);
     }
   }
 
