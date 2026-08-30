@@ -3203,9 +3203,9 @@
               "coverageNote": "zero coverage - no scenario exercises flatten()"
             },
             "unc-modelvalidator": {
-              "status": "unsupported",
-              "evidence": "'flatten' is likewise a USE standard collection operation dispatched as an ExpStdOp node by name (StandardOperationsCollection.java:759, `return \"flatten\";`), not a distinct AST class. It is not in ExpressionTranslator.visitStdOp's explicit whitelist (ExpressionTranslator.java:64-79), so any `->flatten()` call falls through to the same `default -> throw unsupported(\"operator 'flatten'\")` branch at line 78.",
-              "notes": "RecursiveTree.use's childPlus1()/childPlusOnNodeSet() operation bodies use `->flatten->asSet`, but (same as ocl.iterate above) neither operation is ever invoked from an active constraint, and unc's visitInstanceOp (ExpressionTranslator.java:319-321) unconditionally rejects any user-defined operation call regardless, so this would be unreachable even if it were called.",
+              "status": "degraded",
+              "evidence": "2026-08-30, NESTED-LITERAL FLATTEN SLICE: collectionLiteralContent gained a nesting mode -- an element that is ITSELF a collection literal contributes its recursively flattened leaves under the OUTER literal's duplicate policy (Set/OrderedSet collapse, Bag keeps occurrences). ->flatten() over a nested collection literal is recognized by the constant-content resolver (constantCollectionContent) and feeds every constant-content consumer: size, sum, includes/excludes, forAll/exists, isEmpty/notEmpty. FlattenLiteralTest (5 end-to-end real-Z3 tests: Set-of-Sets leaf size, Bag-of-Bags duplicate preservation, flattened sum, membership, forAll). Scope: the nesting must be a LITERAL (translation-time); flatten over navigations of collection-typed attributes needs attribute-typed collections (collection.type-system-collapse) and refuses with a located message. The incumbent's flatten is itself degraded (Op_collection_flatten delegates to the value classes' own flatten, with bag type-system quirks), so the supported shape is parity-strength.",
+              "notes": "unsupported -> degraded: literal-nesting flatten supported; navigation-sourced flatten remains open (blocked on collection-typed attributes, a separate row).",
               "satScenarioIds": [],
               "unsatScenarioIds": [],
               "validationOracleScenarioIds": [],

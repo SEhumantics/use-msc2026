@@ -3019,9 +3019,11 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (variableCount != 1 && variableCount != 2) {
       throw unsupported(FragmentBoundary.TIER_2, "exists with more than two loop variables");
     }
-    if (e.getRangeExpression() instanceof ExpCollectionLiteral setLiteral && variableCount == 1) {
-      result = setLiteralQuantifier(setLiteral, e.getVariableDeclarations().varDecl(0).name(),
-          e.getQueryExpression(), false);
+    SetContent rangeContentE =
+        (variableCount == 1) ? constantCollectionContent(e.getRangeExpression()) : null;
+    if (rangeContentE != null) {
+      result = setQuantifierOver(rangeContentE.integers(), rangeContentE.strings(),
+          e.getVariableDeclarations().varDecl(0).name(), e.getQueryExpression(), false);
       return;
     }
     if (variableCount == 1) {
@@ -3075,9 +3077,11 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (variableCount != 1 && variableCount != 2) {
       throw unsupported(FragmentBoundary.TIER_1, "forAll with more than two loop variables");
     }
-    if (e.getRangeExpression() instanceof ExpCollectionLiteral setLiteral && variableCount == 1) {
-      result = setLiteralQuantifier(setLiteral, e.getVariableDeclarations().varDecl(0).name(),
-          e.getQueryExpression(), true);
+    SetContent rangeContent =
+        (variableCount == 1) ? constantCollectionContent(e.getRangeExpression()) : null;
+    if (rangeContent != null) {
+      result = setQuantifierOver(rangeContent.integers(), rangeContent.strings(),
+          e.getVariableDeclarations().varDecl(0).name(), e.getQueryExpression(), true);
       return;
     }
     if (variableCount == 1) {
@@ -4671,11 +4675,12 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         && isSupportedSelectSource(query)) {
       return defined(sizeTerm(selectedAllInstancesPopulation(query)));
     }
-    if (receiver instanceof ExpCollectionLiteral set) {
+    SetContent literalContent = constantCollectionContent(receiver);
+    if (literalContent != null) {
       // The element count is a compile-time constant: DISTINCT for Set/OrderedSet semantics,
-      // duplicate-COUNTING for Bag/Sequence (collectionLiteralContent keeps the occurrence).
-      SetContent content = collectionLiteralContent(set);
-      return defined(Smt.intLit(BigInteger.valueOf(content.size())));
+      // duplicate-COUNTING for Bag/Sequence (collectionLiteralContent keeps the occurrence);
+      // a ->flatten() node contributes its flattened leaves.
+      return defined(Smt.intLit(BigInteger.valueOf(literalContent.size())));
     }
     // ExpSelectByType EXTENDS ExpSelectByKind: test the exact-type subclass FIRST (see
     // populationOf's own note).
@@ -4748,10 +4753,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     if (receiver instanceof ExpEmptyCollection) {
       return defined(Smt.intLit(BigInteger.ZERO));
     }
-    SetContent content = localCollection(receiver);
-    if (content == null && receiver instanceof ExpCollectionLiteral lit) {
-      content = collectionLiteralContent(lit);
-    }
+    SetContent content = constantCollectionContent(receiver);
     if (content == null) {
       throw unsupported(
           FragmentBoundary.TIER_3,
@@ -4785,10 +4787,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * elements refuse (a String result needs the content-comparison consumers, not a value).
    */
   private TranslatedExpression collectionEnd(Expression receiver, boolean first) {
-    SetContent content = localCollection(receiver);
-    if (content == null && receiver instanceof ExpCollectionLiteral lit) {
-      content = collectionLiteralContent(lit);
-    }
+    SetContent content = constantCollectionContent(receiver);
     if (content == null || content.integers() == null) {
         throw unsupported(
           FragmentBoundary.TIER_3,
@@ -5149,9 +5148,20 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * shared expansion; String constants bind by content; mixing refuses.
    */
   private static SetContent collectionLiteralContent(ExpCollectionLiteral lit) {
+    return collectionLiteralContent(lit, false);
+  }
+
+  /**
+   * The constant content of a collection literal. With {@code flattenNesting}, an element that
+   * is ITSELF a collection literal contributes its own (recursively flattened) leaves -- the
+   * {@code ->flatten()} resolution -- under the OUTER literal's duplicate policy; without it, a
+   * nested collection element refuses (the direct consumers never see one).
+   */
+  private static SetContent collectionLiteralContent(ExpCollectionLiteral lit, boolean flattenNesting) {
     boolean dedupe = lit instanceof ExpSetLiteral || lit instanceof ExpOrderedSetLiteral;
     boolean sawString = false;
     boolean sawReal = false;
+    boolean sawInt = false;
     List<BigDecimal> realValues = new ArrayList<>();
     List<BigInteger> intValues = new ArrayList<>();
     List<String> stringValues = new ArrayList<>();
@@ -5167,14 +5177,43 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         if (!dedupe || !realValues.contains(v)) {
           realValues.add(v);
         }
+      } else if (element instanceof ExpCollectionLiteral inner) {
+        if (!flattenNesting) {
+          throw unsupported(
+              FragmentBoundary.TIER_3,
+              "collection literal with a nested collection element ("
+                  + element
+                  + "); use ->flatten()");
+        }
+        SetContent innerContent = collectionLiteralContent(inner, true);
+        sawString |= innerContent.strings() != null;
+        sawReal |= innerContent.reals() != null;
+        sawInt |= innerContent.integers() != null;
+        List<?>[] innerLists = {
+          innerContent.reals(), innerContent.integers(), innerContent.strings()
+        };
+        List<?>[] outerLists = {realValues, intValues, stringValues};
+        for (int kind = 0; kind < 3; kind++) {
+          if (innerLists[kind] == null) {
+            continue;
+          }
+          for (Object v : innerLists[kind]) {
+            boolean present =
+                dedupe && ((List<Object>) outerLists[kind]).contains(v);
+            if (!present) {
+              ((List<Object>) outerLists[kind]).add(v);
+            }
+          }
+        }
       } else {
+        sawInt = true;
         appendIntegerElementValues(element, intValues, dedupe);
       }
     }
-    if (sawReal && sawString) {
+    if ((sawReal && sawString) || (sawReal && sawInt) || (sawInt && sawString)) {
       throw unsupported(
           FragmentBoundary.TIER_3,
-          "collection literal mixes Real and String constants; not supported in this slice");
+          "collection literal mixes element kinds; not supported in this slice");
     }
     if (sawReal) {
       return new SetContent(realValues, null, null);
@@ -5194,6 +5233,35 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     extended.put(e.getVarname(), binding);
     // A literal is always defined, so the let's definedness is the body's own.
     return translate(e.getInExpression(), context, mode, positivePolarity, Map.copyOf(extended));
+  }
+
+  /**
+   * The constant content behind a collection RECEIVER: a let-bound set/bag/sequence variable, a
+   * collection literal, or {@code ->flatten()} over a (possibly nested) collection literal -- the
+   * three shapes whose content is fully known at translation time. Null for anything else.
+   */
+  private SetContent constantCollectionContent(Expression receiver) {
+    SetContent direct = localCollection(receiver);
+    if (direct != null) {
+      return direct;
+    }
+    if (receiver instanceof ExpCollectionLiteral lit) {
+      boolean isSetKind =
+          lit instanceof ExpSetLiteral
+              || lit instanceof ExpBagLiteral
+              || lit instanceof ExpSequenceLiteral
+              || lit instanceof ExpOrderedSetLiteral;
+      return isSetKind ? collectionLiteralContent(lit, false) : null;
+    }
+    if (receiver instanceof ExpStdOp op
+        && "flatten".equals(op.opname())
+        && op.args().length == 1
+        && op.args()[0] instanceof ExpCollectionLiteral lit) {
+      // ->flatten() over a collection literal: the nesting resolves to the leaves, under the
+      // OUTER literal's duplicate policy.
+      return collectionLiteralContent(lit, true);
+    }
+    return null;
   }
 
   /** The constant set content a variable binding carries, or null. */
@@ -6138,39 +6206,34 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       SmtTerm reachable = closureReachabilityWithReceiver(closure, elementExpr, receiver);
       return defined(wantIncludes ? reachable : Smt.not(reachable));
     }
-    // String-constant set literal: membership by CONTENT against the element's own
-    // registered domain (single domain, so no cross-domain index comparison arises).
-    if (collectionExpr instanceof ExpCollectionLiteral set
-        && set.getElemExpr().length > 0
-        && set.getElemExpr()[0] instanceof ExpConstString) {
-      List<String> constants = distinctStringConstants(set);
-      ContentOperand element = contentOperand(elementExpr);
-      if (element == null || element.enumeratedValues() == null) {
-        throw unsupported(
-            FragmentBoundary.TIER_3,
-            (wantIncludes ? "includes" : "excludes")
-                + " over a String set literal requires a String-typed element with a"
-                + " registered domain");
-      }
-      List<SmtTerm> stringMatches = new ArrayList<>();
-      for (String constant : constants) {
-        int idx = element.enumeratedValues().indexOf(constant);
-        if (idx >= 0) {
-          stringMatches.add(Smt.eq(element.value(), Smt.intLit(BigInteger.valueOf(idx))));
-        }
-      }
-      SmtTerm stringMember = Smt.and(List.of(element.defined(), Smt.or(stringMatches)));
-      return defined(wantIncludes ? stringMember : Smt.not(stringMember));
-    }
-    if (collectionExpr instanceof ExpCollectionLiteral set) {
-      // Membership in an Integer-constant collection literal: the element's value equals one of
-      // the DISTINCT literal constants (total -- a literal is always defined). Membership is
-      // duplicate-insensitive, so Bag/Sequence collapse is harmless HERE.
-      List<BigInteger> constants = distinctIntegerConstants(set);
+    SetContent literalSet = constantCollectionContent(collectionExpr);
+    if (literalSet != null) {
       TranslatedExpression element = argResult(elementExpr);
       List<SmtTerm> matches = new ArrayList<>();
-      for (BigInteger constant : constants) {
-        matches.add(Smt.eq(element.value(), Smt.intLit(constant)));
+      if (literalSet.strings() != null) {
+        // String content: membership by CONTENT against the element's own registered domain
+        // (single domain, so no cross-domain index comparison arises).
+        ContentOperand elementContent = contentOperand(elementExpr);
+        if (elementContent == null || elementContent.enumeratedValues() == null) {
+          throw unsupported(
+              FragmentBoundary.TIER_3,
+              (wantIncludes ? "includes" : "excludes")
+                  + " over a String-valued collection literal requires a String-typed element"
+                  + " with a registered domain");
+        }
+        for (String constant : literalSet.strings()) {
+          int idx = elementContent.enumeratedValues().indexOf(constant);
+          if (idx >= 0) {
+            matches.add(Smt.eq(elementContent.value(), Smt.intLit(BigInteger.valueOf(idx))));
+          }
+        }
+      } else {
+        // Integer membership: the element's value equals one of the DISTINCT literal constants
+        // (total -- a literal is always defined). Membership is duplicate-insensitive, so
+        // Bag/Sequence collapse is harmless HERE.
+        for (BigInteger constant : literalSet.integers()) {
+          matches.add(Smt.eq(element.value(), Smt.intLit(constant)));
+        }
       }
       SmtTerm member = Smt.and(List.of(element.defined(), Smt.or(matches)));
       return defined(wantIncludes ? member : Smt.not(member));
