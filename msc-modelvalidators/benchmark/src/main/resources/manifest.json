@@ -2546,6 +2546,85 @@
         "ternary-links",
         "authored"
       ]
+    },
+    {
+      "id": "AggregationComposition-SelfCycle",
+      "directory": "AggregationComposition",
+      "useFile": "FileSystem.use",
+      "propertiesFile": "FileSystem_selfcycle.properties",
+      "section": "selfcycle",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Authored for this thesis project (msc-4, Trong-Nghia Be) as Study B (RQ2 supersession) corpus evidence: a single-association SELF-referential composition cycle forced while aggregationcyclefreeness = OFF. FileSystem.use's own header documents the incumbent defect: a cycle through a SINGLE aggregation/composition association is compiled into an UNCONDITIONAL Kodkod constraint that ignores the toggle, so the incumbent refuses a model its own configuration says is legal. The unc backend honors the toggle and accepts the forced cycle.",
+      "provenanceCitation": null,
+      "features": [
+        "assoc.aggregation",
+        "assoc.composition.cycle-freeness",
+        "assoc.predefined-links",
+        "config.association-bounds",
+        "config.class-bounds"
+      ],
+      "question": "With aggregationcyclefreeness = off and a 2-tuple cycle forced through the single PrimaryContains composition alone, does the toggle-honoring backend accept the forced cycle the incumbent's unconditional constraint refuses?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "scenarioTags": [
+        "composition-cycle",
+        "toggle-ignored",
+        "supersession",
+        "authored"
+      ],
+      "supersession": {
+        "study": "B",
+        "kodkodOutcome": "TRIVIALLY_UNSATISFIABLE",
+        "kodkodReason": "The forced links PrimaryContains={(f1,f2),(f2,f1)} close a 2-cycle through ONE self-referential composition association. The incumbent compiles single-association aggregation/composition acyclicity into an UNCONDITIONAL constraint: DefaultRelationTransformer (kk-modelvalidator) builds the cycle formula from composition ends with no aggregationcyclefreeness guard on this shape -- FileSystem.use's own header documents it ('A cycle formed by a SINGLE aggregation/composition association ... is compiled into an UNCONDITIONAL Kodkod constraint that ignores the aggregationcyclefreeness toggle'), and AggregationComposition's original discovery runs confirmed the refusal with the toggle OFF. The toggle the configuration sets is silently ignored, so the incumbent's answer is a refutation of a model its own configuration declares legal. Observed outcome TRIVIALLY_UNSATISFIABLE: constant-false at translation time, no search.",
+        "smtOutcome": "SATISFIABLE",
+        "groundTruth": "SATISFIABLE. The configuration pins the entire space: two Folder objects f1/f2, exactly two PrimaryContains links (f1,f2) and (f2,f1), every other association empty, no invariants active. That two-link Folder graph IS a satisfying instance; the toggle OFF declares cycles legal, so nothing forbids it. A reader establishes this by inspection of the configuration alone; USE's evaluator confirms the reconstructed witness (its checkStructure() cycle warning fires as designed and is exactly what the OFF toggle tells the plugin not to treat as an error).",
+        "divergenceClass": "false-unsat"
+      }
+    },
+    {
+      "id": "Redefines-TranslationGap",
+      "directory": "Redefines",
+      "useFile": "Redefines.use",
+      "propertiesFile": "Redefines.properties",
+      "section": "translationGap",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "plugin-original",
+      "provenanceDetail": "The Redefines corpus pair's own [translationGap] section (kk-modelvalidator's historical Redefines.properties, retained by this project) promoted to Study B (RQ2 supersession) evidence: D_tagD is pinned to 'NOT-child-d' so the correctly-translated RedefinedRoleTagCheck (c.b->forAll(x | x.tagD = 'child-d'), where C's b end REDEFINES A's and navigates the CD association) is violated -- UNSATISFIABLE -- while the incumbent's translator, which has no redefines handling at all, encodes c.b through AB's always-empty-for-a-CD-only-linked-C relation and makes the invariant vacuously true.",
+      "provenanceCitation": null,
+      "features": [
+        "assoc.redefines",
+        "ocl.navigation-regular-assoc",
+        "prim.string-literals-equality",
+        "invariant.transform-to-kodkod"
+      ],
+      "question": "With D_tagD = 'NOT-child-d', the redefines-aware reading of c.b->forAll(x | x.tagD = 'child-d') navigates CD, sees tagD='NOT-child-d', and refutes the configuration -- does the backend that lacks redefines handling instead encode c.b through the empty AB relation and wrongly accept?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "scenarioTags": [
+        "redefines",
+        "translation-gap",
+        "supersession",
+        "vacuous-true"
+      ],
+      "supersession": {
+        "study": "B",
+        "kodkodOutcome": "SATISFIABLE",
+        "kodkodReason": "The incumbent's OCL translator has zero redefines handling (confirmed by grep across kk-modelvalidator's transform sources; the feature matrix's assoc.redefines row records the same), so the navigation c.b in RedefinedRoleTagCheck (context c : C inv c.b->forAll(x | x.tagD = 'child-d'), where C::b REDEFINES A::b and must navigate the CD association) is encoded through AB's Kodkod relation instead. The section links c1 only through CD, so AB is empty at c1, and a forAll over an empty collection is vacuously TRUE: the invariant constrains nothing during the search, and the incumbent reports SATISFIABLE -- accepting a state whose own semantics violate the invariant. The properties file's own header comment documented this via manual testing at authoring time ('Confirmed: the plugin still reports outcome SATISFIABLE'); SupersessionDivergenceTest re-pins it empirically.",
+        "smtOutcome": "UNSATISFIABLE",
+        "groundTruth": "UNSATISFIABLE. Under the model's own declared semantics, C::b redefines A::b to navigate CD, so for the only configured C object (c1, linked to d1 through CD) the navigation yields exactly d1, whose tagD is 'NOT-child-d' -- the forAll is FALSE, the invariant is violated, and since the configuration pins every object and link, no satisfying state exists. USE's own evaluator establishes this with no solver: RedefinesCorpusRoundTripTest evaluates the identical invariant on the identical configuration through USE and confirms the refutation.",
+        "divergenceClass": "false-sat"
+      }
     }
   ]
 }

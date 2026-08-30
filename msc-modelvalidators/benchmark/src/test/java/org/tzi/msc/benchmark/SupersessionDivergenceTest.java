@@ -49,6 +49,7 @@ import org.tzi.use.uml.ocl.value.URealValue;
 import org.tzi.use.uml.ocl.value.Value;
 import org.tzi.use.uml.sys.MObject;
 import org.tzi.use.uml.sys.MSystem;
+import org.tzi.use.uml.sys.MLink;
 import org.tzi.use.uml.sys.MSystemState;
 
 import com.google.gson.Gson;
@@ -88,6 +89,8 @@ public class SupersessionDivergenceTest {
 	private static final String REAL_CASE = "RealGrid-UnitInterval";
 	private static final String UREAL_BELOW_CASE = "URealThreshold-Below";
 	private static final String UREAL_ERASURE_CASE = "URealThreshold-NominalErasure";
+	private static final String SELF_CYCLE_CASE = "AggregationComposition-SelfCycle";
+	private static final String TRANSLATION_GAP_CASE = "Redefines-TranslationGap";
 	private static final List<String> FALSE_ACCEPT_CASES = List.of(UREAL_BELOW_CASE, UREAL_ERASURE_CASE);
 
 	private static ExampleManifest manifest;
@@ -270,6 +273,67 @@ public class SupersessionDivergenceTest {
 	 * a single snapshot; USE evaluates the invariant FALSE on it; therefore no satisfying instance
 	 * exists and UNSATISFIABLE is the correct answer. No model finder is involved in this argument.
 	 */
+	// ------------------------------------------------------------------
+	// The 2026-08-30 deliberate Study B extension: two mechanism-distinct
+	// rows, each re-pinned here empirically against the real incumbent.
+	// ------------------------------------------------------------------
+
+	/**
+	 * {@code AggregationComposition-SelfCycle}: with {@code aggregationcyclefreeness = off}, a
+	 * 2-tuple cycle forced through the SINGLE PrimaryContains composition is still refused by the
+	 * incumbent -- its single-association composition acyclicity is an UNCONDITIONAL constraint
+	 * that ignores the toggle (the corpus model's own header documents this; this assertion
+	 * re-runs the incumbent on the same files so the recorded manifest outcome cannot rot).
+	 */
+	@Test
+	public void kodkodRefutesTheSelfCycleEvenWithTheToggleOff() throws Exception {
+		assertObservedKodkodOutcome(entry(SELF_CYCLE_CASE), Solution.Outcome.TRIVIALLY_UNSATISFIABLE);
+	}
+
+	/**
+	 * The toggle-honoring backend accepts the forced cycle, and the reconstructed snapshot
+	 * genuinely contains it -- USE's own checkStructure() cycle warning firing on reconstruction
+	 * is exactly what the OFF toggle tells the plugin not to treat as an error.
+	 */
+	@Test
+	public void smtHonorsTheToggleAndReconstructsTheForcedCycle() throws Exception {
+		ExampleEntry ex = entry(SELF_CYCLE_CASE);
+		ModelFinderResult result = smtResult(ex);
+		assertTrue(SELF_CYCLE_CASE + ": expected SAT", result.satisfiable());
+		MModel model = compile(ex);
+		MSystemState state = result.system().state();
+		int primaryContainsLinks = 0;
+		for (MLink link : state.allLinks()) {
+			if (link.association().name().equals("PrimaryContains")) {
+				primaryContainsLinks++;
+				assertEquals("a PrimaryContains link joins two Folder slots", 2,
+						link.linkEnds().size());
+			}
+		}
+		assertEquals("the forced 2-tuple self-cycle must reconstruct as two links", 2,
+				primaryContainsLinks);
+	}
+
+	/**
+	 * {@code Redefines-TranslationGap}: the incumbent's translator has no redefines handling, so
+	 * {@code c.b} is encoded through AB's relation (empty for a CD-only-linked C), the forAll is
+	 * vacuously true, and the incumbent ACCEPTS the configuration whose own semantics violate the
+	 * invariant. The recorded manifest outcome is re-pinned against the real incumbent here.
+	 */
+	@Test
+	public void kodkodAcceptsTheTranslationGapItsMissingRedefinesHandlingMakesVacuous() throws Exception {
+		assertObservedKodkodOutcome(entry(TRANSLATION_GAP_CASE), Solution.Outcome.SATISFIABLE);
+	}
+
+	/** The redefines-aware backend navigates CD, sees tagD = 'NOT-child-d', and refutes. */
+	@Test
+	public void smtRefutesTheTranslationGapConfiguration() throws Exception {
+		ExampleEntry ex = entry(TRANSLATION_GAP_CASE);
+		ModelFinderResult result = smtResult(ex);
+		assertFalse(TRANSLATION_GAP_CASE + ": expected UNSAT -- C::b redefines A::b to navigate"
+				+ " CD, so tagD = 'NOT-child-d' violates the forAll", result.satisfiable());
+	}
+
 	@Test
 	public void useEvaluatorRefutesTheSingleCandidateEachConfigurationAllows() throws Exception {
 		for (String id : FALSE_ACCEPT_CASES) {
