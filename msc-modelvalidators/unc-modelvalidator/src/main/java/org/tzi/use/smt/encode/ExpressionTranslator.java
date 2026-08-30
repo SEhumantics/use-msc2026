@@ -3328,8 +3328,8 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       }
       case "concat" -> {
         return op.args().length == 2
-            && op.args()[1] instanceof ExpConstString
-            && stringCandidates(op.args()[0]) != null;
+            && stringCandidates(op.args()[0]) != null
+            && stringCandidates(op.args()[1]) != null;
       }
       case "substring" -> {
         return op.args().length == 3
@@ -3434,10 +3434,26 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       return result;
     }
     if ("concat".equals(op.opname())) {
-      String suffix = ((ExpConstString) op.args()[1]).value();
-      for (StringCandidateCase candidate : source.candidates) {
-        result.candidates.add(
-            new StringCandidateCase(candidate.spelling + suffix, candidate.guard));
+      // The second operand may be a literal (a single guard-true candidate) or another
+      // enumerable source (a configured-candidate attribute or String let variable): the
+      // expansion crosses both candidate lists, each pair guarded by the conjunction of its
+      // two guards, capped by the same expansion bound as the other enumerations.
+      EnumerableString second = stringCandidates(op.args()[1]);
+      if (source.candidates.size() * second.candidates.size() > 256) {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            "concat over "
+                + source.candidates.size()
+                + " x "
+                + second.candidates.size()
+                + " configured candidate pairs exceeds the 256-combination expansion cap");
+      }
+      for (StringCandidateCase left : source.candidates) {
+        for (StringCandidateCase right : second.candidates) {
+          result.candidates.add(
+              new StringCandidateCase(
+                  left.spelling + right.spelling, Smt.and(List.of(left.guard, right.guard))));
+        }
       }
       return result;
     }
