@@ -300,13 +300,17 @@ public class NavigationTranslationTest {
   }
 
   /**
-   * Scope boundary: {@code a.b.c.val} chains TWO navigation hops before the attribute leaf ({@code
-   * a.b.c}'s own receiver {@code a.b} is itself a navigation, not a bare variable). This is
-   * deliberately refused rather than silently generalized into a recursive evaluator -- neither
-   * real corpus invariant needs more than one hop.
+   * INVERTED PIN (was: a.b.c.val fails closed with "more than one navigation hop"): the chained
+   * navigation-as-a-value is now TRANSLATED -- chainedAttributeValue resolves hop by hop with
+   * per-slot concrete bindings and chain-wide definedness (ChainedNavigationTest pins the
+   * end-to-end SAT/UNSAT behavior over a real configuration). With this test's deliberately
+   * empty TranslationContext the chain still cannot complete -- no association links are
+   * registered, so the first hop's lookup fails at ENCODING_SCOPE -- which is what this
+   * tripwire now asserts: the chained read PROCEEDS (past the old refusal) and fails only on
+   * the missing registration, never silently.
    */
   @Test
-  public void attributeAccessAfterMoreThanOneNavigationHopFailsClosed() throws Exception {
+  public void chainedNavigationProceedsAndFailsOnlyOnTheEmptyContext() throws Exception {
     MModel model = compileNavChain();
     MClassInvariant inv = findInvariant(model, "chainedTooDeep");
 
@@ -318,8 +322,10 @@ public class NavigationTranslationTest {
                     inv.bodyExpression(),
                     new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of(), Map.of())));
 
-    assertEquals(FragmentBoundary.TIER_2, thrown.boundary());
-    assertTrue(thrown.getMessage(), thrown.getMessage().contains("more than one navigation hop"));
+    assertEquals(FragmentBoundary.ENCODING_SCOPE, thrown.boundary());
+    // The empty context binds no variables, so the chain's ROOT lookup is the first located
+    // failure; with a real context the hop lookups would be the corresponding gate.
+    assertTrue(thrown.getMessage(), thrown.getMessage().contains("unbound OCL variable"));
   }
 
   private static MModel compileSudoku() throws Exception {

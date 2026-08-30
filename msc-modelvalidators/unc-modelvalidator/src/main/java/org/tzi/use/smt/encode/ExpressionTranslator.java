@@ -142,6 +142,13 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     // beyond that -- a second hop, a collection destination -- fails closed inside it rather than
     // being handled here.
     if (e.objExp() instanceof ExpNavigation navigation) {
+      if (navigation.getObjectExpression() instanceof ExpNavigation) {
+        // CHAINED navigation-as-a-value (a.b.c.level): the general-case read the
+        // ocl.navigation-regular-assoc row names -- every hop is a single-valued
+        // navigation and the attribute sits at the terminal hop.
+        result = chainedAttributeValue(navigation, e.attr());
+        return;
+      }
       result =
           navigatedAttribute(
               navigation.getObjectExpression(), navigation.getDestination(), e.attr());
@@ -232,6 +239,90 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     return new TranslatedExpression(
         Smt.or(targets),
         selectLinkedValue(links, destination, source, destSlots, attribute, v));
+  }
+
+  /**
+   * The CHAINED single-valued navigation read ({@code a.b.c.level}, two or more hops): the
+   * value is built hop by hop, exactly as USE's sequential navigation evaluates -- hop j+1's
+   * link term is selected under hop j's link, and the terminal hop selects the attribute value
+   * per slot (the same per-slot pattern {@code selectLinkedValue} builds for one hop). The
+   * result is defined iff EVERY hop along the chain is linked: a broken chain makes the read
+   * undefined, which is the sequential-evaluation semantics, not an approximation. Each hop's
+   * destination resolves redefinition against the PREVIOUS hop's concrete slot binding (slot
+   * classes are known per candidate), so chains over folded or redefining ends stay correct.
+   */
+  private TranslatedExpression chainedAttributeValue(
+      ExpNavigation outerNavigation, MAttribute attribute) {
+    List<MNavigableElement> hops = new ArrayList<>();
+    Expression cursor = outerNavigation;
+    while (cursor instanceof ExpNavigation nav) {
+      hops.add(nav.getDestination());
+      cursor = nav.getObjectExpression();
+    }
+    java.util.Collections.reverse(hops);
+    if (!(cursor instanceof ExpVariable rootVar)
+        || localBindings.containsKey(rootVar.getVarname())) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "chained navigation whose source is not a context variable is not yet supported");
+    }
+    VariableBinding root = context.binding(rootVar.getVarname());
+    return chainRead(root, hops, attribute, 0);
+  }
+
+  /** The recursive hop-by-hop selection behind {@link #chainedAttributeValue}. */
+  private TranslatedExpression chainRead(
+      VariableBinding source, List<MNavigableElement> hops, MAttribute attribute, int index) {
+    MNavigableElement hop = hops.get(index);
+    MNavigableElement destination = resolveRedefinedDestination(hop, source);
+    if (destination.isCollection()) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "chained navigation with a collection-valued intermediate hop is not supported"
+              + " (USE desugars it into a collect, a separate feature)");
+    }
+    AssociationLinks links = context.linksFor(destination.association().name());
+    ObjectSlots destSlots = destinationEndView(links, destination);
+    boolean terminal = index == hops.size() - 1;
+    List<SmtTerm> linkTerms = new ArrayList<>();
+    for (int k = 0; k < destSlots.capacity(); k++) {
+      linkTerms.add(linkTerm(links, destination, source, k));
+    }
+    // The VALUE nests as ite selections (exactly the selectLinkedValue shape -- a boolean
+    // and() over an Int symbol is a sort error the dumped script exposed), the DEFINEDNESS
+    // as the OR of per-slot path definedness: a broken chain anywhere leaves the read
+    // undefined, which is the sequential-evaluation semantics.
+    if (terminal) {
+      AttributeValues terminalValues =
+          context.attributeValues(destSlots.className(), attribute.name());
+      guardEndAgainstUncertainAttribute(destSlots, attribute, terminalValues);
+      return new TranslatedExpression(
+          Smt.or(linkTerms),
+          selectLinkedValue(links, destination, source, destSlots, attribute, terminalValues));
+    }
+    if (destSlots.capacity() == 0) {
+      // No intermediate slot can exist, so no chain passes through this hop: constant-undefined
+      // with a never-consulted sort-correct placeholder.
+      return new TranslatedExpression(Smt.bool(false), crispPlaceholder(attribute.type()));
+    }
+    List<TranslatedExpression> branches = new ArrayList<>();
+    for (int k = 0; k < destSlots.capacity(); k++) {
+      branches.add(
+          chainRead(destSlots.concreteBindings().get(k), hops, attribute, index + 1));
+    }
+    // DEFINED: some slot is linked AND the rest of the chain from it is defined.
+    List<SmtTerm> pathDefined = new ArrayList<>();
+    for (int k = 0; k < destSlots.capacity(); k++) {
+      pathDefined.add(Smt.and(List.of(linkTerms.get(k), branches.get(k).defined())));
+    }
+    SmtTerm defined = Smt.or(pathDefined);
+    // VALUE: nested ite over the slots, deepest fallback last; the value is only consulted
+    // under `defined`, so the fallback's content is never observable.
+    SmtTerm value = branches.get(branches.size() - 1).value();
+    for (int k = destSlots.capacity() - 2; k >= 0; k--) {
+      value = Smt.ite(linkTerms.get(k), branches.get(k).value(), value);
+    }
+    return new TranslatedExpression(defined, value);
   }
 
   /**
@@ -3427,6 +3518,35 @@ public final class ExpressionTranslator implements ExpressionVisitor {
                   && targetClass.allChildren().stream()
                       .anyMatch(child -> child.name().equals(source.className())));
       return defined(Smt.bool(castDefined && runtimeMatches));
+    }
+    // NAVIGATED source ({@code x.part.oclIsKindOf(B)}): the navigation's destination end view
+    // folds the configured subclasses, and each destination slot's concrete class is a
+    // translation-time fact -- so the test is the disjunction over slots of (link term AND
+    // that slot's concrete class match). Type tests stay TOTAL: an unlinked navigation has no
+    // matching slot and contributes FALSE, never undefinedness (ExpIsKindOf#eval's
+    // undefined-tests-FALSE rule).
+    if (sourceExpr instanceof ExpNavigation navigation
+        && !navigation.getDestination().isCollection()
+        && navigation.getObjectExpression() instanceof ExpVariable navSource
+        && !localBindings.containsKey(navSource.getVarname())) {
+      VariableBinding source = context.binding(navSource.getVarname());
+      MNavigableElement destination =
+          resolveRedefinedDestination(navigation.getDestination(), source);
+      AssociationLinks links = context.linksFor(destination.association().name());
+      ObjectSlots destSlots = destinationEndView(links, destination);
+      List<SmtTerm> matchingSlots = new ArrayList<>();
+      for (int k = 0; k < destSlots.capacity(); k++) {
+        VariableBinding concrete = destSlots.concreteBindings().get(k);
+        boolean matches =
+            concrete.className().equals(targetClass.name())
+                || (includeSubtypes
+                    && targetClass.allChildren().stream()
+                        .anyMatch(child -> child.name().equals(concrete.className())));
+        if (matches) {
+          matchingSlots.add(linkTerm(links, destination, source, k));
+        }
+      }
+      return defined(Smt.or(matchingSlots));
     }
     VariableBinding binding = context.binding(variableNameOf(sourceExpr));
     boolean matches =

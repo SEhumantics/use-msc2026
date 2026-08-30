@@ -1117,6 +1117,11 @@ public final class SmtModelFinder {
         externalSolverProcess != null
             ? externalSolverProcess
             : new SolverProcess(SolverBinary.resolve(), config.timeout());
+    if (Boolean.getBoolean("smt.dump")) {
+      System.out.println("### SMT SCRIPT DUMP BEGIN");
+      System.out.println(script.toSmtLib());
+      System.out.println("### SMT SCRIPT DUMP END");
+    }
     SolverResult result = solverProcess.run(script.toSmtLib());
     if (result.outcome() != SolverOutcome.SAT) {
       return new Solved(result.outcome(), ledger, copies, Map.of());
