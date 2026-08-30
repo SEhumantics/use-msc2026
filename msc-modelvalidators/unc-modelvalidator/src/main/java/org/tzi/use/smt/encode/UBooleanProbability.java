@@ -388,7 +388,49 @@ public final class UBooleanProbability {
               + " as abs(p1 - p2) (UBoolean.java xor), not as p1(1-p2) + p2(1-p1), and equivalent"
               + " as xor().not()");
     }
-    if (List.of(">", ">=", "<", "<=", "=", "<>").contains(name)) {
+    if (List.of("=", "<>").contains(name) && args.length == 2) {
+      // UNCERTAIN-VS-UNCERTAIN EQUALITY: `=` lowers to UBooleanValue.uEquals -> equivalent()
+      // -> probability 1 - |p1 - p2|; `<>` lowers to uDistinct -> |p1 - p2|. When BOTH sides
+      // lower to finite case enumerations (attribute accesses / let-bound / algebra over
+      // configured probability candidates), each pair's probability is a compile-time
+      // constant -- delegate the pair value to USE's own UBoolean datatype methods so the
+      // number is bit-exact against the evaluator, guard it with both selections, and let the
+      // toBooleanC threshold read the existential over pairs. A threshold comparison
+      // (`u > lit`, whose probability IS a normal CDF of a solver representative) still takes
+      // the refusal below -- there the probability is not a finite configured choice.
+      List<Case> eqLeft = null;
+      List<Case> eqRight = null;
+      boolean loweringFailed = false;
+      try {
+        eqLeft = lower(args[0], context, alreadyRead, nominal, letResolver);
+        eqRight = lower(args[1], context, alreadyRead, nominal, letResolver);
+      } catch (SmtTranslationException notEnumerable) {
+        loweringFailed = true;
+      }
+      if (!loweringFailed && eqLeft != null && eqRight != null
+          && (long) eqLeft.size() * eqRight.size() <= MAX_CASES) {
+        List<Case> combined = new ArrayList<>(eqLeft.size() * eqRight.size());
+        for (Case l : eqLeft) {
+          for (Case r : eqRight) {
+            double equality = new UBoolean(true, l.probability())
+                .equivalent(new UBoolean(true, r.probability())).getC();
+            combined.add(
+                new Case(
+                    Smt.and(List.of(l.guard(), r.guard())),
+                    name.equals("=") ? equality : 1.0 - equality));
+          }
+        }
+        return combined;
+      }
+      throw unsupported(
+          FragmentBoundary.UTYPE_NONLINEAR_OR_TRANSCENDENTAL,
+          "UBoolean equality '"
+              + operation
+              + "' over operands that do not lower to finite configured probability"
+              + " enumerations (e.g. a threshold comparison whose probability is a normal-CDF"
+              + " function of a solver-chosen representative) is outside QF_LIRA");
+    }
+    if (List.of(">", ">=", "<", "<=").contains(name)) {
       throw unsupported(
           FragmentBoundary.UTYPE_NONLINEAR_OR_TRANSCENDENTAL,
           "UBoolean composition over the comparison '"
