@@ -34,6 +34,7 @@ public final class AttributeEncoder {
         case INTEGER ->
             guardInteger(script, exists, value, domain, owner.className(), attributeName);
         case REAL -> guardReal(script, exists, value, domain, owner.className(), attributeName);
+        case BOOLEAN -> guardBoolean(script, exists, value, domain, owner.className(), attributeName);
         case UREAL, UINTEGER ->
             throw new IllegalArgumentException(
                 type
@@ -58,7 +59,6 @@ public final class AttributeEncoder {
                     + "."
                     + attributeName
                     + "' requires paired value/confidence domains");
-        case BOOLEAN -> {}
       }
     }
     return new AttributeValues(owner.className(), attributeName, type, names);
@@ -392,6 +392,39 @@ public final class AttributeEncoder {
     List<SmtTerm> options = new ArrayList<>();
     for (int i = 0; i < d.enumeratedValues().size(); i++)
       options.add(Smt.eq(value, Smt.intLit(BigInteger.valueOf(i))));
+    s.assertThat(Smt.app("=>", exists, Smt.or(options)));
+  }
+
+  /**
+   * A Boolean attribute's enumerated domain pins the symbol to its literal candidates
+   * ({@code Set{true, false}} = free, a single candidate = pinned). The guard was MISSING
+   * entirely: the switch had no BOOLEAN arm, so a configured Boolean domain was silently
+   * ignored and the solver chose the value freely -- found by the Kleene-strictness audit,
+   * whose forced-false operand came back true.
+   */
+  private static void guardBoolean(
+      SmtScript s, SmtTerm exists, SmtTerm value, AttributeDomain d, String cls, String attr) {
+    if (d.enumeratedValues().isEmpty()) {
+      return;
+    }
+    List<SmtTerm> options = new ArrayList<>();
+    for (String candidate : d.enumeratedValues()) {
+      String normalized = candidate.trim();
+      if (normalized.equalsIgnoreCase("true")) {
+        options.add(Smt.eq(value, Smt.bool(true)));
+      } else if (normalized.equalsIgnoreCase("false")) {
+        options.add(Smt.eq(value, Smt.bool(false)));
+      } else {
+        throw new IllegalArgumentException(
+            "boolean attribute '"
+                + cls
+                + "."
+                + attr
+                + "' has a non-literal configured candidate '"
+                + candidate
+                + "'");
+      }
+    }
     s.assertThat(Smt.app("=>", exists, Smt.or(options)));
   }
 

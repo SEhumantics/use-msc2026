@@ -30,10 +30,11 @@ import org.tzi.use.uml.mm.ModelFactory;
  * self bound to that slot>}, for every derived Integer AND Boolean attribute registration
  * (including the per-subclass registrations of an inherited derived attribute). A configured
  * domain that contradicts the derivation therefore becomes a genuine UNSATISFIABLE, which is
- * the correct reading: no instance satisfies both the configuration and the model. The Boolean
- * attribute's own domain is unconstraining by design (AttributeEncoder's BOOLEAN case is a
- * documented no-op), so the flag's value comes ENTIRELY from its derivation -- which is what
- * these tests assert.
+ * the correct reading: no instance satisfies both the configuration and the model. 2026-08-30:
+ * this now holds for the BOOLEAN domain too -- AttributeEncoder's BOOLEAN case was a no-op (the
+ * flag's value came entirely from its derivation and a configured domain was silently ignored),
+ * which guardBoolean fixed; the negation scenario below was updated to the consistent reading
+ * (its flag domain now AGREES with the derivation instead of relying on being ignored).
  */
 public class DerivedAttributeTest {
 
@@ -121,7 +122,7 @@ public class DerivedAttributeTest {
   @Test
   public void booleanDerivedAttributeNegationFollowsItsDerivation() throws Exception {
     ModelFinderResult negated = find(
-        "FlagNegated", List.of("5"), List.of("10"), List.of("true"));
+        "FlagNegated", List.of("5"), List.of("10"), List.of("false"));
     assertTrue("base = 5 makes the derived flag false, so not flag holds",
         negated.satisfiable());
     assertTrue(verdictFor(negated, "X::FlagNegated").holds());
