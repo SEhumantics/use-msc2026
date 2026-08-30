@@ -254,25 +254,66 @@ public class ArithmeticTranslationTest {
   /**
    * {@code a.i + a.r} type-checks and widens to {@code Real} under USE's own {@code
    * ArithOperation.matches} (confirmed by compiling this exact fixture and inspecting the AST:
-   * {@code ExpStdOp} opname {@code "+"}, {@code a.length==2}, result type {@code Real}) -- so this
-   * is a genuinely reachable shape, not a defensive-only guard, and must be refused rather than
-   * silently emitting a mixed-sort SMT term.
+   * {@code ExpStdOp} opname {@code "+"}, {@code a.length==2}, result type {@code Real}).
+   *
+   * <p>2026-08-30: SUPPORTED -- this test used to pin the crisp-Integer refusal this shape hit
+   * ("only plain crisp Integer arithmetic is supported"); the Real-operand slice superseded that
+   * refusal (the same deliberate pin inversion the RealDivision slice documented), so the test now
+   * pins the WIDENING positively: the Int-sorted {@code a.i} lifts with {@code to_real}, the sum
+   * is Real-sorted, and {@code a.i + a.r = a.r} forces {@code i = 0} -- pinning {@code i = 1} is
+   * UNSAT, pinning {@code i = 0} is SAT, so the widened value genuinely flows into the equality.
    */
   @Test
-  public void binaryPlusOverARealOperandFailsClosedRatherThanMixingSorts() throws Exception {
+  public void binaryPlusOverARealOperandWidensToRealAndSolves() throws Exception {
     MModel model = compileArithmeticScope();
     MClassInvariant inv = findInvariant(model, "realOperandNotConfused");
 
-    SmtTranslationException thrown =
-        assertThrows(
-            SmtTranslationException.class,
-            () ->
-                ExpressionTranslator.translate(
-                    inv.bodyExpression(),
-                    new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of(), Map.of())));
+    SmtScript script = new SmtScript("QF_LIRA");
+    ObjectSlots as = ObjectSlotEncoder.encode(script, List.of(new ClassScope("A", 1, 1))).get("A");
+    AttributeDomain iDomain = new AttributeDomain("A", "i", null, List.of(), null, null);
+    AttributeValues iValues =
+        AttributeEncoder.encode(script, as, "i", AttributeType.INTEGER, iDomain);
+    AttributeDomain rDomain = new AttributeDomain("A", "r", null, List.of(), null, null);
+    AttributeValues rValues =
+        AttributeEncoder.encode(script, as, "r", AttributeType.REAL, rDomain);
+    TranslationContext ctx =
+        new TranslationContext(
+            Map.of("a", new VariableBinding("A", 0)),
+            Map.of("A.i", iValues, "A.r", rValues),
+            Map.of("A.i", iDomain, "A.r", rDomain),
+            Map.of("A", as),
+            Map.of());
+    SmtTerm translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx);
 
-    assertEquals(FragmentBoundary.TIER_2, thrown.boundary());
-    assertTrue(thrown.getMessage(), thrown.getMessage().contains("non-Integer operand"));
+    script.assertThat(Smt.sym("A_0_exists"));
+    script.assertThat(translated);
+
+    // i + r = r simplifies to i = 0 over the Reals: i = 1 is genuinely unsatisfiable.
+    script.assertThat(Smt.eq(Smt.sym(iValues.valueNames().get(0)), Smt.intLit(BigInteger.ONE)));
+    assertEquals(SolverOutcome.UNSAT, solve(script).outcome());
+
+    SmtScript satScript = new SmtScript("QF_LIRA");
+    ObjectSlots satAs =
+        ObjectSlotEncoder.encode(satScript, List.of(new ClassScope("A", 1, 1))).get("A");
+    AttributeDomain satIDomain = new AttributeDomain("A", "i", null, List.of(), null, null);
+    AttributeValues satIValues =
+        AttributeEncoder.encode(satScript, satAs, "i", AttributeType.INTEGER, satIDomain);
+    AttributeDomain satRDomain = new AttributeDomain("A", "r", null, List.of(), null, null);
+    AttributeValues satRValues =
+        AttributeEncoder.encode(satScript, satAs, "r", AttributeType.REAL, satRDomain);
+    TranslationContext satCtx =
+        new TranslationContext(
+            Map.of("a", new VariableBinding("A", 0)),
+            Map.of("A.i", satIValues, "A.r", satRValues),
+            Map.of("A.i", satIDomain, "A.r", satRDomain),
+            Map.of("A", satAs),
+            Map.of());
+    SmtTerm satTranslated = ExpressionTranslator.translate(inv.bodyExpression(), satCtx);
+    satScript.assertThat(Smt.sym("A_0_exists"));
+    satScript.assertThat(
+        Smt.eq(Smt.sym(satIValues.valueNames().get(0)), Smt.intLit(BigInteger.ZERO)));
+    satScript.assertThat(satTranslated);
+    assertEquals(SolverOutcome.SAT, solve(satScript).outcome());
   }
 
   /**
@@ -409,29 +450,61 @@ public class ArithmeticTranslationTest {
 
   /**
    * {@code a.i * a.r} type-checks and widens to {@code Real} under the same {@code
-   * ArithOperation.matches} rule as {@code binaryPlusOverARealOperandFailsClosedRatherThanMixingSorts}
-   * above (confirmed by compiling this exact fixture and inspecting the AST: {@code ExpStdOp}
-   * opname {@code "*"}, {@code a.length==2}, result type {@code Real}) -- so {@code *} must refuse
-   * a non-Integer operand exactly like {@code +}/{@code -} already do, reusing the same {@link
-   * #requireCrispInteger} guard rather than a separate one. The type guard runs before the
-   * linearity guard, so this is refused as a type mismatch even though {@code a.r} is also
-   * non-constant.
+   * ArithOperation.matches} rule as {@code binaryPlusOverARealOperandWidensToRealAndSolves} above.
+   *
+   * <p>2026-08-30: the Real-operand slice superseded the crisp-Integer type refusal this test used
+   * to pin, but the shape this old fixture used ({@code a.i * a.r}) is genuinely nonlinear --
+   * attribute times attribute -- so it is now refused by the linearity guard instead, under the
+   * widened, numeric phrasing. The positive pin lives on the new fixture invariant {@code
+   * realTimesLiteralCoefficient} ({@code a.r * 2 = 3}): the literal-coefficient product over a
+   * Real attribute is supported, r = 1.5 satisfies it, r = 1.0 does not -- the product computes
+   * over the Reals, never a truncated Integer reading.
    */
   @Test
-  public void binaryTimesOverARealOperandFailsClosedRatherThanMixingSorts() throws Exception {
+  public void binaryTimesOverARealOperandWidensToRealAndSolves() throws Exception {
     MModel model = compileArithmeticScope();
-    MClassInvariant inv = findInvariant(model, "productWithRealOperandNotConfused");
+    MClassInvariant inv = findInvariant(model, "realTimesLiteralCoefficient");
 
-    SmtTranslationException thrown =
-        assertThrows(
-            SmtTranslationException.class,
-            () ->
-                ExpressionTranslator.translate(
-                    inv.bodyExpression(),
-                    new TranslationContext(Map.of(), Map.of(), Map.of(), Map.of(), Map.of())));
+    SmtScript script = new SmtScript("QF_LIRA");
+    ObjectSlots as = ObjectSlotEncoder.encode(script, List.of(new ClassScope("A", 1, 1))).get("A");
+    AttributeDomain rDomain = new AttributeDomain("A", "r", null, List.of(), null, null);
+    AttributeValues rValues =
+        AttributeEncoder.encode(script, as, "r", AttributeType.REAL, rDomain);
+    TranslationContext ctx =
+        new TranslationContext(
+            Map.of("a", new VariableBinding("A", 0)),
+            Map.of("A.r", rValues),
+            Map.of("A.r", rDomain),
+            Map.of("A", as),
+            Map.of());
+    SmtTerm translated = ExpressionTranslator.translate(inv.bodyExpression(), ctx);
 
-    assertEquals(FragmentBoundary.TIER_2, thrown.boundary());
-    assertTrue(thrown.getMessage(), thrown.getMessage().contains("non-Integer operand"));
+    script.assertThat(Smt.sym("A_0_exists"));
+    script.assertThat(translated);
+
+    // r * 2 = 3 holds at r = 1.5 (exactly representable), not at r = 1.0.
+    script.assertThat(Smt.eq(Smt.sym(rValues.valueNames().get(0)), Smt.realLit(new java.math.BigDecimal("1.5"))));
+    assertEquals(SolverOutcome.SAT, solve(script).outcome());
+
+    SmtScript missScript = new SmtScript("QF_LIRA");
+    ObjectSlots missAs =
+        ObjectSlotEncoder.encode(missScript, List.of(new ClassScope("A", 1, 1))).get("A");
+    AttributeDomain missRDomain = new AttributeDomain("A", "r", null, List.of(), null, null);
+    AttributeValues missRValues =
+        AttributeEncoder.encode(missScript, missAs, "r", AttributeType.REAL, missRDomain);
+    TranslationContext missCtx =
+        new TranslationContext(
+            Map.of("a", new VariableBinding("A", 0)),
+            Map.of("A.r", missRValues),
+            Map.of("A.r", missRDomain),
+            Map.of("A", missAs),
+            Map.of());
+    SmtTerm missTranslated = ExpressionTranslator.translate(inv.bodyExpression(), missCtx);
+    missScript.assertThat(Smt.sym("A_0_exists"));
+    missScript.assertThat(
+        Smt.eq(Smt.sym(missRValues.valueNames().get(0)), Smt.realLit(new java.math.BigDecimal("1.0"))));
+    missScript.assertThat(missTranslated);
+    assertEquals(SolverOutcome.UNSAT, solve(missScript).outcome());
   }
 
   /**
@@ -679,8 +752,8 @@ public class ArithmeticTranslationTest {
           2 * a.j = 6
         context a: A inv productOfTwoNonConstantIntegers:
           a.i * a.j = 6
-        context a: A inv productWithRealOperandNotConfused:
-          a.i * a.r = a.r
+        context a: A inv realTimesLiteralCoefficient:
+          a.r * 2 = 3
         context a: A inv unaryPlusIsIdentity:
           a.i = +a.j
         """;

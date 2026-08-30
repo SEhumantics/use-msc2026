@@ -710,30 +710,46 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * toBooleanC}, or (b) {@code toBooleanC} itself, whose own extraction in {@link #uTypeThreshold}
    * requires the compared operand to be a bare {@link ExpAttrOp} and refuses an arithmetic
    * sub-expression before ever calling this method -- so a UInteger operand cannot reach here
-   * through any invariant the real front end will actually compile. A genuinely crisp {@code Real}
-   * operand IS reachable this way ({@code self.i + self.r = self.r2} compiles and widens to {@code
-   * Real} per the same {@code ArithOperation.matches}, and {@code self.i * self.r = self.r2} widens
-   * the same way under {@code *}), and is the shape this guard actually refuses in practice.
+   * through any invariant the real front end will actually compile. A genuinely crisp {@code
+   * Real} operand IS reachable this way ({@code self.i + self.r = self.r2} compiles and widens to
+   * {@code Real} per the same {@code ArithOperation.matches}, and {@code self.i * self.r = self.r2}
+   * widens the same way under {@code *}); it is now SUPPORTED: the operation widens to Real (the
+   * same widening USE's own evaluator performs via evalRealResult), the Int-sorted side lifts
+   * with {@code to_real} exactly like {@link #realDivision}'s dividend, and the Real-sorted
+   * result composes with the existing mixed-sort guards in {@link #comparison} and
+   * {@link #orderedComparison}.
    */
   private TranslatedExpression arithmetic(String opname, Expression[] a) {
     if (a.length == 2) {
-      requireCrispInteger(a[0], opname);
-      requireCrispInteger(a[1], opname);
+      requireCrispNumeric(a[0], opname);
+      requireCrispNumeric(a[1], opname);
       if ("*".equals(opname)) {
         requireLinearProduct(a[0], a[1]);
       }
       TranslatedExpression l = argResult(a[0]);
       TranslatedExpression r = argResult(a[1]);
+      // A REAL-typed operand widens the whole operation to Real (USE's
+      // ArithOperation.matches widens (Integer|Real) op (Integer|Real) to Real, and
+      // Op_number_plus/-/* compute via evalRealResult then): the Int-sorted side lifts with
+      // to_real, mirroring realDivision's dividend lift, and the result term is Real-sorted.
+      boolean real = a[0].type().isTypeOfReal() || a[1].type().isTypeOfReal();
+      SmtTerm leftValue =
+          real && a[0].type().isTypeOfInteger() ? Smt.app("to_real", l.value()) : l.value();
+      SmtTerm rightValue =
+          real && a[1].type().isTypeOfInteger() ? Smt.app("to_real", r.value()) : r.value();
       return new TranslatedExpression(
-          Smt.and(List.of(l.defined(), r.defined())), Smt.app(opname, l.value(), r.value()));
+          Smt.and(List.of(l.defined(), r.defined())),
+          Smt.app(opname, leftValue, rightValue));
     }
     if (a.length == 1 && "-".equals(opname)) {
-      requireCrispInteger(a[0], opname);
+      requireCrispNumeric(a[0], opname);
       TranslatedExpression operand = argResult(a[0]);
+      // SMT-LIB's 1-argument negation form is sort-generic: it negates a Real term exactly
+      // like an Int term.
       return new TranslatedExpression(operand.defined(), Smt.app("-", operand.value()));
     }
     if (a.length == 1 && "+".equals(opname)) {
-      requireCrispInteger(a[0], opname);
+      requireCrispNumeric(a[0], opname);
       return argResult(a[0]);
     }
     throw unsupported(
@@ -1078,24 +1094,24 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * this task was told not to make.
    */
   private static void requireLinearProduct(Expression left, Expression right) {
-    if (!isIntegerLiteral(left) && !isIntegerLiteral(right)) {
+    if (!isNumericLiteral(left) && !isNumericLiteral(right)) {
       throw unsupported(
           FragmentBoundary.TIER_2,
-          "operator '*' between two non-constant Integer operands: multiplying two non-constant"
-              + " terms is nonlinear arithmetic, which this project's pinned QF_LIA solver logic"
+          "operator '*' between two non-constant numeric operands: multiplying two non-constant"
+              + " terms is nonlinear arithmetic, which this project's pinned QF_LIRA solver logic"
               + " does not accept (confirmed against the real Z3 binary) -- only a product with at"
-              + " least one compile-time Integer literal operand is supported");
+              + " least one compile-time numeric literal operand is supported");
     }
   }
 
-  private static boolean isIntegerLiteral(Expression e) {
-    if (e instanceof ExpConstInteger) {
+  private static boolean isNumericLiteral(Expression e) {
+    if (e instanceof ExpConstInteger || e instanceof ExpConstReal) {
       return true;
     }
     return e instanceof ExpStdOp op
         && "-".equals(op.opname())
         && op.args().length == 1
-        && isIntegerLiteral(op.args()[0]);
+        && isNumericLiteral(op.args()[0]);
   }
 
   private static void requireCrispInteger(Expression e, String opname) {
@@ -1107,6 +1123,32 @@ public final class ExpressionTranslator implements ExpressionVisitor {
               + "' over a non-Integer operand of type "
               + e.type()
               + ": only plain crisp Integer arithmetic is supported");
+    }
+  }
+
+  /**
+   * {@link #requireCrispInteger}'s numeric superset for {@code +}/{@code -}/{@code *}: a crisp
+   * Real operand widens the operation to Real (USE's own ArithOperation widening), and the
+   * translator lifts the Int-sorted side. U-typed operands stay refused -- the compiler itself
+   * rejects every invariant shape that could carry a U-typed arithmetic result back to Boolean,
+   * and {@code guardAgainstUncertainAttribute} re-guards bare attribute operands.
+   */
+  private void requireCrispNumeric(Expression e, String opname) {
+    if (e instanceof ExpAttrOp attr
+        && attr.objExp() instanceof ExpVariable source
+        && !localBindings.containsKey(source.getVarname())) {
+      guardAgainstUncertainAttribute(
+          context.attributeValues(context.binding(source.getVarname()).className(),
+              attr.attr().name()));
+    }
+    if (!e.type().isTypeOfInteger() && !e.type().isTypeOfReal()) {
+      throw unsupported(
+          FragmentBoundary.TIER_2,
+          "operator '"
+              + opname
+              + "' over a non-numeric operand of type "
+              + e.type()
+              + ": only plain crisp Integer/Real arithmetic is supported");
     }
   }
 
