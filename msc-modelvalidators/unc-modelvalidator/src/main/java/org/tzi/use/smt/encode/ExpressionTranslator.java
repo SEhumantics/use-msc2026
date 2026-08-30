@@ -4374,13 +4374,24 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       SmtTerm repR = uArithRepresentative(arith.args()[1]);
       boolean leftInt = isUArithInteger(arith.args()[0]);
       boolean rightInt = isUArithInteger(arith.args()[1]);
-      if (repL == null || repR == null || leftInt != rightInt) {
+      if (repL == null || repR == null) {
         throw unsupported(
             FragmentBoundary.UTYPE_CORE,
             "let-bound U-type variable '"
                 + e.getVarname()
-                + "': composed initializers must combine same-family U-typed attribute accesses"
-                + " or crisp numeric literals (mixed UInteger/UReal is not supported)");
+                + "': composed initializers must combine U-typed attribute accesses or crisp"
+                + " numeric literals");
+      }
+      // MIXED FAMILY (UInteger + UReal): USE widens the UInteger operand through UReal, so the
+      // Int-sorted part lifts with to_real and the composed family is UREAL (no representative
+      // lift at the consumer).
+      if (leftInt != rightInt) {
+        if (leftInt) {
+          repL = Smt.app("to_real", repL);
+        }
+        if (rightInt) {
+          repR = Smt.app("to_real", repR);
+        }
       }
       valueTerm =
           "+".equals(arith.opname())
