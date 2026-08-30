@@ -2740,6 +2740,64 @@
         "pairwise-enumeration",
         "authored"
       ]
+    },
+    {
+      "id": "SetAttr",
+      "directory": "SetAttr",
+      "useFile": "SetAttr.use",
+      "propertiesFile": "SetAttr.properties",
+      "section": "main",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceDetail": "Authored for this thesis project (msc-4, Trong-Nghia Be) to give Set(Integer)-typed attributes with size bounds their wired benchmark coverage: membership-Bool set encoding, configured element pool, per-object size bounds, membership invariants.",
+      "provenanceCitation": null,
+      "features": [
+        "attr.collection-typed-with-size-bounds",
+        "config.attribute-bounds",
+        "prim.integer-comparisons"
+      ],
+      "question": "Does a Set(Integer)-typed attribute with pool {1,2,3} and size bounds [1,2] admit an instance whose set contains the forced tags 1 and 2 (cardinality 2, within bounds)?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "scenarioTags": [
+        "set-attribute",
+        "size-bounds",
+        "membership",
+        "authored"
+      ]
+    },
+    {
+      "id": "SetAttr-UNSAT",
+      "directory": "SetAttr",
+      "useFile": "SetAttr.use",
+      "propertiesFile": "SetAttr.properties",
+      "section": "unsat",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceDetail": "UNSAT counterpart of SetAttr: all three membership invariants active with size bounds [2,2] force tags {1,2,3} -- cardinality 3 exceeds maxSize 2, a genuine cardinality contradiction over a fully populated model.",
+      "provenanceCitation": null,
+      "features": [
+        "attr.collection-typed-with-size-bounds",
+        "config.attribute-bounds"
+      ],
+      "question": "Do the size bounds genuinely constrain the membership set -- refuting the configuration whose forced tags need cardinality 3 against maxSize 2?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "scenarioTags": [
+        "set-attribute",
+        "size-bounds",
+        "cardinality-contradiction",
+        "authored"
+      ]
     }
   ]
 }

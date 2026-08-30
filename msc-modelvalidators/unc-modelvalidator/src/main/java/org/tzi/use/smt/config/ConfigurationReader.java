@@ -147,6 +147,14 @@ public final class ConfigurationReader {
               : List.of();
       BigDecimal min = decimal(entries, attribute + "_min");
       BigDecimal max = decimal(entries, attribute + "_max");
+      BigDecimal minSize = decimal(entries, attribute + "_minSize");
+      BigDecimal maxSize = decimal(entries, attribute + "_maxSize");
+      if (minSize != null) {
+        min = minSize;
+      }
+      if (maxSize != null) {
+        max = maxSize;
+      }
       if (min != null || max != null || !values.isEmpty()) {
         String[] ownerAndName = splitAttribute(attribute);
         domains.add(new AttributeDomain(ownerAndName[0], ownerAndName[1], null, values, min, max));
@@ -248,20 +256,9 @@ public final class ConfigurationReader {
               + " (\"String_string\" + i), which this encoding has no counterpart for, so it is"
               + " refused rather than reinterpreted as a domain");
     }
-    for (String attribute : vocabulary.attributeNames()) {
-      deferredKeyDiagnostic(
-          entries,
-          diagnostics,
-          attribute + "_minSize",
-          "collection-valued attribute bounds are retained but unsupported before collection"
-              + " encoding");
-      deferredKeyDiagnostic(
-          entries,
-          diagnostics,
-          attribute + "_maxSize",
-          "collection-valued attribute bounds are retained but unsupported before collection"
-              + " encoding");
-    }
+    // Collection-typed attribute SIZE bounds (the incumbent's attributeColSizeMin/Max keys):
+    // parsed into the domain's lower/upper, which the SET_INTEGER encoder reads as the
+    // per-object set cardinality bounds. Defaults 0/unbounded (attributesColSizeMin/Max).
     AnalysisConfiguration configuration =
         new AnalysisConfiguration(
             classes,

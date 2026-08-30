@@ -1,0 +1,27 @@
+model SetAttr
+
+-- Authored specifically to give unc-modelvalidator's Set(Integer)-typed
+-- attributes with size bounds (attr.collection-typed-with-size-bounds) a
+-- real, wired benchmark scenario. The attribute is a membership-Bool set over
+-- the configured pool; the size bounds constrain each object's set
+-- cardinality; the invariant reads membership through ->includes.
+
+class Document
+attributes
+  tags : Set(Integer)
+end
+
+constraints
+
+-- The document must carry tag 1.
+context d : Document inv hasTagOne:
+  d.tags->includes(1)
+
+-- The document must also carry tag 2 (both members forced).
+context d : Document inv hasTagTwo:
+  d.tags->includes(2)
+
+-- Forces a third distinct tag; combined with the size bounds this pins the
+-- set to exactly {1,2,3}.
+context d : Document inv hasTagThree:
+  d.tags->includes(3)

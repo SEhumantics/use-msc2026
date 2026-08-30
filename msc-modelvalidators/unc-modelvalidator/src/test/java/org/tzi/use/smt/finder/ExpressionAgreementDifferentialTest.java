@@ -265,8 +265,11 @@ public class ExpressionAgreementDifferentialTest {
             + " the remaining constants are the crisp attribute types, which are not U-types at"
             + " all",
         List.of(
-            "STRING", "INTEGER", "REAL", "UREAL", "UINTEGER", "UBOOLEAN", "USTRING", "BOOLEAN",
-            "ENUM"),
+            // SET_INTEGER (2026-08-30): the Set(Integer)-typed attribute slice added the tenth
+            // constant; the differential generator scopes itself to the U-type families and the
+            // crisp scalars, so SET_INTEGER rides the crisp arm unchanged.
+            "STRING", "INTEGER", "REAL", "SET_INTEGER", "UREAL", "UINTEGER", "UBOOLEAN",
+            "USTRING", "BOOLEAN", "ENUM"),
         java.util.Arrays.stream(AttributeType.values()).map(Enum::name).toList());
     assertEquals(
         "every U-type AttributeType is uncertain and every crisp one is not, so the four generated"
