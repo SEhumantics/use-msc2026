@@ -6400,10 +6400,22 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           navigationReceiverOperation(operation, arguments, navigation, sourceVar.getVarname(), inProgress);
       return;
     }
+    // DEEP RECEIVER CHAIN (x.b.c.op(), any number of single-valued hops): the chain's
+    // population is built hop by hop by navigationHop -- per final-destination slot, the
+    // reachability guard composes every hop's link term -- so the call expands exactly like
+    // the single-hop path, with self bound to each member's CONCRETE binding (per-slot
+    // dispatch) gated by the chain reachability instead of a single link term.
+    if (receiver instanceof ExpNavigation navigation
+        && !navigation.getDestination().isCollection()
+        && navigation.getObjectExpression() instanceof ExpNavigation) {
+      result = deepNavigationReceiverOperation(operation, arguments, navigation, inProgress);
+      return;
+    }
     throw unsupported(
         FragmentBoundary.TIER_2,
-        "operation call on a receiver that is neither a bare variable nor a single-valued"
-            + " navigation from a context variable is not yet supported");
+        "operation call on a receiver that is neither a bare variable, a single-valued"
+            + " navigation, nor a multi-hop navigation chain from a context variable is not"
+            + " yet supported");
   }
 
   /**
@@ -6487,6 +6499,41 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * cases exactly as {@link #navigationObjectLet} builds them for a let-bound navigation
    * initializer.
    */
+  private TranslatedExpression deepNavigationReceiverOperation(
+      MOperation operation,
+      Expression[] arguments,
+      ExpNavigation navigation,
+      Set<MOperation> inProgress) {
+    NavigationHop hop = navigationHop(navigation);
+    List<PopulationMember> population = hop.population();
+    if (population.isEmpty()) {
+      // No destination slots configured: the receiver can never exist, so the call is
+      // undefined and USE's total-equality rule rejects every demand on it.
+      return new TranslatedExpression(Smt.bool(false), crispPlaceholder(operation.resultType()));
+    }
+    List<SmtTerm> definedCases = new ArrayList<>();
+    List<SmtTerm> gatedValues = new ArrayList<>();
+    for (PopulationMember member : population) {
+      MOperation dispatched =
+          context.dispatchOperation(member.binding().className(), operation.name());
+      MOperation resolved = dispatched != null ? dispatched : operation;
+      java.util.Set<MOperation> slotInProgress = new java.util.HashSet<>(inProgress);
+      slotInProgress.add(resolved);
+      TranslatedExpression body =
+          inlineOperationBody(
+              resolved, arguments, context.withBinding("self", member.binding()), slotInProgress);
+      SmtTerm gate = Smt.and(List.of(member.memberGuard(), body.defined()));
+      definedCases.add(gate);
+      gatedValues.add(gate);
+      gatedValues.add(body.value());
+    }
+    SmtTerm value = gatedValues.get(gatedValues.size() - 1);
+    for (int k = gatedValues.size() - 2; k >= 0; k -= 2) {
+      value = Smt.ite(gatedValues.get(k), gatedValues.get(k + 1), value);
+    }
+    return new TranslatedExpression(Smt.or(definedCases), value);
+  }
+
   private TranslatedExpression navigationReceiverOperation(
       MOperation operation,
       Expression[] arguments,
