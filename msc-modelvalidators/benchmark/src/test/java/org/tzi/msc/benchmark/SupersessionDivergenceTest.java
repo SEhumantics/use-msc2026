@@ -44,6 +44,9 @@ import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
 import org.tzi.use.uml.ocl.expr.Evaluator;
 import org.tzi.use.uml.ocl.value.BooleanValue;
+import org.tzi.use.uml.ocl.value.IntegerValue;
+import org.tzi.use.uml.ocl.value.ObjectValue;
+import org.tzi.use.uml.ocl.value.VarBindings;
 import org.tzi.use.uml.ocl.value.RealValue;
 import org.tzi.use.uml.ocl.value.URealValue;
 import org.tzi.use.uml.ocl.value.Value;
@@ -91,6 +94,7 @@ public class SupersessionDivergenceTest {
 	private static final String UREAL_ERASURE_CASE = "URealThreshold-NominalErasure";
 	private static final String SELF_CYCLE_CASE = "AggregationComposition-SelfCycle";
 	private static final String TRANSLATION_GAP_CASE = "Redefines-TranslationGap";
+	private static final String DERIVED_CASE = "DerivedAttr-UNSAT";
 	private static final List<String> FALSE_ACCEPT_CASES = List.of(UREAL_BELOW_CASE, UREAL_ERASURE_CASE);
 
 	private static ExampleManifest manifest;
@@ -363,6 +367,65 @@ public class SupersessionDivergenceTest {
 			assertFalse(id + ": USE must REFUTE the only candidate, or the corpus's UNSAT oracle is wrong "
 					+ "and this whole row must be withdrawn", ((BooleanValue) verdict).value());
 		}
+	}
+
+	/**
+	 * The seventh divergence's mechanism, re-pinned empirically: the incumbent never constrains a
+	 * derived attribute's STORED value (DerivedAttribute.constraints() is Formula.TRUE, bounds are
+	 * skipped), so the derivation-vs-domain contradiction in DerivedAttr-UNSAT (total pinned to 6
+	 * by qty 2 + unitPrice 4, domain {5}) is invisible to it and it accepts. Fresh pipeline
+	 * re-check 2026-08-31: all five SAT backends SATISFIABLE.
+	 */
+	@Test
+	public void kodkodAcceptsTheDerivedModelWhoseDerivationNeverConstrainsStorage() throws Exception {
+		assertObservedKodkodOutcome(entry(DERIVED_CASE), Solution.Outcome.SATISFIABLE);
+	}
+
+	/** The derivation-aware backend enforces total = 6 against the {5} domain, and refutes. */
+	@Test
+	public void smtRefutesTheDerivedDomainContradiction() throws Exception {
+		ExampleEntry ex = entry(DERIVED_CASE);
+		ModelFinderResult result = smtResult(ex);
+		assertFalse(DERIVED_CASE + ": expected UNSAT -- the derivation pins total to 6 against the"
+				+ " configured domain {5}", result.satisfiable());
+	}
+
+	/**
+	 * The ground truth, established with no solver: build the state the [unsat] configuration
+	 * forces (one Invoice, qty = 2, unitPrice = 4), evaluate the derive expression through USE's
+	 * own evaluator, and confirm it lands outside the configured domain. If this ever stops
+	 * holding, the corpus's UNSAT oracle for this row is wrong and the row must be withdrawn.
+	 */
+	@Test
+	public void useEvaluatorPinsTheDerivedValueOutsideItsConfiguredDomain() throws Exception {
+		ExampleEntry ex = entry(DERIVED_CASE);
+		Configuration config = section(ex);
+		assertEquals(DERIVED_CASE + ": the section must pin the domain the contradiction needs",
+				"Set{5}", config.getString("Invoice_total"));
+		assertEquals(DERIVED_CASE + ": exactly one candidate qty", "Set{2}",
+				config.getString("Invoice_qty"));
+		assertEquals(DERIVED_CASE + ": exactly one candidate unitPrice", "Set{4}",
+				config.getString("Invoice_unitPrice"));
+
+		MModel model = compile(ex);
+		MClass cls = model.getClass("Invoice");
+		MAttribute qty = cls.attribute("qty", true);
+		MAttribute unitPrice = cls.attribute("unitPrice", true);
+		MAttribute total = cls.attribute("total", true);
+		assertNotNull(DERIVED_CASE + ": total must be derived for this oracle to work",
+				total.getDeriveExpression());
+		MSystemState state = new MSystem(model).state();
+		MObject o1 = state.createObject(cls, "i1");
+		o1.state(state).setAttributeValue(qty, new IntegerValue(2));
+		o1.state(state).setAttributeValue(unitPrice, new IntegerValue(4));
+
+		VarBindings bindings = new VarBindings();
+		bindings.push("self", new ObjectValue(cls, o1));
+		Value derived = new Evaluator().eval(total.getDeriveExpression(), state, bindings);
+		assertTrue(DERIVED_CASE + ": the derivation must evaluate to a definite Integer, was "
+				+ derived, derived instanceof IntegerValue);
+		assertEquals(DERIVED_CASE + ": USE's own evaluator must pin total to 6",
+				6, ((IntegerValue) derived).value());
 	}
 
 	@Test

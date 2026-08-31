@@ -137,7 +137,10 @@ public class ManifestSchemaTest {
 	 * (AggregationComposition-SelfCycle: the incumbent's unconditional single-association
 	 * composition-cycle constraint ignoring the aggregationcyclefreeness toggle; Redefines-
 	 * TranslationGap: the incumbent's missing redefines handling making a navigation vacuously
-	 * true), so the corpus now carries SIX.
+	 * true). 2026-08-31: a SEVENTH, DerivedAttr-UNSAT -- the incumbent's derived attributes
+ * never constrain their stored value (DerivedAttribute.constraints() is Formula.TRUE), so a
+ * derivation-vs-domain contradiction is invisible to it -- sanctioned and added; a fresh
+ * pipeline re-check confirmed the recorded outcome on all five SAT backends.
 	 */
 	@Test
 	public void everySupersessionRowFillsAllFiveStudyBColumnsConsistently() {
@@ -167,23 +170,24 @@ public class ManifestSchemaTest {
 			assertFalse(ex.id + ": a supersession row must actually diverge from the incumbent",
 					ex.supersession.kodkodOutcome.equals(ex.supersession.smtOutcome));
 		}
-		assertEquals("Study B supersession rows in the corpus", 6, rows);
+		assertEquals("Study B supersession rows in the corpus", 7, rows);
 	}
 
 	/**
-	 * Spec S9 named FOUR Study B cases; the 2026-08-30 deliberate update added TWO
+	 * Spec S9 named FOUR Study B cases; 2026-08-30 added TWO more, and 2026-08-31 added a
 	 * mechanism-distinct rows (single-association composition-cycle toggle ignored; redefines
 	 * translation gap), and the corpus is where the full set is either covered or not. Pinning the
 	 * exact ids stops the table quietly shrinking, and pinning each row's divergence class stops the
 	 * two DIRECTIONS collapsing into one: the bitwidth, off-grid, and self-cycle rows are
 	 * {@code false-unsat} (the incumbent wrongly REFUTES a model that has a witness), the two UReal
-	 * rows and the redefines row are {@code false-sat} (it wrongly ACCEPTS a model that has none).
+	 * rows, the redefines row, and the derived-attribute row are {@code false-sat} (it wrongly
+ * ACCEPTS a model that has none).
 	 * For a verification tool those are not interchangeable -- a false accept reports the model is
 	 * fine when it is not -- so a corpus that labelled them identically would be recording a weaker
 	 * finding than the evidence supports.
 	 */
 	@Test
-	public void theSixStudyBRowsCoverBothDivergenceDirections() {
+	public void theSevenStudyBRowsCoverBothDivergenceDirections() {
 		Map<String, String> byId = new LinkedHashMap<>();
 		for (ExampleEntry ex : manifest.examples) {
 			if (ex.supersession != null) {
@@ -193,7 +197,8 @@ public class ManifestSchemaTest {
 
 		assertEquals("the corpus must carry one Study B row per sanctioned case",
 				List.of("URealThreshold-Below", "URealThreshold-NominalErasure", "IntegerBitwidth-DailyCap",
-						"RealGrid-UnitInterval", "AggregationComposition-SelfCycle", "Redefines-TranslationGap"),
+						"RealGrid-UnitInterval", "DerivedAttr-UNSAT", "AggregationComposition-SelfCycle",
+						"Redefines-TranslationGap"),
 				List.copyOf(byId.keySet()));
 		assertEquals("integer bitwidth: the incumbent wrongly refutes", "false-unsat",
 				byId.get("IntegerBitwidth-DailyCap"));
@@ -207,6 +212,8 @@ public class ManifestSchemaTest {
 				byId.get("AggregationComposition-SelfCycle"));
 		assertEquals("redefines translation gap: the incumbent wrongly ACCEPTS", "false-sat",
 				byId.get("Redefines-TranslationGap"));
+		assertEquals("derived attribute never constrains storage: the incumbent wrongly ACCEPTS",
+				"false-sat", byId.get("DerivedAttr-UNSAT"));
 	}
 
 	/**
@@ -229,7 +236,7 @@ public class ManifestSchemaTest {
 			assertTrue(ex.id + ": the incumbent must have ACCEPTED, was " + ex.supersession.kodkodOutcome,
 					Set.of("SATISFIABLE", "TRIVIALLY_SATISFIABLE").contains(ex.supersession.kodkodOutcome));
 		}
-		assertEquals("false-sat rows in the corpus", 3, rows);
+		assertEquals("false-sat rows in the corpus", 4, rows);
 	}
 
 	@Test

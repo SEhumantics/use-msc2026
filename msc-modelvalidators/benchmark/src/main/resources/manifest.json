@@ -2486,7 +2486,15 @@
         "derived-attribute",
         "derive-constraint",
         "authored"
-      ]
+      ],
+      "supersession": {
+        "study": "B",
+        "kodkodOutcome": "SATISFIABLE",
+        "kodkodReason": "The incumbent never constrains a derived attribute's STORED value: DerivedAttribute.constraints() returns Formula.TRUE and BoundsVisitor skips bounding DerivedAttribute instances entirely (the feature matrix's attr.derived row), while the derivation is only inlined at READ sites (VariableOperationVisitor.handleDerivedAttribute). In DerivedAttr-UNSAT the configuration pins Invoice.total's domain to {5} while the derivation fixes total = qty + unitPrice = 2 + 4 = 6; the incumbent applies {5} to the free stored value and evaluates the invariant's read site as 6 > 0 = true, so the derivation-vs-domain contradiction is invisible and it reports SATISFIABLE. Re-verified fresh on the real pipeline (2026-08-31): all five SAT backends report SATISFIABLE on this row.",
+        "smtOutcome": "UNSATISFIABLE",
+        "groundTruth": "UNSATISFIABLE. Under the model's own declared semantics the derivation fixes total = qty + unitPrice = 2 + 4 = 6 -- USE's evaluator computes the derive expression from the forced attribute values with no solver -- while the configuration declares total's domain as {5}; one value cannot be both, and the [unsat] section pins qty, unitPrice, and total to single candidates, so no instance exists. The section's own header comment documents the arithmetic, and the SMT backend's witness checker independently re-evaluates the model through USE.",
+        "divergenceClass": "false-sat"
+      }
     },
     {
       "id": "Nary",
