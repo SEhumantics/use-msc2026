@@ -2305,14 +2305,74 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         isIntegerToString(l) ? l : isIntegerToString(r) ? r : null;
     if (toStringSide != null) {
       Expression other = toStringSide == l ? r : l;
+      // String-ATTRIBUTE synthesis: `x.code.toString() = x.name` -- per candidate PAIR the
+      // decimal spelling is compile-time Java (String.valueOf of the Integer candidate), so
+      // equality holds iff the String attribute chose a candidate whose spelling equals the
+      // Integer candidate's spelling, under the guard that both sides chose those candidates.
+      // (String LITERALS still resolve by parsing -- the resolve(ExpConstString, ...) branch
+      // above; Enum-encoded operands keep their refusal, an enum has no decimal spelling.)
+      if (other instanceof ExpAttrOp otherAttr
+          && otherAttr.objExp() instanceof ExpVariable otherVar
+          && !localBindings.containsKey(otherVar.getVarname())
+          && other.type().isTypeOfString()) {
+        ExpStdOp toStringOp = (ExpStdOp) toStringSide;
+        Expression intOperand = toStringOp.args()[0];
+        TranslatedExpression intSide = argResult(intOperand);
+        VariableBinding otherBinding = context.binding(otherVar.getVarname());
+        AttributeValues otherValues =
+            context.attributeValues(otherBinding.className(), otherAttr.attr().name());
+        AttributeDomain otherDomain =
+            context.attributeDomain(otherBinding.className(), otherAttr.attr().name());
+        AttributeDomain intDomain = null;
+        if (intOperand instanceof ExpAttrOp intAttr
+            && intAttr.objExp() instanceof ExpVariable iVar
+            && !localBindings.containsKey(iVar.getVarname())) {
+          VariableBinding intBinding = context.binding(iVar.getVarname());
+          intDomain = context.attributeDomain(intBinding.className(), intAttr.attr().name());
+        }
+        if (intDomain == null) {
+          throw unsupported(
+              FragmentBoundary.TIER_2,
+              "toString() over a non-attribute Integer (a computed operand) compared against a"
+                  + " String attribute is not yet supported");
+        }
+        if ((long) intDomain.enumeratedValues().size()
+                * otherDomain.enumeratedValues().size()
+            > 256) {
+          throw unsupported(
+              FragmentBoundary.TIER_2,
+              "toString()-vs-String-attribute comparison: the candidate cross product ("
+                  + (intDomain.enumeratedValues().size() * otherDomain.enumeratedValues().size())
+                  + ") exceeds the 256-combination convention");
+        }
+        List<SmtTerm> pairCases = new ArrayList<>();
+        for (int i = 0; i < intDomain.enumeratedValues().size(); i++) {
+          String spelling = String.valueOf(intDomain.enumeratedValues().get(i));
+          for (int jn = 0; jn < otherDomain.enumeratedValues().size(); jn++) {
+            if (!otherDomain.enumeratedValues().get(jn).equals(spelling)) {
+              continue;
+            }
+            pairCases.add(
+                Smt.and(
+                    List.of(
+                        // The Integer attribute symbol is VALUE-encoded (guardInteger pins it
+                        // to the literal number), so the guard equates the VALUE, not the index.
+                        Smt.eq(intSide.value(),
+                            Smt.intLit(new java.math.BigDecimal(
+                                intDomain.enumeratedValues().get(i)).toBigIntegerExact())),
+                        Smt.eq(Smt.sym(otherValues.valueNames().get(otherBinding.slotIndex())),
+                            Smt.intLit(BigInteger.valueOf(jn))))));
+          }
+        }
+        SmtTerm equal = Smt.or(pairCases);
+        return useEquality(argResult(l), argResult(r), equal);
+      }
       if (other instanceof ExpConstEnum
-          || other.type().isTypeOfString()
           || other.type().isTypeOfEnum()) {
         throw unsupported(
             FragmentBoundary.TIER_2,
-            "toString() over an Integer compared against a String- or Enum-encoded operand:"
-                + " the value-identity encoding only supports String literals and Integer"
-                + " operands");
+            "toString() over an Integer compared against an Enum-encoded operand: an enum has"
+                + " no decimal spelling to synthesize");
       }
     }
     return useEquality(argResult(l), argResult(r));
