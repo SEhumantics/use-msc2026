@@ -5231,6 +5231,14 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       boolean nonEmpty = distinctLiteralElementCount(set) > 0;
       return new TranslatedExpression(
           Smt.bool(true), wantEmpty ? Smt.bool(!nonEmpty) : Smt.bool(nonEmpty));
+    } else if (receiver instanceof ExpClosure closure) {
+      // An OCL closure always INCLUDES its direct image (it is the least fixed point
+      // containing the range relation's first hop), so the closure is empty exactly when its
+      // RANGE is empty -- regardless of what the body's further hops traverse (a redefined
+      // end, an n-ary end, or any heterogeneous continuation). Routing the emptiness decision
+      // to the range reuses every existing range machinery, including the redirect-aware and
+      // n-ary population paths, without reaching the closure fixed point at all.
+      return collectionEmptiness(closure.getRangeExpression(), wantEmpty);
     } else if (constantCollectionContent(receiver) != null) {
       // Constant-content receivers routed through the shared extractor (collection-valued
       // operation results with constant literal bodies): the content is compile-time, so the
