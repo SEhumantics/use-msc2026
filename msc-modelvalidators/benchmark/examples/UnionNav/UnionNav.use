@@ -1,0 +1,54 @@
+model UnionNav
+
+-- Authored (purpose-built) to give the DERIVED-UNION navigation semantics
+-- its wired corpus coverage: no shipped scenario navigates a union role.
+-- Shape follows Subsets.use (C<A, D<B, E<A, F<B; cd subsets ab; ef subsets
+-- ab). This tool derives a union role's content LIVE as the union of its
+-- subsetting associations' links (USE core's own semantics, Subsets.
+-- properties finding 2), so c1.b is exactly cd's links from c1, and e1.b
+-- exactly ef's links from e1 -- the subclass reprojection: an E source
+-- derives nothing from C-D links.
+
+class A
+end
+
+class B
+end
+
+class C < A
+end
+
+class D < B
+end
+
+class E < A
+end
+
+class F < B
+end
+
+association ab between
+  A[*] role a union
+  B[*] role b union
+end
+
+association cd between
+  C[*] role c subsets a
+  D[*] role d subsets b
+end
+
+association ef between
+  E[*] role e subsets a
+  F[*] role f subsets b
+end
+
+constraints
+
+-- The derived-union read: c1.b is non-empty exactly when cd links (c1,d1).
+context c : C inv cSeesDPartner:
+  c.b->notEmpty()
+
+-- The reprojection discriminator: with cd linked but ef empty, an E source
+-- derives NOTHING (cd's C-D links are invisible to an E object).
+context e : E inv eSeesNothingWhenOnlyCdLinked:
+  e.b->isEmpty()

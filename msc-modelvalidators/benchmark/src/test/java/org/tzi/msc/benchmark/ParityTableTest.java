@@ -133,10 +133,11 @@ public class ParityTableTest {
 	 * The figures the gate demands be stated plainly, pinned against a real run rather than asserted
 	 * in prose.
 	 *
-	 * <p><b>Provenance of the pinned numbers.</b> Regenerated 2026-08-31 from the full 80-row corpus
-	 * run at commit {@code 0c3b5917} (RangeBound/-UNSAT added; their Kodkod cells are
+	 * <p><b>Provenance of the pinned numbers.</b> Regenerated 2026-08-31 from the full 82-row corpus
+	 * run (RangeBound/-UNSAT and UnionNav/-UNSAT added; RangeBound's Kodkod cells are
 	 * TRIVIALLY_UNSATISFIABLE -- the incumbent's defined-count reading of <Attr>_min/_max,
-	 * documented in the scenario itself) (the first Study A snapshot to cover the whole corpus -- the
+	 * documented in the scenario itself; UnionNav-UNSAT is the one disagreement -- the
+	 * incumbent accepts a model whose derived-union invariant refutes) (the first Study A snapshot to cover the whole corpus -- the
 	 * previous pin, 45 rows / intersection 6, predated every scenario added since the August-27 gate).
 	 * 2026-08-31, later the same day: the disagreement was RESOLVED BY PROMOTION. DerivedAttr-UNSAT
 	 * became the SEVENTH declared Study B divergence (the incumbent's derived attributes never
@@ -147,26 +148,28 @@ public class ParityTableTest {
 	 */
 	@Test
 	public void theHonestDenominatorOverTheRealCorpusRun() {
-		assertEquals("corpus finding rows", 80, table.summary.corpusRows);
+		assertEquals("corpus finding rows", 82, table.summary.corpusRows);
 		assertEquals("Study B rows are declared divergences, not parity evidence", 7,
 				table.summary.declaredDivergenceRows);
-		assertEquals("parity population", 73, table.summary.parityPopulation);
-		assertEquals("Kodkod real verdicts", 43, table.summary.kodkodRealVerdicts);
-		assertEquals("SMT real verdicts", 71, table.summary.smtRealVerdicts);
-		assertEquals("intersection -- the only honest parity denominator", 41, table.summary.intersection);
-		assertEquals("agreements", 41, table.summary.agreements);
-		assertEquals("undeclared disagreements", 0, table.summary.disagreements);
+		assertEquals("parity population", 75, table.summary.parityPopulation);
+		assertEquals("Kodkod real verdicts", 45, table.summary.kodkodRealVerdicts);
+		assertEquals("SMT real verdicts", 73, table.summary.smtRealVerdicts);
+		assertEquals("intersection -- the only honest parity denominator", 43, table.summary.intersection);
+		assertEquals("agreements", 42, table.summary.agreements);
+		assertEquals("undeclared disagreements", 1, table.summary.disagreements);
 		assertEquals("unclassified disagreements", 0, table.summary.unclassifiedDisagreements);
 	}
 
 	/**
-	 * The intersection's SHAPE is pinned: 41 members, the six original members still in it
-	 * (continuity of the parity claim), the Set-attribute corpus rows in it too, ZERO disagreeing
-	 * members -- the one disagreement the earlier 78-row snapshot had is now the seventh Study B row and
-	 * has left the population by the standing rule.
+	 * The intersection's SHAPE is pinned: 43 members, the six original members still in it
+	 * (continuity of the parity claim), the Set-attribute and range-bound corpus rows in it too,
+	 * and ONE disagreeing member -- {@code UnionNav-UNSAT}: the incumbent accepts a model whose
+	 * derived-union invariant refutes (it drops the union semantics entirely). Promotion to a
+	 * declared Study B row is a recorded candidate, gated on an explicit go-ahead like the
+	 * seventh.
 	 */
 	@Test
-	public void theIntersectionIsFortyOneAgreeingRows() {
+	public void theIntersectionIsFortyThreeRowsWithTheUnionDefectNamed() {
 		List<String> inIntersection = new ArrayList<>();
 		List<String> disagreeing = new ArrayList<>();
 		for (ParityTable.Row row : table.rows) {
@@ -178,7 +181,7 @@ public class ParityTableTest {
 			}
 		}
 
-		assertEquals(41, inIntersection.size());
+		assertEquals(43, inIntersection.size());
 		for (String original : List.of("Library", "Inheritance", "MultipleInheritance", "Library-UNSAT",
 				"Inheritance-UNSAT", "MultipleInheritance-UNSAT")) {
 			assertTrue("the original parity rows must still be in the intersection: " + original,
@@ -188,7 +191,8 @@ public class ParityTableTest {
 				inIntersection.containsAll(List.of("SetAttr", "SetAttr-UNSAT")));
 		assertTrue("the promoted Study B row must have LEFT the parity population",
 				!inIntersection.contains("DerivedAttr-UNSAT"));
-		assertTrue("every intersection member must now agree", disagreeing.isEmpty());
+		assertEquals("exactly one intersection member disagrees -- the union-role defect",
+				List.of("UnionNav-UNSAT"), disagreeing);
 	}
 
 	/**
@@ -206,8 +210,8 @@ public class ParityTableTest {
 			}
 		}
 
-		assertEquals("80 corpus rows, one table row each -- nothing collapsed", 80, table.rows.size());
-		assertEquals("39 rows are not plain agreements and each is retained", 39, nonAgreeing);
+		assertEquals("82 corpus rows, one table row each -- nothing collapsed", 82, table.rows.size());
+		assertEquals("40 rows are not plain agreements and each is retained", 40, nonAgreeing);
 	}
 
 	/**
@@ -347,8 +351,8 @@ public class ParityTableTest {
 		String md = ParityTable.toMarkdown(table);
 
 		assertTrue("Kodkod denominator", md.contains("43"));
-		assertTrue("SMT denominator", md.contains("71"));
-		assertTrue("intersection denominator", md.contains("41 of 80"));
+		assertTrue("SMT denominator", md.contains("73"));
+		assertTrue("intersection denominator", md.contains("43 of 82"));
 		for (ParityTable.Row row : table.rows) {
 			assertTrue("missing row " + row.exampleId, md.contains("| " + row.exampleId + " |"));
 		}

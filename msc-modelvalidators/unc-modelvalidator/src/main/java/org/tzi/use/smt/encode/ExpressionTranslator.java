@@ -12,6 +12,7 @@ import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.TranslationMode;
 import org.tzi.use.smt.solver.Smt;
 import org.tzi.use.smt.solver.SmtTerm;
+import org.tzi.use.uml.mm.MAssociation;
 import org.tzi.use.uml.mm.MAssociationClass;
 import org.tzi.use.uml.mm.MAssociationEnd;
 import org.tzi.use.uml.mm.MAttribute;
@@ -3905,6 +3906,13 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         VariableBinding source = context.binding(sourceVar.getVarname());
         MNavigableElement destination =
             resolveRedefinedDestination(navigation.getDestination(), source);
+        // UNION-DERIVED NAVIGATION: a union-declared end's content is USE-core-derived --
+        // the live union of every `subsets`-declaring association's links -- so the population
+        // is the union of the subsetting populations, never an own grid (which would let the
+        // solver choose content freely, reproducing the incumbent's documented defect).
+        if (destination.isUnion()) {
+          return unionNavigationPopulation(destination, source);
+        }
         NaryAssociationLinks naryLinks = context.naryLinks(destination.association().name());
         if (naryLinks != null) {
           return naryNavigationPopulation(naryLinks, destination, source, construct);
@@ -3975,6 +3983,62 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * identity, the source by slot-binding lookup); a REFLEXIVE n-ary association (the same class
    * at two ends) is refused rather than guessed at.
    */
+  /**
+   * The population of a UNION-declared end's navigation. USE core derives a union role's
+   * content LIVE as the union of every {@code subsets}-declaring association's links
+   * (Subsets.properties's own research: the role's own stored content and bound are never
+   * consulted), so the encoding derives it too: the population is the per-slot union of each
+   * subsetting association's destination end view, contributed only where the navigating
+   * object's concrete class sits in that association's source end view -- the subclass
+   * reprojection (a C source sees D partners through cd, an E source sees F partners through
+   * ef; an A-typed binding would contribute via every subsetting association it conforms to).
+   */
+  private List<PopulationMember> unionNavigationPopulation(
+      MNavigableElement unionEnd, VariableBinding source) {
+    List<PopulationMember> population = new ArrayList<>();
+    for (MAssociationEnd subsettingEnd : unionEnd.getSubsettingEnds()) {
+      MAssociation subsettingAssociation = subsettingEnd.association();
+      if (subsettingAssociation.associationEnds().size() != 2) {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            "union end '"
+                + unionEnd.nameAsRolename()
+                + "' is subsetted by the non-binary association "
+                + subsettingAssociation.name()
+                + ", which this slice does not model");
+      }
+      AssociationLinks links = context.linksFor(subsettingAssociation.name());
+      if (links == null) {
+        throw unsupported(
+            FragmentBoundary.TIER_3,
+            "union end '"
+                + unionEnd.nameAsRolename()
+                + "' is subsetted by association "
+                + subsettingAssociation.name()
+                + ", whose own link grid is not registered");
+      }
+      // The subclass reprojection: an association whose source end view does not contain the
+      // navigating object contributes nothing (an E object derives nothing from C-D links).
+      if (links.aEnd().indexOf(source) < 0 && links.bEnd().indexOf(source) < 0) {
+        continue;
+      }
+      ObjectSlots destSlots = destinationEndView(links, subsettingEnd);
+      for (int k = 0; k < destSlots.capacity(); k++) {
+        population.add(
+            new PopulationMember(
+                destSlots.concreteBindings().get(k), linkTerm(links, subsettingEnd, source, k)));
+      }
+    }
+    if (population.isEmpty()) {
+      throw unsupported(
+          FragmentBoundary.TIER_3,
+          "union end '"
+              + unionEnd.nameAsRolename()
+              + "' has no `subsets`-declaring association to derive its content from");
+    }
+    return population;
+  }
+
   private List<PopulationMember> naryNavigationPopulation(
       NaryAssociationLinks links,
       MNavigableElement destination,

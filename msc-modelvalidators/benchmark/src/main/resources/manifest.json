@@ -2862,6 +2862,67 @@
         "classification": "unsat",
         "outcome": "UNSATISFIABLE"
       }
+    },
+    {
+      "id": "UnionNav",
+      "directory": "UnionNav",
+      "useFile": "UnionNav.use",
+      "propertiesFile": "UnionNav.properties",
+      "section": "main",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceCitation": null,
+      "provenanceDetail": "Authored for this thesis project (msc-4, Trong-Nghia Be) to give the DERIVED-UNION navigation semantics its wired corpus coverage: no shipped scenario navigates a union role. This tool derives a union role's content live as the union of its subsetting associations' links (USE core's own semantics), with the subclass reprojection (cd's C-D links are invisible to an E source). kk drops the union semantics entirely (Subsets.properties finding 1), so its cell is expected TRIVIALLY_* or an answer that ignores the derivation -- recorded as observed.",
+      "features": [
+        "assoc.union",
+        "assoc.subsets",
+        "ocl.navigation-regular-assoc"
+      ],
+      "question": "Is the derived-union read live -- c1.b non-empty via cd's link, while e1.b stays empty (cd's links invisible to an E source)?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      },
+      "scenarioTags": [
+        "union",
+        "subsets",
+        "derived-association",
+        "authored"
+      ]
+    },
+    {
+      "id": "UnionNav-UNSAT",
+      "directory": "UnionNav",
+      "useFile": "UnionNav.use",
+      "propertiesFile": "UnionNav.properties",
+      "section": "unsat",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceCitation": null,
+      "provenanceDetail": "Authored for this thesis project (msc-4, Trong-Nghia Be) to give the DERIVED-UNION navigation semantics its wired corpus coverage: no shipped scenario navigates a union role. This tool derives a union role's content live as the union of its subsetting associations' links (USE core's own semantics), with the subclass reprojection (cd's C-D links are invisible to an E source). kk drops the union semantics entirely (Subsets.properties finding 1), so its cell is expected TRIVIALLY_* or an answer that ignores the derivation -- recorded as observed. UNSAT counterpart: cd and ef both forced empty, so the derived union is empty and the notEmpty invariant refutes.",
+      "features": [
+        "assoc.union",
+        "assoc.subsets",
+        "ocl.navigation-regular-assoc"
+      ],
+      "question": "Does the derived union genuinely constrain -- refuting notEmpty when both subsetting associations are empty?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      },
+      "scenarioTags": [
+        "union",
+        "subsets",
+        "derived-association",
+        "authored",
+        "unsat"
+      ]
     }
   ]
 }
