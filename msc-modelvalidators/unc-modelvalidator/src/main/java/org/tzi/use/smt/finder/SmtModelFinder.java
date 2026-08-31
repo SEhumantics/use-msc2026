@@ -1746,57 +1746,95 @@ public final class SmtModelFinder {
     // candidates. A pair whose concatenation the derived domain cannot offer contributes
     // falsity -- if no pair offers it, the assertion is simply false (genuinely
     // unsatisfiable), the same discipline as the literal branch above.
-    if (deriveExpr instanceof ExpStdOp stdOp
-        && "concat".equals(stdOp.opname())
-        && stdOp.args().length == 2
-        && stdOp.args()[0] instanceof ExpAttrOp leftAttr
-        && stdOp.args()[1] instanceof ExpAttrOp rightAttr
-        && leftAttr.objExp() instanceof ExpVariable lSelf
-        && "self".equals(lSelf.getVarname())
-        && rightAttr.objExp() instanceof ExpVariable rSelf
-        && "self".equals(rSelf.getVarname())) {
-      AttributeDomain leftDomain = context.attributeDomain(className, leftAttr.attr().name());
-      AttributeDomain rightDomain = context.attributeDomain(className, rightAttr.attr().name());
-      AttributeDomain dstDomain = context.attributeDomain(className, attributeName);
-      List<String> leftValues = leftDomain.enumeratedValues();
-      List<String> rightValues = rightDomain.enumeratedValues();
-      if ((long) leftValues.size() * rightValues.size() > 256) {
-        throw new org.tzi.use.smt.encode.SmtTranslationException(
-            org.tzi.use.smt.encode.FragmentBoundary.TIER_3,
-            "String concat derivation for "
-                + className
-                + "."
-                + attributeName
-                + ": the candidate cross product ("
-                + (leftValues.size() * rightValues.size())
-                + ") exceeds the 256-combination convention");
-      }
-      AttributeValues leftValuesSym = context.attributeValues(className, leftAttr.attr().name());
-      AttributeValues rightValuesSym =
-          context.attributeValues(className, rightAttr.attr().name());
-      for (int slot = 0; slot < owner.capacity(); slot++) {
-        List<SmtTerm> slotCases = new ArrayList<>();
-        for (int i = 0; i < leftValues.size(); i++) {
-          for (int j = 0; j < rightValues.size(); j++) {
-            String concatenated = leftValues.get(i) + rightValues.get(j);
-            int localIndex = dstValuesList.enumeratedValues().indexOf(concatenated);
-            if (localIndex < 0) {
-              continue;
-            }
-            slotCases.add(
-                Smt.and(
-                    List.of(
-                        Smt.eq(Smt.sym(leftValuesSym.valueNames().get(slot)),
-                            Smt.intLit(BigInteger.valueOf(i))),
-                        Smt.eq(Smt.sym(rightValuesSym.valueNames().get(slot)),
-                            Smt.intLit(BigInteger.valueOf(j))),
-                        Smt.eq(Smt.sym(derivedValues.valueNames().get(slot)),
-                            Smt.intLit(BigInteger.valueOf(localIndex))))));
-          }
+    // CONCAT CHAIN: `full derive: self.a.concat(self.b)` or the left-nested chain
+    // `self.a.concat(self.b).concat(self.c)`. The operands flatten to a list of self-attribute
+    // aliases; per candidate TUPLE the concatenation is compile-time Java over the configured
+    // spellings, and the derived attribute's value is pinned to its own domain's index whose
+    // content equals the tuple's concatenation, under the guard that every source chose its
+    // tuple member. A tuple whose concatenation the derived domain cannot offer contributes
+    // falsity -- if no tuple offers one, the assertion is simply false (genuinely
+    // unsatisfiable).
+    java.util.List<org.tzi.use.uml.ocl.expr.Expression> concatOperands = new ArrayList<>();
+    if (deriveExpr instanceof ExpStdOp outerConcat && "concat".equals(outerConcat.opname())) {
+      java.util.Deque<org.tzi.use.uml.ocl.expr.Expression> stack = new java.util.ArrayDeque<>();
+      stack.push(deriveExpr);
+      boolean wellFormed = true;
+      while (!stack.isEmpty() && wellFormed) {
+        org.tzi.use.uml.ocl.expr.Expression node = stack.pop();
+        if (node instanceof ExpStdOp concat && "concat".equals(concat.opname())
+            && concat.args().length == 2) {
+          stack.push(concat.args()[1]);
+          stack.push(concat.args()[0]);
+        } else if (node instanceof ExpAttrOp attrOp
+            && attrOp.objExp() instanceof ExpVariable selfVar
+            && "self".equals(selfVar.getVarname())) {
+          concatOperands.add(attrOp);
+        } else {
+          wellFormed = false;
         }
-        script.assertThat(Smt.or(slotCases));
       }
-      return;
+      if (wellFormed && concatOperands.size() >= 2) {
+        List<List<String>> operandValueLists = new ArrayList<>();
+        List<AttributeValues> operandSymbols = new ArrayList<>();
+        long tupleCount = 1;
+        for (org.tzi.use.uml.ocl.expr.Expression operand : concatOperands) {
+          AttributeDomain operandDomain =
+              context.attributeDomain(className, ((ExpAttrOp) operand).attr().name());
+          operandValueLists.add(operandDomain.enumeratedValues());
+          operandSymbols.add(context.attributeValues(className, ((ExpAttrOp) operand).attr().name()));
+          tupleCount *= operandDomain.enumeratedValues().size();
+        }
+        if (tupleCount > 256) {
+          throw new org.tzi.use.smt.encode.SmtTranslationException(
+              org.tzi.use.smt.encode.FragmentBoundary.TIER_3,
+              "String concat derivation for "
+                  + className
+                  + "."
+                  + attributeName
+                  + ": the candidate cross product ("
+                  + tupleCount
+                  + ") exceeds the 256-combination convention");
+        }
+        int operandCount = concatOperands.size();
+        int[] tuple = new int[operandCount];
+        for (int slot = 0; slot < owner.capacity(); slot++) {
+          List<SmtTerm> slotCases = new ArrayList<>();
+          java.util.Arrays.fill(tuple, 0);
+          for (long t = 0; t < tupleCount; t++) {
+            StringBuilder concatenatedBuilder = new StringBuilder();
+            for (int o = 0; o < operandCount; o++) {
+              concatenatedBuilder.append(operandValueLists.get(o).get(tuple[o]));
+            }
+            String concatenated = concatenatedBuilder.toString();
+            int localIndex = dstValuesList.enumeratedValues().indexOf(concatenated);
+            if (localIndex >= 0) {
+              List<SmtTerm> conjuncts = new ArrayList<>();
+              for (int o = 0; o < operandCount; o++) {
+                conjuncts.add(
+                    Smt.eq(
+                        Smt.sym(operandSymbols.get(o).valueNames().get(slot)),
+                        Smt.intLit(BigInteger.valueOf(tuple[o]))));
+              }
+              conjuncts.add(
+                  Smt.eq(
+                      Smt.sym(derivedValues.valueNames().get(slot)),
+                      Smt.intLit(BigInteger.valueOf(localIndex))));
+              slotCases.add(Smt.and(conjuncts));
+            }
+            // advance the odometer
+            for (int o = operandCount - 1; o >= 0; o--) {
+              tuple[o]++;
+              if (tuple[o] < operandValueLists.get(o).size()) {
+                break;
+              }
+              tuple[o] = 0;
+            }
+          }
+          script.assertThat(Smt.or(slotCases));
+        }
+        return;
+      }
+      // fall through to the located refusal for malformed concat shapes
     }
     throw new org.tzi.use.smt.encode.SmtTranslationException(
         org.tzi.use.smt.encode.FragmentBoundary.TIER_3,
