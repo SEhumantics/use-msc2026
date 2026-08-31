@@ -233,6 +233,41 @@ public class StudyCOracleSweepTest {
     throw new AssertionError("missing invariant " + name);
   }
 
+  /**
+   * MILESTONE 2 FIX 2: an expression OUTSIDE the erasure table's recognized shapes --
+   * arithmetic over a UReal operand feeding toBooleanC -- must throw
+   * NominalErasureUnsupportedException from NominalErasureEvaluator (the fail-closed
+   * default), NOT a guessed nominal value.
+   */
+  @Test
+  public void unsupportedErasureShapeThrows() throws Exception {
+    MModel model = compile();
+    MSystem system = new MSystem(model);
+    MSystemState state = system.state();
+    MClass sensor = model.getClass("Sensor");
+    MObject o = state.createObject(sensor, "sU1");
+    o.state(state).setAttributeValue(sensor.attribute("speed", true),
+        new URealValue(0.40, 0.02));
+
+    // `x.speed.multiply(2.0).toBooleanC(0.8)`: the multiply result is UReal -- an
+    // arithmetic-over-UReal operand the erasure table does not recognize.
+    Expression multiplied = org.tzi.use.uml.ocl.expr.ExpStdOp.create("*",
+        new Expression[] {
+            new org.tzi.use.uml.ocl.expr.ExpAttrOp(sensor.attribute("speed", true),
+                new org.tzi.use.uml.ocl.expr.ExpVariable("self", sensor)),
+            new org.tzi.use.uml.ocl.expr.ExpConstReal(2.0) });
+    Expression toBool = org.tzi.use.uml.ocl.expr.ExpStdOp.create("toBooleanC",
+        new Expression[] { multiplied,
+            new org.tzi.use.uml.ocl.expr.ExpConstReal(0.8) });
+
+    EvalContext ctx = new EvalContext(state, state, system.varBindings(), null, "");
+    NominalErasureUnsupportedException thrown =
+        org.junit.Assert.assertThrows(NominalErasureUnsupportedException.class,
+            () -> NominalErasureEvaluator.eval(toBool, ctx));
+    assertTrue("the refusal must be the fail-closed UNSUPPORTED message",
+        thrown.getMessage().contains("not") || !thrown.getMessage().isEmpty());
+  }
+
   private static Map<String, Object> byName(List<Map<String, Object>> rows, String name) {
     return rows.stream().filter(r -> r.get("name").equals(name)).findFirst()
         .orElseThrow(() -> new AssertionError("missing row " + name));
