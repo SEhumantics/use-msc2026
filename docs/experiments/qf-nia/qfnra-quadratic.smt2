@@ -1,0 +1,11 @@
+; QF_NRA: real-sorted quadratic -- r^2 <= 50 with r in a real band.
+(set-logic QF_NRA)
+(declare-const r Real)
+(declare-const s Real)
+(assert (>= r 0.0)) (assert (<= r 20.0))
+(assert (= s (* r r)))
+(assert (<= s 50.0))
+(assert (> r 5.5))
+(assert (< r 7.5))
+(check-sat)
+(get-value (r s))

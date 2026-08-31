@@ -1,0 +1,7 @@
+(set-logic QF_NIA)
+(declare-const x Int) (declare-const y Int)
+(assert (>= x 2)) (assert (<= x 12))
+(assert (>= y 2)) (assert (<= y 12))
+(assert (= (* x y) 24))
+(check-sat)
+(get-value (x y))
