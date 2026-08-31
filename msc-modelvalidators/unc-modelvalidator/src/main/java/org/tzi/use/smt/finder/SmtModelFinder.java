@@ -1654,7 +1654,13 @@ public final class SmtModelFinder {
       }
       Map<String, MOperation> byName = new LinkedHashMap<>();
       for (MOperation candidate : cls.allOperations()) {
-        if (!candidate.isCallableFromOCL() || candidate.paramList().size() != 0) {
+        // Parameterized operations are dispatched too: the per-call parameter lets live in
+        // ExpressionTranslator#inlineOperationBody, which keys them off the RESOLVED
+        // operation's own paramList -- excluding parameterized candidates here made every
+        // parameterized OVERRIDE fall back to the statically declared body (a wrong verdict
+        // the USE witness checker caught: the static body's result fails USE's runtime
+        // dispatch on the reconstructed state).
+        if (!candidate.isCallableFromOCL()) {
           continue;
         }
         byName.putIfAbsent(candidate.name(), cls.operation(candidate.name(), true));
