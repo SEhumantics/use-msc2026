@@ -5231,6 +5231,14 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       boolean nonEmpty = distinctLiteralElementCount(set) > 0;
       return new TranslatedExpression(
           Smt.bool(true), wantEmpty ? Smt.bool(!nonEmpty) : Smt.bool(nonEmpty));
+    } else if (constantCollectionContent(receiver) != null) {
+      // Constant-content receivers routed through the shared extractor (collection-valued
+      // operation results with constant literal bodies): the content is compile-time, so the
+      // emptiness decision is too.
+      SetContent opContent = constantCollectionContent(receiver);
+      boolean nonEmpty = (opContent.integers() != null && !opContent.integers().isEmpty());
+      return new TranslatedExpression(
+          Smt.bool(true), wantEmpty ? Smt.bool(!nonEmpty) : Smt.bool(nonEmpty));
     } else {
       throw unsupported(
           FragmentBoundary.TIER_3,
@@ -5617,6 +5625,33 @@ public final class ExpressionTranslator implements ExpressionVisitor {
               || lit instanceof ExpSequenceLiteral
               || lit instanceof ExpOrderedSetLiteral;
       return isSetKind ? collectionLiteralContent(lit, false) : null;
+    }
+    // COLLECTION-VALUED OPERATION RESULTS (the Lists.use arc, first slice): an operation
+    // whose result type is a collection and whose BODY is a collection literal over
+    // compile-time-constant elements has a constant content, so every consumer that reads
+    // constant content (size, membership, emptiness, quantifiers) serves it through this
+    // same branch. The receiver does not influence a constant body's content; symbolic
+    // elements and non-literal bodies return null (the caller's constant-content branches
+    // fall through to their own located refusals).
+    if (receiver instanceof ExpObjOp objOp) {
+      MOperation operation = objOp.getOperation();
+      if (!operationsInProgress.contains(operation)
+          && operation.resultType() != null
+          && operation.resultType().isKindOfCollection(
+              org.tzi.use.uml.ocl.type.Type.VoidHandling.EXCLUDE_VOID)
+          && operation.expression() instanceof ExpCollectionLiteral literal) {
+        boolean allConstant = true;
+        for (Expression element : literal.getElemExpr()) {
+          if (!(element instanceof ExpConstInteger)) {
+            allConstant = false;
+            break;
+          }
+        }
+        if (allConstant) {
+          return collectionLiteralContent(literal, false);
+        }
+      }
+      return null;
     }
     if (receiver instanceof ExpStdOp op
         && "flatten".equals(op.opname())
