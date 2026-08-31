@@ -142,13 +142,22 @@ public final class ConfigurationReader {
     // The model-wide explicit String spellings: kk's padded universe CONTAINS them (the
     // placeholders only fill up to the configured count), so an unconfigured attribute can
     // take any of them too.
+    Integer stringUniverseDefaultFill = null;
+    if (entries.containsKey("String_min") || entries.containsKey("String_max")) {
+      BigDecimal configuredMax = decimal(entries, "String_max");
+      stringUniverseDefaultFill =
+          configuredMax != null ? configuredMax.intValueExact() : 10; // DefaultConfigurationValues.stringMax
+    }
     java.util.LinkedHashSet<String> modelWideStringSpellings = new java.util.LinkedHashSet<>();
     for (String attribute : vocabulary.attributeNames().stream().sorted().toList()) {
       if (vocabulary.isStringAttribute(attribute) && entries.containsKey(attribute)) {
         modelWideStringSpellings.addAll(setValues(attribute, entries.get(attribute), true));
       }
     }
-    BigDecimal stringUniverseMax = decimal(entries, "String_max");
+    BigDecimal stringUniverseMax =
+        stringUniverseDefaultFill != null
+            ? BigDecimal.valueOf(stringUniverseDefaultFill)
+            : decimal(entries, "String_max");
     for (String attribute : vocabulary.attributeNames().stream().sorted().toList()) {
       boolean stringTyped = vocabulary.isStringAttribute(attribute);
       if (stringTyped
@@ -282,24 +291,14 @@ public final class ConfigurationReader {
         diagnostics,
         "Real_step",
         "accepted for Kodkod compatibility and ignored because SMT Reals are not discretised");
-    // String_max PORT (the incumbent's StringConfigurator semantics, source-confirmed): it
-    // reads String_max as a COUNT of string atoms and pads the string universe with generated
-    // placeholder spellings ("String_string" + i); String_min is read as the range's lower
-    // bound and never used. Ported below in the attribute-domain loop: with String_max = k,
-    // every String attribute WITHOUT an explicit Set{} domain gets the padded universe as its
-    // candidate space (model-wide explicit spellings, capped at k, plus generated placeholders
-    // up to k total); an attribute WITH an explicit domain keeps it. String_min alone still
-    // refuses: its kk behavior in that configuration is not established, and guessing would
-    // be the failure mode this reader exists to prevent.
-    if (entries.containsKey("String_min") && !entries.containsKey("String_max")) {
-      deferredKeyDiagnostic(
-          entries,
-          diagnostics,
-          "String_min",
-          "the incumbent reads String_min as the lower bound of the string-universe range and"
-              + " never uses it; without String_max the universe semantics are not established,"
-              + " so it is refused rather than guessed at");
-    }
+    // String keys PORT (the incumbent's PropertyConfigurationVisitor semantics, source-confirmed
+    // at visitor lines 243-268 + DefaultConfigurationValues.stringMin=0/stringMax=10): the keys
+    // form a RANGE over the string-universe atom COUNT. If EITHER key is present, the missing
+    // side is DEFAULT-FILLED (min <- stringMin=0, max <- stringMax=10) -- this is the audit's
+    // "stringMax=10 default-fill", now ported -- and StringConfigurator pads the universe to the
+    // range's upper. String_min itself is never consulted by the configurator (only the range
+    // upper drives the padding), so accepting-and-ignoring it is the faithful reading.
+    // Synthesis below uses the effective upper.
     // Collection-typed attribute SIZE bounds (the incumbent's attributeColSizeMin/Max keys):
     // parsed into the domain's lower/upper, which the SET_INTEGER encoder reads as the
     // per-object set cardinality bounds. Defaults 0/unbounded (attributesColSizeMin/Max).

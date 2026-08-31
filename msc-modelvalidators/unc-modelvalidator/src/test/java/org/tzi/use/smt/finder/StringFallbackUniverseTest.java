@@ -96,6 +96,32 @@ public class StringFallbackUniverseTest {
         miss.satisfiable());
   }
 
+  /**
+   * String_min ALONE now ports the incumbent's default-fill (source-confirmed:
+   * PropertyConfigurationVisitor fills the missing side of the range from
+   * DefaultConfigurationValues.stringMin=0/stringMax=10), so the universe pads to 10
+   * candidates even with no String_max key -- replacing the earlier refuse-on-min-alone
+   * reading, which the audit corrected.
+   */
+  @Test
+  public void stringMinAloneDefaultsTheUniverseToTen() throws Exception {
+    MModel model = compile();
+    ConfigurationVocabulary vocabulary = ConfigurationVocabulary.fromModel(model);
+    Path file = Files.createTempFile("string-universe-min", ".properties");
+    Files.writeString(file,
+        "[main]\n\nX_min = 1\nX_max = 1\n\nString_min = 3\n\n"
+        + "X_sPicksPlaceholder = active\n");
+    RawConfiguration raw = ConfigurationReader.read(file, "main");
+    AnalysisConfiguration config = ConfigurationReader.normalize(raw, vocabulary).requireSupported();
+    AttributeDomain s = config.attributeDomains().stream()
+        .filter(d -> d.className().equals("X") && d.attributeName().equals("s"))
+        .findFirst()
+        .orElseThrow(() -> new AssertionError("no synthesized domain for the unconfigured s"));
+    assertEquals(10, s.enumeratedValues().size());
+    assertTrue("placeholders numbered from the specific count + 1 (none here)",
+        s.enumeratedValues().get(0).equals("String_string1"));
+  }
+
   /** Reader-level pin: the synthesized candidate list is exactly the padded universe. */
   @Test
   public void readerSynthesizesExactlyFiveCandidates() throws Exception {
