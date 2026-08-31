@@ -120,7 +120,9 @@ public class NaryAssociationProbeTest {
       // Observed 2026-08-30 (research step 1, first empirical confirmation): the real kk
       // pipeline transforms the ternary association, applies the forced 3-tuple bound
       // (Supplies=[[Supplier_sup, Part_p1, Project_j1]]), navigates the collection-valued
-      // n-ary end (USE types s.part as a Bag), and reports SATISFIABLE.
+      // n-ary end, and reports SATISFIABLE. (CORRECTED 2026-08-31: the earlier parenthetical
+      // "USE types s.part as a Bag" was a misreading -- MAssociationEnd.getType types the
+      // UNQUALIFIED n-ary end navigation as a SET; Bag/Sequence require qualifiers.)
       String instance = String.valueOf(solution.instance());
       assertTrue(
           "the recorded research finding must hold: KK solves the ternary association and the "

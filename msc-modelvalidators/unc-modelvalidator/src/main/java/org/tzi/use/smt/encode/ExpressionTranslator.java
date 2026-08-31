@@ -3923,8 +3923,17 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   /**
    * True when {@code navigation} denotes a collection: the usual single-valued/collection-valued
    * role-multiplicity test, OR the n-ary case -- an end of an N-ARY association (arity &ge; 3)
-   * projects a BAG even when the end's own multiplicity is single-valued (the navigation ranges
-   * over the remaining tuple positions), so the static TYPE is the arbiter there.
+   * projects a collection even when the end's own multiplicity is single-valued (the navigation
+   * ranges over the remaining tuple positions), so the static TYPE is the arbiter there.
+   *
+   * <p>CORRECTED 2026-08-31 against USE's own {@code MAssociationEnd.getType}: an n-ary end
+   * navigation is typed SET, not Bag (the Bag/Sequence branches require qualifiers; both the
+   * unqualified collection-multiplicity branch and the n-ary single-valued branch call
+   * {@code TypeFactory.mkSet}). The earlier "n-ary navigations are Bags" note -- inherited from
+   * a probe comment -- was a misreading; the witness checker caught it the same turn (an SMT
+   * bag-count of duplicate tuples failed USE's independent re-evaluation, which counted the
+   * distinct Set). The deduplicated per-slot population is therefore EXACT, and every
+   * count-based construct is sound over it.
    */
   private static boolean isCollectionValuedNavigation(ExpNavigation navigation) {
     return navigation.getDestination().isCollection()
@@ -3933,17 +3942,20 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   }
 
   /**
-   * The membership/predicate population consumers an N-ARY navigation may feed. USE types an
-   * n-ary end navigation as a BAG over the projected tuples (duplicate tuples COUNT -- two
-   * tuples {@code (s,p,j1)}, {@code (s,p,j2)} put {@code p} in {@code s.part} twice), while this
-   * encoder's population is one member per destination slot. forAll/exists/isEmpty/notEmpty
-   * depend only on per-element truth and existence, so the deduplication is sound for them;
-   * size()/isUnique/one()/includesAll answer COUNT questions a deduplicated population would
-   * answer WRONGLY (the Set question instead of the Bag question), so each refuses with this
-   * located message rather than approximating.
+   * The population consumers an N-ARY navigation may feed. CORRECTED 2026-08-31: USE types an
+   * n-ary end navigation as a SET ({@code MAssociationEnd.getType} -- Bag/Sequence need
+   * qualifiers, everything unqualified lands on {@code mkSet}), so the deduplicated per-slot
+   * population is EXACT and every construct the binary navigation path serves is sound here
+   * too: forAll/exists/isEmpty/notEmpty/size()/isUnique/one()/includesAll. Only constructs
+   * outside that set (e.g. closure's fixed-point re-navigation, which has its own machinery)
+   * still refuse. The original allowlist was four constructs wide because the population was
+   * (wrongly) assumed to be a Bag whose duplicates the per-slot deduplication would miscount;
+   * USE's own evaluator never counted duplicates, and the witness checker caught the bag-count
+   * attempt failing re-evaluation before it could ship.
    */
   private static final java.util.Set<String> NARY_NAVIGATION_CONSTRUCTS =
-      java.util.Set.of("forAll", "exists", "isEmpty", "notEmpty");
+      java.util.Set.of("forAll", "exists", "isEmpty", "notEmpty", "size()", "isUnique", "one",
+          "includesAll");
 
   /**
    * The population one end of an N-ARY association (arity &ge; 3) projects from a fixed source
@@ -3963,10 +3975,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       throw unsupported(
           FragmentBoundary.TIER_3,
           construct
-              + " over an n-ary association navigation: USE's n-ary end navigation is a Bag"
-              + " (duplicate tuples count) while this population is per-slot deduplicated, so"
-              + " only forAll/exists/isEmpty/notEmpty are supported -- the count-based"
-              + " constructs would answer a different (Set-based) question");
+              + " over an n-ary association navigation: the navigation is typed Set (USE's own"
+              + " MAssociationEnd.getType), and the supported consumers are forAll/exists/"
+              + "isEmpty/notEmpty/size()/isUnique/one()/includesAll over that deduplicated"
+              + " population -- this construct needs machinery the n-ary path does not have");
     }
     int arity = links.arity();
     int destEnd = -1;
