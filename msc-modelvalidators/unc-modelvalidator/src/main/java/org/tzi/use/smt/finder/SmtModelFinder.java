@@ -62,6 +62,7 @@ import org.tzi.use.smt.verify.InvariantVerdict;
 import org.tzi.use.smt.verify.QueryWitnessChecker;
 import org.tzi.use.uml.ocl.expr.ExpAttrOp;
 import org.tzi.use.uml.ocl.expr.ExpConstString;
+import org.tzi.use.uml.ocl.expr.ExpStdOp;
 import org.tzi.use.uml.ocl.expr.ExpVariable;
 import org.tzi.use.uml.mm.MAggregationKind;
 import org.tzi.use.uml.mm.MAssociation;
@@ -1735,6 +1736,65 @@ public final class SmtModelFinder {
             localIndex >= 0
                 ? Smt.eq(dstSymbol, Smt.intLit(BigInteger.valueOf(localIndex)))
                 : Smt.bool(false));
+      }
+      return;
+    }
+    // CONCAT OF TWO ATTRIBUTE ALIASES: `full derive: self.first.concat(self.second)`. Per
+    // candidate PAIR (i, j) the concatenation is compile-time Java over the configured
+    // spellings, so the derived attribute's value is pinned to its own domain's index whose
+    // content equals first[i] + second[j], under the guard that both sources chose those
+    // candidates. A pair whose concatenation the derived domain cannot offer contributes
+    // falsity -- if no pair offers it, the assertion is simply false (genuinely
+    // unsatisfiable), the same discipline as the literal branch above.
+    if (deriveExpr instanceof ExpStdOp stdOp
+        && "concat".equals(stdOp.opname())
+        && stdOp.args().length == 2
+        && stdOp.args()[0] instanceof ExpAttrOp leftAttr
+        && stdOp.args()[1] instanceof ExpAttrOp rightAttr
+        && leftAttr.objExp() instanceof ExpVariable lSelf
+        && "self".equals(lSelf.getVarname())
+        && rightAttr.objExp() instanceof ExpVariable rSelf
+        && "self".equals(rSelf.getVarname())) {
+      AttributeDomain leftDomain = context.attributeDomain(className, leftAttr.attr().name());
+      AttributeDomain rightDomain = context.attributeDomain(className, rightAttr.attr().name());
+      AttributeDomain dstDomain = context.attributeDomain(className, attributeName);
+      List<String> leftValues = leftDomain.enumeratedValues();
+      List<String> rightValues = rightDomain.enumeratedValues();
+      if ((long) leftValues.size() * rightValues.size() > 256) {
+        throw new org.tzi.use.smt.encode.SmtTranslationException(
+            org.tzi.use.smt.encode.FragmentBoundary.TIER_3,
+            "String concat derivation for "
+                + className
+                + "."
+                + attributeName
+                + ": the candidate cross product ("
+                + (leftValues.size() * rightValues.size())
+                + ") exceeds the 256-combination convention");
+      }
+      AttributeValues leftValuesSym = context.attributeValues(className, leftAttr.attr().name());
+      AttributeValues rightValuesSym =
+          context.attributeValues(className, rightAttr.attr().name());
+      for (int slot = 0; slot < owner.capacity(); slot++) {
+        List<SmtTerm> slotCases = new ArrayList<>();
+        for (int i = 0; i < leftValues.size(); i++) {
+          for (int j = 0; j < rightValues.size(); j++) {
+            String concatenated = leftValues.get(i) + rightValues.get(j);
+            int localIndex = dstValuesList.enumeratedValues().indexOf(concatenated);
+            if (localIndex < 0) {
+              continue;
+            }
+            slotCases.add(
+                Smt.and(
+                    List.of(
+                        Smt.eq(Smt.sym(leftValuesSym.valueNames().get(slot)),
+                            Smt.intLit(BigInteger.valueOf(i))),
+                        Smt.eq(Smt.sym(rightValuesSym.valueNames().get(slot)),
+                            Smt.intLit(BigInteger.valueOf(j))),
+                        Smt.eq(Smt.sym(derivedValues.valueNames().get(slot)),
+                            Smt.intLit(BigInteger.valueOf(localIndex))))));
+          }
+        }
+        script.assertThat(Smt.or(slotCases));
       }
       return;
     }
