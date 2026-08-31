@@ -113,17 +113,23 @@ public class PrimitiveTypeWideFallbackDomainTest {
     assertEquals(50, integer(employee, state, "salary"));
   }
 
+  /**
+   * INVERTED 2026-08-31 (the String-universe port): the old pin demanded a refusal for
+   * String_min/String_max; the port now consumes them with the incumbent's own semantics --
+   * String_max is a count of string atoms, the universe padded with generated
+   * "String_string<i>" spellings -- so an unconfigured String attribute becomes encodable
+   * instead of refused. StringFallbackUniverseTest pins the ported behavior end to end; this
+   * fixture-level test pins that the same key set that used to refuse now solves.
+   */
   @Test
-  public void theStringTypeWideKeysAreRefusedRatherThanReinterpretedAsADomain() throws Exception {
-    try {
-      find("TypeWideFallbackString", null);
-      fail("String_min/String_max are a COUNT of string atoms and must not be read as a domain");
-    } catch (ConfigurationReadException expected) {
-      assertTrue(
-          "the refusal must name both keys, got: " + expected.getMessage(),
-          expected.getMessage().contains("String_max")
-              && expected.getMessage().contains("String_min"));
-    }
+  public void theStringTypeWideKeysPadTheUniverseForUnconfiguredStringAttributes()
+      throws Exception {
+    ModelFinderResult result = find("TypeWideFallbackString", null);
+    assertTrue(
+        "String_max = 4 must give the unconfigured attribute a padded candidate universe,"
+            + " making the trivial invariant solvable",
+        result.satisfiable());
+    assertTrue(result.allActiveInvariantsHold());
   }
 
   /**

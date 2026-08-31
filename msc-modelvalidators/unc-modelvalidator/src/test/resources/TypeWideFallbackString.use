@@ -1,9 +1,10 @@
 -- The String half of the same configuration surface. String_min/String_max are
--- NOT string bounds in the incumbent -- they are a COUNT of string atoms, and
--- the atoms beyond the configured ones are GENERATED placeholder spellings
--- (StringConfigurator.atoms: "String_string" + i). This project has no such
--- notion, so the String type-wide keys are deliberately NOT consumed as a
--- fallback domain and an unconfigured String attribute keeps failing closed.
+-- NOT string bounds in the incumbent -- String_max is a COUNT of string atoms
+-- and the atoms beyond the configured ones are GENERATED placeholder spellings
+-- (StringConfigurator.atoms: "String_string" + i). PORTED 2026-08-31: with
+-- String_max = 4 the unconfigured `name` attribute's candidate space is the
+-- padded universe ("String_string1".."String_string4" -- no model-wide
+-- specifics here), so the trivial invariant solves and the port is observable.
 model TypeWideFallbackString
 
 class Person

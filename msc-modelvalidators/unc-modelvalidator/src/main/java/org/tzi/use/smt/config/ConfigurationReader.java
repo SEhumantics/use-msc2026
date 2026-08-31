@@ -139,8 +139,44 @@ public final class ConfigurationReader {
         "association");
 
     List<AttributeDomain> domains = new ArrayList<>();
+    // The model-wide explicit String spellings: kk's padded universe CONTAINS them (the
+    // placeholders only fill up to the configured count), so an unconfigured attribute can
+    // take any of them too.
+    java.util.LinkedHashSet<String> modelWideStringSpellings = new java.util.LinkedHashSet<>();
+    for (String attribute : vocabulary.attributeNames().stream().sorted().toList()) {
+      if (vocabulary.isStringAttribute(attribute) && entries.containsKey(attribute)) {
+        modelWideStringSpellings.addAll(setValues(attribute, entries.get(attribute), true));
+      }
+    }
+    BigDecimal stringUniverseMax = decimal(entries, "String_max");
     for (String attribute : vocabulary.attributeNames().stream().sorted().toList()) {
       boolean stringTyped = vocabulary.isStringAttribute(attribute);
+      if (stringTyped
+          && !entries.containsKey(attribute)
+          && stringUniverseMax != null
+          && stringUniverseMax.signum() > 0) {
+        // The ported String_max semantics: the attribute's candidate space is the shared
+        // universe -- the model's explicit spellings (capped at k) plus generated
+        // "String_string<i>" placeholders up to k candidates total.
+        int k = stringUniverseMax.intValueExact();
+        List<String> universe = new ArrayList<>(modelWideStringSpellings);
+        while (universe.size() > k) {
+          universe.remove(universe.size() - 1);
+        }
+        // kk numbers the placeholders from the model-wide SPECIFIC count + 1
+        // (StringConfigurator: i = allValues().size() + 1), independent of the cap.
+        int i = modelWideStringSpellings.size() + 1;
+        while (universe.size() < k) {
+          String placeholder = "String_string" + i;
+          if (!universe.contains(placeholder)) {
+            universe.add(placeholder);
+          }
+          i++;
+        }
+        String[] ownerAndName = splitAttribute(attribute);
+        domains.add(
+            new AttributeDomain(ownerAndName[0], ownerAndName[1], null, universe, null, null));
+      }
       List<String> values =
           entries.containsKey(attribute)
               ? setValues(attribute, entries.get(attribute), stringTyped)
@@ -246,15 +282,23 @@ public final class ConfigurationReader {
         diagnostics,
         "Real_step",
         "accepted for Kodkod compatibility and ignored because SMT Reals are not discretised");
-    for (String key : List.of("String_min", "String_max")) {
+    // String_max PORT (the incumbent's StringConfigurator semantics, source-confirmed): it
+    // reads String_max as a COUNT of string atoms and pads the string universe with generated
+    // placeholder spellings ("String_string" + i); String_min is read as the range's lower
+    // bound and never used. Ported below in the attribute-domain loop: with String_max = k,
+    // every String attribute WITHOUT an explicit Set{} domain gets the padded universe as its
+    // candidate space (model-wide explicit spellings, capped at k, plus generated placeholders
+    // up to k total); an attribute WITH an explicit domain keeps it. String_min alone still
+    // refuses: its kk behavior in that configuration is not established, and guessing would
+    // be the failure mode this reader exists to prevent.
+    if (entries.containsKey("String_min") && !entries.containsKey("String_max")) {
       deferredKeyDiagnostic(
           entries,
           diagnostics,
-          key,
-          "not a String value bound: the incumbent's StringConfigurator reads it as a COUNT of"
-              + " string atoms and pads the universe with generated placeholder spellings"
-              + " (\"String_string\" + i), which this encoding has no counterpart for, so it is"
-              + " refused rather than reinterpreted as a domain");
+          "String_min",
+          "the incumbent reads String_min as the lower bound of the string-universe range and"
+              + " never uses it; without String_max the universe semantics are not established,"
+              + " so it is refused rather than guessed at");
     }
     // Collection-typed attribute SIZE bounds (the incumbent's attributeColSizeMin/Max keys):
     // parsed into the domain's lower/upper, which the SET_INTEGER encoder reads as the
