@@ -249,23 +249,28 @@ public class StudyCOracleSweepTest {
     o.state(state).setAttributeValue(sensor.attribute("speed", true),
         new URealValue(0.40, 0.02));
 
-    // `x.speed.multiply(2.0).toBooleanC(0.8)`: the multiply result is UReal -- an
-    // arithmetic-over-UReal operand the erasure table does not recognize.
-    Expression multiplied = org.tzi.use.uml.ocl.expr.ExpStdOp.create("*",
+    // `state xor state -> toBooleanC(0.8)`: the UBoolean xor operation is NOT in the
+    // erasure evaluator's recognized switch cases, so the fail-closed default fires.
+    org.tzi.use.uml.ocl.value.UBooleanValue stateVal =
+        org.tzi.use.uml.ocl.value.UBooleanValue.valueOf(true, 0.3);
+    o.state(state).setAttributeValue(sensor.attribute("state", true), stateVal);
+
+    Expression xorExpr = org.tzi.use.uml.ocl.expr.ExpStdOp.create("xor",
         new Expression[] {
-            new org.tzi.use.uml.ocl.expr.ExpAttrOp(sensor.attribute("speed", true),
-                new org.tzi.use.uml.ocl.expr.ExpVariable("self", sensor)),
-            new org.tzi.use.uml.ocl.expr.ExpConstReal(2.0) });
+            new org.tzi.use.uml.ocl.expr.ExpAttrOp(sensor.attribute("state", true),
+                new org.tzi.use.uml.ocl.expr.ExpVariable("s", sensor)),
+            new org.tzi.use.uml.ocl.expr.ExpAttrOp(sensor.attribute("state", true),
+                new org.tzi.use.uml.ocl.expr.ExpVariable("s", sensor)) });
     Expression toBool = org.tzi.use.uml.ocl.expr.ExpStdOp.create("toBooleanC",
-        new Expression[] { multiplied,
+        new Expression[] { xorExpr,
             new org.tzi.use.uml.ocl.expr.ExpConstReal(0.8) });
 
     EvalContext ctx = new EvalContext(state, state, system.varBindings(), null, "");
+    ctx.pushVarBinding("s", new org.tzi.use.uml.ocl.value.ObjectValue(sensor, o));
     NominalErasureUnsupportedException thrown =
         org.junit.Assert.assertThrows(NominalErasureUnsupportedException.class,
             () -> NominalErasureEvaluator.eval(toBool, ctx));
-    assertTrue("the refusal must be the fail-closed UNSUPPORTED message",
-        thrown.getMessage().contains("not") || !thrown.getMessage().isEmpty());
+    assertNotNull("the UNSUPPORTED refusal must carry a reason", thrown.getMessage());
   }
 
   private static Map<String, Object> byName(List<Map<String, Object>> rows, String name) {

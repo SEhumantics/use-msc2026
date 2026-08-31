@@ -49,15 +49,19 @@ public class D2FixtureVerificationTest {
         UBooleanValue.valueOf(true, 0.3));
 
     org.tzi.use.uml.mm.MClassInvariant inv = invariantByName(model, "Relay::contactClosed");
+    org.tzi.use.uml.ocl.value.VarBindings bindings =
+        new org.tzi.use.uml.ocl.value.VarBindings();
+    bindings.push("r", new org.tzi.use.uml.ocl.value.ObjectValue(relay, o));
     Value result = new org.tzi.use.uml.ocl.expr.Evaluator()
-        .eval(inv.bodyExpression(), state);
+        .eval(inv.bodyExpression(), state, bindings);
 
     assertTrue("the REAL Op_uBoolean_toBooleanC must yield a defined Boolean",
         result instanceof BooleanValue);
     assertTrue("0.3 >= 0.2: U-aware TRUE through the real operation",
         ((BooleanValue) result).value());
     assertFalse("and the nominal reading is FALSE (0.3 < 0.5): genuine mode disagreement",
-        ((BooleanValue) result).value() == (state.probability() >= 0.5));
+        ((BooleanValue) result).value() == (((UBooleanValue)
+            o.state(state).attributeValue(relay.attribute("state", true))).probability() >= 0.5));
   }
 
   private static org.tzi.use.uml.mm.MClassInvariant invariantByName(
