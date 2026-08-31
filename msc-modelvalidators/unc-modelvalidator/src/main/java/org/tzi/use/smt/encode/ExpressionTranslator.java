@@ -2542,30 +2542,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         String destClass = destination.cls().name();
         vals = context.attributeValues(destClass, a.attr().name());
         domain = context.attributeDomain(destClass, a.attr().name());
-      } else if (a.objExp() instanceof ExpNavigation deepNav
-          && !deepNav.getDestination().isCollection()
-          && deepNav.getObjectExpression() instanceof ExpNavigation) {
-        // MULTI-HOP chain root: the terminal attribute's value is the hop-by-hop ite
-        // selection (the same construction visitAttrOp's chained branch builds), and the
-        // candidate domain is the terminal hop's RESOLVED concrete class's own domain.
-        List<MNavigableElement> hops = new ArrayList<>();
-        Expression cursor = deepNav;
-        while (cursor instanceof ExpNavigation hop) {
-          hops.add(hop.getDestination());
-          cursor = hop.getObjectExpression();
-        }
-        java.util.Collections.reverse(hops);
-        if (!(cursor instanceof ExpVariable rootVar)
-            || localBindings.containsKey(rootVar.getVarname())) {
-          return null;
-        }
-        VariableBinding root = context.binding(rootVar.getVarname());
-        MNavigableElement terminal =
-            resolveRedefinedDestination(hops.get(hops.size() - 1), root);
-        String destClass = terminal.cls().name();
-        vals = context.attributeValues(destClass, a.attr().name());
-        domain = context.attributeDomain(destClass, a.attr().name());
-      } else {
+        } else {
         return null;
       }
       if (vals.type() != AttributeType.STRING && vals.type() != AttributeType.ENUM) {
