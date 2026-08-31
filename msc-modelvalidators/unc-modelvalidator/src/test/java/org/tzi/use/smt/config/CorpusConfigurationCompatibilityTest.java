@@ -41,7 +41,7 @@ public class CorpusConfigurationCompatibilityTest {
    * DerivedAssociationEncoder's any()-match idiom a real corpus scenario -- also ordinary
    * satisfiability questions, no query key.
    */
-  private static final int QUERYLESS_SCENARIOS = 72; // session total 78 entries, 6 query-carrying (last: SetAttr/-UNSAT, 2026-08-30)
+  private static final int QUERYLESS_SCENARIOS = 74; // session total 80 entries, 6 query-carrying (last: RangeBound/-UNSAT, 2026-08-31)
 
   /** The Milestone 4.6 scenario-profile rows, the first corpus entries to configure a query. */
   private static final int QUERY_CARRYING_SCENARIOS = 6;

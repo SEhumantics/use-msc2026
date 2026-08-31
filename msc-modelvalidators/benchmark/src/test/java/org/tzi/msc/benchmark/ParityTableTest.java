@@ -133,8 +133,10 @@ public class ParityTableTest {
 	 * The figures the gate demands be stated plainly, pinned against a real run rather than asserted
 	 * in prose.
 	 *
-	 * <p><b>Provenance of the pinned numbers.</b> Regenerated 2026-08-31 from the full 78-row corpus
-	 * run at commit {@code 6c181299} (the first Study A snapshot to cover the whole corpus -- the
+	 * <p><b>Provenance of the pinned numbers.</b> Regenerated 2026-08-31 from the full 80-row corpus
+	 * run at commit {@code 0c3b5917} (RangeBound/-UNSAT added; their Kodkod cells are
+	 * TRIVIALLY_UNSATISFIABLE -- the incumbent's defined-count reading of <Attr>_min/_max,
+	 * documented in the scenario itself) (the first Study A snapshot to cover the whole corpus -- the
 	 * previous pin, 45 rows / intersection 6, predated every scenario added since the August-27 gate).
 	 * 2026-08-31, later the same day: the disagreement was RESOLVED BY PROMOTION. DerivedAttr-UNSAT
 	 * became the SEVENTH declared Study B divergence (the incumbent's derived attributes never
@@ -145,12 +147,12 @@ public class ParityTableTest {
 	 */
 	@Test
 	public void theHonestDenominatorOverTheRealCorpusRun() {
-		assertEquals("corpus finding rows", 78, table.summary.corpusRows);
+		assertEquals("corpus finding rows", 80, table.summary.corpusRows);
 		assertEquals("Study B rows are declared divergences, not parity evidence", 7,
 				table.summary.declaredDivergenceRows);
-		assertEquals("parity population", 71, table.summary.parityPopulation);
+		assertEquals("parity population", 73, table.summary.parityPopulation);
 		assertEquals("Kodkod real verdicts", 43, table.summary.kodkodRealVerdicts);
-		assertEquals("SMT real verdicts", 69, table.summary.smtRealVerdicts);
+		assertEquals("SMT real verdicts", 71, table.summary.smtRealVerdicts);
 		assertEquals("intersection -- the only honest parity denominator", 41, table.summary.intersection);
 		assertEquals("agreements", 41, table.summary.agreements);
 		assertEquals("undeclared disagreements", 0, table.summary.disagreements);
@@ -160,7 +162,7 @@ public class ParityTableTest {
 	/**
 	 * The intersection's SHAPE is pinned: 41 members, the six original members still in it
 	 * (continuity of the parity claim), the Set-attribute corpus rows in it too, ZERO disagreeing
-	 * members -- the one disagreement the 78-row snapshot had is now the seventh Study B row and
+	 * members -- the one disagreement the earlier 78-row snapshot had is now the seventh Study B row and
 	 * has left the population by the standing rule.
 	 */
 	@Test
@@ -204,8 +206,8 @@ public class ParityTableTest {
 			}
 		}
 
-		assertEquals("78 corpus rows, one table row each -- nothing collapsed", 78, table.rows.size());
-		assertEquals("37 rows are not plain agreements and each is retained", 37, nonAgreeing);
+		assertEquals("80 corpus rows, one table row each -- nothing collapsed", 80, table.rows.size());
+		assertEquals("39 rows are not plain agreements and each is retained", 39, nonAgreeing);
 	}
 
 	/**
@@ -345,8 +347,8 @@ public class ParityTableTest {
 		String md = ParityTable.toMarkdown(table);
 
 		assertTrue("Kodkod denominator", md.contains("43"));
-		assertTrue("SMT denominator", md.contains("69"));
-		assertTrue("intersection denominator", md.contains("41 of 78"));
+		assertTrue("SMT denominator", md.contains("71"));
+		assertTrue("intersection denominator", md.contains("41 of 80"));
 		for (ParityTable.Row row : table.rows) {
 			assertTrue("missing row " + row.exampleId, md.contains("| " + row.exampleId + " |"));
 		}

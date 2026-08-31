@@ -792,10 +792,19 @@ public final class ExpressionTranslator implements ExpressionVisitor {
             if (a.length == 1 && a[0].type().isTypeOfInteger()) {
               yield argResult(a[0]);
             }
+            // Real.round() is USE's Op_real_round = Java Math.round(double) = floor(r + 0.5)
+            // (StandardOperationsNumber) -- LINEAR in the pinned QF_LIRA logic once SMT-LIB's
+            // own floor-valued to_int is used, so the old blanket refusal was not forced. The
+            // encoding matches Java exactly, negative halves included: Math.round(-2.5) = -2.
+            if (a.length == 1 && a[0].type().isTypeOfReal()) {
+              TranslatedExpression operand = argResult(a[0]);
+              yield defined(
+                  Smt.app("to_int", Smt.app("+", operand.value(), Smt.realLit(new java.math.BigDecimal("0.5")))));
+            }
             throw unsupported(
                 boundaryOfOperator(e.opname()),
-                "operator 'round' over a non-Integer operand (Real/UReal rounding semantics are"
-                    + " not in this slice)");
+                "operator 'round' over a non-Integer/non-Real operand (UReal rounding composes"
+                    + " uncertainty and is not in this slice)");
           }
           default ->
               throw unsupported(boundaryOfOperator(e.opname()), "operator '" + e.opname() + "'");

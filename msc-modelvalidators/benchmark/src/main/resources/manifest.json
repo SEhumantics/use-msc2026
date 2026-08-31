@@ -2806,6 +2806,62 @@
         "cardinality-contradiction",
         "authored"
       ]
+    },
+    {
+      "directory": "RangeBound",
+      "useFile": "RangeBound.use",
+      "propertiesFile": "RangeBound.properties",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceCitation": null,
+      "scenarioTags": [
+        "attribute-range",
+        "config-bounds",
+        "authored"
+      ],
+      "id": "RangeBound",
+      "section": "main",
+      "features": [
+        "config.attribute-bounds",
+        "prim.integer-comparisons"
+      ],
+      "provenanceDetail": "Authored for this thesis project (msc-4, Trong-Nghia Be) to give the per-attribute NUMERIC RANGE half of config.attribute-bounds its first wired corpus coverage: Sensor_level bounded by _min/_max range [10,20] (not an enumerated Set{}), invariant level >= 10 satisfiable inside the range. KEY-SEMANTICS DIVERGENCE: the incumbent reads <Attr>_min/_max as a count of defined objects (AttributeConfigurator.setLimits/numberOfDefinedValues), so it demands 10..20 defined objects with a 1-object scope and collapses to TRIVIALLY_UNSATISFIABLE (observed, all five SAT backends); this tool reads the same keys as a value range. The [10,20] range guard is USE-checkable directly.",
+      "question": "Does the per-attribute numeric range [10,20] admit a level satisfying level >= 10?",
+      "expected": {
+        "classification": "sat",
+        "outcome": "SATISFIABLE"
+      }
+    },
+    {
+      "directory": "RangeBound",
+      "useFile": "RangeBound.use",
+      "propertiesFile": "RangeBound.properties",
+      "bitwidth": 8,
+      "category": "expressiveness",
+      "mode": "finding",
+      "hasValidationTests": false,
+      "provenanceType": "authored-for-thesis",
+      "provenanceCitation": null,
+      "scenarioTags": [
+        "attribute-range",
+        "config-bounds",
+        "authored"
+      ],
+      "id": "RangeBound-UNSAT",
+      "section": "unsat",
+      "features": [
+        "config.attribute-bounds",
+        "prim.integer-comparisons"
+      ],
+      "provenanceDetail": "UNSAT counterpart of RangeBound: the same range [10,20] with the invariant level <= 5 -- the range forbids every value the invariant accepts, a genuine range-driven refutation under the value-range reading of <Attr>_min/_max (the incumbent's defined-count reading makes both rows TRIVIALLY_UNSATISFIABLE; see the RangeBound entry).",
+      "question": "Does the numeric range genuinely constrain -- refuting level <= 5 against floor 10?",
+      "expected": {
+        "classification": "unsat",
+        "outcome": "UNSATISFIABLE"
+      }
     }
   ]
 }

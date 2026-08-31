@@ -1,0 +1,28 @@
+model RangeBound
+
+-- Authored to give the per-attribute NUMERIC RANGE half of
+-- config.attribute-bounds its wired corpus coverage: Sensor_level carries a
+-- _min/_max range ([10,20], not an enumerated Set{}), so the attribute's
+-- value is bounded by a range guard rather than by candidate enumeration.
+-- No shipped corpus scenario used the numeric-range form before this --
+-- Library/Inheritance use Set{} spellings, SetAttr uses collection sizes,
+-- and the type-wide Integer_min/max keys are the OTHER config row
+-- (config.primitive-type-wide-value-domain).
+
+class Sensor
+attributes
+  level : Integer
+end
+
+constraints
+
+-- Satisfiable inside the configured range: the solver picks level in [10,20]
+-- (e.g. 10), and the invariant holds.
+context s : Sensor inv levelAboveFloor:
+  s.level >= 10
+
+-- Demands below the configured floor: the range guard forbids every value
+-- the invariant would accept, so the section activating this alone is
+-- genuinely UNSATISFIABLE -- the range, not the invariant list, refutes.
+context s : Sensor inv levelBelowFloor:
+  s.level <= 5
