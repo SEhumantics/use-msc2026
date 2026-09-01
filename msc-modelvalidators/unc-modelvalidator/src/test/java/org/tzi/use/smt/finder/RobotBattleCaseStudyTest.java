@@ -35,8 +35,14 @@ import org.tzi.use.uml.mm.ModelFactory;
  *     refutes.</li>
  * <li><b>3. Confidence-flipped safety verdict</b> -- the UString identification confidence
  *     selects friend from foe: the SAME spelling at a different confidence flips the verdict.</li>
- * <li><b>4. Scenario-policy separation</b> -- EXISTS/COVER/UNIFORM via the non-monotone
- *     window pair already corpus-proven (ScenarioProfiles' own construction).</li>
+ * <li><b>4. Scenario-policy separation</b> -- demonstrated by the UNION of the general
+ *     UReal capability ({@see ScenarioProfileTest#existsSucceedsWhereCoverAndUniformAreBothRefuted}
+ *     for EXISTS vs COVER, and
+ *     {@see ScenarioProfileTest#coverSucceedsWithADIFFERENTSnapshotPerScenarioWhereUniformIsRefuted}
+ *     for COVER vs UNIFORM -- the load-bearing distinction) with the Robot-Battle-specific
+ *     instances in this file: uRealPolicySeparation (distinction (a), UReal on the Robot's
+ *     speed slot) and uBooleanPolicyLimitation (the UBoolean collapse finding). Robot
+ *     Battle alone does not prove the three-way separation.</li>
  * </ul>
  */
 public class RobotBattleCaseStudyTest {
@@ -240,10 +246,12 @@ public class RobotBattleCaseStudyTest {
       """;
 
   /**
-   * The UBoolean structural limitation, experiment-backed: EXISTS SAT, COVER SAT,
-   * UNIFORM SAT -- the three policies COLLAPSE for UBoolean because the probability
-   * is registered once (shared) rather than per-scenario. Documented as a structural
-   * limitation in the RQ3 brief.
+   * The UBoolean structural limitation: this test verifies that EXISTS, COVER, and
+   * UNIFORM all return SAT for a UBoolean-only model, demonstrating that the three
+   * policies COLLAPSE because the probability is registered once (shared across all
+   * scenario copies) rather than per-scenario. This is a documented structural
+   * limitation, not a positive proof of the scenario-policy separation (which is
+   * carried by uRealPolicySeparation and ScenarioProfileTest using UReal).
    */
   @Test
   public void uBooleanPolicyLimitation() throws Exception {
@@ -272,9 +280,11 @@ public class RobotBattleCaseStudyTest {
   }
 
   /**
-   * Claim 4's positive proof: the UReal non-monotone window pair (the ScenarioProfiles
-   * construction) DOES separate EXISTS / COVER / UNIFORM. EXISTS-sat, COVER-unsat,
-   * UNIFORM-unsat when the window is uncoverable at one sigma.
+   * Robot-Battle-specific instance of the scenario-policy separation (distinction (a)):
+   * EXISTS-sat, COVER-unsat, UNIFORM-unsat on the Robot's UReal speed slot using the
+   * non-monotone window pair. The GENERAL three-way capability is proven by
+   * ScenarioProfileTest (solver-level, both pairwise distinctions); this test adds the
+   * Robot-Battle-specific instance on the same UReal mechanism.
    */
   @Test
   public void uRealPolicySeparation() throws Exception {
