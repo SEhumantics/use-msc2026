@@ -43,11 +43,12 @@ import org.tzi.use.uml.mm.ModelFactory;
  *     instances in this file: uRealPolicySeparation (distinction (a), UReal on the Robot's
  *     speed slot) and uBooleanPolicyLimitation (the UBoolean collapse finding). Robot
  *     Battle alone does not prove the three-way separation.
- *     ALL FOUR U-TYPES now covered: UReal and UInteger genuinely separate
- *     (distinct registration paths with scenario-bound measurement quality);
- *     UBoolean and UString structurally collapse (USE's normalization couples
- *     truth flag and probability into a snapshot-owned variable). This is an
- *     intentional, disclosed architectural boundary, not a missing feature.</li>
+ *     All four U-types are covered: UReal and UInteger separate under the
+ *     scenario policies (uRealPolicySeparation, uIntegerScenarioPolicySeparation);
+ *     UBoolean and UString collapse (uBooleanPolicyLimitation,
+ *     uStringScenarioPolicyCollapse) because USE's normalization couples the
+ *     uncertainty parameter into a snapshot-owned variable, so it cannot vary
+ *     per scenario. Two types separate, two collapse.</li>
  * </ul>
  */
 public class RobotBattleCaseStudyTest {
@@ -80,6 +81,8 @@ public class RobotBattleCaseStudyTest {
       constraints
       context r : Robot inv reliablyFast:
         (r.speed > 0.30).toBooleanC(0.95)
+      context r : Robot inv movedRecently:
+        (r.lastMovement > 8).toBooleanC(0.95)
       context u : UnidentifiedObject inv identified:
         (u.id = 'U-77').toBooleanC(0.7)
       context u : UnidentifiedObject inv recentlyMoved:
@@ -285,7 +288,8 @@ public class RobotBattleCaseStudyTest {
    * policies COLLAPSE because the probability is registered once (shared across all
    * scenario copies) rather than per-scenario. This is a documented structural
    * limitation, not a positive proof of the scenario-policy separation (which is
-   * carried by uRealPolicySeparation and ScenarioProfileTest using UReal).
+   * carried by uRealPolicySeparation, uIntegerScenarioPolicySeparation, and
+   * ScenarioProfileTest).
    */
   @Test
   public void uBooleanPolicyLimitation() throws Exception {
@@ -316,11 +320,14 @@ public class RobotBattleCaseStudyTest {
   // ============================================= CLAIM 4: UInteger + UString coverage
 
   /**
-   * UInteger shares UReal's exact registration path (registerUTypeAttribute, both ride
-   * encodeUTypeUncertainties with a scenario-selected sigma), so it should genuinely
-   * separate under EXISTS/COVER/UNIFORM -- EXISTS-sat, COVER-unsat, UNIFORM-unsat on
-   * the non-monotone window pair (same construction as uRealPolicySeparation but with
-   * UInteger instead of UReal).
+   * UInteger instance of the scenario-policy separation (distinction (a)), mirroring
+   * uRealPolicySeparation on the Robot's UInteger lastMovement slot with the
+   * non-monotone window pair sigma in {2, 8} against the invariant
+   * movedRecently: (lastMovement > 8).toBooleanC(0.95):
+   * Phi((12-8)/2) = Phi(2) ~ 0.977 >= 0.95, but Phi((12-8)/8) = Phi(0.5) ~ 0.69 < 0.95.
+   * So EXISTS-sat (pick sigma=2), COVER-unsat (sigma=8 is uncoverable by mu=12 alone),
+   * UNIFORM-unsat (no shared snapshot). UInteger shares UReal's registration path
+   * (registerUTypeAttribute with a scenario-selected sigma), so it separates the same way.
    */
   @Test
   public void uIntegerScenarioPolicySeparation() throws Exception {
@@ -329,39 +336,39 @@ public class RobotBattleCaseStudyTest {
 
     List<AttributeDomain> domains = List.of(
         new AttributeDomain("Robot", "lastMovement", "value", List.of("12"), null, null),
-        new AttributeDomain("Robot", "lastMovement", "uncertainty", List.of("2", "8"), null, null),
-        new AttributeDomain("Robot", "speed", "value", List.of("0.35"), null, null),
-        new AttributeDomain("Robot", "speed", "uncertainty", List.of("0.02"), null, null));
+        new AttributeDomain("Robot", "lastMovement", "uncertainty", List.of("2", "8"), null, null));
     List<ClassScope> robotScope = List.of(new ClassScope("Robot", 1, 1, List.of("r1")));
 
-    // EXISTS / COVER / UNIFORM on a UInteger slot with a non-monotone window pair.
-    // The UInteger shares UReal's registration path, so the expectation was genuine
-    // separation. The ACTUAL results are recorded below -- report what Z3 does, not
-    // what the prediction said.
     AnalysisConfiguration existsCfg = new AnalysisConfiguration(
-        robotScope, List.of(), domains, Set.of("Robot::reliablyFast"),
+        robotScope, List.of(), domains, Set.of("Robot::movedRecently"),
         QueryParser.parse("exists satisfy", vocab), Duration.ofSeconds(30), 1);
     ModelFinderResult exists = SmtModelFinder.find(model, existsCfg);
-    assertTrue("UInteger EXISTS: empirical result recorded", exists.satisfiable());
+    assertTrue("UInteger EXISTS: sigma=2 gives Phi(2) ~ 0.977 >= 0.95 → SAT",
+        exists.satisfiable());
 
     AnalysisConfiguration coverCfg = new AnalysisConfiguration(
-        robotScope, List.of(), domains, Set.of("Robot::reliablyFast"),
+        robotScope, List.of(), domains, Set.of("Robot::movedRecently"),
         QueryParser.parse("cover satisfy", vocab), Duration.ofSeconds(30), 1);
     ModelFinderResult cover = SmtModelFinder.find(model, coverCfg);
-    assertTrue("UInteger COVER: empirical result recorded", cover.satisfiable());
+    assertFalse("UInteger COVER: sigma=8 uncoverable by mu=12 alone → UNSAT",
+        cover.satisfiable());
 
     AnalysisConfiguration uniformCfg = new AnalysisConfiguration(
-        robotScope, List.of(), domains, Set.of("Robot::reliablyFast"),
+        robotScope, List.of(), domains, Set.of("Robot::movedRecently"),
         QueryParser.parse("uniform satisfy", vocab), Duration.ofSeconds(30), 1);
     ModelFinderResult uniform = SmtModelFinder.find(model, uniformCfg);
-    assertTrue("UInteger UNIFORM: empirical result recorded", uniform.satisfiable());
+    assertFalse("UInteger UNIFORM: no shared snapshot → UNSAT", uniform.satisfiable());
   }
 
   /**
    * UString is architecturally identical to UBoolean: USE's normalization couples the
    * spelling and confidence into a single (spelling, confidence) pair, and the SMT
-   * encoding has confidence registered ONCE (shared across scenario copies). All three
-   * policies should return SAT (structural collapse).
+   * encoding has confidence registered ONCE (shared across scenario copies) rather
+   * than per-scenario. The confidence domain varies over two values, 0.85 and 0.5,
+   * against the invariant identified: (id = 'U-77').toBooleanC(0.7): 0.85 >= 0.7 but
+   * 0.5 < 0.7, so a scenario-pinned confidence would make COVER and UNIFORM unsat.
+   * All three policies still return SAT -- the collapse holds under genuine
+   * variation, not by singleton-domain triviality.
    */
   @Test
   public void uStringScenarioPolicyCollapse() throws Exception {
@@ -370,7 +377,7 @@ public class RobotBattleCaseStudyTest {
 
     List<AttributeDomain> domains = List.of(
         new AttributeDomain("UnidentifiedObject", "id", "value", List.of("U-77"), null, null),
-        new AttributeDomain("UnidentifiedObject", "id", "confidence", List.of("0.85"), null, null));
+        new AttributeDomain("UnidentifiedObject", "id", "confidence", List.of("0.85", "0.5"), null, null));
     List<ClassScope> uScope = List.of(new ClassScope("UnidentifiedObject", 1, 1, List.of("u1")));
 
     for (var profile : List.of("exists satisfy", "cover satisfy", "uniform satisfy")) {
