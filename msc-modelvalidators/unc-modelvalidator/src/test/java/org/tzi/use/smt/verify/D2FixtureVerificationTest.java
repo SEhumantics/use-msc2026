@@ -1,7 +1,6 @@
 package org.tzi.use.smt.verify;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -37,6 +36,10 @@ public class D2FixtureVerificationTest {
    * {@code Op_uBoolean_toBooleanC.eval} (dispatched by USE's own {@code Evaluator} on a
    * parsed {@code toBooleanC(0.2)} expression), not a hand-copied inline formula.
    */
+  // Deliberate regression pin for the MILESTONE 2 fixture-construction bug (UBooleanValue.valueOf's
+  // value=true normalization) -- not redundant with StudyCOracleSweepTest's near-identical
+  // d2-nominal-false-u-true row (p=0.3/theta=0.2): that sweep re-checks classification across many
+  // rows in one pass, while this file isolates the exact construction step that broke.
   @Test
   public void uAwareToBooleanC02IsTrueThroughTheRealOperation() throws Exception {
     org.tzi.use.uml.mm.MModel model = compile();
@@ -59,9 +62,16 @@ public class D2FixtureVerificationTest {
         result instanceof BooleanValue);
     assertTrue("0.3 >= 0.2: U-aware TRUE through the real operation",
         ((BooleanValue) result).value());
-    assertFalse("and the nominal reading is FALSE (0.3 < 0.5): genuine mode disagreement",
-        ((BooleanValue) result).value() == (((UBooleanValue)
-            o.state(state).attributeValue(relay.attribute("state", true))).probability() >= 0.5));
+
+    // Nominal: the REAL NominalErasureEvaluator on the same state -- not the hand-copied
+    // 'probability() >= 0.5' shortcut, matching this file's own stated standard above.
+    org.tzi.use.uml.ocl.expr.EvalContext ctx =
+        new org.tzi.use.uml.ocl.expr.EvalContext(state, state, bindings, null, "");
+    org.tzi.use.smt.config.InvariantOutcome nominal =
+        NominalErasureEvaluator.eval(inv.bodyExpression(), ctx);
+    assertEquals("nominal: 0.3 < 0.5 -> FALSE through the real NominalErasureEvaluator "
+        + "(genuine mode disagreement with U-aware TRUE)",
+        org.tzi.use.smt.config.InvariantOutcome.FALSE, nominal);
   }
 
   private static org.tzi.use.uml.mm.MClassInvariant invariantByName(

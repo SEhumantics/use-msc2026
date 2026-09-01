@@ -43,9 +43,11 @@ import com.google.gson.GsonBuilder;
  * Evaluator} on the U-carrying state, the nominal reading through this package's
  * {@link NominalErasureEvaluator} -- never a solver self-report. The sweep writes
  * {@code target/studyC-oracle.json} and {@code target/studyC-oracle.md}; the pin asserts the
- * settled-row count, the two diagnostic rows' exact two-mode classifications, and per-row
- * agreement with the expected oracle table below (whose numbers were verified against
- * use-core source and the normal CDF, see DESIGN_BRIEF_RQ3_ORACLE_SWEEP.md Milestone 1).
+ * settled-row count, the FOUR diagnostic rows' (d1-nominal-true-u-undefined,
+ * d2-nominal-false-u-true, d3-fragile-witness, fragile-witness-mirror) exact two-mode
+ * classifications, and per-row agreement with the expected oracle table below (whose
+ * numbers were verified against use-core source and the normal CDF, see
+ * DESIGN_BRIEF_RQ3_ORACLE_SWEEP.md Milestone 1).
  */
 public class StudyCOracleSweepTest {
 

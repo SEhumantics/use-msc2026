@@ -36,9 +36,9 @@ import org.tzi.use.uml.mm.ModelFactory;
  * <li><b>3. Confidence-flipped safety verdict</b> -- the UString identification confidence
  *     selects friend from foe: the SAME spelling at a different confidence flips the verdict.</li>
  * <li><b>4. Scenario-policy separation</b> -- demonstrated by the UNION of the general
- *     UReal capability ({@see ScenarioProfileTest#existsSucceedsWhereCoverAndUniformAreBothRefuted}
+ *     UReal capability ({@link ScenarioProfileTest#existsSucceedsWhereCoverAndUniformAreBothRefuted}
  *     for EXISTS vs COVER, and
- *     {@see ScenarioProfileTest#coverSucceedsWithADIFFERENTSnapshotPerScenarioWhereUniformIsRefuted}
+ *     {@link ScenarioProfileTest#coverSucceedsWithADIFFERENTSnapshotPerScenarioWhereUniformIsRefuted}
  *     for COVER vs UNIFORM -- the load-bearing distinction) with the Robot-Battle-specific
  *     instances in this file: uRealPolicySeparation (distinction (a), UReal on the Robot's
  *     speed slot) and uBooleanPolicyLimitation (the UBoolean collapse finding). Robot
@@ -124,6 +124,49 @@ public class RobotBattleCaseStudyTest {
     assertTrue(verdictFor(match, "UnidentifiedObject::recentlyMoved").holds());
   }
 
+  // ============================================= CLAIM 2: erasure divergence
+
+  /**
+   * THE ERASURE DIVERGENCE (design brief Part B, claim 2): the ReliablyFast shape on a
+   * hand-built UReal(0.31, 0.02) state, evaluated in BOTH modes by USE's OWN evaluators.
+   * Nominal: 0.31 > 0.30 → TRUE. U-aware: crossing probability Φ((0.31−0.30)/0.02) ≈ 0.6915
+   * < 0.95 → FALSE. The crisp incumbent reports "satisfied"; the U-aware semantics refutes
+   * the same snapshot.
+   */
+  @Test
+  public void erasureDivergence() throws Exception {
+    MModel model = compile();
+    org.tzi.use.uml.sys.MSystem system = new org.tzi.use.uml.sys.MSystem(model);
+    org.tzi.use.uml.sys.MSystemState state = system.state();
+    org.tzi.use.uml.mm.MClass robot = model.getClass("Robot");
+
+    org.tzi.use.uml.sys.MObject r = state.createObject(robot, "r_div");
+    r.state(state).setAttributeValue(robot.attribute("speed", true),
+        new org.tzi.use.uml.ocl.value.URealValue(0.31, 0.02));
+
+    org.tzi.use.uml.mm.MClassInvariant inv = invariantByName(model, "Robot::reliablyFast");
+    org.tzi.use.uml.ocl.expr.Expression body = inv.expandedExpression();
+
+    // U-aware: USE's own Evaluator on the U-carrying state.
+    org.tzi.use.uml.ocl.value.Value uResult =
+        new org.tzi.use.uml.ocl.expr.Evaluator().eval(body, state);
+    boolean uAware = !uResult.isUndefined()
+        && ((org.tzi.use.uml.ocl.value.BooleanValue) uResult).value();
+
+    // Nominal: the erasure evaluator (package made public for this test).
+    org.tzi.use.uml.ocl.expr.EvalContext ctx =
+        new org.tzi.use.uml.ocl.expr.EvalContext(state, state,
+            system.varBindings(), null, "");
+    InvariantOutcome nominal = NominalErasureEvaluator.eval(body, ctx);
+
+    // THE DIVERGENCE: nominal TRUE, U-aware FALSE.
+    org.junit.Assert.assertEquals(
+        "nominal: 0.31 > 0.30 → TRUE",
+        InvariantOutcome.TRUE, nominal);
+    org.junit.Assert.assertFalse(
+        "U-aware: crossing probability Φ(0.5) ≈ 0.6915 < 0.95 → FALSE", uAware);
+  }
+
   // ============================================= CLAIM 3: confidence-flipped verdict
 
   /**
@@ -171,57 +214,6 @@ public class RobotBattleCaseStudyTest {
   // ============================================= CLAIM 4: scenario-policy separation
 
   /**
-   * EXISTS / COVER / UNIFORM on the non-monotone window pair (the ScenarioProfiles
-   * construction applied to the Robot Battle speed slot). The EXISTS solve succeeds; the
-   * COVER solve succeeds (each scenario gets its own snapshot); the UNIFORM solve REFUTES
-   * (no single snapshot covers both windows). The unsat is the policy separation's teeth.
-   */
-  // ============================================= CLAIM 2: erasure divergence
-
-  /**
-   * THE ERASURE DIVERGENCE (design brief Part B, claim 2): the ReliablyFast shape on a
-   * hand-built UReal(0.31, 0.02) state, evaluated in BOTH modes by USE's OWN evaluators.
-   * Nominal: 0.31 > 0.30 → TRUE. U-aware: crossing probability Φ((0.31−0.30)/0.02) ≈ 0.6915
-   * < 0.95 → FALSE. The crisp incumbent reports "satisfied"; the U-aware semantics refutes
-   * the same snapshot.
-   */
-  @Test
-  public void erasureDivergence() throws Exception {
-    MModel model = compile();
-    org.tzi.use.uml.sys.MSystem system = new org.tzi.use.uml.sys.MSystem(model);
-    org.tzi.use.uml.sys.MSystemState state = system.state();
-    org.tzi.use.uml.mm.MClass robot = model.getClass("Robot");
-
-    org.tzi.use.uml.sys.MObject r = state.createObject(robot, "r_div");
-    r.state(state).setAttributeValue(robot.attribute("speed", true),
-        new org.tzi.use.uml.ocl.value.URealValue(0.31, 0.02));
-
-    org.tzi.use.uml.mm.MClassInvariant inv = invariantByName(model, "Robot::reliablyFast");
-    org.tzi.use.uml.ocl.expr.Expression body = inv.expandedExpression();
-
-    // U-aware: USE's own Evaluator on the U-carrying state.
-    org.tzi.use.uml.ocl.value.Value uResult =
-        new org.tzi.use.uml.ocl.expr.Evaluator().eval(body, state);
-    boolean uAware = !uResult.isUndefined()
-        && ((org.tzi.use.uml.ocl.value.BooleanValue) uResult).value();
-
-    // Nominal: the erasure evaluator (package made public for this test).
-    org.tzi.use.uml.ocl.expr.EvalContext ctx =
-        new org.tzi.use.uml.ocl.expr.EvalContext(state, state,
-            system.varBindings(), null, "");
-    InvariantOutcome nominal = NominalErasureEvaluator.eval(body, ctx);
-
-    // THE DIVERGENCE: nominal TRUE, U-aware FALSE.
-    org.junit.Assert.assertEquals(
-        "nominal: 0.31 > 0.30 → TRUE",
-        InvariantOutcome.TRUE, nominal);
-    org.junit.Assert.assertFalse(
-        "U-aware: crossing probability Φ(0.5) ≈ 0.6915 < 0.95 → FALSE", uAware);
-  }
-
-  // ============================================= CLAIM 4: scenario-policy separation
-
-  /**
    * THE SCENARIO-POLICY SEPARATION (design brief Milestone 1 §2, construction verified):
    * EXISTS-sat / COVER-sat / UNIFORM-unsat via two stored UBoolean attributes whose
    * probabilities are scenario-bound. The scenario domain is the cross product of
@@ -244,40 +236,6 @@ public class RobotBattleCaseStudyTest {
       context m : Mark inv j: m.hitsTarget.toBooleanC(0.8)
       context m : Mark inv k: m.confirmed.toBooleanC(0.8)
       """;
-
-  /**
-   * The UBoolean structural limitation: this test verifies that EXISTS, COVER, and
-   * UNIFORM all return SAT for a UBoolean-only model, demonstrating that the three
-   * policies COLLAPSE because the probability is registered once (shared across all
-   * scenario copies) rather than per-scenario. This is a documented structural
-   * limitation, not a positive proof of the scenario-policy separation (which is
-   * carried by uRealPolicySeparation and ScenarioProfileTest using UReal).
-   */
-  @Test
-  public void uBooleanPolicyLimitation() throws Exception {
-    ModelFactory factory = new ModelFactory();
-    java.io.StringWriter buffer = new java.io.StringWriter();
-    java.io.PrintWriter err = new java.io.PrintWriter(buffer, true);
-    MModel model = USECompiler.compileSpecification(POLICY_MODEL, "PolicySeparation", err, factory);
-    err.flush();
-    if (model == null) throw new AssertionError("policy model did not compile:\n" + buffer);
-    ConfigurationVocabulary vocab = ConfigurationVocabulary.fromModel(model);
-
-    List<AttributeDomain> domains = List.of(
-        new AttributeDomain("Mark", "hitsTarget", "probability", List.of("0.9", "0.15"), null, null),
-        new AttributeDomain("Mark", "confirmed", "probability", List.of("0.9", "0.15"), null, null));
-    List<ClassScope> scopes = List.of(new ClassScope("Mark", 1, 1, List.of("m1")));
-
-    for (var profile : List.of("exists satisfy", "cover satisfy", "uniform satisfy")) {
-      AnalysisConfiguration cfg = new AnalysisConfiguration(
-          scopes, List.of(), domains, Set.of("Mark::j", "Mark::k"),
-          QueryParser.parse(profile, vocab), Duration.ofSeconds(30), 1);
-      ModelFinderResult result = SmtModelFinder.find(model, cfg);
-      assertTrue("UBoolean " + profile.split(" ")[0] + ": SAT (all three collapse -- "
-          + "no snapshot-side representative for UBoolean)",
-          result.satisfiable());
-    }
-  }
 
   /**
    * Robot-Battle-specific instance of the scenario-policy separation (distinction (a)):
@@ -316,9 +274,40 @@ public class RobotBattleCaseStudyTest {
     assertFalse("UNIFORM: no shared snapshot → UNSAT", uniform.satisfiable());
   }
 
-  // ============================================= shared helpers
+  /**
+   * The UBoolean structural limitation: this test verifies that EXISTS, COVER, and
+   * UNIFORM all return SAT for a UBoolean-only model, demonstrating that the three
+   * policies COLLAPSE because the probability is registered once (shared across all
+   * scenario copies) rather than per-scenario. This is a documented structural
+   * limitation, not a positive proof of the scenario-policy separation (which is
+   * carried by uRealPolicySeparation and ScenarioProfileTest using UReal).
+   */
+  @Test
+  public void uBooleanPolicyLimitation() throws Exception {
+    ModelFactory factory = new ModelFactory();
+    java.io.StringWriter buffer = new java.io.StringWriter();
+    java.io.PrintWriter err = new java.io.PrintWriter(buffer, true);
+    MModel model = USECompiler.compileSpecification(POLICY_MODEL, "PolicySeparation", err, factory);
+    err.flush();
+    if (model == null) throw new AssertionError("policy model did not compile:\n" + buffer);
+    ConfigurationVocabulary vocab = ConfigurationVocabulary.fromModel(model);
 
-  // ============================================= shared helpers
+    List<AttributeDomain> domains = List.of(
+        new AttributeDomain("Mark", "hitsTarget", "probability", List.of("0.9", "0.15"), null, null),
+        new AttributeDomain("Mark", "confirmed", "probability", List.of("0.9", "0.15"), null, null));
+    List<ClassScope> scopes = List.of(new ClassScope("Mark", 1, 1, List.of("m1")));
+
+    for (var profile : List.of("exists satisfy", "cover satisfy", "uniform satisfy")) {
+      AnalysisConfiguration cfg = new AnalysisConfiguration(
+          scopes, List.of(), domains, Set.of("Mark::j", "Mark::k"),
+          QueryParser.parse(profile, vocab), Duration.ofSeconds(30), 1);
+      ModelFinderResult result = SmtModelFinder.find(model, cfg);
+      assertTrue("UBoolean " + profile.split(" ")[0] + ": SAT (all three collapse -- "
+          + "no snapshot-side representative for UBoolean)",
+          result.satisfiable());
+    }
+  }
+
   // ============================================= shared helpers
 
   private static org.tzi.use.smt.verify.InvariantVerdict verdictFor(
