@@ -473,7 +473,17 @@ public final class SmtModelFinder {
               + "' names a class with no configured scope");
     }
     owners.add(domain.className());
-    for (MClassifier descendant : model.getClass(domain.className()).allChildren()) {
+    MClass cls = model.getClass(domain.className());
+    if (cls == null) {
+      throw new SmtTranslationException(
+          FragmentBoundary.ENCODING_SCOPE,
+          "attribute domain '"
+              + domain.className()
+              + "."
+              + domain.attributeName()
+              + "' names a class not present in the model");
+    }
+    for (MClassifier descendant : cls.allChildren()) {
       String key = descendant.name() + "." + domain.attributeName();
       if (!explicitlyDeclared.contains(key) && scoped.contains(descendant.name())) {
         owners.add(descendant.name());
@@ -640,6 +650,17 @@ public final class SmtModelFinder {
       }
       MClass cls = model.getClass(domain.className());
       MAttribute attribute = cls.attribute(domain.attributeName(), true);
+      if (attribute == null) {
+        throw new SmtTranslationException(
+            FragmentBoundary.ENCODING_SCOPE,
+            "attribute domain '"
+                + domain.className()
+                + "."
+                + domain.attributeName()
+                + "' names an attribute not declared on class '"
+                + domain.className()
+                + "'");
+      }
       AttributeType type = attributeTypeOf(attribute.type());
       AttributeValues values =
           AttributeEncoder.encode(script, owner, domain.attributeName(), type, domain);
@@ -678,6 +699,15 @@ public final class SmtModelFinder {
       String className = representative.className();
       String attributeName = representative.attributeName();
       MClass cls = model.getClass(className);
+      if (cls == null) {
+        throw new SmtTranslationException(
+            FragmentBoundary.ENCODING_SCOPE,
+            "attribute domain '"
+                + className
+                + "."
+                + attributeName
+                + "' names a class not present in the model");
+      }
       MAttribute attribute = cls.attribute(attributeName, true);
       if (!attribute.type().isTypeOfUReal()
           && !attribute.type().isTypeOfUInteger()
@@ -848,6 +878,11 @@ public final class SmtModelFinder {
     Map<String, List<ObjectSlots>> assocClassEndViews = new LinkedHashMap<>();
     for (AssociationScope scope : config.associationScopes()) {
       MAssociation association = model.getAssociation(scope.associationName());
+      if (association == null) {
+        throw new SmtTranslationException(
+            FragmentBoundary.ENCODING_SCOPE,
+            "association '" + scope.associationName() + "' is not declared in the model");
+      }
       if (association instanceof MAssociationClass associationClass) {
         registerAssociationClassPointers(
             script,
@@ -1189,7 +1224,9 @@ public final class SmtModelFinder {
       String className = entry.getKey();
       MClass cls = model.getClass(className);
       if (cls == null) {
-        continue;
+        throw new SmtTranslationException(
+            FragmentBoundary.ENCODING_SCOPE,
+            "class scope '" + className + "' names a class not present in the model");
       }
       List<MAttribute> attributes = new ArrayList<>(cls.allAttributes());
       attributes.sort(java.util.Comparator.comparing(MAttribute::name));
@@ -1255,7 +1292,9 @@ public final class SmtModelFinder {
       String className = entry.getKey();
       MClass cls = model.getClass(className);
       if (cls == null) {
-        continue;
+        throw new SmtTranslationException(
+            FragmentBoundary.ENCODING_SCOPE,
+            "class scope '" + className + "' names a class not present in the model");
       }
       List<MAttribute> attributes = new ArrayList<>(cls.allAttributes());
       attributes.sort(java.util.Comparator.comparing(MAttribute::name));
