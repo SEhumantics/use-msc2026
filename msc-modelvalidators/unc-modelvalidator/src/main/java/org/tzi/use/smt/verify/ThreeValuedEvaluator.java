@@ -40,6 +40,23 @@ import org.tzi.use.uml.ocl.value.Value;
  * otherwise it is false (and OCL's {@code exists} over an empty range is FALSE, not vacuously
  * true).
  *
+ * <p>{@code xor} is walked too, matching {@code ExpressionTranslator.booleanXor}'s rule: unlike
+ * {@code and}/{@code or} it has no ABSORBING value, so it is undefined if EITHER operand is
+ * undefined, otherwise the ordinary boolean xor of the two definite values. Without its own case
+ * here, an {@code xor} node used to fall to {@code expression.eval(ctx)} -- USE's raw evaluator --
+ * whose {@code Op_boolean_xor.evalWithArgs} calls {@code args[i].eval(ctx)} directly on each
+ * operand, hitting the exact same {@code evalForAll0}/{@code evalExists0} collapse for a nested
+ * quantifier operand that motivated this class in the first place.
+ *
+ * <p>{@code =}/{@code <>} are walked ONLY when BOTH operands are Boolean-typed, matching {@code
+ * ExpressionTranslator}'s {@code useEquality} rule (in turn USE's own {@code Op_equal.eval}, kind
+ * {@code SPECIAL}): the comparison is ALWAYS defined, true exactly when both operands are
+ * undefined or both are defined and equal. A Boolean-typed operand can itself be a nested
+ * quantifier or connective, so the same raw-{@code eval} collapse above is reachable through
+ * {@code =}/{@code <>} too; non-Boolean operands (Integer, String, object identity, and so on)
+ * carry no such risk and keep falling through to {@code expression.eval(ctx)} unchanged --
+ * {@code Op_equal.eval}'s own undefined handling for those types is not reimplemented here.
+ *
  * <p>Boundary, stated rather than hidden: the collection-filtering constructs USE also collapses
  * undefined inside ({@code select}/{@code reject}, {@code any}, {@code one}, {@code uSelect}) are
  * NOT walked here. None of them is in the supported SMT translation fragment -- {@code
@@ -67,6 +84,18 @@ final class ThreeValuedEvaluator {
           return not(eval(args[0], ctx));
         case "implies":
           return or(not(eval(args[0], ctx)), eval(args[1], ctx));
+        case "xor":
+          return xor(eval(args[0], ctx), eval(args[1], ctx));
+        case "=":
+          if (args[0].type().isTypeOfBoolean() && args[1].type().isTypeOfBoolean()) {
+            return equalsOutcome(eval(args[0], ctx), eval(args[1], ctx));
+          }
+          break;
+        case "<>":
+          if (args[0].type().isTypeOfBoolean() && args[1].type().isTypeOfBoolean()) {
+            return not(equalsOutcome(eval(args[0], ctx), eval(args[1], ctx)));
+          }
+          break;
         default:
           break;
       }
@@ -160,6 +189,30 @@ final class ThreeValuedEvaluator {
       case FALSE -> InvariantOutcome.TRUE;
       case UNDEFINED -> InvariantOutcome.UNDEFINED;
     };
+  }
+
+  /**
+   * {@code xor}, matching {@code ExpressionTranslator.booleanXor}'s documented rule exactly:
+   * unlike {@code and}/{@code or} there is no ABSORBING value, so the result is undefined if
+   * EITHER operand is undefined; otherwise it is the ordinary boolean xor of the two definite
+   * values.
+   */
+  private static InvariantOutcome xor(InvariantOutcome left, InvariantOutcome right) {
+    if (left == InvariantOutcome.UNDEFINED || right == InvariantOutcome.UNDEFINED) {
+      return InvariantOutcome.UNDEFINED;
+    }
+    return left == right ? InvariantOutcome.FALSE : InvariantOutcome.TRUE;
+  }
+
+  /**
+   * {@code =} between two Boolean-typed operands, matching {@code ExpressionTranslator}'s {@code
+   * useEquality} rule (in turn USE's own {@code Op_equal.eval}, kind {@code SPECIAL}): ALWAYS
+   * defined, true exactly when both operands are undefined or both are defined and equal. Unlike
+   * {@code and}/{@code or}/{@code xor}, an undefined operand never makes the comparison itself
+   * undefined -- it can only make it FALSE (a defined value never equals an undefined one).
+   */
+  private static InvariantOutcome equalsOutcome(InvariantOutcome left, InvariantOutcome right) {
+    return left == right ? InvariantOutcome.TRUE : InvariantOutcome.FALSE;
   }
 
   private static InvariantOutcome outcomeOf(Expression expression, Value result) {
