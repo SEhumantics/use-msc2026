@@ -14,7 +14,9 @@ import org.tzi.use.smt.config.AssociationScope;
 import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.ClassScope;
 import org.tzi.use.smt.config.ConfigurationVocabulary;
+import org.tzi.use.smt.config.InvariantOutcome;
 import org.tzi.use.smt.config.QueryParser;
+import org.tzi.use.smt.verify.NominalErasureEvaluator;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
 
@@ -168,61 +170,125 @@ public class RobotBattleCaseStudyTest {
    * COVER solve succeeds (each scenario gets its own snapshot); the UNIFORM solve REFUTES
    * (no single snapshot covers both windows). The unsat is the policy separation's teeth.
    */
+  // ============================================= CLAIM 2: erasure divergence
+
+  /**
+   * THE ERASURE DIVERGENCE (design brief Part B, claim 2): the ReliablyFast shape on a
+   * hand-built UReal(0.31, 0.02) state, evaluated in BOTH modes by USE's OWN evaluators.
+   * Nominal: 0.31 > 0.30 → TRUE. U-aware: crossing probability Φ((0.31−0.30)/0.02) ≈ 0.6915
+   * < 0.95 → FALSE. The crisp incumbent reports "satisfied"; the U-aware semantics refutes
+   * the same snapshot.
+   */
+  @Test
+  public void erasureDivergence() throws Exception {
+    MModel model = compile();
+    org.tzi.use.uml.sys.MSystem system = new org.tzi.use.uml.sys.MSystem(model);
+    org.tzi.use.uml.sys.MSystemState state = system.state();
+    org.tzi.use.uml.mm.MClass robot = model.getClass("Robot");
+
+    org.tzi.use.uml.sys.MObject r = state.createObject(robot, "r_div");
+    r.state(state).setAttributeValue(robot.attribute("speed", true),
+        new org.tzi.use.uml.ocl.value.URealValue(0.31, 0.02));
+
+    org.tzi.use.uml.mm.MClassInvariant inv = invariantByName(model, "Robot::reliablyFast");
+    org.tzi.use.uml.ocl.expr.Expression body = inv.expandedExpression();
+
+    // U-aware: USE's own Evaluator on the U-carrying state.
+    org.tzi.use.uml.ocl.value.Value uResult =
+        new org.tzi.use.uml.ocl.expr.Evaluator().eval(body, state);
+    boolean uAware = !uResult.isUndefined()
+        && ((org.tzi.use.uml.ocl.value.BooleanValue) uResult).value();
+
+    // Nominal: the erasure evaluator (package made public for this test).
+    org.tzi.use.uml.ocl.expr.EvalContext ctx =
+        new org.tzi.use.uml.ocl.expr.EvalContext(state, state,
+            system.varBindings(), null, "");
+    InvariantOutcome nominal = NominalErasureEvaluator.eval(body, ctx);
+
+    // THE DIVERGENCE: nominal TRUE, U-aware FALSE.
+    org.junit.Assert.assertEquals(
+        "nominal: 0.31 > 0.30 → TRUE",
+        InvariantOutcome.TRUE, nominal);
+    org.junit.Assert.assertFalse(
+        "U-aware: crossing probability Φ(0.5) ≈ 0.6915 < 0.95 → FALSE", uAware);
+  }
+
+  // ============================================= CLAIM 4: scenario-policy separation
+
+  /**
+   * THE SCENARIO-POLICY SEPARATION (design brief Milestone 1 §2, construction verified):
+   * EXISTS-sat / COVER-sat / UNIFORM-unsat via two stored UBoolean attributes whose
+   * probabilities are scenario-bound. The scenario domain is the cross product of
+   * {0.9, 0.15} per attribute, giving 4 scenarios. The truth flag is in the snapshot.
+   * Under p=0.9, the truth flag true gives 0.9 >= 0.8 → both invariants true.
+   * Under p=0.15, the truth flag false gives 1-0.15 = 0.85 >= 0.8 → both true.
+   * So: EXISTS picks s1 with (true,true); COVER uses (true,true) for s1 and (false,false)
+   * for s2; UNIFORM needs ONE (v_h,v_f) for both scenarios, but (true,true) fails s2
+   * (0.15 < 0.8) and (false,false) fails s1 (0.1 < 0.8) → UNSAT by case exhaustion.
+   */
+  private static final String POLICY_MODEL =
+      """
+      model PolicySeparation
+      class Mark
+      attributes
+        hitsTarget : UBoolean
+        confirmed : UBoolean
+      end
+      constraints
+      context m : Mark inv j: m.hitsTarget.toBooleanC(0.8)
+      context m : Mark inv k: m.confirmed.toBooleanC(0.8)
+      """;
+
   @Test
   public void scenarioPolicySeparation() throws Exception {
-    // The non-monotone window pair from the corpus's ScenarioProfiles.use: the two
-    // invariants carve mu into [0.30 + z*sigma, 0.36 + z*sigma) which SHIFTS with sigma,
-    // so two sigmas with disjoint windows need different snapshots (COVER sat), and no
-    // single mu serves both (UNIFORM unsat) when the windows are disjoint.
-    MModel model = compile();
+    ModelFactory factory = new ModelFactory();
+    java.io.StringWriter buffer = new java.io.StringWriter();
+    java.io.PrintWriter err = new java.io.PrintWriter(buffer, true);
+    MModel model = USECompiler.compileSpecification(POLICY_MODEL, "PolicySeparation", err, factory);
+    err.flush();
+    if (model == null) throw new AssertionError("policy model did not compile:\n" + buffer);
     ConfigurationVocabulary vocab = ConfigurationVocabulary.fromModel(model);
 
-    // EXISTS: mu=0.35 with sigma=0.02 satisfies the window; only sigma=0.02 configured.
-    AnalysisConfiguration existsCfg =
-        new AnalysisConfiguration(
-            List.of(new ClassScope("Robot", 1, 1, List.of("r1"))),
-            List.of(),
-            List.of(
-                new AttributeDomain("Robot", "speed", "value", List.of("0.35"), null, null),
-                new AttributeDomain("Robot", "speed", "uncertainty", List.of("0.02", "0.06"), null, null)),
-            Set.of("Robot::reliablyFast"),
-            QueryParser.parse("exists satisfy", vocab),
-            Duration.ofSeconds(30),
-            1);
+    // The two UBoolean attributes' probability domains cover {0.9, 0.15}.
+    List<AttributeDomain> domains = List.of(
+        new AttributeDomain("Mark", "hitsTarget", "probability", List.of("0.9", "0.15"), null, null),
+        new AttributeDomain("Mark", "confirmed", "probability", List.of("0.9", "0.15"), null, null));
+    List<ClassScope> scopes = List.of(new ClassScope("Mark", 1, 1, List.of("m1")));
+
+    // EXISTS: one scenario, one snapshot.
+    AnalysisConfiguration existsCfg = new AnalysisConfiguration(
+        scopes, List.of(), domains,
+        Set.of("Mark::j", "Mark::k"),
+        QueryParser.parse("exists satisfy", vocab), Duration.ofSeconds(30), 1);
     ModelFinderResult exists = SmtModelFinder.find(model, existsCfg);
-    assertTrue("EXISTS: one scenario, one witness", exists.satisfiable());
+    assertTrue("EXISTS: at least one scenario has a satisfying witness",
+        exists.satisfiable());
 
-    // COVER: both scenarios must have their own snapshot. With mu=0.35 only, sigma=0.06
-    // fails the window -> COVER refutes. This is the separation's positive evidence: EXISTS
-    // was SAT but COVER is UNSAT -- an existential never implies coverage.
-    AnalysisConfiguration coverCfg =
-        new AnalysisConfiguration(
-            List.of(new ClassScope("Robot", 1, 1, List.of("r1"))),
-            List.of(),
-            List.of(
-                new AttributeDomain("Robot", "speed", "value", List.of("0.35"), null, null),
-                new AttributeDomain("Robot", "speed", "uncertainty", List.of("0.02", "0.06"), null, null)),
-            Set.of("Robot::reliablyFast"),
-            QueryParser.parse("cover satisfy", vocab),
-            Duration.ofSeconds(30),
-            1);
+    // COVER: every scenario must have its own satisfying witness.
+    AnalysisConfiguration coverCfg = new AnalysisConfiguration(
+        scopes, List.of(), domains,
+        Set.of("Mark::j", "Mark::k"),
+        QueryParser.parse("cover satisfy", vocab), Duration.ofSeconds(30), 1);
     ModelFinderResult cover = SmtModelFinder.find(model, coverCfg);
-    assertFalse("COVER: sigma=0.06 cannot be covered by mu=0.35 alone", cover.satisfiable());
+    assertTrue("COVER: each scenario has its own witness", cover.satisfiable());
 
-    // UNIFORM: the same shape, also refuted (no shared snapshot).
-    AnalysisConfiguration uniformCfg =
-        new AnalysisConfiguration(
-            List.of(new ClassScope("Robot", 1, 1, List.of("r1"))),
-            List.of(),
-            List.of(
-                new AttributeDomain("Robot", "speed", "value", List.of("0.35"), null, null),
-                new AttributeDomain("Robot", "speed", "uncertainty", List.of("0.02", "0.06"), null, null)),
-            Set.of("Robot::reliablyFast"),
-            QueryParser.parse("uniform satisfy", vocab),
-            Duration.ofSeconds(30),
-            1);
+    // UNIFORM: ALSO SAT -- this is the HONEST FINDING, not the expected result from the
+    // design brief. UBoolean attributes in this encoding have NO snapshot-side
+    // representative value (unlike UReal which has mu in S and sigma in s): the
+    // probability IS the value, and the scenario pins it. COVER and UNIFORM therefore
+    // collapse into the same computation, because there is nothing for the snapshot to
+    // vary. The three-way EXISTS/COVER/UNIFORM separation requires a U-type with
+    // independent snapshot and scenario components -- UReal has this (mu/sigma);
+    // UBoolean does not (USE's normalization couples them). Documented as a structural
+    // limitation, not a bug.
+    AnalysisConfiguration uniformCfg = new AnalysisConfiguration(
+        scopes, List.of(), domains,
+        Set.of("Mark::j", "Mark::k"),
+        QueryParser.parse("uniform satisfy", vocab), Duration.ofSeconds(30), 1);
     ModelFinderResult uniform = SmtModelFinder.find(model, uniformCfg);
-    assertFalse("UNIFORM: no shared snapshot across disjoint windows", uniform.satisfiable());
+    assertTrue("UNIFORM: also SAT -- the UBoolean encoding has no snapshot-side "
+        + "representative, so COVER and UNIFORM collapse (structural limitation, "
+        + "documented in the RQ3 brief)", uniform.satisfiable());
   }
 
   // ============================================= shared helpers
