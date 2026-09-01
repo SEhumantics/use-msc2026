@@ -16,18 +16,40 @@
 # Counts are summed from surefire's own per-class XML reports' root <testsuite tests=".." errors=".."
 # failures=".." skipped=".."> attributes. The 5 JUnit3-style *TestSuite.xml wrapper reports
 # (aggregating child test classes) report 0/0/0/0 at their own root element -- verified empirically,
-# 2026-08-21 -- so summing across every *.xml file does not double-count. This total (currently 3311)
-# is intentionally not the same number `mvn test`'s console summary prints (currently 6035): the
+# 2026-08-21 -- so summing across every *.xml file does not double-count. This total (currently 3321)
+# is intentionally not the same number `mvn test`'s console summary prints (currently 6045): the
 # console tally additionally counts rerun attempts for failing tests, which the XML reports collapse
 # to one row each. That distinction doesn't matter here -- this script only needs to be
 # self-consistent across runs, not to match the console number.
+#
+# PER-TEST IDENTITY, not just an aggregate count: an aggregate ceiling alone lets a future change fix
+# some of the known failures while introducing an equal-or-smaller number of NEW, uncharacterized
+# failures elsewhere and still print PASS -- the count never moves, but the SET underneath it does.
+# scripts/known-failing-tests.txt pins the exact (classname#testname) set; this script recomputes the
+# current set the same way (scripts/canonical-failing.py) and diffs it against that file byte-for-byte,
+# failing loudly on ANY difference -- an added test, a removed one, or a same-size swap alike. If you
+# genuinely fix (or newly characterize) a failure, regenerate the baseline in the same commit:
+#   python3 scripts/canonical-failing.py | sort > scripts/known-failing-tests.txt
+# and say why in the commit message -- this script only checks that the set is INTENTIONAL, not that
+# it is small.
 set -euo pipefail
 
 MODULE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPORTS_DIR="$MODULE_DIR/target/surefire-reports"
+BASELINE_FILE="$MODULE_DIR/scripts/known-failing-tests.txt"
 
-FLOOR_MIN_TESTS=3311
-FLOOR_MAX_FAILURES=461
+# Bumped 2026-09-02 from 3311/461 to 3321/462: two new committed test classes exercising real,
+# non-behavioral fixes/reproductions land in the same commit as this floor change --
+# KodkodModelValidatorErrorReportingTest (2 tests, 0 failures: KodkodModelValidator#validationError()
+# error-reporting fix) and DispatchBugProbeTest (8 tests, 1 deliberate failure:
+# skipLevelInheritedOverrideShouldBeSatisfiable, the reproduction backing the
+# ocl.operation-polymorphic-override "known-defect" row in docs/modelvalidator-feature-matrix.json).
+# Neither the fix nor the reproduction changes kk-modelvalidator's actual solving/transformation
+# semantics -- see that commit's message. The original 461 failures are unchanged (see
+# scripts/known-failing-tests.txt, still exactly the 9 classes documented above); this floor tracks
+# ADDED evidence, not a regression.
+FLOOR_MIN_TESTS=3321
+FLOOR_MAX_FAILURES=462
 FLOOR_MAX_ERRORS=0
 
 if [ ! -d "$REPORTS_DIR" ]; then
@@ -75,8 +97,31 @@ if [ "$ERRORS" -gt "$FLOOR_MAX_ERRORS" ]; then
   FAIL=1
 fi
 
+if [ ! -f "$BASELINE_FILE" ]; then
+  echo "[kk-floor] FAIL: no baseline file at $BASELINE_FILE -- did it get deleted or never committed?" >&2
+  FAIL=1
+else
+  CURRENT_FAILING="$(python3 "$MODULE_DIR/scripts/canonical-failing.py" "$REPORTS_DIR" | sort)"
+  BASELINE_FAILING="$(sort "$BASELINE_FILE")"
+
+  if [ "$CURRENT_FAILING" != "$BASELINE_FAILING" ]; then
+    echo "[kk-floor] FAIL: the exact failing (classname#testname) set differs from scripts/known-failing-tests.txt -- an aggregate count match alone is not enough: the identity of what's failing must match too, otherwise fixing some known failures while silently introducing new, uncharacterized ones could still pass this gate." >&2
+    ADDED="$(comm -13 <(echo "$BASELINE_FAILING") <(echo "$CURRENT_FAILING"))"
+    REMOVED="$(comm -23 <(echo "$BASELINE_FAILING") <(echo "$CURRENT_FAILING"))"
+    if [ -n "$ADDED" ]; then
+      echo "[kk-floor]   NEW (failing now, not in baseline -- investigate; if genuinely characterized, add to the baseline with a citation):" >&2
+      echo "$ADDED" | sed 's/^/[kk-floor]     + /' >&2
+    fi
+    if [ -n "$REMOVED" ]; then
+      echo "[kk-floor]   GONE (in baseline, not failing now -- likely fixed; remove from the baseline and lower FLOOR_MAX_FAILURES in the same commit, with a citation):" >&2
+      echo "$REMOVED" | sed 's/^/[kk-floor]     - /' >&2
+    fi
+    FAIL=1
+  fi
+fi
+
 if [ "$FAIL" -ne 0 ]; then
   exit 1
 fi
 
-echo "[kk-floor] PASS -- within the pinned, characterized floor."
+echo "[kk-floor] PASS -- within the pinned, characterized floor, and the exact failing set matches scripts/known-failing-tests.txt."
