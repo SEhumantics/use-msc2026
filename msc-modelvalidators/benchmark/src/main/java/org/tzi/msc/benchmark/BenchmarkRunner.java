@@ -354,6 +354,16 @@ public class BenchmarkRunner {
 				if (visitor.containErrors()) {
 					result.outcome = "ERROR";
 					result.error = "PropertyConfigurationVisitor reported errors for section [" + section + "]";
+					// Route through the same finalize/record steps the normal end-of-loop path below
+					// uses, rather than returning `result` as-is: without this, `allWitnessDigests`
+					// stayed raw Java `null` (finalizeResult is the only place that normalizes it to
+					// emptyList()) instead of the empty-list-on-ERROR contract every other ERROR cell
+					// gets -- a real null-vs-empty-list inconsistency for a List<String> field with no
+					// guard downstream. wallMs/kodkodSolveMs/kodkodTranslateMs/digests are still empty
+					// here (this fires before any repeat ever reaches validate()), so this is a pure
+					// normalization, not a change to any recorded timing or witness data.
+					finalizeResult(result, null, wallMs, kodkodSolveMs, kodkodTranslateMs, digests);
+					recordReconstruction(result, isWitnessCapturingOutcome(result.outcome), null);
 					return result;
 				}
 
@@ -364,19 +374,10 @@ public class BenchmarkRunner {
 				Thread watchdog = watchdogEnabled
 						? startHangWatchdog(ex.id + "/" + solver + " " + (isWarmup ? "warmup" : "repeat") + " " + i)
 						: null;
-				long t0 = System.nanoTime();
-				if (watchdog != null) {
-					try {
-						validator.validate(model);
-					} finally {
-						watchdog.interrupt();
-					}
-				} else {
-					// watchdogEnabled=false: nothing but the original call happens in this timed region --
-					// byte-for-byte the same as before this safety layer existed.
-					validator.validate(model);
-				}
-				long t1 = System.nanoTime();
+				long[] window = timeThenCleanup(() -> validator.validate(model),
+						watchdog == null ? null : watchdog::interrupt);
+				long t0 = window[0];
+				long t1 = window[1];
 				if (!isWarmup) {
 					wallMs.add((t1 - t0) / 1_000_000.0);
 				}
@@ -483,6 +484,42 @@ public class BenchmarkRunner {
 	 */
 	static boolean isWitnessCapturingOutcome(String outcome) {
 		return "SATISFIABLE".equals(outcome) || "TRIVIALLY_SATISFIABLE".equals(outcome);
+	}
+
+	/**
+	 * Times {@code work} into a strict {@code [t0,t1]} window -- {@code t1} is captured the INSTANT
+	 * {@code work} returns normally -- then runs {@code cleanup} (if non-null) strictly AFTER {@code
+	 * t1}, in a {@code finally} so it still runs even when {@code work} throws. Pulled out of
+	 * {@link #runOne} as its own testable unit, the same reason {@link #finalizeResult} and
+	 * {@link #recordReconstruction} were: {@code BenchmarkRunnerTest} exercises the before/after
+	 * ordering directly with fake work/cleanup, deterministically, instead of relying on measuring a
+	 * real solve's timing (which the actual overhead here -- tens of microseconds -- would be far too
+	 * small and noisy to assert on reliably).
+	 *
+	 * <p>Regression note (BUG A): {@code runOne}'s watchdog cleanup ({@code watchdog.interrupt()})
+	 * used to run inside the SAME {@code finally} block as the timed call itself, BEFORE {@code t1}
+	 * was captured -- so every watchdog-enabled Kodkod call paid ~17-70us of {@code interrupt()}
+	 * overhead that {@code runOneSmt}'s SMT path (which has no watchdog at all) never paid. That is a
+	 * small but SYSTEMATIC (not random) timing asymmetry favoring whichever side lacks the watchdog,
+	 * and since {@code watchdogEnabled} defaults to {@code true} and {@code run-benchmark.sh} defaults
+	 * {@code safety=on}, it is very likely present in the committed RQ4 timing data. Calling {@code
+	 * cleanup} only after this method has already captured {@code t1} is what keeps that asymmetry
+	 * from recurring.
+	 *
+	 * @return {@code {t0, t1}}, both from {@link System#nanoTime()}
+	 */
+	static long[] timeThenCleanup(Runnable work, Runnable cleanup) {
+		long t0 = System.nanoTime();
+		long t1;
+		try {
+			work.run();
+			t1 = System.nanoTime();
+		} finally {
+			if (cleanup != null) {
+				cleanup.run();
+			}
+		}
+		return new long[] { t0, t1 };
 	}
 
 	private static final long WATCHDOG_FIRST_WARNING_SECONDS = 60;
