@@ -269,6 +269,43 @@ public class ScenarioProfileTest {
     assertTrue(refused.getMessage(), refused.getMessage().contains("finite"));
   }
 
+  /**
+   * BUG A, end-to-end through the real {@code SmtModelFinder.find()} pipeline (not just {@code
+   * ScenarioSpace.enumerate()} in isolation): a FINITE but over-cap scenario space -- capacity 3,
+   * seven configured uncertainty candidates, 7^3 = 343 -- must refuse with a located {@code
+   * SmtTranslationException} before any script is built, exactly like the already-covered infinite
+   * case above refuses before any sampling. UNIFORM is the profile the bug report calls out as more
+   * serious (one joint script encoding every scenario), so this exercises that profile specifically.
+   */
+  @Test
+  public void uniformIsRefusedWhenTheScenarioSpaceExceedsThe256CombinationCap() throws Exception {
+    MModel model = compile("ScenarioProfiles.use");
+
+    List<String> sevenCandidates =
+        List.of("0.01", "0.02", "0.03", "0.04", "0.05", "0.06", "0.07");
+    AnalysisConfiguration overCap =
+        new AnalysisConfiguration(
+            List.of(new ClassScope("UnidentifiedObject", 3, 3)),
+            List.of(),
+            List.of(
+                new AttributeDomain(
+                    "UnidentifiedObject", "speed", "value", List.of("0.35"), null, null),
+                new AttributeDomain(
+                    "UnidentifiedObject", "speed", "uncertainty", sevenCandidates, null, null)),
+            Set.of(FAST, NOT_VERY_FAST),
+            new QueryExpr.Profiled(ScenarioProfile.UNIFORM, new QueryExpr.Satisfy()),
+            Duration.ofSeconds(30),
+            1);
+
+    org.tzi.use.smt.encode.SmtTranslationException refused =
+        org.junit.Assert.assertThrows(
+            org.tzi.use.smt.encode.SmtTranslationException.class,
+            () -> SmtModelFinder.find(model, overCap));
+    assertEquals(org.tzi.use.smt.encode.FragmentBoundary.UTYPE_CORE, refused.boundary());
+    assertTrue(refused.getMessage(), refused.getMessage().contains("343"));
+    assertTrue(refused.getMessage(), refused.getMessage().contains("256"));
+  }
+
   // ------------------------------------------------------------------------- helpers
 
   private static InvariantOutcome outcomeOf(List<InvariantVerdict> verdicts, String name) {

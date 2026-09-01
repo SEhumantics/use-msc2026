@@ -33,9 +33,29 @@ import org.tzi.use.smt.config.ScenarioProfile;
  * <p>A component domain with no enumerated candidates (a bounded RANGE) makes {@code Sigma_K}
  * infinite, so COVER and UNIFORM -- which quantify universally over it -- fail closed instead of
  * sampling it.
+ *
+ * <p>A FINITE {@code Sigma_K} can still be enormous -- the cross product is over SLOTS, so a
+ * handful of attributes with a modest candidate count each multiplies out fast -- and unlike every
+ * other combinatorial expansion in this codebase (see {@link UBooleanProbability#MAX_CASES} and
+ * {@code ExpressionTranslator}'s several explicit 256-combination checks), this one used to have NO
+ * cap at all. That is worse here than anywhere else those caps apply: COVER solves one script PER
+ * scenario, and UNIFORM encodes every scenario's own pinned uncertainty symbols and reified
+ * {@code def}/{@code val} pair into ONE joint script, so an uncapped {@code Sigma_K} is a
+ * combinatorial script-size blowup, not merely a combinatorial term inside one operator's
+ * expansion. {@link #MAX_SCENARIOS} applies this codebase's established 256-combination convention
+ * to that total, so an over-cap configuration is refused before either profile attempts to build
+ * from it, rather than after the resulting script has already been built.
  */
 public final class ScenarioSpace {
   private ScenarioSpace() {}
+
+  /**
+   * The project's established 256-combination convention, applied to {@code |Sigma_K|} itself. See
+   * the class comment: COVER and UNIFORM both pay for every scenario in the set, so this is the one
+   * cap in the codebase that bounds an entire script's scenario count rather than one operator's
+   * candidate-pair expansion.
+   */
+  static final int MAX_SCENARIOS = 256;
 
   /** One U-typed attribute on one concrete class, with the slot capacity it was encoded at. */
   public record UncertainAttribute(
@@ -75,6 +95,32 @@ public final class ScenarioSpace {
                   parse(attribute, candidate)));
         }
         axes.add(axis);
+      }
+    }
+
+    // |Sigma_K| is the product of every axis's size (one axis per attribute-slot pair). Multiply
+    // incrementally and stop the instant the running product exceeds MAX_SCENARIOS: every axis has
+    // at least one candidate (the empty-candidates case above already refused), so the running
+    // product never shrinks, and breaking as soon as it clears a 256-sized cap keeps each individual
+    // multiplication (running product <= MAX_SCENARIOS, times one axis's size) far below overflow --
+    // it never attempts the full, potentially astronomical product.
+    long totalScenarios = 1;
+    for (List<Scenario.Binding> axis : axes) {
+      totalScenarios *= axis.size();
+      if (totalScenarios > MAX_SCENARIOS) {
+        throw new SmtTranslationException(
+            FragmentBoundary.UTYPE_CORE,
+            "scenario profile "
+                + profile
+                + " quantifies over every configured measurement scenario, but the "
+                + axes.size()
+                + " configured U-typed attribute slot(s) cross to at least "
+                + totalScenarios
+                + " scenarios, exceeding the project's "
+                + MAX_SCENARIOS
+                + "-combination convention; COVER would solve one script per scenario and UNIFORM"
+                + " would encode every scenario into one joint script, so the unbounded cross"
+                + " product is refused rather than built");
       }
     }
 
