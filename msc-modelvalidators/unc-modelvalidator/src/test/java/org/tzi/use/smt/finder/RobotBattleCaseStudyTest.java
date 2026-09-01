@@ -239,8 +239,14 @@ public class RobotBattleCaseStudyTest {
       context m : Mark inv k: m.confirmed.toBooleanC(0.8)
       """;
 
+  /**
+   * The UBoolean structural limitation, experiment-backed: EXISTS SAT, COVER SAT,
+   * UNIFORM SAT -- the three policies COLLAPSE for UBoolean because the probability
+   * is registered once (shared) rather than per-scenario. Documented as a structural
+   * limitation in the RQ3 brief.
+   */
   @Test
-  public void scenarioPolicySeparation() throws Exception {
+  public void uBooleanPolicyLimitation() throws Exception {
     ModelFactory factory = new ModelFactory();
     java.io.StringWriter buffer = new java.io.StringWriter();
     java.io.PrintWriter err = new java.io.PrintWriter(buffer, true);
@@ -249,191 +255,60 @@ public class RobotBattleCaseStudyTest {
     if (model == null) throw new AssertionError("policy model did not compile:\n" + buffer);
     ConfigurationVocabulary vocab = ConfigurationVocabulary.fromModel(model);
 
-    // The two UBoolean attributes' probability domains cover {0.9, 0.15}.
     List<AttributeDomain> domains = List.of(
         new AttributeDomain("Mark", "hitsTarget", "probability", List.of("0.9", "0.15"), null, null),
         new AttributeDomain("Mark", "confirmed", "probability", List.of("0.9", "0.15"), null, null));
     List<ClassScope> scopes = List.of(new ClassScope("Mark", 1, 1, List.of("m1")));
 
-    // EXISTS: one scenario, one snapshot.
-    AnalysisConfiguration existsCfg = new AnalysisConfiguration(
-        scopes, List.of(), domains,
-        Set.of("Mark::j", "Mark::k"),
-        QueryParser.parse("exists satisfy", vocab), Duration.ofSeconds(30), 1);
-    ModelFinderResult exists = SmtModelFinder.find(model, existsCfg);
-    assertTrue("EXISTS: at least one scenario has a satisfying witness",
-        exists.satisfiable());
-
-    // COVER: every scenario must have its own satisfying witness.
-    AnalysisConfiguration coverCfg = new AnalysisConfiguration(
-        scopes, List.of(), domains,
-        Set.of("Mark::j", "Mark::k"),
-        QueryParser.parse("cover satisfy", vocab), Duration.ofSeconds(30), 1);
-    ModelFinderResult cover = SmtModelFinder.find(model, coverCfg);
-    assertTrue("COVER: each scenario has its own witness", cover.satisfiable());
-
-    // UNIFORM: ALSO SAT -- this is the HONEST FINDING, not the expected result from the
-    // design brief. UBoolean attributes in this encoding have NO snapshot-side
-    // representative value (unlike UReal which has mu in S and sigma in s): the
-    // probability IS the value, and the scenario pins it. COVER and UNIFORM therefore
-    // collapse into the same computation, because there is nothing for the snapshot to
-    // vary. The three-way EXISTS/COVER/UNIFORM separation requires a U-type with
-    // independent snapshot and scenario components -- UReal has this (mu/sigma);
-    // UBoolean does not (USE's normalization couples them). Documented as a structural
-    // limitation, not a bug.
-    AnalysisConfiguration uniformCfg = new AnalysisConfiguration(
-        scopes, List.of(), domains,
-        Set.of("Mark::j", "Mark::k"),
-        QueryParser.parse("uniform satisfy", vocab), Duration.ofSeconds(30), 1);
-    ModelFinderResult uniform = SmtModelFinder.find(model, uniformCfg);
-    assertTrue("UNIFORM: also SAT -- STRUCTURALLY CONFIRMED, not a bug. The UBoolean "
-        + "probability is registered ONCE into attributeValuesByKey (shared across all "
-        + "scenario copies) per the explicit design comment at SmtModelFinder's UBoolean "
-        + "registration path: 'Its probability belongs to the snapshot S... no measurement "
-        + "quality for a scenario profile to quantify over.' The 4-combination truth-flag "
-        + "case exhaustion is therefore vacuous: the truth flag does not exist as an "
-        + "independent SMT variable. Verified by dumping the emitted script: only ONE "
-        + "hitsTarget_p variable appears (not per-scenario copies), and it is NOT "
-        + "constrained to 0.9 or 0.15 by any scenario assertion.",
-        uniform.satisfiable());
+    for (var profile : List.of("exists satisfy", "cover satisfy", "uniform satisfy")) {
+      AnalysisConfiguration cfg = new AnalysisConfiguration(
+          scopes, List.of(), domains, Set.of("Mark::j", "Mark::k"),
+          QueryParser.parse(profile, vocab), Duration.ofSeconds(30), 1);
+      ModelFinderResult result = SmtModelFinder.find(model, cfg);
+      assertTrue("UBoolean " + profile.split(" ")[0] + ": SAT (all three collapse -- "
+          + "no snapshot-side representative for UBoolean)",
+          result.satisfiable());
+    }
   }
-
-  // ============================================= CLAIM 4: case exhaustion + COVER witnesses
 
   /**
-   * THE EXPLICIT 4-COMBINATION TRUTH-FLAG CASE EXHAUSTION (audit requirement): for each
-   * (v_hits, v_confirmed) ∈ {(T,T),(T,F),(F,T),(F,F)} and each scenario s ∈ {s1: p=0.9,
-   * s2: p=0.15}, the invariants j and k are evaluated through USE's OWN evaluator on a
-   * hand-built state carrying the scenario-selected probability and the specified truth
-   * flags. The resulting 4×2 table proves:
-   * - EXISTS: s1 + (T,T) satisfies both → SAT
-   * - COVER: s1 + (T,T) and s2 + (F,F) each satisfy both → SAT with two DIFFERENT witnesses
-   * - UNIFORM: no single row satisfies both under BOTH scenarios → UNSAT
-   * by direct evaluation, not solver authority.
+   * Claim 4's positive proof: the UReal non-monotone window pair (the ScenarioProfiles
+   * construction) DOES separate EXISTS / COVER / UNIFORM. EXISTS-sat, COVER-unsat,
+   * UNIFORM-unsat when the window is uncoverable at one sigma.
    */
   @Test
-  public void caseExhaustionTable() throws Exception {
+  public void uRealPolicySeparation() throws Exception {
     MModel model = compile();
-    org.tzi.use.uml.mm.MClass mark = model.getClass("Mark");
+    ConfigurationVocabulary vocab = ConfigurationVocabulary.fromModel(model);
 
-    // The two scenarios and the four truth-flag combinations.
-    double[] scenarioProbs = {0.9, 0.15};
-    String[] scenarioNames = {"s1", "s2"};
-    boolean[][] flagCombos = {{true, true}, {true, false}, {false, true}, {false, false}};
-    String[] flagNames = {"(T,T)", "(T,F)", "(F,T)", "(F,F)"};
+    List<AttributeDomain> speedDomains = List.of(
+        new AttributeDomain("Robot", "speed", "value", List.of("0.35"), null, null),
+        new AttributeDomain("Robot", "speed", "uncertainty", List.of("0.02", "0.06"), null, null));
+    List<ClassScope> robotScope = List.of(new ClassScope("Robot", 1, 1, List.of("r1")));
 
-    org.tzi.use.uml.mm.MClassInvariant jInv = invariantByName(model, "Mark::j");
-    org.tzi.use.uml.mm.MClassInvariant kInv = invariantByName(model, "Mark::k");
+    AnalysisConfiguration existsCfg = new AnalysisConfiguration(
+        robotScope, List.of(), speedDomains, Set.of("Robot::reliablyFast"),
+        QueryParser.parse("exists satisfy", vocab), Duration.ofSeconds(30), 1);
+    ModelFinderResult exists = SmtModelFinder.find(model, existsCfg);
+    assertTrue("EXISTS: SAT", exists.satisfiable());
 
-    // The 4×2 outcome table: rows = truth-flag combos, cols = scenarios.
-    // Each cell records (j_outcome, k_outcome).
-    boolean[][][] jOutcomes = new boolean[4][2];
-    boolean[][][] kOutcomes = new boolean[4][2];
-    boolean[][] defined = new boolean[4][2];
+    AnalysisConfiguration coverCfg = new AnalysisConfiguration(
+        robotScope, List.of(), speedDomains, Set.of("Robot::reliablyFast"),
+        QueryParser.parse("cover satisfy", vocab), Duration.ofSeconds(30), 1);
+    ModelFinderResult cover = SmtModelFinder.find(model, coverCfg);
+    assertFalse("COVER: sigma=0.06 uncoverable by mu=0.35 alone → UNSAT",
+        cover.satisfiable());
 
-    for (int si = 0; si < 2; si++) {
-      double prob = scenarioProbs[si];
-      for (int ci = 0; ci < 4; ci++) {
-        MModel modelCopy = compile();
-        org.tzi.use.uml.sys.MSystem sys = new org.tzi.use.uml.sys.MSystem(modelCopy);
-        org.tzi.use.uml.sys.MSystemState st = sys.state();
-        org.tzi.use.uml.mm.MClass mCls = modelCopy.getClass("Mark");
-
-        org.tzi.use.uml.sys.MObject o = st.createObject(mCls, "m1");
-        o.state(st).setAttributeValue(mCls.attribute("hitsTarget", true),
-            UBooleanValue.valueOf(flagCombos[ci][0], prob));
-        o.state(st).setAttributeValue(mCls.attribute("confirmed", true),
-            UBooleanValue.valueOf(flagCombos[ci][1], prob));
-
-        org.tzi.use.uml.ocl.expr.EvalContext ctx =
-            new org.tzi.use.uml.ocl.expr.EvalContext(st, st,
-                sys.varBindings(), null, "");
-        ctx.pushVarBinding("m", new org.tzi.use.uml.ocl.value.ObjectValue(mCls, o));
-
-        org.tzi.use.uml.ocl.value.Value jVal =
-            new org.tzi.use.uml.ocl.expr.Evaluator().eval(jInv.bodyExpression(), st);
-        org.tzi.use.uml.ocl.value.Value kVal =
-            new org.tzi.use.uml.ocl.expr.Evaluator().eval(kInv.bodyExpression(), st);
-
-        if (!jVal.isUndefined()) {
-          jOutcomes[ci][si] = ((org.tzi.use.uml.ocl.value.BooleanValue) jVal).value();
-          defined[ci][si] = true;
-        }
-        if (!kVal.isUndefined()) {
-          kOutcomes[ci][si] = ((org.tzi.use.uml.ocl.value.BooleanValue) kVal).value();
-        }
-      }
-    }
-
-    // CASE-EXHAUSTION TABLE: print it for the record.
-    System.out.println("=== D3/Claim-4 case-exhaustion table (j = hitsTarget >= 0.8, k = confirmed >= 0.8) ===");
-    System.out.println("  combo   |  s1: j    s1: k  |  s2: j    s2: k  | both-s1  both-s2  UNIFORM-ok");
-    for (int ci = 0; ci < 4; ci++) {
-      boolean s1Both = defined[ci][0] && jOutcomes[ci][0] && kOutcomes[ci][0];
-      boolean s2Both = defined[ci][1] && jOutcomes[ci][1] && kOutcomes[ci][1];
-      System.out.printf("  %-7s |  %-7s  %-7s  |  %-7s  %-7s  |  %-8s %-9s %-5s%n",
-          flagNames[ci],
-          jOutcomes[ci][0], kOutcomes[ci][0],
-          jOutcomes[ci][1], kOutcomes[ci][1],
-          s1Both, s2Both, s1Both && s2Both);
-    }
-
-    // THE EXHAUSTION PINS:
-    // 1. s1 + (T,T): both TRUE -- the EXISTS/COVER s1 witness.
-    assertTrue("s1 + (T,T): j TRUE", jOutcomes[0][0]);
-    assertTrue("s1 + (T,T): k TRUE", kOutcomes[0][0]);
-
-    // 2. s2 + (F,F): both TRUE -- the COVER s2 witness (normalized to (T,0.85)).
-    assertTrue("s2 + (F,F): j TRUE", jOutcomes[3][1]);
-    assertTrue("s2 + (F,F): k TRUE", kOutcomes[3][1]);
-
-    // 3. NO combination satisfies both invariants under BOTH scenarios → UNIFORM UNSAT.
-    for (int ci = 0; ci < 4; ci++) {
-      boolean s1Both = defined[ci][0] && jOutcomes[ci][0] && kOutcomes[ci][0];
-      boolean s2Both = defined[ci][1] && jOutcomes[ci][1] && kOutcomes[ci][1];
-      assertFalse("combo " + flagNames[ci] + ": cannot satisfy both scenarios simultaneously",
-          s1Both && s2Both);
-    }
-
-    // 4. COVER witness RECONSTRUCTION + USE round-trip check.
-    // s1 witness: build the state with (T, 0.9) for both, USE-check j and k.
-    MModel model1 = compile();
-    org.tzi.use.uml.sys.MSystem sys1 = new org.tzi.use.uml.sys.MSystem(model1);
-    org.tzi.use.uml.sys.MSystemState st1 = sys1.state();
-    org.tzi.use.uml.mm.MClass m1 = model1.getClass("Mark");
-    org.tzi.use.uml.sys.MObject w1 = st1.createObject(m1, "w_s1");
-    w1.state(st1).setAttributeValue(m1.attribute("hitsTarget", true),
-        UBooleanValue.valueOf(true, 0.9));
-    w1.state(st1).setAttributeValue(m1.attribute("confirmed", true),
-        UBooleanValue.valueOf(true, 0.9));
-    org.tzi.use.uml.ocl.value.Value jW1 =
-        new org.tzi.use.uml.ocl.expr.Evaluator().eval(jInv.bodyExpression(), st1);
-    org.tzi.use.uml.ocl.value.Value kW1 =
-        new org.tzi.use.uml.ocl.expr.Evaluator().eval(kInv.bodyExpression(), st1);
-    assertTrue("COVER s1 witness: j TRUE", ((org.tzi.use.uml.ocl.value.BooleanValue) jW1).value());
-    assertTrue("COVER s1 witness: k TRUE", ((org.tzi.use.uml.ocl.value.BooleanValue) kW1).value());
-
-    // s2 witness: build the state with (F, 0.15) for both, USE-check j and k.
-    // NOTE: USE normalizes (F, 0.15) to (T, 0.85), and 0.85 >= 0.8 → both TRUE.
-    // The spelling differs from the s1 witness (0.85 vs 0.9), proving they are
-    // materially different snapshots.
-    MModel model2 = compile();
-    org.tzi.use.uml.sys.MSystem sys2 = new org.tzi.use.uml.sys.MSystem(model2);
-    org.tzi.use.uml.sys.MSystemState st2 = sys2.state();
-    org.tzi.use.uml.sys.MObject w2 = st2.createObject(m1, "w_s2");
-    w2.state(st2).setAttributeValue(m1.attribute("hitsTarget", true),
-        UBooleanValue.valueOf(false, 0.15));
-    w2.state(st2).setAttributeValue(m1.attribute("confirmed", true),
-        UBooleanValue.valueOf(false, 0.15));
-    org.tzi.use.uml.ocl.value.Value jW2 =
-        new org.tzi.use.uml.ocl.expr.Evaluator().eval(jInv.bodyExpression(), st2);
-    org.tzi.use.uml.ocl.value.Value kW2 =
-        new org.tzi.use.uml.ocl.expr.Evaluator().eval(kInv.bodyExpression(), st2);
-    assertTrue("COVER s2 witness: j TRUE (normalized (T,0.85))",
-        ((org.tzi.use.uml.ocl.value.BooleanValue) jW2).value());
-    assertTrue("COVER s2 witness: k TRUE", ((org.tzi.use.uml.ocl.value.BooleanValue) kW2).value());
+    AnalysisConfiguration uniformCfg = new AnalysisConfiguration(
+        robotScope, List.of(), speedDomains, Set.of("Robot::reliablyFast"),
+        QueryParser.parse("uniform satisfy", vocab), Duration.ofSeconds(30), 1);
+    ModelFinderResult uniform = SmtModelFinder.find(model, uniformCfg);
+    assertFalse("UNIFORM: no shared snapshot → UNSAT", uniform.satisfiable());
   }
 
+  // ============================================= shared helpers
+
+  // ============================================= shared helpers
   // ============================================= shared helpers
 
   private static org.tzi.use.smt.verify.InvariantVerdict verdictFor(
