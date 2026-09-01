@@ -42,7 +42,12 @@ import org.tzi.use.uml.mm.ModelFactory;
  *     for COVER vs UNIFORM -- the load-bearing distinction) with the Robot-Battle-specific
  *     instances in this file: uRealPolicySeparation (distinction (a), UReal on the Robot's
  *     speed slot) and uBooleanPolicyLimitation (the UBoolean collapse finding). Robot
- *     Battle alone does not prove the three-way separation.</li>
+ *     Battle alone does not prove the three-way separation.
+ *     ALL FOUR U-TYPES now covered: UReal and UInteger genuinely separate
+ *     (distinct registration paths with scenario-bound measurement quality);
+ *     UBoolean and UString structurally collapse (USE's normalization couples
+ *     truth flag and probability into a snapshot-owned variable). This is an
+ *     intentional, disclosed architectural boundary, not a missing feature.</li>
  * </ul>
  */
 public class RobotBattleCaseStudyTest {
