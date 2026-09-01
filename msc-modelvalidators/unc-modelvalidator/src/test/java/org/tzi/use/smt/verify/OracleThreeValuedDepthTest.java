@@ -62,6 +62,44 @@ public class OracleThreeValuedDepthTest {
   }
 
   /**
+   * The {@code NestedForAll} coverage above nests only ONE level deep: an IMPLICIT context
+   * quantifier around a single EXPLICIT {@code forAll}, whose body ({@code q.n > 0}) is a plain
+   * comparison. {@link ThreeValuedEvaluator}'s per-element base case therefore falls through to
+   * {@code outcomeOf(expression, expression.eval(ctx))} either way it is written, so a mutation that
+   * swaps its recursive {@code eval(body, ctx)} call for exactly that expression is invisible there.
+   *
+   * <p>This test nests a genuinely EXPLICIT {@code forAll} inside another EXPLICIT {@code forAll}'s
+   * body, so the base case's {@code body} is itself an {@code ExpForAll} -- the recursive call is
+   * load-bearing here: bypassing it hands the inner quantifier to USE's own evaluator, which
+   * collapses its undefined element to {@code BooleanValue.FALSE} ({@code ExpQuery.evalForAll0}),
+   * turning this invariant's true UNDEFINED reading into a bogus DEFINED-FALSE -- the B3 defect one
+   * level deeper than the outermost collapse.
+   */
+  @Test
+  public void anExplicitForAllNestedInsideAnotherExplicitForAllBodyStaysUndefined()
+      throws Exception {
+    MModel model =
+        compile(
+            """
+            model DoublyNestedDepth
+            class P
+            attributes
+              n : Integer
+            end
+            constraints
+            context p : P inv DoubleNestedForAll: P.allInstances()->forAll(x | P.allInstances()->forAll(y | y.n > 0))
+            """,
+            "DoublyNestedDepth");
+    List<InvariantVerdict> verdicts = evaluate(model, "P", "p1");
+
+    assertEquals(
+        "the inner forAll's undefined element must stay undefined two levels deep, not collapse"
+            + " to false",
+        InvariantOutcome.UNDEFINED,
+        outcomeOf(verdicts, "P::DoubleNestedForAll"));
+  }
+
+  /**
    * A genuinely violated nested quantifier must still be read as DEFINED-FALSE -- the fix must make
    * undefined visible without making every nested body undefined. This is the shape Library's three
    * key invariants use, so it is the parity evidence's own path.
