@@ -1739,110 +1739,49 @@ public final class SmtModelFinder {
       }
       return;
     }
-    // CONCAT OF TWO ATTRIBUTE ALIASES: `full derive: self.first.concat(self.second)`. Per
-    // candidate PAIR (i, j) the concatenation is compile-time Java over the configured
-    // spellings, so the derived attribute's value is pinned to its own domain's index whose
-    // content equals first[i] + second[j], under the guard that both sources chose those
-    // candidates. A pair whose concatenation the derived domain cannot offer contributes
-    // falsity -- if no pair offers it, the assertion is simply false (genuinely
-    // unsatisfiable), the same discipline as the literal branch above.
-    // CONCAT CHAIN: `full derive: self.a.concat(self.b)` or the left-nested chain
-    // `self.a.concat(self.b).concat(self.c)`. The operands flatten to a list of self-attribute
-    // aliases; per candidate TUPLE the concatenation is compile-time Java over the configured
-    // spellings, and the derived attribute's value is pinned to its own domain's index whose
-    // content equals the tuple's concatenation, under the guard that every source chose its
-    // tuple member. A tuple whose concatenation the derived domain cannot offer contributes
-    // falsity -- if no tuple offers one, the assertion is simply false (genuinely
-    // unsatisfiable).
-    java.util.List<org.tzi.use.uml.ocl.expr.Expression> concatOperands = new ArrayList<>();
-    if (deriveExpr instanceof ExpStdOp outerConcat && "concat".equals(outerConcat.opname())) {
-      java.util.Deque<org.tzi.use.uml.ocl.expr.Expression> stack = new java.util.ArrayDeque<>();
-      stack.push(deriveExpr);
-      boolean wellFormed = true;
-      while (!stack.isEmpty() && wellFormed) {
-        org.tzi.use.uml.ocl.expr.Expression node = stack.pop();
-        if (node instanceof ExpStdOp concat && "concat".equals(concat.opname())
-            && concat.args().length == 2) {
-          stack.push(concat.args()[1]);
-          stack.push(concat.args()[0]);
-        } else if (node instanceof ExpAttrOp attrOp
-            && attrOp.objExp() instanceof ExpVariable selfVar
-            && "self".equals(selfVar.getVarname())) {
-          concatOperands.add(attrOp);
-        } else {
-          wellFormed = false;
-        }
-      }
-      if (wellFormed && concatOperands.size() >= 2) {
-        List<List<String>> operandValueLists = new ArrayList<>();
-        List<AttributeValues> operandSymbols = new ArrayList<>();
-        long tupleCount = 1;
-        for (org.tzi.use.uml.ocl.expr.Expression operand : concatOperands) {
-          AttributeDomain operandDomain =
-              context.attributeDomain(className, ((ExpAttrOp) operand).attr().name());
-          operandValueLists.add(operandDomain.enumeratedValues());
-          operandSymbols.add(context.attributeValues(className, ((ExpAttrOp) operand).attr().name()));
-          tupleCount *= operandDomain.enumeratedValues().size();
-        }
-        if (tupleCount > 256) {
-          throw new org.tzi.use.smt.encode.SmtTranslationException(
-              org.tzi.use.smt.encode.FragmentBoundary.TIER_3,
-              "String concat derivation for "
-                  + className
-                  + "."
-                  + attributeName
-                  + ": the candidate cross product ("
-                  + tupleCount
-                  + ") exceeds the 256-combination convention");
-        }
-        int operandCount = concatOperands.size();
-        int[] tuple = new int[operandCount];
-        for (int slot = 0; slot < owner.capacity(); slot++) {
-          List<SmtTerm> slotCases = new ArrayList<>();
-          java.util.Arrays.fill(tuple, 0);
-          for (long t = 0; t < tupleCount; t++) {
-            StringBuilder concatenatedBuilder = new StringBuilder();
-            for (int o = 0; o < operandCount; o++) {
-              concatenatedBuilder.append(operandValueLists.get(o).get(tuple[o]));
-            }
-            String concatenated = concatenatedBuilder.toString();
-            int localIndex = dstValuesList.enumeratedValues().indexOf(concatenated);
-            if (localIndex >= 0) {
-              List<SmtTerm> conjuncts = new ArrayList<>();
-              for (int o = 0; o < operandCount; o++) {
-                conjuncts.add(
-                    Smt.eq(
-                        Smt.sym(operandSymbols.get(o).valueNames().get(slot)),
-                        Smt.intLit(BigInteger.valueOf(tuple[o]))));
-              }
-              conjuncts.add(
-                  Smt.eq(
-                      Smt.sym(derivedValues.valueNames().get(slot)),
-                      Smt.intLit(BigInteger.valueOf(localIndex))));
-              slotCases.add(Smt.and(conjuncts));
-            }
-            // advance the odometer
-            for (int o = operandCount - 1; o >= 0; o--) {
-              tuple[o]++;
-              if (tuple[o] < operandValueLists.get(o).size()) {
-                break;
-              }
-              tuple[o] = 0;
-            }
+    // GENERAL VIRTUAL-STRING DERIVATION: for ANY String-typed derive expression (concat
+    // chain, substring, toUpper/toLower, at, or arbitrary recursive composition), resolve
+    // the expression into its enumerated (spelling, guard) candidates via
+    // ExpressionTranslator's virtual-string machinery, then pin the derived attribute's
+    // value to its own domain's index whose content matches each candidate spelling under
+    // that candidate's guard. Candidates whose spelling the derived domain cannot offer
+    // contribute falsity -- if no candidate offers a match, the assertion is simply false
+    // (genuinely unsatisfiable), the same discipline as the literal branch above.
+    // Per slot, `self` is bound to that slot's own VariableBinding so attribute reads
+    // inside the derive expression resolve to the correct per-slot symbols.
+    {
+      boolean anyCandidateMatched = false;
+      for (int slot = 0; slot < owner.capacity(); slot++) {
+        var selfBinding = new org.tzi.use.smt.encode.VariableBinding(className, slot);
+        var selfContext = context.withBinding("self", selfBinding);
+        var candidates = org.tzi.use.smt.encode.ExpressionTranslator
+            .resolveStringCandidates(deriveExpr, selfContext);
+        List<SmtTerm> slotCases = new ArrayList<>();
+        for (var candidate : candidates.candidates) {
+          int localIndex = dstValuesList.enumeratedValues().indexOf(candidate.spelling);
+          if (localIndex < 0) {
+            continue;
           }
+          slotCases.add(
+              Smt.and(
+                  List.of(
+                      candidate.guard,
+                      Smt.eq(
+                          Smt.sym(derivedValues.valueNames().get(slot)),
+                          Smt.intLit(BigInteger.valueOf(localIndex))))));
+        }
+        if (!slotCases.isEmpty()) {
+          anyCandidateMatched = true;
           script.assertThat(Smt.or(slotCases));
         }
+      }
+      if (anyCandidateMatched) {
         return;
       }
-      // fall through to the located refusal for malformed concat shapes
+      // No slot produced any candidate matching the derived domain: the derivation is
+      // genuinely unsatisfiable under the current configuration.
+      script.assertThat(Smt.bool(false));
     }
-    throw new org.tzi.use.smt.encode.SmtTranslationException(
-        org.tzi.use.smt.encode.FragmentBoundary.TIER_3,
-        "String derivation for "
-            + className
-            + "."
-            + attributeName
-            + ": only an attribute alias (self.other) or a literal is supported in this slice");
   }
 
   private static SmtTerm canonicalChain(

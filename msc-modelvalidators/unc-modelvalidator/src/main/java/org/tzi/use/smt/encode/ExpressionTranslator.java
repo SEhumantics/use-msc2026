@@ -3975,7 +3975,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         }
         NaryAssociationLinks naryLinks = context.naryLinks(destination.association().name());
         if (naryLinks != null) {
-          return naryNavigationPopulation(naryLinks, destination, source, construct);
+          return naryNavigationPopulation(naryLinks, destination, navigation.getSource(), source, construct);
         }
         AssociationLinks links = context.linksFor(destination.association().name());
         ObjectSlots destSlots = destinationEndView(links, destination);
@@ -4102,6 +4102,7 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   private List<PopulationMember> naryNavigationPopulation(
       NaryAssociationLinks links,
       MNavigableElement destination,
+      MNavigableElement sourceElement,
       VariableBinding source,
       String construct) {
     if (!NARY_NAVIGATION_CONSTRUCTS.contains(construct)) {
@@ -4128,9 +4129,13 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           "navigation destination is not a declared end of n-ary association "
               + links.associationName());
     }
+    // DECLARED-END IDENTITY for sourceEnd: for a reflexive n-ary association (two or more
+    // ends of the same class), content-based indexOf(source) can silently match the wrong
+    // end because all end views carry identical bindings. Instead, match on the declared
+    // end identity from navigation.getSource().
     int sourceEnd = -1;
     for (int e = 0; e < arity; e++) {
-      if (e != destEnd && links.endView(e).indexOf(source) >= 0) {
+      if (e != destEnd && declaredEnds.get(e).equals(sourceElement)) {
         sourceEnd = e;
         break;
       }
@@ -4406,9 +4411,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   }
 
   /** One candidate of an enumerable string source: its guard and its spelling. */
-  private static final class StringCandidateCase {
-    final String spelling;
-    final SmtTerm guard;
+  public static final class StringCandidateCase {
+    public final String spelling;
+    public final SmtTerm guard;
 
     StringCandidateCase(String spelling, SmtTerm guard) {
       this.spelling = spelling;
@@ -4416,9 +4421,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
   }
 
-  private static final class EnumerableString {
-    final List<StringCandidateCase> candidates = new ArrayList<>();
-    SmtTerm defined = Smt.bool(true);
+  public static final class EnumerableString {
+    public final List<StringCandidateCase> candidates = new ArrayList<>();
+    public SmtTerm defined = Smt.bool(true);
   }
 
   /**
@@ -4426,6 +4431,21 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * a bare String attribute on a context variable (its configured domain), or a String let
    * variable (its recorded candidate list). Null for anything else.
    */
+  /**
+   * Public entry point for the virtual-string resolver, for callers outside this class
+   * (currently SmtModelFinder's assertStringDerivedAttribute). Resolves a String-typed
+   * expression into its enumerated (spelling, guard) candidates over the configured
+   * domains, handling concat/substring/at/toUpper/toLower with arbitrary recursive
+   * composition. The caller is responsible for binding 'self' in the context before
+   * calling this method.
+   */
+  public static EnumerableString resolveStringCandidates(
+      Expression expr, TranslationContext context) {
+    ExpressionTranslator et = new ExpressionTranslator(
+        context, TranslationMode.UNCERTAIN, true, Map.of(), Set.of());
+    return et.stringCandidates(expr);
+  }
+
   private EnumerableString stringCandidates(Expression e) {
     EnumerableString result = new EnumerableString();
     if (e instanceof ExpConstString literal) {
