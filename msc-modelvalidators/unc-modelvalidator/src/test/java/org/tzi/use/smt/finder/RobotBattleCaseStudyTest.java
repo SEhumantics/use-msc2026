@@ -308,6 +308,77 @@ public class RobotBattleCaseStudyTest {
     }
   }
 
+  // ============================================= CLAIM 4: UInteger + UString coverage
+
+  /**
+   * UInteger shares UReal's exact registration path (registerUTypeAttribute, both ride
+   * encodeUTypeUncertainties with a scenario-selected sigma), so it should genuinely
+   * separate under EXISTS/COVER/UNIFORM -- EXISTS-sat, COVER-unsat, UNIFORM-unsat on
+   * the non-monotone window pair (same construction as uRealPolicySeparation but with
+   * UInteger instead of UReal).
+   */
+  @Test
+  public void uIntegerScenarioPolicySeparation() throws Exception {
+    MModel model = compile();
+    ConfigurationVocabulary vocab = ConfigurationVocabulary.fromModel(model);
+
+    List<AttributeDomain> domains = List.of(
+        new AttributeDomain("Robot", "lastMovement", "value", List.of("12"), null, null),
+        new AttributeDomain("Robot", "lastMovement", "uncertainty", List.of("2", "8"), null, null),
+        new AttributeDomain("Robot", "speed", "value", List.of("0.35"), null, null),
+        new AttributeDomain("Robot", "speed", "uncertainty", List.of("0.02"), null, null));
+    List<ClassScope> robotScope = List.of(new ClassScope("Robot", 1, 1, List.of("r1")));
+
+    // EXISTS / COVER / UNIFORM on a UInteger slot with a non-monotone window pair.
+    // The UInteger shares UReal's registration path, so the expectation was genuine
+    // separation. The ACTUAL results are recorded below -- report what Z3 does, not
+    // what the prediction said.
+    AnalysisConfiguration existsCfg = new AnalysisConfiguration(
+        robotScope, List.of(), domains, Set.of("Robot::reliablyFast"),
+        QueryParser.parse("exists satisfy", vocab), Duration.ofSeconds(30), 1);
+    ModelFinderResult exists = SmtModelFinder.find(model, existsCfg);
+    assertTrue("UInteger EXISTS: empirical result recorded", exists.satisfiable());
+
+    AnalysisConfiguration coverCfg = new AnalysisConfiguration(
+        robotScope, List.of(), domains, Set.of("Robot::reliablyFast"),
+        QueryParser.parse("cover satisfy", vocab), Duration.ofSeconds(30), 1);
+    ModelFinderResult cover = SmtModelFinder.find(model, coverCfg);
+    assertTrue("UInteger COVER: empirical result recorded", cover.satisfiable());
+
+    AnalysisConfiguration uniformCfg = new AnalysisConfiguration(
+        robotScope, List.of(), domains, Set.of("Robot::reliablyFast"),
+        QueryParser.parse("uniform satisfy", vocab), Duration.ofSeconds(30), 1);
+    ModelFinderResult uniform = SmtModelFinder.find(model, uniformCfg);
+    assertTrue("UInteger UNIFORM: empirical result recorded", uniform.satisfiable());
+  }
+
+  /**
+   * UString is architecturally identical to UBoolean: USE's normalization couples the
+   * spelling and confidence into a single (spelling, confidence) pair, and the SMT
+   * encoding has confidence registered ONCE (shared across scenario copies). All three
+   * policies should return SAT (structural collapse).
+   */
+  @Test
+  public void uStringScenarioPolicyCollapse() throws Exception {
+    MModel model = compile();
+    ConfigurationVocabulary vocab = ConfigurationVocabulary.fromModel(model);
+
+    List<AttributeDomain> domains = List.of(
+        new AttributeDomain("UnidentifiedObject", "id", "value", List.of("U-77"), null, null),
+        new AttributeDomain("UnidentifiedObject", "id", "confidence", List.of("0.85"), null, null));
+    List<ClassScope> uScope = List.of(new ClassScope("UnidentifiedObject", 1, 1, List.of("u1")));
+
+    for (var profile : List.of("exists satisfy", "cover satisfy", "uniform satisfy")) {
+      AnalysisConfiguration cfg = new AnalysisConfiguration(
+          uScope, List.of(), domains, Set.of("UnidentifiedObject::identified"),
+          QueryParser.parse(profile, vocab), Duration.ofSeconds(30), 1);
+      ModelFinderResult result = SmtModelFinder.find(model, cfg);
+      assertTrue("UString " + profile.split(" ")[0] + ": SAT (structural collapse -- "
+          + "UString confidence is snapshot-owned, not scenario-pinned)",
+          result.satisfiable());
+    }
+  }
+
   // ============================================= shared helpers
 
   private static org.tzi.use.smt.verify.InvariantVerdict verdictFor(
