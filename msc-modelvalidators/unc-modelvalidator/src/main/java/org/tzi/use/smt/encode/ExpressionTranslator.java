@@ -291,14 +291,22 @@ public final class ExpressionTranslator implements ExpressionVisitor {
    * forAll/exists over a SET-typed attribute's pool: only pool elements that are actually
    * MEMBERS are in the set, so forAll quantifies (member => body) and exists quantifies
    * (member AND body) over each pool element, with the iterator bound to that element through
-   * the same per-element SMT let the constant-content quantifier uses.
+   * the same per-element SMT let the constant-content quantifier uses. No closing pipe in the
+   * stem: the -defined/-value suffixes complete the quoted symbol (mirrors {@link
+   * #setQuantifierOver}'s own stem construction and comment). Definedness follows the same
+   * strong-Kleene false/true-dominates rescue as the general-population {@link #visitForAll}/
+   * {@link #visitExists}: a forAll is defined-false the moment ANY member is a definite
+   * counterexample, regardless of whether other members are undefined; an exists is
+   * defined-true the moment ANY member is a definite witness, regardless of the rest.
    */
   private TranslatedExpression setAttrQuantifier(
       SetAttrView setAttr, String iterator, Expression bodyExpr, boolean forAll) {
     List<SmtTerm> definedTerms = new ArrayList<>();
     List<SmtTerm> trueTerms = new ArrayList<>();
+    List<SmtTerm> falseCandidates = new ArrayList<>();
+    List<SmtTerm> definedCandidates = new ArrayList<>();
     for (int j = 0; j < setAttr.poolSize(); j++) {
-      String stem = "|set-attr-" + iterator + "-" + j + "|";
+      String stem = "|set-attr-" + iterator + "-" + j;
       LocalBinding binding =
           new LocalBinding(stem + "-defined|", stem + "-value|", false, null);
       Map<String, LocalBinding> extended = new LinkedHashMap<>(localBindings);
@@ -307,21 +315,25 @@ public final class ExpressionTranslator implements ExpressionVisitor {
           translate(bodyExpr, context, mode, positivePolarity, Map.copyOf(extended));
       List<SmtTerm.Binding> bindings =
           List.of(
-              new SmtTerm.Binding(binding.definedSymbol(), Smt.intLit(setAttr.pool().get(j))),
+              new SmtTerm.Binding(binding.definedSymbol(), Smt.bool(true)),
               new SmtTerm.Binding(binding.valueSymbol(), Smt.intLit(setAttr.pool().get(j))));
       SmtTerm member = setAttr.member(j);
       if (forAll) {
         definedTerms.add(Smt.app("=>", member, Smt.let(bindings, body.defined())));
         trueTerms.add(Smt.app("=>", member, Smt.let(bindings, body.value())));
+        falseCandidates.add(Smt.and(List.of(member, Smt.let(bindings, body.falseTerm()))));
       } else {
         trueTerms.add(Smt.and(List.of(member, Smt.let(bindings, body.trueTerm()))));
+        definedCandidates.add(Smt.app("=>", member, Smt.let(bindings, body.defined())));
       }
     }
     if (forAll) {
-      return new TranslatedExpression(Smt.and(definedTerms), Smt.and(trueTerms));
+      SmtTerm defined = Smt.or(List.of(Smt.or(falseCandidates), Smt.and(definedTerms)));
+      return new TranslatedExpression(defined, Smt.and(trueTerms));
     }
     SmtTerm any = trueTerms.isEmpty() ? Smt.bool(false) : Smt.or(trueTerms);
-    return new TranslatedExpression(Smt.bool(true), any);
+    SmtTerm defined = Smt.or(List.of(any, Smt.and(definedCandidates)));
+    return new TranslatedExpression(defined, any);
   }
 
   /** The recursive hop-by-hop selection behind {@link #chainedAttributeValue}. */
@@ -6672,6 +6684,14 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     }
     AssociationLinks links = context.linksFor(destination.association().name());
     ObjectSlots destinationSlots = destinationEndView(links, destination);
+    if (destinationSlots.capacity() == 0) {
+      // No destination slots configured (e.g. the navigated end's class has scope [0,0], which
+      // is the default USE gives every abstract class): the receiver can never exist, so the
+      // call is undefined -- same shape as deepNavigationReceiverOperation's own empty-population
+      // guard and chainRead's capacity-0 guard, not a raw IndexOutOfBoundsException on an empty
+      // gatedValues list.
+      return new TranslatedExpression(Smt.bool(false), crispPlaceholder(operation.resultType()));
+    }
     List<SmtTerm> definedCases = new ArrayList<>();
     List<SmtTerm> gatedValues = new ArrayList<>();
     for (int k = 0; k < destinationSlots.capacity(); k++) {
