@@ -1756,6 +1756,18 @@ public final class SmtModelFinder {
         var selfContext = context.withBinding("self", selfBinding);
         var candidates = org.tzi.use.smt.encode.ExpressionTranslator
             .resolveStringCandidates(deriveExpr, selfContext);
+        if (candidates == null) {
+          throw new org.tzi.use.smt.encode.SmtTranslationException(
+              org.tzi.use.smt.encode.FragmentBoundary.TIER_3,
+              "String derivation for "
+                  + className
+                  + "."
+                  + attributeName
+                  + ": only an attribute alias (self.other), a literal, or a "
+                  + "concat/substring/at/toUpper/toLower composition of those is supported "
+                  + "in this slice (navigation-sourced derivation and numeric-String "
+                  + "conversion are not)");
+        }
         List<SmtTerm> slotCases = new ArrayList<>();
         for (var candidate : candidates.candidates) {
           int localIndex = dstValuesList.enumeratedValues().indexOf(candidate.spelling);
