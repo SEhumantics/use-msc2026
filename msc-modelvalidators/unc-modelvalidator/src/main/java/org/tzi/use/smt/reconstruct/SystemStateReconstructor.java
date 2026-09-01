@@ -377,8 +377,20 @@ public final class SystemStateReconstructor {
     return className + "#" + index;
   }
 
+  /**
+   * A genuinely ABSENT key (solver/parser gap, or a symbol-name mismatch between encode and
+   * reconstruct) is not the same claim as a present-and-false one, and must not be read as
+   * false -- doing so would silently reconstruct "the object/link does not exist" with no
+   * exception, the one place in this file that disagreed with {@link #decodeIndex} above and
+   * {@link SmtValueDecoder}'s own accessors, all of which already fail loudly on the identical
+   * missing-or-wrong-typed condition. Mirrors {@link #decodeIndex}'s own negated-{@code
+   * instanceof} shape, which already covers both cases (missing key -> {@code null}, wrong-typed
+   * key) with the one check.
+   */
   private static boolean isTrue(Map<String, SmtValue> modelValues, String symbol) {
-    SmtValue value = modelValues.get(symbol);
-    return value instanceof SmtValue.Bool bool && bool.value();
+    if (!(modelValues.get(symbol) instanceof SmtValue.Bool bool)) {
+      throw new IllegalStateException("expected a Bool model value for " + symbol);
+    }
+    return bool.value();
   }
 }

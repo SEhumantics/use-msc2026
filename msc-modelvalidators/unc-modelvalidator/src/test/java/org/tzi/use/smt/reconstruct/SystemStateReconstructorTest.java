@@ -305,6 +305,102 @@ public class SystemStateReconstructorTest {
         !state.hasLinkBetweenObjects(marriageAssoc, husband, wife));
   }
 
+  /**
+   * {@code isTrue} used to treat a genuinely ABSENT key (solver/parser gap, or a symbol-name
+   * mismatch between encode and reconstruct) as indistinguishable from a present-and-false value,
+   * silently reconstructing "the object does not exist" -- zero objects, no exception -- instead
+   * of surfacing the disagreement. Every other decode path in this file ({@link #decodeIndex},
+   * {@link SmtValueDecoder}'s own accessors) already fails loudly on the identical missing-or-
+   * wrong-typed condition; this proves {@code isTrue} now does too. The {@code modelValues} map
+   * below is built BY HAND (no solver round-trip) specifically so the "_exists" key can be left
+   * out entirely -- a well-typed attribute value is present for the same slot, so the only
+   * anomaly is the missing key, not a malformed map in general.
+   */
+  @Test
+  public void aMissingExistsKeyThrowsInsteadOfSilentlyReconstructingZeroObjects()
+      throws Exception {
+    MModel model = compileLibrary();
+    SmtScript script = new SmtScript("QF_LIA");
+
+    ObjectSlots users =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("User", 1, 1))).get("User");
+    AttributeDomain nameDomain =
+        new AttributeDomain("User", "name", null, List.of("Ada"), null, null);
+    AttributeValues nameValues =
+        AttributeEncoder.encode(script, users, "name", AttributeType.STRING, nameDomain);
+
+    String existsSymbol = users.existsNames().get(0);
+    Map<String, SmtValue> modelValues =
+        Map.of(nameValues.valueNames().get(0), new SmtValue.Int(java.math.BigInteger.ZERO));
+    assertNull(
+        "test setup sanity: the exists symbol must be genuinely ABSENT, not merely false",
+        modelValues.get(existsSymbol));
+
+    TranslationContext context =
+        new TranslationContext(
+            Map.of(),
+            Map.of("User.name", nameValues),
+            Map.of("User.name", nameDomain),
+            Map.of("User", users),
+            Map.of());
+
+    try {
+      SystemStateReconstructor.reconstruct(model, context, modelValues);
+      org.junit.Assert.fail(
+          "expected reconstruct() to throw when the exists key is entirely absent, instead of"
+              + " silently reconstructing zero objects");
+    } catch (IllegalStateException expected) {
+      assertTrue(
+          "exception message should name the missing symbol so the disagreement is"
+              + " diagnosable, got: "
+              + expected.getMessage(),
+          expected.getMessage().contains(existsSymbol));
+    }
+  }
+
+  /**
+   * The other half of the same defect: a key that IS present but holds the wrong SMT sort (e.g.
+   * an Int where a Bool was expected -- a plausible encode/reconstruct type-mismatch) must also
+   * throw, not silently read as false via the same {@code instanceof} check.
+   */
+  @Test
+  public void aWrongTypedExistsKeyThrowsInsteadOfSilentlyReadingAsFalse() throws Exception {
+    MModel model = compileLibrary();
+    SmtScript script = new SmtScript("QF_LIA");
+
+    ObjectSlots users =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("User", 1, 1))).get("User");
+    AttributeDomain nameDomain =
+        new AttributeDomain("User", "name", null, List.of("Ada"), null, null);
+    AttributeValues nameValues =
+        AttributeEncoder.encode(script, users, "name", AttributeType.STRING, nameDomain);
+
+    String existsSymbol = users.existsNames().get(0);
+    Map<String, SmtValue> modelValues =
+        Map.of(
+            existsSymbol, new SmtValue.Int(java.math.BigInteger.ONE),
+            nameValues.valueNames().get(0), new SmtValue.Int(java.math.BigInteger.ZERO));
+
+    TranslationContext context =
+        new TranslationContext(
+            Map.of(),
+            Map.of("User.name", nameValues),
+            Map.of("User.name", nameDomain),
+            Map.of("User", users),
+            Map.of());
+
+    try {
+      SystemStateReconstructor.reconstruct(model, context, modelValues);
+      org.junit.Assert.fail(
+          "expected reconstruct() to throw when the exists key holds the wrong SMT sort, instead"
+              + " of silently treating it as false");
+    } catch (IllegalStateException expected) {
+      assertTrue(
+          "exception message should name the offending symbol, got: " + expected.getMessage(),
+          expected.getMessage().contains(existsSymbol));
+    }
+  }
+
   private static MModel compileMarriage() throws Exception {
     String source =
         """
