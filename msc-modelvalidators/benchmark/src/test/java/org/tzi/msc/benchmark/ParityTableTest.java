@@ -143,8 +143,9 @@ public class ParityTableTest {
 	 * became the SEVENTH declared Study B divergence (the incumbent's derived attributes never
 	 * constrain their stored value, so a derivation-vs-domain contradiction is invisible to it;
 	 * fresh pipeline re-check confirmed its recorded outcome). It leaves the parity population by
-	 * the standing rule, so the intersection is 41 with agreement on EVERY member and zero
-	 * disagreements -- the figures below are pinned to that state.
+	 * the standing rule. The later UnionNav-UNSAT experiment introduced a new undeclared
+	 * disagreement, so the intersection is 43 with 42 agreements and 1 undeclared
+	 * disagreement -- the figures below are pinned to that state.
 	 */
 	@Test
 	public void theHonestDenominatorOverTheRealCorpusRun() {
