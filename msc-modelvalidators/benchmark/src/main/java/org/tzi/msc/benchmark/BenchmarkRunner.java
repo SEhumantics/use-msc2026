@@ -325,6 +325,11 @@ public class BenchmarkRunner {
 		List<Long> kodkodTranslateMs = new ArrayList<>();
 		List<String> digests = new ArrayList<>();
 		String outcome = null;
+		// Set whenever a repeat's validate() call swallowed a solve()-time exception internally (see
+		// KodkodModelValidator#validationError()) rather than reconstructing a Solution -- cleared on any
+		// later repeat that DOES reconstruct one, so a transient failure never outlives a subsequent
+		// success and violates SolverResult#error's own "non-null only when outcome == ERROR" contract.
+		String lastValidationErrorMessage = null;
 
 		// The first `warmups` iterations exercise the exact same solve path (JVM/JIT warm-up matters
 		// here: solve times range from single-digit milliseconds to tens of seconds, and a cold first
@@ -384,6 +389,8 @@ public class BenchmarkRunner {
 
 				if (validator.solution() != null) {
 					outcome = validator.solution().outcome().toString();
+					lastValidationErrorMessage = null; // this repeat reconstructed a Solution; any earlier
+														// repeat's transient failure message is now stale
 					if (!isWarmup) {
 						kodkodSolveMs.add(validator.solution().stats().solvingTime());
 						kodkodTranslateMs.add(validator.solution().stats().translationTime());
@@ -391,6 +398,16 @@ public class BenchmarkRunner {
 					if (!isWarmup && isWitnessCapturingOutcome(outcome)) {
 						MSystemState state = mSystem.state();
 						digests.add(WitnessDigest.digest(mModel, state));
+					}
+				} else {
+					// validate() caught and swallowed a solve()-time exception internally (it deliberately
+					// never rethrows -- other callers rely on it returning normally) instead of
+					// reconstructing a Solution. Recover the real message through its own accessor so this
+					// cell's ERROR outcome (set below by finalizeResult, since `outcome` stays null) is not
+					// left with error=None the way it silently was before validationError() existed.
+					String msg = errorMessageFromValidationError(validator.validationError());
+					if (msg != null) {
+						lastValidationErrorMessage = msg;
 					}
 				}
 			} catch (Exception e) {
@@ -408,12 +425,33 @@ public class BenchmarkRunner {
 		}
 
 		finalizeResult(result, outcome, wallMs, kodkodSolveMs, kodkodTranslateMs, digests);
+		// Only fill in error from a swallowed validate()-time exception if the cell actually finished
+		// ERROR and nothing already populated `error` -- the PropertyConfigurationVisitor and outer
+		// catch(Exception e) branches above both already set result.error themselves before this point,
+		// and must not be overwritten by a stale message from an earlier, superseded repeat.
+		if ("ERROR".equals(result.outcome) && result.error == null) {
+			result.error = lastValidationErrorMessage;
+		}
 		// The incumbent re-checks nothing: it reports its own solver's verdict and stops. So the
 		// snapshot fact is available (it did or did not reconstruct one) but the USE re-evaluation
 		// fact is not -- null, not false. Study A prints that as not-applicable, and that gap IS a
 		// finding, not a hole in this runner.
 		recordReconstruction(result, isWitnessCapturingOutcome(result.outcome), null);
 		return result;
+	}
+
+	/**
+	 * Turns a swallowed {@link org.tzi.kodkod.KodkodModelValidator#validationError()} into the same
+	 * "ClassSimpleName: message" text the outer {@code catch (Exception e)} branch above already uses
+	 * for {@link SolverResult#error}, so both paths to an ERROR outcome render consistently. Returns
+	 * {@code null} for a null input (validate() did not throw) rather than the string {@code "null"}.
+	 * Package-private and pure so a test can exercise it without a real Kodkod solve.
+	 */
+	static String errorMessageFromValidationError(Throwable validationError) {
+		if (validationError == null) {
+			return null;
+		}
+		return validationError.getClass().getSimpleName() + ": " + validationError.getMessage();
 	}
 
 	/**

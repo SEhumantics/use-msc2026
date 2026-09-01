@@ -1,0 +1,28 @@
+model RealOps
+
+-- Authored specifically to give unc-modelvalidator's Real-widened abs/min/max
+-- (the last shape of the prim.integer-arithmetic arithmetic surface) a real,
+-- wired benchmark scenario: a tolerance check written the way engineers
+-- actually write it -- |value - reference| <= tolerance -- plus a min-based
+-- ordering invariant. USE's own evaluators confirm the semantics (Op_real_abs
+-- is Math.abs; Op_number_min widens mixed Integer/Real via
+-- getLeastCommonSupertype and compares over doubles).
+
+class Reading
+attributes
+  value : Real
+  reference : Real
+  tolerance : Real
+end
+
+constraints
+
+-- The tolerance check as an absolute difference: linear ite over
+-- (value - reference), compared against the configured tolerance.
+context x : Reading inv withinTolerance:
+  (x.value - x.reference).abs() <= x.tolerance
+
+-- min dispatches to the smaller operand: holds exactly when the reading does
+-- not exceed its reference.
+context x : Reading inv valueIsTheMinimum:
+  x.value.min(x.reference) = x.value

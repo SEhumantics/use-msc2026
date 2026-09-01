@@ -167,4 +167,26 @@ public class BenchmarkRunnerTest {
 		assertNull("an ERROR cell must claim no reconstruction", result.reconstructed);
 		assertNull("an ERROR cell must claim no USE re-evaluation", result.useChecked);
 	}
+
+	/**
+	 * Regression test for the exact bug documented in
+	 * docs/experiments/rq4-cost/raw-results-repeats5.json: 10 rows (RealOps/RealOps-UNSAT x 5 Kodkod
+	 * solvers) all had {@code outcome=ERROR, error=None} because {@code KodkodModelValidator.validate}
+	 * swallowed the {@code kodkodSolver.solve} exception with no channel for a caller to recover it. See
+	 * {@code KodkodModelValidatorErrorReportingTest} (kk-modelvalidator module) for the actual solve()
+	 * exception this reproduces ({@code IllegalArgumentException: No such atom in the universe:
+	 * Real_3.5}); this test only exercises this method's own string formatting, pure and without a real
+	 * Kodkod solve.
+	 */
+	@Test
+	public void errorMessageFromValidationErrorFormatsClassAndMessage() {
+		assertEquals("IllegalArgumentException: No such atom in the universe: Real_3.5",
+				BenchmarkRunner.errorMessageFromValidationError(
+						new IllegalArgumentException("No such atom in the universe: Real_3.5")));
+	}
+
+	@Test
+	public void errorMessageFromValidationErrorIsNullWhenValidateDidNotThrow() {
+		assertNull(BenchmarkRunner.errorMessageFromValidationError(null));
+	}
 }

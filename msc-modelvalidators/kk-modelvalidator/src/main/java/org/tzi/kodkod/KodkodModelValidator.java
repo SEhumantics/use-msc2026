@@ -20,24 +20,28 @@ public abstract class KodkodModelValidator {
 	protected IModel model;
 	protected Solution solution;
 	protected Evaluator evaluator;
+	private Throwable validationError;
 
 	/**
 	 * Validates the given model.
-	 * 
+	 *
 	 * @param model
 	 */
 	public void validate(IModel model) {
 		this.model = model;
 		evaluator = null;
-		
+		validationError = null;
+
 		KodkodSolver kodkodSolver = new KodkodSolver();
 		try {
 			solution = kodkodSolver.solve(model);
 		} catch (Exception e) {
 			LOG.error(LogMessages.validationException + " (" + e.getMessage() + ")");
+			validationError = e;
 			return;
 		} catch (OutOfMemoryError oome) {
 			LOG.error(LogMessages.validationOutOfMemory + " (" + oome.getMessage() + ")");
+			validationError = oome;
 			return;
 		}
 
@@ -83,6 +87,25 @@ public abstract class KodkodModelValidator {
 	 */
 	public Solution solution() {
 		return solution;
+	}
+
+	/**
+	 * The {@link Exception} or {@link OutOfMemoryError} that {@link KodkodSolver#solve} raised during
+	 * the most recent {@link #validate(IModel)} call, or {@code null} if that call did not throw (this
+	 * includes: validate() has not run yet, the most recent run solved without incident, or an earlier
+	 * run's error was superseded by a later, successful run on the same instance -- reset at the top of
+	 * every {@link #validate(IModel)} call exactly like {@link #solution}). Added for the same reason as
+	 * {@link #solution()}: {@code validate} deliberately still swallows the exception and returns
+	 * normally rather than propagating it (existing callers -- the GUI command, {@link
+	 * InvariantIndepChecker}, recursive re-solves via {@code newSolution} -- all rely on that), but a
+	 * caller that DOES want to know what went wrong (e.g. to populate a benchmark result's own error
+	 * field) previously had no way to recover it: the message only ever reached this class's own log4j
+	 * {@code LOG.error} call, which is unreliable in this reactor's multi-plugin setup (see {@link
+	 * #solution()}'s own javadoc) and, even when it does print, is not attributable to a specific
+	 * validate() call by any caller holding just this object.
+	 */
+	public Throwable validationError() {
+		return validationError;
 	}
 
 	protected abstract void satisfiable();
