@@ -92,11 +92,11 @@ import org.tzi.use.uml.ocl.value.Value;
  * ExpressionTranslator}, whose NOMINAL and UNCERTAIN encodings differ in exactly one place ({@code
  * uRealThreshold}).
  */
-final class NominalErasureEvaluator {
+public final class NominalErasureEvaluator {
   private NominalErasureEvaluator() {}
 
   /** The nominal reading of a Boolean-typed expression. */
-  static InvariantOutcome eval(Expression expression, EvalContext ctx) {
+  public static InvariantOutcome eval(Expression expression, EvalContext ctx) {
     if (!containsUncertainty(expression)) {
       // E(e) = e for a crisp expression: nominal and uncertain evaluation coincide.
       return ThreeValuedEvaluator.eval(expression, ctx);

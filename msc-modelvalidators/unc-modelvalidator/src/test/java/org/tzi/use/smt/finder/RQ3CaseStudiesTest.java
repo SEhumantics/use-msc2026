@@ -23,10 +23,10 @@ import org.tzi.use.uml.mm.ModelFactory;
  *
  * <p><b>Frost Alarm</b> (UInteger): the scenario-dependent rounding boundary. A calibrated
  * sensor (sigma=0.8) needs representative n=10 to clear the 0.9-confidence frost alarm;
- * a drifted sensor (sigma=2.5) needs n=12. The COVER witnesses are materially different
+ * a drifted sensor (sigma=2.5) needs n=13. The COVER witnesses are materially different
  * snapshots (different n), and UNIFORM is SAT (a high enough n works for both -- the
  * requirement is monotone in n). A FRAGILE witness (n=10 under drift: nominal 10>=8 TRUE,
- * U-aware Φ((10−8)/2.5)≈0.21 < 0.9 FALSE) is also pinned.
+ * U-aware Φ((10−8)/2.5)≈0.79 < 0.9 FALSE) is also pinned.
  *
  * <p><b>Sensor Label</b> (UString): the identification confidence drives the match verdict.
  * Two scenarios (high 0.9 / low 0.5 confidence) with the spelling pinned to 'S3': the

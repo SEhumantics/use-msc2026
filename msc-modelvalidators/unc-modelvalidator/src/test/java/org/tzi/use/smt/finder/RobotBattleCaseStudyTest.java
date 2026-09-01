@@ -286,9 +286,16 @@ public class RobotBattleCaseStudyTest {
         Set.of("Mark::j", "Mark::k"),
         QueryParser.parse("uniform satisfy", vocab), Duration.ofSeconds(30), 1);
     ModelFinderResult uniform = SmtModelFinder.find(model, uniformCfg);
-    assertTrue("UNIFORM: also SAT -- the UBoolean encoding has no snapshot-side "
-        + "representative, so COVER and UNIFORM collapse (structural limitation, "
-        + "documented in the RQ3 brief)", uniform.satisfiable());
+    assertTrue("UNIFORM: also SAT -- STRUCTURALLY CONFIRMED, not a bug. The UBoolean "
+        + "probability is registered ONCE into attributeValuesByKey (shared across all "
+        + "scenario copies) per the explicit design comment at SmtModelFinder's UBoolean "
+        + "registration path: 'Its probability belongs to the snapshot S... no measurement "
+        + "quality for a scenario profile to quantify over.' The 4-combination truth-flag "
+        + "case exhaustion is therefore vacuous: the truth flag does not exist as an "
+        + "independent SMT variable. Verified by dumping the emitted script: only ONE "
+        + "hitsTarget_p variable appears (not per-scenario copies), and it is NOT "
+        + "constrained to 0.9 or 0.15 by any scenario assertion.",
+        uniform.satisfiable());
   }
 
   // ============================================= shared helpers
