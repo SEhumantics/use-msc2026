@@ -31,6 +31,32 @@ def iqr(sorted_vals):
     q1, q3 = quartiles(sorted_vals)
     return q3 - q1
 
+def summarize(vals):
+    # median: the real definition -- for an even-length list this is the
+    # AVERAGE of the two middle values, not just vals[len(vals)//2] (which
+    # silently returns the upper-middle element and is wrong for even n).
+    # statistics.median implements the correct definition for both parities;
+    # we round to 2dp (not 1dp) because averaging two already-1dp values can
+    # legitimately need a second decimal (e.g. (1.6+1.9)/2 == 1.75).
+    #
+    # q1/q3/iqr: nearest-rank method (see quartiles() above), i.e. the value
+    # at floor(n/4) and floor(3n/4) directly, NOT interpolated. There is no
+    # single universal definition of quartiles (Tukey hinges, Excel's
+    # QUARTILE.INC/.EXC, and linear-interpolation methods all disagree for
+    # some n); nearest-rank is a defensible, simple, commonly-used choice.
+    # We keep it as the pre-existing convention for this report rather than
+    # switching to an interpolated method -- documented here explicitly so
+    # the choice is not mistaken for the same median bug fixed above.
+    return {
+        'median': round(statistics.median(vals), 2),
+        'q1': quartiles(vals)[0],
+        'q3': quartiles(vals)[1],
+        'iqr': quartiles(vals)[1] - quartiles(vals)[0],
+        'mean': round(sum(vals) / len(vals), 1),
+        'min': vals[0],
+        'max': vals[-1],
+    }
+
 def main():
     if len(sys.argv) < 2:
         print("usage: extract-rq4.py <results.json> [output_dir]")
@@ -91,24 +117,18 @@ def main():
                      if r['z3MedianWallMs'] < r['kkMedianWallMs'])
     kk_faster = len(rows) - smt_faster
 
-    def summarize(vals):
-        return {
-            'median': round(median := vals[len(vals)//2], 1),
-            'q1': quartiles(vals)[0],
-            'q3': quartiles(vals)[1],
-            'iqr': quartiles(vals)[1] - quartiles(vals)[0],
-            'mean': round(sum(vals) / len(vals), 1),
-            'min': vals[0],
-            'max': vals[-1],
-        }
-
     summary = {
         'intersectionSize': len(rows),
         'z3': summarize(z3_vals),
         'kkDefaultSAT4J': summarize(kk_vals),
         'smtFasterOn': smt_faster,
         'kkFasterOn': kk_faster,
-        'medianRatio': round(ratios[len(ratios)//2], 2),
+        # Same real-median fix as summarize() above, applied to the per-example
+        # ratio distribution; rounded to 3dp (not 2dp) since averaging two
+        # already-2dp ratios can need a third decimal (e.g. (3.89+3.98)/2 ==
+        # 3.935). ratioIqr keeps the nearest-rank method for the same reason
+        # documented in summarize().
+        'medianRatio': round(statistics.median(ratios), 3),
         'ratioIqr': [ratios[len(ratios)//4], ratios[3*len(ratios)//4]],
     }
 

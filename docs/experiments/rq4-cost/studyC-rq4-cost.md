@@ -2,7 +2,7 @@
 Intersection: 46 of 82 rows. KK-trivial: 32. Censored: 4.
 | Metric | Z3 | KK DefaultSAT4J |
 |---|---|---|
-| Median (ms) | 6.2 | 1.9 |
+| Median (ms) | 5.9 | 1.75 |
 | Q1 (ms) | 3.9 | 0.9 |
 | Q3 (ms) | 34.5 | 8.3 |
 | IQR (ms) | 30.6 | 7.4 |
@@ -10,7 +10,7 @@ Intersection: 46 of 82 rows. KK-trivial: 32. Censored: 4.
 | Min (ms) | 2.3 | 0.3 |
 | Max (ms) | 14042.3 | 19762.5 |
 
-Z3 faster on 5/46; KK faster on 41/46. Median ratio (Z3/KK): 3.98.
+Z3 faster on 5/46; KK faster on 41/46. Median ratio (Z3/KK): 3.935.
 
 | Example | Outcome | Z3 med | Z3 min | Z3 max | KK med | KK min | KK max | Ratio |
 |---|---|---:|---:|---:|---:|---:|---:|---:|

@@ -15,7 +15,7 @@
   "summary": {
     "intersectionSize": 46,
     "z3": {
-      "median": 6.2,
+      "median": 5.9,
       "q1": 3.9,
       "q3": 34.5,
       "iqr": 30.6,
@@ -24,7 +24,7 @@
       "max": 14042.3
     },
     "kkDefaultSAT4J": {
-      "median": 1.9,
+      "median": 1.75,
       "q1": 0.9,
       "q3": 8.3,
       "iqr": 7.4,
@@ -34,7 +34,7 @@
     },
     "smtFasterOn": 5,
     "kkFasterOn": 41,
-    "medianRatio": 3.98,
+    "medianRatio": 3.935,
     "ratioIqr": [
       2.85,
       6.43
