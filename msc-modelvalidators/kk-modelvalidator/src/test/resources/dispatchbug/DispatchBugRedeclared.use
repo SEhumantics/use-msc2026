@@ -1,0 +1,29 @@
+model DispatchBug
+
+-- Sanity control for DispatchBugProbeTest: identical shape to DispatchBug.use
+-- except C now DIRECTLY re-declares op() itself (rather than merely
+-- inheriting B's override). This is the case getOverriddenOperations()
+-- actually handles (child.operation(name, searchInherited=false) finds an
+-- own declaration on C), so dispatch should be correct here -- confirming
+-- the harness/model shape itself is sound and isolating the bug to the
+-- specific "override inherited without re-declaration" case.
+
+class A
+operations
+  op(): Integer = 1
+end
+
+class B < A
+operations
+  op(): Integer = 2
+end
+
+class C < B
+operations
+  op(): Integer = 2
+end
+
+constraints
+
+context self: A inv OpDispatchesToNearestOverride:
+  self.oclIsTypeOf(C) implies self.op() = 2

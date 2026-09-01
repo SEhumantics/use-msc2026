@@ -1,0 +1,39 @@
+model DispatchBug
+
+-- Probe for a suspected polymorphic-operation-dispatch bug in
+-- OperationExpressionVisitor.getOverriddenOperations()/handleOveriddenOperation():
+-- a 3-level chain A -> B -> C where B overrides op() and C does NOT
+-- re-declare it (C simply inherits B's override, per plain OCL/UML
+-- semantics). The call site is inside an invariant on A itself, so the
+-- receiver's STATIC type is A (the base declaring class), which is exactly
+-- the shape that exercises the dynamic-dispatch nested-if-then-else code
+-- path instead of USE's own static vtable resolution.
+
+class A
+operations
+  op(): Integer = 1
+end
+
+class B < A
+operations
+  op(): Integer = 2
+end
+
+class C < B
+end
+
+constraints
+
+-- Correct OCL semantics: a C instance inherits B's override (nearest
+-- ancestor declaration), so self.op() = 2 for every C instance -- this
+-- invariant is a tautology under correct dispatch.
+context self: A inv OpDispatchesToNearestOverride:
+  self.oclIsTypeOf(C) implies self.op() = 2
+
+-- Control: if kk's dispatch actually computed A's ORIGINAL body (1) for
+-- the exact-type-C instance instead of B's inherited override (2), THIS
+-- invariant will be satisfiable instead -- pinning down exactly which
+-- wrong value the buggy fallback produces (only one of the two properties
+-- files below marks this one active; see DispatchBugControlWrongValue.properties).
+context self: A inv OpWronglyComputesBaseBody:
+  self.oclIsTypeOf(C) implies self.op() = 1

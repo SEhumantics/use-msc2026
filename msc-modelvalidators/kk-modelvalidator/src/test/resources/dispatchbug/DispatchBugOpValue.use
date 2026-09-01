@@ -1,0 +1,19 @@
+model DispatchBug
+
+class A
+operations
+  op(): Integer = 1
+end
+
+class B < A
+operations
+  op(): Integer = 2
+end
+
+class C < B
+end
+
+constraints
+
+context self: A inv OpNeitherOneNorTwo:
+  self.oclIsTypeOf(C) implies (self.op() <> 1 and self.op() <> 2)
