@@ -81,6 +81,52 @@ public record ConfigurationVocabulary(
   }
 
   /**
+   * The {@code Class::invariant} spelling of a flat {@code Class_invariant} vocabulary key -- the
+   * form {@code MClassInvariant.qualifiedName()} uses, and therefore the only form {@code
+   * SmtModelFinder} and {@code QueryCompiler} can match an invariant by.
+   *
+   * <p>Resolved by {@link #owningClass} against the model's ACTUAL class names, not by splitting at
+   * the first underscore. USE's {@code IDENT} grammar permits underscores inside a class name, so
+   * {@code Order_Item_PriceIsFortyTwo} qualifies to {@code Order_Item::PriceIsFortyTwo}; the
+   * first-underscore split produced {@code Order::Item_PriceIsFortyTwo}, a name no invariant in any
+   * model carries, which made an ACTIVE or NEGATED invariant on such a class abort the solve
+   * outright and made every {@code query} spelling of it unreachable.
+   */
+  public String qualifiedInvariantName(String invariantKey) {
+    String owner = owningClass(invariantKey, classNames);
+    if (owner == null) {
+      throw new ConfigurationReadException(
+          "invariant vocabulary entry '"
+              + invariantKey
+              + "' does not begin with any of the model's class names followed by '_'; expected"
+              + " Class_invariant");
+    }
+    return owner + "::" + invariantKey.substring(owner.length() + 1);
+  }
+
+  /**
+   * The owning class of a flat {@code Class_member} vocabulary key, or {@code null} when no class
+   * name prefixes it at all: among every real class name that is a {@code ClassName_} prefix of
+   * {@code key}, the LONGEST one wins -- the "maximal munch" rule that resolves the {@code
+   * Class_Item_member} ambiguity correctly whenever both {@code Class} and {@code Class_Item} are
+   * declared classes. Shared by the attribute keys ({@code ConfigurationReader.splitAttribute}) and
+   * the invariant keys ({@link #qualifiedInvariantName}), which are built to the same {@code
+   * name + "_" + member} shape and so must be taken apart by the same rule.
+   */
+  static String owningClass(String key, Set<String> classNames) {
+    String owner = null;
+    for (String className : classNames) {
+      String prefix = className + "_";
+      if (key.startsWith(prefix)
+          && key.length() > prefix.length()
+          && (owner == null || className.length() > owner.length())) {
+        owner = className;
+      }
+    }
+    return owner;
+  }
+
+  /**
    * Derives the vocabulary directly from a compiled model, instead of naming every class/
    * attribute/association/invariant by hand -- every prior use of this record hand-wrote a small
    * fixed subset for one test; a real driver needs the whole model's real vocabulary.

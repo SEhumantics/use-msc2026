@@ -252,7 +252,7 @@ public final class ConfigurationReader {
     for (String invariant : vocabulary.invariantNames()) {
       String status = one(entries, invariant);
       if (status == null || "active".equalsIgnoreCase(status)) {
-        active.add(invariant.replaceFirst("_", "::"));
+        active.add(vocabulary.qualifiedInvariantName(invariant));
       } else if ("negate".equalsIgnoreCase(status)) {
         // A negated invariant is still active (QueryExpr.Counterexample's own target must be
         // active -- see QueryCompiler.desugar's requireActive), but the query is switched below
@@ -260,7 +260,7 @@ public final class ConfigurationReader {
         // exactly the incumbent's InvariantIndepChecker-style single-invariant negation --
         // reusing the counterexample query machinery already built and tested for
         // SmtModelFinder.independenceSweep rather than inventing a second one.
-        String qualified = invariant.replaceFirst("_", "::");
+        String qualified = vocabulary.qualifiedInvariantName(invariant);
         active.add(qualified);
         negated.add(qualified);
       } else if (!"inactive".equalsIgnoreCase(status)) {
@@ -812,15 +812,7 @@ public final class ConfigurationReader {
    * against a different model), which is refused rather than guessed at.
    */
   private static String[] splitAttribute(String attribute, Set<String> classNames) {
-    String owner = null;
-    for (String className : classNames) {
-      String prefix = className + "_";
-      if (attribute.startsWith(prefix)
-          && attribute.length() > prefix.length()
-          && (owner == null || className.length() > owner.length())) {
-        owner = className;
-      }
-    }
+    String owner = ConfigurationVocabulary.owningClass(attribute, classNames);
     if (owner == null) {
       throw new ConfigurationReadException(
           "attribute vocabulary entry '"

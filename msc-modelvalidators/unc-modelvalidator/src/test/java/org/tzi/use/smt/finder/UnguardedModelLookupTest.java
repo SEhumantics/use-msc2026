@@ -132,6 +132,56 @@ public class UnguardedModelLookupTest {
     }
   }
 
+  // ------------------------------------------------------- site 2b (~line 651), same loop
+  // The CLASS half of that same lookup. `slotsByClass.get(domain.className())` above proves only
+  // that the name is a configured ClassScope -- ObjectSlotEncoder builds its map from
+  // config.classScopes() and never cross-checks the model -- so `model.getClass(...)` on the very
+  // next line is still @Nullable, and `cls.attribute(...)` dereferenced it raw. The sibling U-type
+  // loop (site 1) has carried exactly this guard all along; the plain loop did not. Site 1 phrases
+  // its refusal identically, so isolation comes from the configuration instead: neither domain
+  // below declares a COMPONENT, which is the only thing that routes a domain to site 1's loop at
+  // all -- sites 5/6, which could also blame 'Ghost', run several hundred lines later.
+
+
+
+  @Test
+  public void plainAttributeDomainRefusesAClassScopeNameAbsentFromTheModel() throws Exception {
+    MModel model = compile(
+        """
+        model PlainAttributeDomainClassTypo
+        class Widget
+        attributes
+          count : Integer
+        end
+        constraints
+        context Widget inv Trivial: self.count >= 0
+        """,
+        "PlainAttributeDomainClassTypo");
+    AnalysisConfiguration config =
+        new AnalysisConfiguration(
+            List.of(new ClassScope("Widget", 1, 1), new ClassScope("Ghost", 1, 1)),
+            List.of(),
+            List.of(
+                new AttributeDomain("Widget", "count", null, List.of("1"), null, null),
+                new AttributeDomain("Ghost", "count", null, List.of("1"), null, null)),
+            Set.of("Widget::Trivial"),
+            QueryParser.parse("satisfy", ConfigurationVocabulary.fromModel(model)),
+            Duration.ofSeconds(30),
+            1);
+    try {
+      SmtModelFinder.find(model, config);
+      fail("an attribute domain naming a class absent from the model must be refused");
+    } catch (SmtTranslationException expected) {
+      assertEquals(FragmentBoundary.ENCODING_SCOPE, expected.boundary());
+      assertTrue(
+          "must name the offending pair, got: " + expected.getMessage(),
+          expected.getMessage().contains("Ghost.count"));
+      assertTrue(
+          "must say the class is absent from the model, got: " + expected.getMessage(),
+          expected.getMessage().contains("not present in the model"));
+    }
+  }
+
   // ------------------------------------------------------------------ site 3 (~line 476)
   // owningClasses, feeding scenarioSpace() for COVER/UNIFORM: `scoped.contains(domain.className())`
   // only proves the name is a configured ClassScope, not that it names a real model class --

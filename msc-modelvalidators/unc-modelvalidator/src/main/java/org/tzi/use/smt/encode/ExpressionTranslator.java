@@ -5113,28 +5113,6 @@ public final class ExpressionTranslator implements ExpressionVisitor {
   }
 
   /**
-   * {@code X->includesAll(Y)} for two (possibly chained, multi-hop) collection-valued navigations
-   * reaching the SAME destination class -- confirmed as a real, recurring shape by sweeping
-   * unc-modelvalidator against USE's own bundled example models (not our own curated benchmark
-   * corpus): {@code self.department.employee->includesAll(self.employee)} (Demo.use, ex.use,
-   * Project.use, all three the identical shape modulo the outer navigation hop). {@code
-   * self.department.employee} is itself two hops -- originally a separate, unsupported limitation
-   * these three didn't fully close on their own; closed once {@link #populationOf} gained the
-   * general multi-hop form ({@link #navigationHop}), see {@code
-   * IncludesAllTranslationTest#includesAllOverAMultiHopNavigationDiscriminatesOnARealCorpusShape}.
-   *
-   * <p>Reduces to {@link #populationOf} directly rather than a new membership primitive: both
-   * navigations, reaching the SAME class, draw from that class's ONE shared {@link ObjectSlots}
-   * pool, so their two populations are index-aligned by construction -- slot {@code k} in one
-   * population and slot {@code k} in the other refer to the exact same candidate object. "every Y
-   * member is also an X member" is then simply, per slot, "Y's own member guard implies X's own
-   * member guard" -- the SAME "found, don't reinvent" reuse {@link #navigationEquals} and {@link
-   * #collectionSize} already established for single-hop populations. An empty Y population makes
-   * the whole conjunction vacuously true (an empty {@link List} yields {@code Smt.and([])} =
-   * {@code true}, matching every other empty-population convention in this class), matching OCL's
-   * own {@code includesAll} semantics over an empty argument.
-   */
-  /**
    * {@code ->sum()} over a CONSTANT-CONTENT collection (a collection literal or a let-bound
    * one): the total is a compile-time constant of the element set -- duplicate-COUNTING for
    * Bag/Sequence (the multiset semantics the size() slice pinned), and USE's own total for the
@@ -5238,6 +5216,49 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     return new TranslatedExpression(defined, value);
   }
 
+  /**
+   * {@code X->includesAll(Y)} for two (possibly chained, multi-hop) collection-valued navigations
+   * -- confirmed as a real, recurring shape by sweeping unc-modelvalidator against USE's own
+   * bundled example models (not our own curated benchmark corpus): {@code
+   * self.department.employee->includesAll(self.employee)} (Demo.use, ex.use, Project.use, all
+   * three the identical shape modulo the outer navigation hop). {@code self.department.employee}
+   * is itself two hops, resolved via {@link #navigationHop}'s general recursive form (see {@code
+   * IncludesAllTranslationTest#includesAllOverAMultiHopNavigationDiscriminatesOnARealCorpusShape}).
+   *
+   * <p>A GENUINE SUBSET TEST, not an index-by-index pairing. The two populations {@link
+   * #populationOf} returns are NOT index-aligned in general, and the earlier encoding's assumption
+   * that they were (slot {@code k} on each side naming the same candidate object) was unsound
+   * wherever it failed:
+   *
+   * <ul>
+   *   <li>a UNION-declared end's population is the CONCATENATION of every {@code subsets}-declaring
+   *       association's own population ({@link #unionNavigationPopulation}, iterating {@code
+   *       MAssociationEnd.getSubsettingEnds()} -- a {@code HashSet}, so not even in a stable
+   *       order), so a union end and one of its own subsetting ends share a class while having
+   *       neither the same size nor the same order;
+   *   <li>a REDEFINED end is redirected to the redefining association's own, narrower end ({@link
+   *       #resolveRedefinedDestination}), whose view spans only the subclass's slots while the
+   *       unredefined side's view is FOLDED over the whole polymorphic population.
+   * </ul>
+   *
+   * <p>Both shapes are reachable and were confirmed defective end to end (a spurious UNSAT, an
+   * {@code IndexOutOfBoundsException}, and a witness the real USE evaluator refuted). Membership is
+   * therefore resolved the way every other same-object comparison in this class resolves it --
+   * STATICALLY, off each member's own {@link VariableBinding} ({@code concreteClass#slotIndex}),
+   * which identifies a candidate object uniquely and independently of which grid or which end view
+   * produced it. Each contained member's guard implies the DISJUNCTION of every containing member
+   * that names the same candidate: an existential over the containing population, exactly the
+   * "membership of a slot in a population" idiom {@link #collectionEmptiness} and {@link
+   * #naryNavigationPopulation} already use. A candidate the containing side cannot hold at all
+   * disjoins to {@code Smt.or([])} = {@code false}, correctly forcing that member absent rather
+   * than reading a neighbouring slot's guard.
+   *
+   * <p>For an index-aligned pair (both sides drawing from ONE shared {@link ObjectSlots} view --
+   * every shape that already worked) each disjunction has exactly one match and {@link Smt#or}
+   * collapses it, so the emitted script is byte-identical to the previous encoding's. An empty Y
+   * population still makes the whole conjunction vacuously true ({@code Smt.and([])} = {@code
+   * true}), matching OCL's own {@code includesAll} semantics over an empty argument.
+   */
   private TranslatedExpression collectionIncludesAll(Expression collectionExpr, Expression otherExpr) {
     if (!(collectionExpr instanceof ExpNavigation collectionNav)
         || !collectionNav.getDestination().isCollection()) {
@@ -5263,17 +5284,82 @@ public final class ExpressionTranslator implements ExpressionVisitor {
               + otherDestClass
               + ") is not yet supported");
     }
+    requireCompatibleResolvedDestinations(collectionNav, otherNav);
     List<PopulationMember> collectionPopulation = populationOf(collectionNav, "includesAll");
     List<PopulationMember> otherPopulation = populationOf(otherNav, "includesAll");
     List<SmtTerm> everyOtherMemberIsAlsoAMember = new ArrayList<>(otherPopulation.size());
-    for (int k = 0; k < otherPopulation.size(); k++) {
+    for (PopulationMember contained : otherPopulation) {
+      List<SmtTerm> containingSlotsNamingTheSameCandidate = new ArrayList<>();
+      for (PopulationMember containing : collectionPopulation) {
+        if (containing.binding().equals(contained.binding())) {
+          containingSlotsNamingTheSameCandidate.add(containing.memberGuard());
+        }
+      }
       everyOtherMemberIsAlsoAMember.add(
           Smt.app(
               "=>",
-              otherPopulation.get(k).memberGuard(),
-              collectionPopulation.get(k).memberGuard()));
+              contained.memberGuard(),
+              Smt.or(containingSlotsNamingTheSameCandidate)));
     }
     return defined(Smt.and(everyOtherMemberIsAlsoAMember));
+  }
+
+  /**
+   * The DECLARED-class check above runs before {@link #resolveRedefinedDestination} has had a say,
+   * and redefinition can still redirect either side afterwards -- the declared classes agreeing
+   * proves nothing about the classes the two populations are actually drawn from. Two candidate
+   * pools related by inheritance are fine (the subset test matches candidates by {@link
+   * VariableBinding}, so a slot the narrower side cannot hold simply never matches, which is the
+   * correct answer rather than an approximation of it); two pools in UNRELATED hierarchies -- two
+   * SIBLING redefinitions off the same source class, say -- mean the invariant is comparing
+   * populations that can never share a candidate at all, which is refused rather than answered with
+   * a vacuous truth the modeller did not ask for.
+   */
+  private void requireCompatibleResolvedDestinations(ExpNavigation left, ExpNavigation right) {
+    MNavigableElement leftEnd = resolvedDestination(left);
+    MNavigableElement rightEnd = resolvedDestination(right);
+    if (leftEnd == null || rightEnd == null) {
+      return;
+    }
+    org.tzi.use.uml.mm.MClass leftClass = leftEnd.cls();
+    org.tzi.use.uml.mm.MClass rightClass = rightEnd.cls();
+    if (leftClass.equals(rightClass)
+        || leftClass.allParents().contains(rightClass)
+        || rightClass.allParents().contains(leftClass)) {
+      return;
+    }
+    throw unsupported(
+        FragmentBoundary.TIER_3,
+        "includesAll between two navigations whose redefinition-resolved destinations are the"
+            + " unrelated classes ("
+            + leftClass.name()
+            + ", "
+            + rightClass.name()
+            + ") is not yet supported");
+  }
+
+  /**
+   * The end {@link #populationOf} will actually draw {@code navigation}'s population from, i.e. its
+   * destination AFTER {@link #resolveRedefinedDestination}, resolved the same way for a chained
+   * source that {@link #navigationHop} resolves it (each hop's own resolved destination class is
+   * the next hop's source witness) but WITHOUT building that hop's terms -- this is a check, not a
+   * translation. {@code null} for a source that is neither a bound variable nor another navigation,
+   * a shape {@link #populationOf} refuses on its own a moment later.
+   */
+  private MNavigableElement resolvedDestination(ExpNavigation navigation) {
+    VariableBinding sourceWitness;
+    if (navigation.getObjectExpression() instanceof ExpVariable sourceVar) {
+      sourceWitness = context.binding(sourceVar.getVarname());
+    } else if (navigation.getObjectExpression() instanceof ExpNavigation innerNavigation) {
+      MNavigableElement innerEnd = resolvedDestination(innerNavigation);
+      if (innerEnd == null) {
+        return null;
+      }
+      sourceWitness = new VariableBinding(innerEnd.cls().name(), 0);
+    } else {
+      return null;
+    }
+    return resolveRedefinedDestination(navigation.getDestination(), sourceWitness);
   }
 
   /**

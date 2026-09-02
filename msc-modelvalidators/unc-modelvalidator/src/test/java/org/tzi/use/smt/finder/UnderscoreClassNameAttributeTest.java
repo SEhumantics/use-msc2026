@@ -34,12 +34,11 @@ import org.tzi.use.uml.sys.MSystemState;
  *
  * <p>No invariant is declared: the single-candidate {@code Order_Item_price = Set{42}} domain alone
  * already deterministically pins the reconstructed value, which is enough to discriminate correct
- * attribution from the bug without a separate invariant. (Note, out of this fix's scope: {@code
- * ConfigurationReader}'s SEPARATE {@code invariant.replaceFirst("_", "::")} qualification shares
- * the same first-underscore-split defect for an active invariant on an underscore- containing class
- * -- confirmed while building this test, an active {@code Order_Item_PriceIsFortyTwo} invariant
- * fails with "query names invariant(s) absent from model: [Order::Item_PriceIsFortyTwo]" -- but it
- * is not one of this task's 4 target bugs, so it is avoided here rather than fixed.)
+ * attribution from the bug without a separate invariant. The SEPARATE first-underscore split on the
+ * INVARIANT keys -- noted here when this test was written, and confirmed then to fail an active
+ * {@code Order_Item_PriceIsFortyTwo} with "query names invariant(s) absent from model:
+ * [Order::Item_PriceIsFortyTwo]" -- has since been closed against the same longest-prefix rule; see
+ * {@link UnderscoreClassNameInvariantTest}.
  */
 public class UnderscoreClassNameAttributeTest {
 

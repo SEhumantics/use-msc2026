@@ -648,7 +648,21 @@ public final class SmtModelFinder {
                 + domain.attributeName()
                 + "' names a class with no configured scope");
       }
+      // The guard above proves only that the name is a configured ClassScope (slotsByClass is
+      // built from config.classScopes(), which is trusted verbatim), not that the model declares
+      // it -- and MModel.getClass is @Nullable. The sibling U-type component loop below carries
+      // exactly this guard; without it here, a hand-built configuration naming a class the model
+      // does not have raised a raw NullPointerException out of find.
       MClass cls = model.getClass(domain.className());
+      if (cls == null) {
+        throw new SmtTranslationException(
+            FragmentBoundary.ENCODING_SCOPE,
+            "attribute domain '"
+                + domain.className()
+                + "."
+                + domain.attributeName()
+                + "' names a class not present in the model");
+      }
       MAttribute attribute = cls.attribute(domain.attributeName(), true);
       if (attribute == null) {
         throw new SmtTranslationException(

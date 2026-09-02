@@ -181,10 +181,19 @@ public final class QueryParser {
     };
   }
 
+  /**
+   * The three spellings a {@code query} may name one invariant by: the flat vocabulary key ({@code
+   * Order_Item_PriceIsFortyTwo}), the qualified name ({@code Order_Item::PriceIsFortyTwo}), and the
+   * bare invariant name ({@code PriceIsFortyTwo}) where it is unambiguous. All three are derived
+   * from {@link ConfigurationVocabulary#qualifiedInvariantName}, i.e. by longest-prefix match
+   * against the model's real class names -- splitting the key at its first underscore instead made
+   * the qualified and simple spellings of an invariant on an underscore-named class unreachable
+   * ("unknown invariant"), while the flat spelling resolved to a name absent from the model.
+   */
   private String resolveInvariant(Token token) {
     List<String> matches = new ArrayList<>();
     for (String configuredName : vocabulary.invariantNames()) {
-      String qualified = configuredName.replaceFirst("_", "::");
+      String qualified = vocabulary.qualifiedInvariantName(configuredName);
       String simple = qualified.substring(qualified.indexOf("::") + 2);
       if (token.text().equals(configuredName)
           || token.text().equals(qualified)
