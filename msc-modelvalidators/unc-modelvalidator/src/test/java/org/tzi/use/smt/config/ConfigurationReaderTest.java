@@ -183,11 +183,9 @@ public class ConfigurationReaderTest {
   }
 
   @Test
-  public void negatingMoreThanOneInvariantInOneSectionIsAmbiguousAndFailsClosed()
-      throws Exception {
+  public void negatingMoreThanOneInvariantInOneSectionIsAmbiguousAndFailsClosed() throws Exception {
     Path file =
-        temporaryConfiguration(
-            "User_min = 1\nUser_nameIsKey = negate\nBook_titleIsKey = negate\n");
+        temporaryConfiguration("User_min = 1\nUser_nameIsKey = negate\nBook_titleIsKey = negate\n");
 
     ConfigurationReader.NormalizedConfiguration normalized =
         ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY);
@@ -383,6 +381,114 @@ public class ConfigurationReaderTest {
     return configuration.attributeDomains().stream()
         .filter(domain -> domain.className().isEmpty() && domain.attributeName().equals(typeName))
         .findFirst();
+  }
+
+  /**
+   * The audit's own repro: {@code GraphColoring.properties}-shaped self-association {@code
+   * Adjacent} with 5 forced link tuples but {@code Adjacent_max = 3} (and {@code Adjacent_min} left
+   * unconfigured, so it defaults to 1). {@code readMin(1) < readMax(3) < k(5)} is exactly the
+   * non-exhaustive gap in {@code associationScope}'s branch: before the fix, {@code max} fell
+   * through unchanged at its initializer value {@code k(5)}, silently discarding the user's
+   * explicit cap of 3 rather than refusing the fact that 5 forced links categorically cannot fit
+   * under a maximum of 3.
+   */
+  @Test
+  public void associationMaxSmallerThanTheForcedLinkCountIsRefusedNotSilentlyWidened()
+      throws Exception {
+    ConfigurationVocabulary vocabulary =
+        ConfigurationVocabulary.of(
+            Set.of("Region"), Set.of("Adjacent"), Set.of(), Set.of(), Set.of());
+    Path file =
+        temporaryConfiguration(
+            """
+            Region = Set{r0,r1,r2,r3,r4}
+            Region_min = 5
+            Region_max = 5
+            Adjacent = Set{(r0,r1),(r1,r2),(r2,r3),(r3,r4),(r4,r0)}
+            Adjacent_max = 3
+            """);
+
+    ConfigurationReadException exception =
+        assertThrows(
+            ConfigurationReadException.class,
+            () -> ConfigurationReader.normalize(ConfigurationReader.read(file, null), vocabulary));
+
+    assertTrue(exception.getMessage(), exception.getMessage().contains("Adjacent"));
+    assertTrue(exception.getMessage(), exception.getMessage().contains("5 forced link"));
+    assertTrue(exception.getMessage(), exception.getMessage().contains("Adjacent_max"));
+  }
+
+  /**
+   * {@code addPrimitiveDomain} never validated {@code min <= max} for a type-wide primitive domain,
+   * unlike {@code validateScopes}, which already does exactly this for class/association scopes. A
+   * transposed {@code Integer_min}/{@code Integer_max} silently produced an inverted, unsatisfiable
+   * domain instead of a located, actionable refusal.
+   */
+  @Test
+  public void typeWideMinGreaterThanMaxIsRefused() throws Exception {
+    Path file = temporaryConfiguration("User_min = 1\nInteger_min = 5\nInteger_max = 2\n");
+
+    ConfigurationReadException exception =
+        assertThrows(
+            ConfigurationReadException.class,
+            () -> ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY));
+
+    assertTrue(exception.getMessage(), exception.getMessage().contains("Integer_min=5"));
+    assertTrue(exception.getMessage(), exception.getMessage().contains("Integer_max=2"));
+  }
+
+  /**
+   * {@code String_max = -1} used to be interpreted two contradictory ways in the same {@code
+   * normalize} method: the type-wide domain path read it as a literal negative value bound
+   * (producing an inverted, now-refused domain per the previous test once {@code min <= max} is
+   * enforced), while the per-attribute universe-padding path silently collapsed it to "unset" and
+   * fell back to a default fill of 10 candidates as if the key had never been configured at all.
+   * Both paths must now agree that {@code -1} is the SAME "unbounded" sentinel {@code
+   * ClassScope}/{@code AssociationScope} already use for their own {@code max}: the type-wide
+   * domain preserves {@code -1} literally (exactly as those two records do), and the per-attribute
+   * universe imposes no artificial cap at all -- neither padded up to 10 nor truncated -- landing
+   * on exactly the model-wide explicit spellings.
+   */
+  @Test
+  public void stringMaxNegativeOneIsTheSameUnboundedSentinelInBothPaths() throws Exception {
+    Path file =
+        temporaryConfiguration(
+            """
+            User_min = 1
+            User_max = 1
+            Book_min = 1
+            Book_max = 1
+            User_name = Set{'Ada', 'Bob'}
+            String_max = -1
+            """);
+
+    AnalysisConfiguration configuration =
+        ConfigurationReader.normalize(ConfigurationReader.read(file, null), LIBRARY)
+            .requireSupported();
+
+    assertEquals(
+        "the type-wide String domain must preserve -1 as the unbounded sentinel, not"
+            + " default-fill it to stringMax=10 nor read it as a literal (always-losing) upper"
+            + " value bound",
+        java.util.Optional.of(
+            new AttributeDomain(
+                "",
+                "String",
+                null,
+                java.util.List.of(),
+                java.math.BigDecimal.ZERO,
+                java.math.BigDecimal.valueOf(-1))),
+        typeWide(configuration, "String"));
+    assertTrue(
+        "the per-attribute universe-padding path must agree: the unconfigured Book_title's"
+            + " candidate universe is exactly the model-wide spellings, neither truncated nor"
+            + " padded up to the unconfigured default of 10",
+        configuration.attributeDomains().stream()
+            .anyMatch(
+                domain ->
+                    domain.className().equals("Book")
+                        && domain.attributeName().equals("title")
+                        && domain.enumeratedValues().equals(java.util.List.of("Ada", "Bob"))));
   }
 
   private static Path temporaryConfiguration(String contents) throws Exception {

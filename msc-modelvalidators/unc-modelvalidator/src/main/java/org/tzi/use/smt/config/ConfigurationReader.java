@@ -142,11 +142,23 @@ public final class ConfigurationReader {
     // The model-wide explicit String spellings: kk's padded universe CONTAINS them (the
     // placeholders only fill up to the configured count), so an unconfigured attribute can
     // take any of them too.
+    //
+    // String_max = -1 is the SAME "unbounded" sentinel every OTHER max in this file already
+    // carries (ClassScope, AssociationScope, addPrimitiveDomain's own String exemption below) --
+    // not an ordinary count to default-fill from. typeWideDecimal (not decimal(), which already
+    // collapses -1 to "unset" and would make it indistinguishable from genuinely unconfigured) is
+    // read here specifically so that distinction survives: unconfigured still default-fills to
+    // kk's stringMax=10, but an explicit -1 instead disables the cap entirely below.
     Integer stringUniverseDefaultFill = null;
+    boolean stringUniverseUnbounded = false;
     if (entries.containsKey("String_min") || entries.containsKey("String_max")) {
-      BigDecimal configuredMax = decimal(entries, "String_max");
-      stringUniverseDefaultFill =
-          configuredMax != null ? configuredMax.intValueExact() : 10; // DefaultConfigurationValues.stringMax
+      BigDecimal rawMax = typeWideDecimal(entries, "String_max");
+      if (rawMax != null && rawMax.compareTo(BigDecimal.valueOf(-1)) == 0) {
+        stringUniverseUnbounded = true;
+      } else {
+        stringUniverseDefaultFill =
+            rawMax != null ? rawMax.intValueExact() : 10; // DefaultConfigurationValues.stringMax
+      }
     }
     java.util.LinkedHashSet<String> modelWideStringSpellings = new java.util.LinkedHashSet<>();
     for (String attribute : vocabulary.attributeNames().stream().sorted().toList()) {
@@ -155,34 +167,45 @@ public final class ConfigurationReader {
       }
     }
     BigDecimal stringUniverseMax =
-        stringUniverseDefaultFill != null
-            ? BigDecimal.valueOf(stringUniverseDefaultFill)
-            : decimal(entries, "String_max");
+        stringUniverseUnbounded
+            ? null
+            : stringUniverseDefaultFill != null
+                ? BigDecimal.valueOf(stringUniverseDefaultFill)
+                : decimal(entries, "String_max");
     for (String attribute : vocabulary.attributeNames().stream().sorted().toList()) {
       boolean stringTyped = vocabulary.isStringAttribute(attribute);
+      // Unbounded (-1): no cap to pad or truncate to -- the candidate space is exactly the
+      // model-wide explicit spellings, as-is. Skipped when there are none at all: an unbounded
+      // cap over zero explicit spellings has nothing to offer, exactly like the ordinary
+      // (bounded) branch already skips a configured max of 0.
+      boolean registerUnboundedUniverse =
+          stringUniverseUnbounded && !modelWideStringSpellings.isEmpty();
+      boolean registerBoundedUniverse =
+          !stringUniverseUnbounded && stringUniverseMax != null && stringUniverseMax.signum() > 0;
       if (stringTyped
           && !entries.containsKey(attribute)
-          && stringUniverseMax != null
-          && stringUniverseMax.signum() > 0) {
+          && (registerUnboundedUniverse || registerBoundedUniverse)) {
         // The ported String_max semantics: the attribute's candidate space is the shared
         // universe -- the model's explicit spellings (capped at k) plus generated
         // "String_string<i>" placeholders up to k candidates total.
-        int k = stringUniverseMax.intValueExact();
         List<String> universe = new ArrayList<>(modelWideStringSpellings);
-        while (universe.size() > k) {
-          universe.remove(universe.size() - 1);
-        }
-        // kk numbers the placeholders from the model-wide SPECIFIC count + 1
-        // (StringConfigurator: i = allValues().size() + 1), independent of the cap.
-        int i = modelWideStringSpellings.size() + 1;
-        while (universe.size() < k) {
-          String placeholder = "String_string" + i;
-          if (!universe.contains(placeholder)) {
-            universe.add(placeholder);
+        if (registerBoundedUniverse) {
+          int k = stringUniverseMax.intValueExact();
+          while (universe.size() > k) {
+            universe.remove(universe.size() - 1);
           }
-          i++;
+          // kk numbers the placeholders from the model-wide SPECIFIC count + 1
+          // (StringConfigurator: i = allValues().size() + 1), independent of the cap.
+          int i = modelWideStringSpellings.size() + 1;
+          while (universe.size() < k) {
+            String placeholder = "String_string" + i;
+            if (!universe.contains(placeholder)) {
+              universe.add(placeholder);
+            }
+            i++;
+          }
         }
-        String[] ownerAndName = splitAttribute(attribute);
+        String[] ownerAndName = splitAttribute(attribute, vocabulary.classNames());
         domains.add(
             new AttributeDomain(ownerAndName[0], ownerAndName[1], null, universe, null, null));
       }
@@ -201,13 +224,13 @@ public final class ConfigurationReader {
         max = maxSize;
       }
       if (min != null || max != null || !values.isEmpty()) {
-        String[] ownerAndName = splitAttribute(attribute);
+        String[] ownerAndName = splitAttribute(attribute, vocabulary.classNames());
         domains.add(new AttributeDomain(ownerAndName[0], ownerAndName[1], null, values, min, max));
       }
       for (String component : List.of("value", "uncertainty", "probability", "confidence")) {
         String componentKey = attribute + "_" + component;
         if (entries.containsKey(componentKey)) {
-          String[] ownerAndName = splitAttribute(attribute);
+          String[] ownerAndName = splitAttribute(attribute, vocabulary.classNames());
           domains.add(
               new AttributeDomain(
                   ownerAndName[0],
@@ -331,6 +354,19 @@ public final class ConfigurationReader {
    * <p>Second, a range is created as soon as EITHER side is configured, and the missing side is
    * completed from {@code DefaultConfigurationValues} rather than left open (lines 260-266). With
    * neither side configured the incumbent sets no range at all, so neither does this.
+   *
+   * <p>Third, the completed range's ordering is validated -- {@code validateScopes} already does
+   * this for class/association scopes, and a transposed {@code min}/{@code max} here (e.g. {@code
+   * Integer_min=5}, {@code Integer_max=2}) is exactly as much a configuration error, silently
+   * producing an inverted, unsatisfiable domain otherwise. {@code String}'s own {@code max} is
+   * exempted from that check when it carries the literal {@code -1} sentinel: unlike {@code
+   * Integer}/{@code Real} (where {@code -1} is an ordinary value the domain can legitimately start
+   * or end at, per the first detail above), a String type has no natural order for a type-wide
+   * VALUE range to bound in the first place -- the only sense {@code String_max} makes here is as
+   * the same "unbounded UNIVERSE SIZE" sentinel {@code ClassScope}/{@code AssociationScope} already
+   * use their own {@code max} for, so it must agree with how the per-attribute universe-padding
+   * path above interprets the identical raw key, not be read as a literal (and here always-losing,
+   * since the completed {@code min} defaults to {@code 0}) upper bound.
    */
   private static void addPrimitiveDomain(
       List<AttributeDomain> domains, Map<String, List<String>> entries, String typeName) {
@@ -339,14 +375,24 @@ public final class ConfigurationReader {
     if (min == null && max == null) {
       return;
     }
-    domains.add(
-        new AttributeDomain(
-            "",
-            typeName,
-            null,
-            List.of(),
-            min != null ? min : DEFAULT_TYPE_WIDE_MIN.get(typeName),
-            max != null ? max : DEFAULT_TYPE_WIDE_MAX.get(typeName)));
+    BigDecimal lower = min != null ? min : DEFAULT_TYPE_WIDE_MIN.get(typeName);
+    BigDecimal upper = max != null ? max : DEFAULT_TYPE_WIDE_MAX.get(typeName);
+    boolean upperUnbounded =
+        "String".equals(typeName) && upper.compareTo(BigDecimal.valueOf(-1)) == 0;
+    if (!upperUnbounded && upper.compareTo(lower) < 0) {
+      throw new ConfigurationReadException(
+          "invalid "
+              + typeName
+              + " type-wide bounds: "
+              + typeName
+              + "_min="
+              + lower
+              + ", "
+              + typeName
+              + "_max="
+              + upper);
+    }
+    domains.add(new AttributeDomain("", typeName, null, List.of(), lower, upper));
   }
 
   /**
@@ -385,9 +431,9 @@ public final class ConfigurationReader {
    * and split the remainder on commas, trimming each element. Tuple ARITY is checked against the
    * association by the link encoders (which know the model), not here: this reader accepts any
    * N-tuple with N &ge; 2 non-empty ends (the n-ary slice's ternary tuples parse exactly like the
-   * incumbent's; the incumbent's own three-element ASSOCIATION-CLASS form prepends the link
-   * object the same way an ordinary third end is spelled, and an arity mismatch is a located
-   * encoder refusal, not a silent binary read).
+   * incumbent's; the incumbent's own three-element ASSOCIATION-CLASS form prepends the link object
+   * the same way an ordinary third end is spelled, and an arity mismatch is a located encoder
+   * refusal, not a silent binary read).
    */
   private static List<List<String>> linkTuples(String key, List<String> values) {
     String body = String.join(",", setBody(key, values));
@@ -437,27 +483,25 @@ public final class ConfigurationReader {
    * overriding when the user explicitly configured a nonzero {@code ClassName_min}/{@code
    * ClassName_max} for it.
    *
-   * <p>UML abstract classes categorically cannot have direct instances; nothing before this
-   * checked that anywhere in unc-modelvalidator (docs/modelvalidator-feature-matrix.json, feature
-   * {@code class.abstract}) -- an unconfigured abstract class defaulted to the ordinary min=1/
-   * max=1 a concrete class gets, and USE's own core object-creation API (not this reader) was
-   * left to reject the resulting witness at reconstruction time with an uncaught {@code
-   * MSystemException}. Kodkod's own {@code ClassConfigurator.generateObjectsTuple}
-   * (kk-modelvalidator, lines 23-34) handles this by forcing an abstract class's own relation to
-   * an empty {@code TupleSet} UNCONDITIONALLY -- it overrides whatever bound was configured,
-   * silently.
+   * <p>UML abstract classes categorically cannot have direct instances; nothing before this checked
+   * that anywhere in unc-modelvalidator (docs/modelvalidator-feature-matrix.json, feature {@code
+   * class.abstract}) -- an unconfigured abstract class defaulted to the ordinary min=1/ max=1 a
+   * concrete class gets, and USE's own core object-creation API (not this reader) was left to
+   * reject the resulting witness at reconstruction time with an uncaught {@code MSystemException}.
+   * Kodkod's own {@code ClassConfigurator.generateObjectsTuple} (kk-modelvalidator, lines 23-34)
+   * handles this by forcing an abstract class's own relation to an empty {@code TupleSet}
+   * UNCONDITIONALLY -- it overrides whatever bound was configured, silently.
    *
    * <p>This reader does not follow that override precedent. It follows this codebase's OWN
    * precedent instead -- {@link #associationScope}, directly above -- which refuses rather than
    * silently resolves a genuine contradiction between what the user configured and what the model
    * structurally demands (there, k forced link tuples versus an explicit association bound; here,
    * abstractness versus an explicit class bound). Only a bound the user left UNCONFIGURED is
-   * defaulted to 0/0 silently -- exactly like every other unconfigured bound in this method
-   * already defaults, so a scenario that never mentions the abstract class's bounds at all (the
-   * ordinary case) is unaffected. A bound the user explicitly wrote down to something other than
-   * 0 is a config/model contradiction, refused with a located, descriptive error instead of
-   * guessed at -- per this project's standing bias against silently doing something other than
-   * what was asked.
+   * defaulted to 0/0 silently -- exactly like every other unconfigured bound in this method already
+   * defaults, so a scenario that never mentions the abstract class's bounds at all (the ordinary
+   * case) is unaffected. A bound the user explicitly wrote down to something other than 0 is a
+   * config/model contradiction, refused with a located, descriptive error instead of guessed at --
+   * per this project's standing bias against silently doing something other than what was asked.
    */
   private static int[] abstractClassBounds(
       Map<String, List<String>> entries, String name, int min, int max) {
@@ -525,6 +569,27 @@ public final class ConfigurationReader {
       max = readMax;
     } else if (readMax <= readMin) {
       max = readMax == -1 ? -1 : readMin;
+    } else {
+      // The remaining case, readMin < readMax < k: the user's own explicit maximum is smaller
+      // than the k forced tuples that must all be admitted -- a genuine contradiction, distinct
+      // from the readMax <= readMin case above (which resolves rather than refuses). Refusing
+      // here, rather than falling through with `max` left at its initializer value `k`, matters:
+      // silently keeping `k` would discard the user's configured cap without saying so.
+      throw new ConfigurationReadException(
+          "association '"
+              + name
+              + "' predefines "
+              + k
+              + " forced link(s) but its configured maximum '"
+              + name
+              + "_max' is "
+              + readMax
+              + ", which is smaller than the number of forced links and cannot admit them all;"
+              + " raise '"
+              + name
+              + "_max' to at least "
+              + k
+              + " or leave it unconfigured");
     }
     if (max != -1 && max < min) {
       throw new ConfigurationReadException(
@@ -730,13 +795,40 @@ public final class ConfigurationReader {
     return stringTyped ? trimmed.replaceAll("'", "") : trimmed;
   }
 
-  private static String[] splitAttribute(String attribute) {
-    int split = attribute.indexOf('_');
-    if (split < 1 || split == attribute.length() - 1) {
-      throw new ConfigurationReadException(
-          "attribute vocabulary entry must be Class_attribute: " + attribute);
+  /**
+   * Resolves a flat {@code Class_attribute} vocabulary key back into its owning class name and bare
+   * attribute name -- against the model's ACTUAL class names, not a naive first-underscore split.
+   * USE's own {@code IDENT} grammar permits underscores inside a class name (e.g. {@code
+   * Order_Item}), so {@code "Order_Item_price"} must resolve to owner {@code "Order_Item"} /
+   * attribute {@code "price"}, not owner {@code "Order"} / attribute {@code "Item_price"} -- the
+   * latter either blames a nonexistent class outright or, worse, silently misattributes the domain
+   * to a coincidentally-matching wrong class.
+   *
+   * <p>Disambiguated by longest-prefix match against {@code classNames}: among every real class
+   * name that is a {@code ClassName_} prefix of {@code attribute}, the LONGEST one wins, exactly
+   * the "maximal munch" rule that resolves the analogous {@code Class_Item_field} ambiguity
+   * correctly whenever both {@code Class} and {@code Class_Item} are declared classes. No class
+   * name is a prefix at all only when the key is genuinely malformed (or the vocabulary was built
+   * against a different model), which is refused rather than guessed at.
+   */
+  private static String[] splitAttribute(String attribute, Set<String> classNames) {
+    String owner = null;
+    for (String className : classNames) {
+      String prefix = className + "_";
+      if (attribute.startsWith(prefix)
+          && attribute.length() > prefix.length()
+          && (owner == null || className.length() > owner.length())) {
+        owner = className;
+      }
     }
-    return new String[] {attribute.substring(0, split), attribute.substring(split + 1)};
+    if (owner == null) {
+      throw new ConfigurationReadException(
+          "attribute vocabulary entry '"
+              + attribute
+              + "' does not begin with any of the model's class names followed by '_'; expected"
+              + " Class_attribute");
+    }
+    return new String[] {owner, attribute.substring(owner.length() + 1)};
   }
 
   private static Duration duration(Map<String, List<String>> entries) {
@@ -757,9 +849,9 @@ public final class ConfigurationReader {
 
   /**
    * Deliberately defaults to {@code false} (not the incumbent's own on-by-default convention) --
-   * see {@link AnalysisConfiguration#requireAggregationCycleFreedom()}'s own javadoc for why:
-   * every existing corpus scenario with a composition/aggregation association never mentions this
-   * key, so matching the incumbent's default would add a brand new constraint nobody asked for.
+   * see {@link AnalysisConfiguration#requireAggregationCycleFreedom()}'s own javadoc for why: every
+   * existing corpus scenario with a composition/aggregation association never mentions this key, so
+   * matching the incumbent's default would add a brand new constraint nobody asked for.
    */
   private static boolean aggregationCycleFreedomRequired(Map<String, List<String>> entries) {
     String status = one(entries, "aggregationcyclefreeness");
@@ -787,14 +879,14 @@ public final class ConfigurationReader {
   }
 
   /**
-   * A {@code status = negate} invariant asks for a witness where THAT ONE invariant is false
-   * while every other active invariant still holds -- exactly {@link QueryExpr.Counterexample}'s
-   * own meaning, so this reuses that query rather than inventing a second representation of the
-   * same idea. Refused (retained as a diagnostic, same fail-closed policy as every other
-   * not-yet-understood key) rather than guessed at in the two cases where "the" target is
-   * genuinely ambiguous: more than one invariant negated in the same section (a counterexample
-   * query has exactly one target), or an explicit {@code query} key ALSO configured alongside a
-   * negated invariant (which of the two should win is not this reader's call to make).
+   * A {@code status = negate} invariant asks for a witness where THAT ONE invariant is false while
+   * every other active invariant still holds -- exactly {@link QueryExpr.Counterexample}'s own
+   * meaning, so this reuses that query rather than inventing a second representation of the same
+   * idea. Refused (retained as a diagnostic, same fail-closed policy as every other
+   * not-yet-understood key) rather than guessed at in the two cases where "the" target is genuinely
+   * ambiguous: more than one invariant negated in the same section (a counterexample query has
+   * exactly one target), or an explicit {@code query} key ALSO configured alongside a negated
+   * invariant (which of the two should win is not this reader's call to make).
    */
   private static QueryExpr negatedInvariantQuery(
       Map<String, List<String>> entries,
@@ -822,7 +914,8 @@ public final class ConfigurationReader {
                   + " which one should win"));
       return QueryExpr.SATISFY;
     }
-    return new QueryExpr.Profiled(ScenarioProfile.EXISTS, new QueryExpr.Counterexample(negated.get(0)));
+    return new QueryExpr.Profiled(
+        ScenarioProfile.EXISTS, new QueryExpr.Counterexample(negated.get(0)));
   }
 
   private static String one(Map<String, List<String>> entries, String key) {
