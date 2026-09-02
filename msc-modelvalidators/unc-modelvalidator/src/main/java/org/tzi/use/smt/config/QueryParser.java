@@ -8,11 +8,32 @@ import java.util.Set;
 
 /** Recursive-descent parser for the single {@code query} configuration value. */
 public final class QueryParser {
+
+  /**
+   * A generous, finite bound on {@code parseUnary}'s own recursion depth -- the single site both
+   * nested parentheses ({@code "(((...)))"}, via {@code parseUnary -> parseOr -> parseAnd ->
+   * parseUnary}) and a repeated {@code not} prefix ({@code "not not not ..."}, via {@code
+   * parseUnary}'s own direct self-call) go through. Every real {@code query} key checked into this
+   * repository's own corpus nests parentheses at most 2 deep, counting macro-call parens like
+   * {@code counterexample(...)} (grep-confirmed by counting paren depth across every checked-in
+   * {@code *.properties} {@code query = ...} line), so 300 is enormous headroom for any realistic
+   * query. It is still finite: an unguarded recursion of this
+   * same shape overflows a default JVM thread stack somewhere in the low thousands of levels (
+   * reproduced directly), and a {@link StackOverflowError} is an {@link Error}, not a {@link
+   * RuntimeException} -- it would otherwise escape every catch clause up the call chain, including
+   * {@code SmtValidateCmd}'s own {@code catch (RuntimeException | UseApiException)}, contradicting
+   * this tool's own "every failure degrades to a printed error line" discipline. Refusing with a
+   * located, catchable {@link ConfigurationReadException} well before that raw stack limit keeps
+   * that discipline intact regardless of the host JVM's own configured stack size.
+   */
+  private static final int MAX_EXPRESSION_DEPTH = 300;
+
   private final ConfigurationVocabulary vocabulary;
   private final List<Token> tokens;
   private final Set<String> referencedInvariants = new LinkedHashSet<>();
   private int index;
   private int othersPosition = -1;
+  private int expressionDepth = 0;
 
   private QueryParser(String source, ConfigurationVocabulary vocabulary) {
     this.vocabulary = vocabulary;
@@ -62,13 +83,22 @@ public final class QueryParser {
   }
 
   private QueryExpr parseUnary() {
-    if (matchWord("not")) return new QueryExpr.Not(parseUnary());
-    if (match(TokenKind.LEFT_PAREN)) {
-      QueryExpr nested = parseOr();
-      expect(TokenKind.RIGHT_PAREN, "')'");
-      return nested;
+    if (++expressionDepth > MAX_EXPRESSION_DEPTH) {
+      throw error(
+          peek().position(),
+          "query expression is nested too deeply (max depth " + MAX_EXPRESSION_DEPTH + ")");
     }
-    return parseAtom();
+    try {
+      if (matchWord("not")) return new QueryExpr.Not(parseUnary());
+      if (match(TokenKind.LEFT_PAREN)) {
+        QueryExpr nested = parseOr();
+        expect(TokenKind.RIGHT_PAREN, "')'");
+        return nested;
+      }
+      return parseAtom();
+    } finally {
+      expressionDepth--;
+    }
   }
 
   private QueryExpr parseAtom() {

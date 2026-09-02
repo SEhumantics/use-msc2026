@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintWriter;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -126,6 +127,61 @@ public class SmtValidateCmdTest {
     assertTrue(
         "no-model must print the graceful guard message",
         out.toString().contains("[smtmodelvalidator] No model loaded."));
+  }
+
+  /**
+   * Regression guard for the actual production escape route: {@code QueryParser}'s recursive-
+   * descent parser previously had no recursion-depth bound, so a deeply-nested {@code query} value
+   * could overflow the raw Java call stack with a {@link StackOverflowError} -- an {@link Error},
+   * not a {@link RuntimeException}, escaping THIS very command's own {@code catch
+   * (RuntimeException | UseApiException)} and crashing the shell instead of degrading to a printed
+   * error line, contradicting this class's own javadoc promise ("every failure ... degrades to a
+   * printed {@code [smtmodelvalidator] error: ...} line rather than an exception escaping into the
+   * shell"). Runs the real, unmodified {@code performCommand} entry point end to end against a
+   * properties file whose {@code query} key nests 50,000 levels of parentheses -- comfortably past
+   * both the fix's own 300-level bound and, unguarded, the depth at which a default JVM thread
+   * stack actually overflows (reproduced directly for this same recursive shape).
+   */
+  @Test(timeout = 20_000)
+  public void aDeeplyNestedQueryDegradesToAPrintedErrorRatherThanCrashingTheShell()
+      throws Exception {
+    Session session = sessionWithModel();
+    int depth = 50_000;
+    StringBuilder query = new StringBuilder(depth * 2 + 16);
+    query.append("(".repeat(depth)).append("satisfy").append(")".repeat(depth));
+    Path deepQuery = Files.createTempFile("msc-deep-query-", ".properties");
+    Files.writeString(
+        deepQuery,
+        "X_min = 1\n"
+            + "X_max = 1\n"
+            + "X_i = Set{5}\n"
+            + "X_IIsFive = active\n"
+            + "query = "
+            + query
+            + "\n");
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    java.io.PrintStream oldOut = System.out;
+    System.setOut(new java.io.PrintStream(out));
+    try {
+      new SmtValidateCmd()
+          .performCommand(
+              new IPluginShellCmd() {
+                @Override public void executeCmd(String cmd, String cmdArguments, String[] argList) {}
+                @Override public String getCmd() { return "smtmodelvalidator -validate"; }
+                @Override public Session getSession() { return session; }
+                @Override public org.tzi.use.main.shell.Shell getShell() { return null; }
+                @Override public String getCmdArguments() { return deepQuery.toString(); }
+                @Override public String[] getCmdArgumentList() {
+                  return new String[] {deepQuery.toString()};
+                }
+              });
+    } finally {
+      System.setOut(oldOut);
+      Files.deleteIfExists(deepQuery);
+    }
+    assertTrue(
+        "a deeply-nested query must degrade to a printed error line, not crash the shell",
+        out.toString().contains("[smtmodelvalidator] error:"));
   }
 
   /**

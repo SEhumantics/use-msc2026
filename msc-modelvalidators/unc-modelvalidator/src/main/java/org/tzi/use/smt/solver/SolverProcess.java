@@ -1,6 +1,7 @@
 package org.tzi.use.smt.solver;
 
 import java.io.BufferedReader;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
@@ -52,6 +53,22 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class SolverProcess implements AutoCloseable {
 
+  /**
+   * The POSIX/Java convention for a child process terminated BY A SIGNAL (a crash or an OS kill),
+   * rather than a normal, deliberate {@code exit(N)} call: {@code 128 + signal number} -- confirmed
+   * directly against this JVM (a deliberately SIGSEGV'd child reports {@code exitValue() == 139 ==
+   * 128 + 11}). Z3's own deliberate exit codes never reach this range: {@code 0} on success, and
+   * {@code 1} whenever ANY command in the script produced an {@code (error ...)} response --
+   * confirmed directly against the pinned binary for SAT, UNSAT, UNKNOWN, and malformed-input
+   * scripts alike. That {@code 1} case is not rare or exotic: every script this codebase generates
+   * ends with an unconditional {@code (get-model)} (see {@code SmtScript#toSmtLib}), so it fires on
+   * literally every UNSAT or UNKNOWN result (get-model fails with "model is not available") --
+   * exactly the case {@link #classify} already handles correctly via {@link #stripTrailingError}.
+   * This threshold exists to catch an ACTUAL crash without misclassifying that entirely ordinary,
+   * already-tested exit-1 shape as one.
+   */
+  private static final int SIGNAL_TERMINATION_EXIT_THRESHOLD = 128;
+
   private final SolverBinary binary;
   private final Duration timeout;
   private final boolean persistentMode;
@@ -100,13 +117,14 @@ public final class SolverProcess implements AutoCloseable {
   private SolverResult runOneShot(String smtLib) {
     Path scriptFile = null;
     Path outputFile = null;
+    Process process = null;
     long started = System.nanoTime();
     try {
       scriptFile = Files.createTempFile("msc-smt-", ".smt2");
       Files.writeString(scriptFile, smtLib, StandardCharsets.UTF_8);
 
       outputFile = Files.createTempFile("msc-smt-out-", ".txt");
-      Process process =
+      process =
           new ProcessBuilder(binary.path().toString(), "-smt2", scriptFile.toString())
               .redirectErrorStream(true)
               .redirectOutput(outputFile.toFile())
@@ -118,11 +136,29 @@ public final class SolverProcess implements AutoCloseable {
         process.destroyForcibly();
         return new SolverResult(SolverOutcome.TIMEOUT, output, "", millis);
       }
+      // A signal-terminated exit (SIGSEGV, OOM-kill, ...) is a crash, not a completed answer --
+      // even when it happened AFTER the process had already printed a verdict line (e.g. "sat")
+      // but BEFORE finishing the rest of its output. Trusting that verdict text would misreport a
+      // corrupt, truncated run as a confirmed result with a garbage/empty model. This mirrors
+      // runPersistent's own EOF-before-sentinel handling below, which forces MALFORMED for exactly
+      // the same reason: an incomplete response is not a real answer, regardless of what partial
+      // text it contains. See SIGNAL_TERMINATION_EXIT_THRESHOLD's own javadoc for why this is
+      // deliberately NOT "any nonzero exit" -- that would misclassify every ordinary UNSAT/UNKNOWN
+      // result too.
+      if (process.exitValue() >= SIGNAL_TERMINATION_EXIT_THRESHOLD) {
+        return new SolverResult(SolverOutcome.MALFORMED, output, "", millis);
+      }
       return classify(output, millis);
     } catch (IOException e) {
       throw new SolverConfigurationException("Failed to run " + binary.path(), e);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
+      // Matches the timeout branch above: a cancelled/interrupted solve must not orphan the
+      // spawned solver process. Without this, an interrupted caller (e.g. a cancelled analysis)
+      // leaves the child running to completion on its own, untracked by anything in this JVM.
+      if (process != null) {
+        process.destroyForcibly();
+      }
       throw new SolverConfigurationException("Interrupted running " + binary.path(), e);
     } finally {
       deleteQuietly(scriptFile);
@@ -168,6 +204,12 @@ public final class SolverProcess implements AutoCloseable {
     if (persistentProcess != null && persistentProcess.isAlive()) {
       return;
     }
+    // Defense-in-depth, not a confirmed leak fix: if the previous process died on its own (a
+    // crash between calls, not via killPersistentProcess) its streams were never explicitly
+    // closed before being overwritten below. 200 crash/respawn cycles showed zero FD growth
+    // without this, so it is not chasing a demonstrated bug -- just cheap and safe to add.
+    closeQuietly(persistentStdin);
+    closeQuietly(persistentStdout);
     // stderr is routed straight to this JVM's own stderr (not merged into stdout, and not left as
     // an unread pipe either) -- merging would risk a stray warning line landing between a
     // response and its sentinel and corrupting the parse; leaving it as a separate, undrained pipe
@@ -188,9 +230,23 @@ public final class SolverProcess implements AutoCloseable {
       return;
     }
     persistentProcess.destroyForcibly();
+    closeQuietly(persistentStdin);
+    closeQuietly(persistentStdout);
     persistentProcess = null;
     persistentStdin = null;
     persistentStdout = null;
+  }
+
+  /** Defense-in-depth stream cleanup (see {@link #ensurePersistentProcessAlive}'s own note). */
+  private static void closeQuietly(Closeable closeable) {
+    if (closeable == null) {
+      return;
+    }
+    try {
+      closeable.close();
+    } catch (IOException ignored) {
+      // Best-effort: the process is already being force-killed regardless.
+    }
   }
 
   private static SolverResult classify(String output, long millis) {

@@ -1,12 +1,17 @@
 package org.tzi.use.smt.solver;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
@@ -214,5 +219,136 @@ public class SolverProcessTest {
   public void closeOnAOneShotInstanceIsANoOp() {
     SolverProcess oneShot = new SolverProcess(SolverBinary.resolve(), Duration.ofSeconds(30));
     oneShot.close();
+  }
+
+  /**
+   * Regression guard: {@code runOneShot} previously trusted whatever verdict text a solver
+   * happened to print, even when the process went on to crash (SIGSEGV/OOM-kill) before finishing
+   * the rest of its output -- misreporting a corrupt, truncated run as a confirmed SAT with a
+   * garbage/empty model. A stand-in fake-solver script prints {@code sat} and then genuinely
+   * SIGSEGVs itself (not an arbitrary nonzero exit -- deliberately the same signal-death shape the
+   * bug names, and the shape the fix's own threshold is keyed on; a plain small nonzero exit, e.g.
+   * {@code 1}, is Z3's own ordinary "a script command errored" convention and must NOT be
+   * misclassified as a crash, see {@code unsatFollowedByAModelNotAvailableErrorIsStillUnsat}
+   * above and {@code SolverProcess.SIGNAL_TERMINATION_EXIT_THRESHOLD}'s own javadoc). The fix must
+   * force MALFORMED (mirroring persistent mode's own EOF-before-sentinel handling) instead of
+   * trusting the "sat" line.
+   */
+  @Test(timeout = 15_000)
+  public void aSolverThatCrashesAfterPrintingAVerdictIsReportedAsMalformedNotConfirmed()
+      throws Exception {
+    Path script = Files.createTempFile("msc-crash-solver-", ".sh");
+    Files.writeString(
+        script,
+        "#!/bin/sh\n"
+            + "if [ \"$1\" = \"--version\" ]; then\n"
+            + "  echo \"Fake solver 9.9.9\"\n"
+            + "  exit 0\n"
+            + "fi\n"
+            + "echo sat\n"
+            + "kill -SEGV $$\n");
+    Files.setPosixFilePermissions(
+        script,
+        EnumSet.of(
+            PosixFilePermission.OWNER_READ,
+            PosixFilePermission.OWNER_WRITE,
+            PosixFilePermission.OWNER_EXECUTE));
+    try {
+      SolverBinary crashBinary = SolverBinary.resolveFrom(script.toString(), "9.9.9");
+      SolverProcess crashy = new SolverProcess(crashBinary, Duration.ofSeconds(30));
+
+      SolverResult result = crashy.run("(check-sat)");
+
+      assertEquals(
+          "a SIGSEGV after printing a verdict line must not be trusted as a confirmed result",
+          SolverOutcome.MALFORMED,
+          result.outcome());
+    } finally {
+      Files.deleteIfExists(script);
+    }
+  }
+
+  /**
+   * Regression guard: unlike the sibling timeout branch three lines above it (which calls {@code
+   * process.destroyForcibly()}), {@code runOneShot}'s {@code InterruptedException} catch branch
+   * used to never kill the child process -- a cancelled/interrupted solve orphaned the spawned
+   * solver process, left running to completion on its own. Spawns a stand-in fake-solver script
+   * that records its own pid and then sleeps far longer than this test's own timeout, runs it on a
+   * dedicated thread, interrupts that thread once the child has genuinely started, and confirms the
+   * child process is actually gone afterward -- not merely that the Java call returned.
+   */
+  @Test(timeout = 20_000)
+  public void interruptingAOneShotSolveKillsTheChildProcessRatherThanOrphaningIt()
+      throws Exception {
+    Path pidFile = Files.createTempFile("msc-interrupt-pid-", ".txt");
+    Path script = Files.createTempFile("msc-sleepy-solver-", ".sh");
+    Files.writeString(
+        script,
+        "#!/bin/sh\n"
+            + "if [ \"$1\" = \"--version\" ]; then\n"
+            + "  echo \"Fake solver 9.9.9\"\n"
+            + "  exit 0\n"
+            + "fi\n"
+            + "echo $$ > "
+            + pidFile
+            + "\n"
+            + "exec sleep 999\n");
+    Files.setPosixFilePermissions(
+        script,
+        EnumSet.of(
+            PosixFilePermission.OWNER_READ,
+            PosixFilePermission.OWNER_WRITE,
+            PosixFilePermission.OWNER_EXECUTE));
+    try {
+      SolverBinary sleepyBinary = SolverBinary.resolveFrom(script.toString(), "9.9.9");
+      SolverProcess sleepy = new SolverProcess(sleepyBinary, Duration.ofSeconds(30));
+
+      Thread worker =
+          new Thread(
+              () -> {
+                try {
+                  sleepy.run("(check-sat)");
+                } catch (RuntimeException expected) {
+                  // The interrupted call is expected to throw SolverConfigurationException; this
+                  // test only cares about the child process's fate, asserted below.
+                }
+              });
+      worker.setDaemon(true);
+      worker.start();
+
+      // exec replaces the shell's process image with sleep but keeps the SAME pid, so the pid
+      // recorded before exec still identifies the process SolverProcess actually started.
+      long pid = awaitPid(pidFile);
+      assertTrue(
+          "the fake solver's child process must actually be alive before we interrupt it",
+          ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false));
+
+      worker.interrupt();
+      worker.join(5_000);
+
+      // destroyForcibly delivers SIGKILL asynchronously; poll briefly rather than racing it.
+      boolean stillAlive = ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false);
+      long deadline = System.currentTimeMillis() + 5_000;
+      while (stillAlive && System.currentTimeMillis() < deadline) {
+        Thread.sleep(50);
+        stillAlive = ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false);
+      }
+      assertFalse("an interrupted one-shot solve must not orphan its child process", stillAlive);
+    } finally {
+      Files.deleteIfExists(script);
+      Files.deleteIfExists(pidFile);
+    }
+  }
+
+  private static long awaitPid(Path pidFile) throws Exception {
+    long deadline = System.currentTimeMillis() + 5_000;
+    while (System.currentTimeMillis() < deadline) {
+      String content = Files.readString(pidFile).strip();
+      if (!content.isEmpty()) {
+        return Long.parseLong(content);
+      }
+      Thread.sleep(20);
+    }
+    throw new AssertionError("fake solver never wrote its pid within the deadline");
   }
 }

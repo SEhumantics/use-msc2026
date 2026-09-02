@@ -95,6 +95,42 @@ public class QueryParserTest {
         "invariant-independence cannot be combined with a scenario profile");
   }
 
+  /**
+   * Regression guard: {@code parseUnary} previously recursed without any depth bound on nested
+   * parentheses (and, separately, on a repeated {@code not} prefix), so a deeply-nested query
+   * string could overflow the raw Java call stack with a {@link StackOverflowError} -- an {@link
+   * Error}, not a {@link RuntimeException}, escaping every catch clause up the call chain
+   * (including {@code SmtValidateCmd}'s own {@code catch (RuntimeException | UseApiException)}).
+   * 50,000 levels of nested parens comfortably exceeds both the fix's own generous 300-level bound
+   * and, unguarded, the depth at which a default JVM thread stack actually overflows (reproduced
+   * directly: an unguarded recursion of this same shape overflows in the low thousands of levels),
+   * so this same query string discriminates the fix in both directions: guarded, it refuses fast
+   * with a located exception; unguarded, it genuinely stack-overflows.
+   */
+  @Test
+  public void deeplyNestedParenthesesAreRefusedWithALocatedErrorRatherThanOverflowingTheStack() {
+    int depth = 50_000;
+    StringBuilder query = new StringBuilder(depth * 2 + 7);
+    query.append("(".repeat(depth)).append("satisfy").append(")".repeat(depth));
+
+    ConfigurationReadException exception =
+        assertThrows(
+            ConfigurationReadException.class, () -> QueryParser.parse(query.toString(), VOCABULARY));
+    assertTrue(exception.getMessage(), exception.getMessage().contains("nested too deeply"));
+  }
+
+  /** Same guard, the OTHER unbounded recursion vector: a repeated {@code not} prefix, not parens. */
+  @Test
+  public void repeatedNotPrefixesAreAlsoRefusedRatherThanOverflowingTheStack() {
+    int depth = 50_000;
+    StringBuilder query = new StringBuilder("not ".repeat(depth)).append("satisfy");
+
+    ConfigurationReadException exception =
+        assertThrows(
+            ConfigurationReadException.class, () -> QueryParser.parse(query.toString(), VOCABULARY));
+    assertTrue(exception.getMessage(), exception.getMessage().contains("nested too deeply"));
+  }
+
   private static void assertFailure(String query, String position, String message) {
     ConfigurationReadException exception =
         assertThrows(ConfigurationReadException.class, () -> QueryParser.parse(query, VOCABULARY));
