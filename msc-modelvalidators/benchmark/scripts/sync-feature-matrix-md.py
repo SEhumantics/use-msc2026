@@ -17,12 +17,20 @@ import json
 import sys
 from pathlib import Path
 
+# Every status the matrix uses must appear here, not just the ones with a nicer label: the
+# per-plugin summary line below renders `for k in STATUS_LABEL`, so a status missing from this map
+# is COUNTED into `evaluated` but never printed, and the summary's parts then silently fail to add
+# up to its own total. "not-applicable" was added 2026-09-02 with the smt.symbol-namespace-collisions
+# row, whose kk-modelvalidator side is neither supported nor unsupported -- that plugin has no
+# textual SMT symbol namespace for a model identifier to collide with, so calling it "unsupported"
+# would assert a gap that does not exist.
 STATUS_LABEL = {
     "supported": "Supported",
     "known-defect": "Known defect",
     "degraded": "Degraded",
     "unsupported": "Unsupported",
     "unverified": "Unverified",
+    "not-applicable": "Not applicable",
 }
 EVIDENCE_TRUNCATE = 200
 

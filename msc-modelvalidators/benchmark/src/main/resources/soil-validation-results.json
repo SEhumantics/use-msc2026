@@ -7,6 +7,8 @@
     "numInvariantsChecked": 9,
     "numFailures": 0,
     "failedInvariants": [],
+    "numObjectsInState": 6,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -20,6 +22,8 @@
     "failedInvariants": [
       "Book::yearPlausible"
     ],
+    "numObjectsInState": 6,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -31,6 +35,8 @@
     "numInvariantsChecked": 2,
     "numFailures": 0,
     "failedInvariants": [],
+    "numObjectsInState": 3,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -44,6 +50,8 @@
     "failedInvariants": [
       "Employee::PositiveSalary"
     ],
+    "numObjectsInState": 3,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -55,6 +63,8 @@
     "numInvariantsChecked": 29,
     "numFailures": 0,
     "failedInvariants": [],
+    "numObjectsInState": 13,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -68,6 +78,8 @@
     "failedInvariants": [
       "Employee::salary_positive"
     ],
+    "numObjectsInState": 13,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -79,6 +91,8 @@
     "numInvariantsChecked": 5,
     "numFailures": 0,
     "failedInvariants": [],
+    "numObjectsInState": 3,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -92,6 +106,8 @@
     "failedInvariants": [
       "Person::nameIsUnique"
     ],
+    "numObjectsInState": 3,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -105,6 +121,8 @@
     "failedInvariants": [
       "Person::balancedBinaryTree"
     ],
+    "numObjectsInState": 4,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected (excluding documented out-of-scope [Person::balancedBinaryTree])"
   },
@@ -119,6 +137,8 @@
       "Person::balancedBinaryTree",
       "Person::parentOlderChild"
     ],
+    "numObjectsInState": 4,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -130,6 +150,8 @@
     "numInvariantsChecked": 5,
     "numFailures": 0,
     "failedInvariants": [],
+    "numObjectsInState": 6,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -143,6 +165,8 @@
     "failedInvariants": [
       "Employment::PositiveSalary"
     ],
+    "numObjectsInState": 6,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -154,6 +178,8 @@
     "numInvariantsChecked": 3,
     "numFailures": 0,
     "failedInvariants": [],
+    "numObjectsInState": 2,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -167,6 +193,8 @@
     "failedInvariants": [
       "Car::ReasonableDoors"
     ],
+    "numObjectsInState": 2,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -178,6 +206,8 @@
     "numInvariantsChecked": 4,
     "numFailures": 0,
     "failedInvariants": [],
+    "numObjectsInState": 4,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -191,6 +221,8 @@
     "failedInvariants": [
       "File::sizePositive"
     ],
+    "numObjectsInState": 4,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -202,6 +234,8 @@
     "numInvariantsChecked": 3,
     "numFailures": 0,
     "failedInvariants": [],
+    "numObjectsInState": 5,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -215,6 +249,8 @@
     "failedInvariants": [
       "D::LevelsDiffer"
     ],
+    "numObjectsInState": 5,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -226,6 +262,8 @@
     "numInvariantsChecked": 22,
     "numFailures": 0,
     "failedInvariants": [],
+    "numObjectsInState": 5,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -239,6 +277,8 @@
     "failedInvariants": [
       "House::DistinctDrink"
     ],
+    "numObjectsInState": 5,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -250,6 +290,8 @@
     "numInvariantsChecked": 2,
     "numFailures": 0,
     "failedInvariants": [],
+    "numObjectsInState": 40,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -263,6 +305,8 @@
     "failedInvariants": [
       "Region::properColoring"
     ],
+    "numObjectsInState": 40,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -274,6 +318,8 @@
     "numInvariantsChecked": 3,
     "numFailures": 0,
     "failedInvariants": [],
+    "numObjectsInState": 4,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -287,6 +333,8 @@
     "failedInvariants": [
       "A::TagANotEmpty"
     ],
+    "numObjectsInState": 4,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -298,6 +346,8 @@
     "numInvariantsChecked": 3,
     "numFailures": 0,
     "failedInvariants": [],
+    "numObjectsInState": 24,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -311,6 +361,8 @@
     "failedInvariants": [
       "Queen::noAttack"
     ],
+    "numObjectsInState": 24,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -322,6 +374,8 @@
     "numInvariantsChecked": 18,
     "numFailures": 0,
     "failedInvariants": [],
+    "numObjectsInState": 55,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   },
@@ -335,6 +389,67 @@
     "failedInvariants": [
       "Field::allowedValue"
     ],
+    "numObjectsInState": 55,
+    "errorLines": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "PriceCalc",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 2,
+    "numFailures": 0,
+    "failedInvariants": [],
+    "numObjectsInState": 4,
+    "errorLines": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "PriceCalc",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 2,
+    "numFailures": 1,
+    "failedInvariants": [
+      "Product::doublePriceCheck"
+    ],
+    "numObjectsInState": 4,
+    "errorLines": [],
+    "exitCode": 0,
+    "note": "as expected"
+  },
+  {
+    "exampleId": "DerivedFK",
+    "cmdFile": "valid-instance.cmd",
+    "kind": "valid",
+    "passed": true,
+    "numInvariantsChecked": 2,
+    "numFailures": 1,
+    "failedInvariants": [
+      "Gadget::NoMatchIsUndefined"
+    ],
+    "numObjectsInState": 4,
+    "errorLines": [],
+    "exitCode": 0,
+    "note": "as expected (excluding documented out-of-scope [Gadget::NoMatchIsUndefined])"
+  },
+  {
+    "exampleId": "DerivedFK",
+    "cmdFile": "invalid-instance.cmd",
+    "kind": "invalid",
+    "passed": true,
+    "numInvariantsChecked": 2,
+    "numFailures": 2,
+    "failedInvariants": [
+      "Gadget::NoMatchIsUndefined",
+      "Gadget::WidgetNameMatches"
+    ],
+    "numObjectsInState": 4,
+    "errorLines": [],
     "exitCode": 0,
     "note": "as expected"
   }
