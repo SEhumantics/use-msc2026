@@ -12,13 +12,42 @@ public final class SmtModelParser {
 
   private SmtModelParser() {}
 
+  /**
+   * Every top-level form in {@code modelText}, merged.
+   *
+   * <p>This used to read EXACTLY ONE form and collect only that, which silently dropped everything
+   * after it and silently yielded an empty map for anything that was not a list at all. Both are
+   * reachable: {@code SolverProcess}'s one-shot mode runs the solver with {@code
+   * redirectErrorStream(true)}, so a solver stderr line can land between the {@code sat} verdict
+   * and the model itself, and then the model was the SECOND form -- dropped without a word, and an
+   * empty model is not distinguishable downstream from a model that legitimately binds nothing.
+   *
+   * <p>So: read until the input is exhausted, harvest {@code define-fun} bindings from every form
+   * (later bindings of one name win, though a solver never emits a name twice), and raise a LOUD,
+   * located error on a top-level form that is not a list -- a bare {@code unsupported} token, a
+   * stray {@code )}, a truncated {@code (}. A list that carries no {@code define-fun} -- notably
+   * {@code (error "...")} -- is skipped rather than rejected, because a diagnostic printed
+   * alongside a real model must not stop that model from being read. The legacy {@code (model
+   * ...)} wrapper needs no special case: {@link #collect} recurses into any list.
+   */
   public static Map<String, SmtValue> parse(String modelText) {
     Map<String, SmtValue> values = new LinkedHashMap<>();
     if (modelText == null || modelText.isBlank()) {
       return values;
     }
-    Object parsed = new Reader(modelText).readForm();
-    collect(parsed, values);
+    Reader reader = new Reader(modelText);
+    while (reader.hasMoreForms()) {
+      int start = reader.position();
+      Object form = reader.readForm();
+      if (!(form instanceof List<?> list)) {
+        throw new IllegalArgumentException(
+            "unrecognised top-level form in solver model output at offset "
+                + start
+                + ": "
+                + Reader.snippet(modelText, start));
+      }
+      collect(list, values);
+    }
     return values;
   }
 
@@ -94,6 +123,8 @@ public final class SmtModelParser {
 
   /** Minimal S-expression reader: nested lists of atoms. */
   private static final class Reader {
+    private static final int SNIPPET_LENGTH = 40;
+
     private final String text;
     private int position;
 
@@ -101,18 +132,40 @@ public final class SmtModelParser {
       this.text = text;
     }
 
+    /** True when non-whitespace input remains; leaves the cursor on that input. */
+    boolean hasMoreForms() {
+      skipWhitespace();
+      return position < text.length();
+    }
+
+    int position() {
+      return position;
+    }
+
+    /**
+     * Reads one form. An unterminated {@code (} and a stray {@code )} are ERRORS rather than
+     * quietly-truncated or empty results: truncated solver output is not a model, and letting a
+     * stray {@code )} return an empty atom would also spin {@link #parse}'s read loop forever,
+     * since the cursor would never advance past it.
+     */
     Object readForm() {
       skipWhitespace();
       if (position >= text.length()) {
         return List.of();
       }
-      if (text.charAt(position) == '(') {
+      char first = text.charAt(position);
+      if (first == '(') {
+        int opened = position;
         position++;
         List<Object> items = new ArrayList<>();
         while (true) {
           skipWhitespace();
           if (position >= text.length()) {
-            break;
+            throw new IllegalArgumentException(
+                "unterminated '(' at offset "
+                    + opened
+                    + " in solver model output: "
+                    + snippet(text, opened));
           }
           if (text.charAt(position) == ')') {
             position++;
@@ -121,6 +174,13 @@ public final class SmtModelParser {
           items.add(readForm());
         }
         return items;
+      }
+      if (first == ')') {
+        throw new IllegalArgumentException(
+            "unbalanced ')' at offset "
+                + position
+                + " in solver model output: "
+                + snippet(text, position));
       }
       int start = position;
       while (position < text.length()
@@ -136,6 +196,13 @@ public final class SmtModelParser {
       while (position < text.length() && Character.isWhitespace(text.charAt(position))) {
         position++;
       }
+    }
+
+    /** The offending text itself, bounded, so the message locates the problem in real output. */
+    static String snippet(String text, int at) {
+      int end = Math.min(text.length(), at + SNIPPET_LENGTH);
+      String shown = text.substring(Math.min(at, text.length()), end);
+      return "'" + shown + (end < text.length() ? "..." : "") + "'";
     }
   }
 }

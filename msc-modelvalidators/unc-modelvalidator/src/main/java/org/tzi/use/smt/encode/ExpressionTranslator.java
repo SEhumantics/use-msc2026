@@ -1550,7 +1550,10 @@ public final class ExpressionTranslator implements ExpressionVisitor {
       // over the end view -- each slot's lengths from its concrete class's configured
       // spellings -- nested under the slot link guards, and the uncertainty the per-slot
       // confidence symbol under the same guards. The fallback is the last slot's block, never
-      // consulted while unlinked (the definedness is false there and the body is violated).
+      // consulted while unlinked: the OR of the slot link guards becomes this expression's
+      // DEFINEDNESS (see the return statements below), so an unlinked receiver is undefined --
+      // there is no tag to measure -- exactly as navigatedAttribute/chainRead already treat a
+      // navigated read, and the value under that guard is never observed.
       VariableBinding navSource =
           context.binding(
               ((ExpVariable) ((ExpNavigation) usAttr.objExp()).getObjectExpression())
@@ -1601,11 +1604,22 @@ public final class ExpressionTranslator implements ExpressionVisitor {
         slotGuards.add(link);
         slotUnc.add(classUnc);
       }
-      declared = slotBlocks.get(slotBlocks.size() - 1);
-      uncertainty = slotUnc.get(slotUnc.size() - 1);
-      for (int k = slotBlocks.size() - 2; k >= 0; k--) {
-        declared = Smt.ite(slotGuards.get(k), slotBlocks.get(k), declared);
-        uncertainty = Smt.ite(slotGuards.get(k), slotUnc.get(k), uncertainty);
+      if (slotBlocks.isEmpty()) {
+        // The destination end has NO slots at all (its class scope allows zero objects), so no
+        // link can ever exist and the read is unconditionally UNDEFINED -- the same answer
+        // chainRead gives a zero-capacity intermediate hop. The value terms are sort-correct
+        // placeholders, never observed: Smt.or of no guards is the constant false below, so this
+        // expression's definedness is false. Without this the two `get(size() - 1)` reads below
+        // threw a raw IndexOutOfBoundsException out of a translator that otherwise fails closed.
+        declared = Smt.intLit(BigInteger.ZERO);
+        uncertainty = Smt.realLit(BigDecimal.ZERO);
+      } else {
+        declared = slotBlocks.get(slotBlocks.size() - 1);
+        uncertainty = slotUnc.get(slotUnc.size() - 1);
+        for (int k = slotBlocks.size() - 2; k >= 0; k--) {
+          declared = Smt.ite(slotGuards.get(k), slotBlocks.get(k), declared);
+          uncertainty = Smt.ite(slotGuards.get(k), slotUnc.get(k), uncertainty);
+        }
       }
       integerRepresentative = true;
       operandLinkGuard = Smt.or(slotGuards);
@@ -1624,8 +1638,16 @@ public final class ExpressionTranslator implements ExpressionVisitor {
     SmtTerm representative = integerRepresentative ? Smt.app("to_real", declared) : declared;
     SmtTerm zero = Smt.realLit(BigDecimal.ZERO);
     SmtTerm exact = Smt.app(comparison.opname(), representative, Smt.realLit(literal));
+    // A navigated receiver contributes DEFINEDNESS, not value: an unlinked receiver has no
+    // attribute to read, so the comparison is UNDEFINED (OCL/USE), not defined-false. This is
+    // the same shape navigatedAttribute and chainRead already return -- the OR of the per-slot
+    // link terms as `defined`, the selected value untouched -- rather than ANDing the guard into
+    // the value and claiming constant definedness, which classified every unlinked receiver as a
+    // definite counterexample.
     if (mode == TranslationMode.NOMINAL) {
-      return defined(operandLinkGuard == null ? exact : Smt.and(List.of(operandLinkGuard, exact)));
+      return operandLinkGuard == null
+          ? defined(exact)
+          : new TranslatedExpression(operandLinkGuard, exact);
     }
     URealThresholdBoundary.Enclosure enclosure = URealThresholdBoundary.enclose(confidence);
     BigDecimal standardizedBoundary = positivePolarity ? enclosure.upper() : enclosure.lower();
@@ -1642,10 +1664,9 @@ public final class ExpressionTranslator implements ExpressionVisitor {
             List.of(
                 Smt.and(List.of(Smt.eq(uncertainty, zero), exact)),
                 Smt.and(List.of(Smt.app(">", uncertainty, zero), uncertain))));
-    return defined(
-        operandLinkGuard == null
-            ? thresholdFormula
-            : Smt.and(List.of(operandLinkGuard, thresholdFormula)));
+    return operandLinkGuard == null
+        ? defined(thresholdFormula)
+        : new TranslatedExpression(operandLinkGuard, thresholdFormula);
   }
 
   /**
