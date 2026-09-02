@@ -18,6 +18,7 @@ import org.tzi.use.smt.config.AttributeDomain;
 import org.tzi.use.smt.config.ConfigurationReader;
 import org.tzi.use.smt.config.ConfigurationVocabulary;
 import org.tzi.use.smt.config.RawConfiguration;
+import org.tzi.use.smt.encode.SmtTranslationException;
 import org.tzi.use.smt.verify.InvariantVerdict;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
@@ -118,7 +119,7 @@ public class QuotedStringDomainTest {
     assertEquals(List.of("'1'", "'2'"), domainOf(config, "Counter", "rank").enumeratedValues());
     assertThrows(
         "a quoted Integer domain is malformed and must not be silently repaired",
-        IllegalArgumentException.class,
+        SmtTranslationException.class,
         () -> SmtModelFinder.find(model, config));
   }
 

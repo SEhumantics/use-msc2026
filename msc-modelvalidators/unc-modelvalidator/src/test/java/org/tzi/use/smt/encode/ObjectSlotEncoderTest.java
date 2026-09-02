@@ -1,6 +1,7 @@
 package org.tzi.use.smt.encode;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.time.Duration;
@@ -84,6 +85,63 @@ public class ObjectSlotEncoderTest {
       }
     }
     assertEquals(SolverOutcome.SAT, solve(script).outcome());
+  }
+
+  /**
+   * {@code ClassName_max = -1} is this codebase's own established "unbounded" sentinel --
+   * {@code ConfigurationReader.validateScopes} already accepts it for class scopes (not just
+   * associations/attributes), and the real benchmark corpus configures it for associations today.
+   * Before the fix, {@code -1 < min} was true for every non-negative {@code min}, so a class scope
+   * this shape failed encoding regardless of {@code min} -- reproduced here with {@code min=2}.
+   */
+  @Test
+  public void unboundedMaxSentinelIsAcceptedRatherThanRejected() {
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots slots =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Widget", 2, -1))).get("Widget");
+    assertTrue(
+        "an unbounded scope must still declare more candidate slots than the forced minimum, or"
+            + " there is no room to explore a bigger population",
+        slots.slotNames().size() > 2);
+    assertEquals(SolverOutcome.SAT, solve(script).outcome());
+  }
+
+  /**
+   * A naive translation of the sentinel straight into the upper-bound comparison would assert
+   * {@code count <= -1}, an unsatisfiable constraint (a boolean count can never be negative) no
+   * matter how many slots exist. Forcing every declared slot to exist proves that assertion was
+   * never emitted.
+   */
+  @Test
+  public void unboundedMaxSentinelDoesNotForbidMoreThanTheMinimum() {
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots slots =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Widget", 1, -1))).get("Widget");
+    for (String existsName : slots.existsNames()) {
+      script.assertThat(org.tzi.use.smt.solver.Smt.sym(existsName));
+    }
+    assertEquals(SolverOutcome.SAT, solve(script).outcome());
+  }
+
+  @Test
+  public void unboundedClassScopeStillEnforcesItsConfiguredMinimum() {
+    SmtScript script = new SmtScript("QF_LIA");
+    ObjectSlots slots =
+        ObjectSlotEncoder.encode(script, List.of(new ClassScope("Widget", 2, -1))).get("Widget");
+    // Force every slot but the first to not exist -- at most 1 can exist, contradicting min=2.
+    for (int i = 1; i < slots.existsNames().size(); i++) {
+      script.assertThat(
+          org.tzi.use.smt.solver.Smt.not(org.tzi.use.smt.solver.Smt.sym(slots.existsNames().get(i))));
+    }
+    assertEquals(SolverOutcome.UNSAT, solve(script).outcome());
+  }
+
+  @Test
+  public void aNegativeMinimumIsStillRejectedRegardlessOfTheUnboundedSentinel() {
+    SmtScript script = new SmtScript("QF_LIA");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> ObjectSlotEncoder.encode(script, List.of(new ClassScope("Widget", -1, -1))));
   }
 
   @Test

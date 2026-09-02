@@ -39,29 +39,37 @@ public final class AttributeEncoder {
         case REAL -> guardReal(script, exists, value, domain, owner.className(), attributeName);
         case BOOLEAN -> guardBoolean(script, exists, value, domain, owner.className(), attributeName);
         case UREAL, UINTEGER ->
-            throw new IllegalArgumentException(
+            throw new SmtTranslationException(
+                FragmentBoundary.ENCODING_SCOPE,
                 type
                     + " attribute '"
                     + owner.className()
                     + "."
                     + attributeName
-                    + "' requires paired value/uncertainty domains");
+                    + "' is configured with a bare value domain (_min/_max or a value list) instead"
+                    + " of paired '_value'/'_uncertainty' domains, which this attribute's type"
+                    + " requires");
         case UBOOLEAN ->
-            throw new IllegalArgumentException(
+            throw new SmtTranslationException(
+                FragmentBoundary.ENCODING_SCOPE,
                 type
                     + " attribute '"
                     + owner.className()
                     + "."
                     + attributeName
-                    + "' requires a probability domain");
+                    + "' is configured with a bare value domain (_min/_max or a value list) instead"
+                    + " of a '_probability' domain, which this attribute's type requires");
         case USTRING ->
-            throw new IllegalArgumentException(
+            throw new SmtTranslationException(
+                FragmentBoundary.ENCODING_SCOPE,
                 type
                     + " attribute '"
                     + owner.className()
                     + "."
                     + attributeName
-                    + "' requires paired value/confidence domains");
+                    + "' is configured with a bare value domain (_min/_max or a value list) instead"
+                    + " of paired '_value'/'_confidence' domains, which this attribute's type"
+                    + " requires");
       }
     }
     return new AttributeValues(owner.className(), attributeName, type, names);
@@ -368,7 +376,8 @@ public final class AttributeEncoder {
   private static AttributeValues encodeSetInteger(
       SmtScript script, ObjectSlots owner, String attributeName, AttributeDomain domain) {
     if (domain.enumeratedValues().isEmpty()) {
-      throw new IllegalArgumentException(
+      throw new SmtTranslationException(
+          FragmentBoundary.ENCODING_SCOPE,
           "Set-typed attribute '"
               + owner.className()
               + "."
@@ -377,7 +386,7 @@ public final class AttributeEncoder {
     }
     List<BigInteger> pool = new ArrayList<>();
     for (String candidate : domain.enumeratedValues()) {
-      pool.add(new java.math.BigDecimal(candidate.trim()).toBigIntegerExact());
+      pool.add(parseSetIntegerElement(candidate, owner.className(), attributeName));
     }
     int poolSize = pool.size();
     List<String> names = new ArrayList<>();
@@ -450,7 +459,8 @@ public final class AttributeEncoder {
   private static void guardString(
       SmtScript s, SmtTerm exists, SmtTerm value, AttributeDomain d, String cls, String attr) {
     if (d.enumeratedValues().isEmpty())
-      throw new IllegalArgumentException(
+      throw new SmtTranslationException(
+          FragmentBoundary.ENCODING_SCOPE,
           "string attribute '" + cls + "." + attr + "' has no configured candidate values");
     List<SmtTerm> options = new ArrayList<>();
     for (int i = 0; i < d.enumeratedValues().size(); i++)
@@ -478,7 +488,8 @@ public final class AttributeEncoder {
       } else if (normalized.equalsIgnoreCase("false")) {
         options.add(Smt.eq(value, Smt.bool(false)));
       } else {
-        throw new IllegalArgumentException(
+        throw new SmtTranslationException(
+            FragmentBoundary.ENCODING_SCOPE,
             "boolean attribute '"
                 + cls
                 + "."
@@ -500,7 +511,7 @@ public final class AttributeEncoder {
       s.assertThat(Smt.app("=>", exists, Smt.or(options)));
       return;
     }
-    guardRange(s, exists, value, d, true);
+    guardRange(s, exists, value, d, true, cls, attr);
   }
 
   private static void guardReal(
@@ -512,28 +523,51 @@ public final class AttributeEncoder {
       }
       s.assertThat(Smt.app("=>", exists, Smt.or(options)));
     }
-    guardRange(s, exists, value, d, false);
+    guardRange(s, exists, value, d, false, cls, attr);
   }
 
   private static void guardRange(
-      SmtScript s, SmtTerm exists, SmtTerm value, AttributeDomain d, boolean integer) {
+      SmtScript s,
+      SmtTerm exists,
+      SmtTerm value,
+      AttributeDomain d,
+      boolean integer,
+      String cls,
+      String attr) {
     List<SmtTerm> bounds = new ArrayList<>();
-    if (d.lowerBound() != null) bounds.add(Smt.app(">=", value, literal(d.lowerBound(), integer)));
-    if (d.upperBound() != null) bounds.add(Smt.app("<=", value, literal(d.upperBound(), integer)));
+    if (d.lowerBound() != null)
+      bounds.add(Smt.app(">=", value, literal(d.lowerBound(), integer, cls, attr)));
+    if (d.upperBound() != null)
+      bounds.add(Smt.app("<=", value, literal(d.upperBound(), integer, cls, attr)));
     if (!bounds.isEmpty()) s.assertThat(Smt.app("=>", exists, Smt.and(bounds)));
   }
 
-  private static SmtTerm literal(BigDecimal d, boolean integer) {
-    return integer ? Smt.intLit(d.toBigIntegerExact()) : Smt.realLit(d);
+  private static SmtTerm literal(BigDecimal d, boolean integer, String cls, String attr) {
+    if (!integer) {
+      return Smt.realLit(d);
+    }
+    try {
+      return Smt.intLit(d.toBigIntegerExact());
+    } catch (ArithmeticException e) {
+      throw new SmtTranslationException(
+          FragmentBoundary.ENCODING_SCOPE,
+          "integer attribute '"
+              + cls
+              + "."
+              + attr
+              + "' has a non-integer configured bound '"
+              + d
+              + "'");
+    }
   }
 
   private static BigInteger parseInteger(String candidate, String cls, String attr) {
     try {
       return new BigInteger(candidate);
     } catch (NumberFormatException e) {
-      throw new IllegalArgumentException(
-          "invalid integer candidate '" + candidate + "' for attribute '" + cls + "." + attr + "'",
-          e);
+      throw new SmtTranslationException(
+          FragmentBoundary.ENCODING_SCOPE,
+          "invalid integer candidate '" + candidate + "' for attribute '" + cls + "." + attr + "'");
     }
   }
 
@@ -541,8 +575,25 @@ public final class AttributeEncoder {
     try {
       return new BigDecimal(candidate);
     } catch (NumberFormatException e) {
-      throw new IllegalArgumentException(
-          "invalid real candidate '" + candidate + "' for attribute '" + cls + "." + attr + "'", e);
+      throw new SmtTranslationException(
+          FragmentBoundary.ENCODING_SCOPE,
+          "invalid real candidate '" + candidate + "' for attribute '" + cls + "." + attr + "'");
+    }
+  }
+
+  private static BigInteger parseSetIntegerElement(String candidate, String cls, String attr) {
+    try {
+      return new BigDecimal(candidate.trim()).toBigIntegerExact();
+    } catch (NumberFormatException | ArithmeticException e) {
+      throw new SmtTranslationException(
+          FragmentBoundary.ENCODING_SCOPE,
+          "invalid Set(Integer) pool element '"
+              + candidate
+              + "' for attribute '"
+              + cls
+              + "."
+              + attr
+              + "'");
     }
   }
 

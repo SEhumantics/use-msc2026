@@ -116,9 +116,9 @@ public class AttributeEncoderTest {
   @Test
   public void emptyStringDomainFailsClosedWithClassAndAttributeNamed() {
     SmtScript s = new SmtScript("QF_LIA");
-    IllegalArgumentException e =
+    SmtTranslationException e =
         assertThrows(
-            IllegalArgumentException.class,
+            SmtTranslationException.class,
             () ->
                 AttributeEncoder.encode(
                     s,
@@ -132,9 +132,9 @@ public class AttributeEncoderTest {
   @Test
   public void malformedIntegerCandidateFailsClosedNamingTheOffendingValue() {
     SmtScript s = new SmtScript("QF_LIA");
-    IllegalArgumentException e =
+    SmtTranslationException e =
         assertThrows(
-            IllegalArgumentException.class,
+            SmtTranslationException.class,
             () ->
                 AttributeEncoder.encode(
                     s,
@@ -144,6 +144,143 @@ public class AttributeEncoderTest {
                     new AttributeDomain("Book", "year", null, List.of("1994.0"), null, null)));
     assertTrue(e.getMessage().contains("Book.year"));
     assertTrue(e.getMessage().contains("1994.0"));
+  }
+
+  @Test
+  public void malformedRealCandidateFailsClosedNamingTheOffendingValue() {
+    SmtScript s = new SmtScript("QF_LIA");
+    SmtTranslationException e =
+        assertThrows(
+            SmtTranslationException.class,
+            () ->
+                AttributeEncoder.encode(
+                    s,
+                    slots(s, 1, 1),
+                    "price",
+                    AttributeType.REAL,
+                    new AttributeDomain("Book", "price", null, List.of("nine-ninety"), null, null)));
+    assertTrue(e.getMessage().contains("Book.price"));
+    assertTrue(e.getMessage().contains("nine-ninety"));
+  }
+
+  @Test
+  public void nonIntegerConfiguredBoundOnAnIntegerAttributeFailsClosed() {
+    SmtScript s = new SmtScript("QF_LIA");
+    SmtTranslationException e =
+        assertThrows(
+            SmtTranslationException.class,
+            () ->
+                AttributeEncoder.encode(
+                    s,
+                    slots(s, 1, 1),
+                    "year",
+                    AttributeType.INTEGER,
+                    new AttributeDomain(
+                        "Book", "year", null, List.of(), new BigDecimal("1994.5"), null)));
+    assertTrue(e.getMessage().contains("Book.year"));
+  }
+
+  @Test
+  public void aBareMinMaxDomainOnAURealAttributeFailsClosedInsteadOfRawIllegalArgument() {
+    SmtScript s = new SmtScript("QF_LIRA");
+    ObjectSlots reading = slots(s, 1, 1, "Reading");
+    SmtTranslationException e =
+        assertThrows(
+            SmtTranslationException.class,
+            () ->
+                AttributeEncoder.encode(
+                    s,
+                    reading,
+                    "measurement",
+                    AttributeType.UREAL,
+                    new AttributeDomain(
+                        "Reading", "measurement", null, List.of(), BigDecimal.ZERO, BigDecimal.TEN)));
+    assertTrue(e.getMessage().contains("Reading.measurement"));
+  }
+
+  @Test
+  public void aBareMinMaxDomainOnAUBooleanAttributeFailsClosedInsteadOfRawIllegalArgument() {
+    SmtScript s = new SmtScript("QF_LIRA");
+    ObjectSlots flag = slots(s, 1, 1, "Flag");
+    SmtTranslationException e =
+        assertThrows(
+            SmtTranslationException.class,
+            () ->
+                AttributeEncoder.encode(
+                    s,
+                    flag,
+                    "state",
+                    AttributeType.UBOOLEAN,
+                    new AttributeDomain("Flag", "state", null, List.of("true"), null, null)));
+    assertTrue(e.getMessage().contains("Flag.state"));
+  }
+
+  @Test
+  public void aBareMinMaxDomainOnAUStringAttributeFailsClosedInsteadOfRawIllegalArgument() {
+    SmtScript s = new SmtScript("QF_LIRA");
+    ObjectSlots note = slots(s, 1, 1, "Note");
+    SmtTranslationException e =
+        assertThrows(
+            SmtTranslationException.class,
+            () ->
+                AttributeEncoder.encode(
+                    s,
+                    note,
+                    "text",
+                    AttributeType.USTRING,
+                    new AttributeDomain("Note", "text", null, List.of("hello"), null, null)));
+    assertTrue(e.getMessage().contains("Note.text"));
+  }
+
+  @Test
+  public void aNonLiteralBooleanCandidateFailsClosedNamingTheOffendingValue() {
+    SmtScript s = new SmtScript("QF_LIA");
+    SmtTranslationException e =
+        assertThrows(
+            SmtTranslationException.class,
+            () ->
+                AttributeEncoder.encode(
+                    s,
+                    slots(s, 1, 1, "Widget"),
+                    "flag",
+                    AttributeType.BOOLEAN,
+                    new AttributeDomain("Widget", "flag", null, List.of("maybe"), null, null)));
+    assertTrue(e.getMessage().contains("Widget.flag"));
+    assertTrue(e.getMessage().contains("maybe"));
+  }
+
+  @Test
+  public void anEmptySetIntegerPoolFailsClosedWithClassAndAttributeNamed() {
+    SmtScript s = new SmtScript("QF_LIA");
+    SmtTranslationException e =
+        assertThrows(
+            SmtTranslationException.class,
+            () ->
+                AttributeEncoder.encode(
+                    s,
+                    slots(s, 1, 1, "Basket"),
+                    "codes",
+                    AttributeType.SET_INTEGER,
+                    new AttributeDomain("Basket", "codes", null, List.of(), null, null)));
+    assertTrue(e.getMessage().contains("Basket.codes"));
+  }
+
+  @Test
+  public void aMalformedSetIntegerPoolElementFailsClosedNamingTheOffendingValue() {
+    SmtScript s = new SmtScript("QF_LIA");
+    SmtTranslationException e =
+        assertThrows(
+            SmtTranslationException.class,
+            () ->
+                AttributeEncoder.encode(
+                    s,
+                    slots(s, 1, 1, "Basket"),
+                    "codes",
+                    AttributeType.SET_INTEGER,
+                    new AttributeDomain(
+                        "Basket", "codes", null, List.of("1", "notAnInteger"), null, null)));
+    assertTrue(e.getMessage().contains("Basket.codes"));
+    assertTrue(e.getMessage().contains("notAnInteger"));
   }
 
   @Test
@@ -183,7 +320,12 @@ public class AttributeEncoderTest {
   }
 
   private static ObjectSlots slots(SmtScript s, int min, int max) {
-    return ObjectSlotEncoder.encode(s, List.of(new ClassScope("Book", min, max))).get("Book");
+    return slots(s, min, max, "Book");
+  }
+
+  private static ObjectSlots slots(SmtScript s, int min, int max, String className) {
+    return ObjectSlotEncoder.encode(s, List.of(new ClassScope(className, min, max)))
+        .get(className);
   }
 
   private static SolverResult solve(SmtScript s) {
