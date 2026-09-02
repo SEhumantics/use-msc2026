@@ -270,6 +270,7 @@
   .oracle-caveat b { color: var(--text-primary); }
 
   footer.viz-foot { margin-top: 2.5rem; color: var(--text-muted); font-size: var(--fs-tiny); line-height: 1.6; max-width: 72ch; }
+  footer.viz-foot .incomplete-run { display: block; margin-bottom: 0.55rem; padding: 0.5rem 0.7rem; border-radius: 7px; border: 1px solid var(--status-critical); background: var(--status-critical-soft); color: var(--text-primary); font-size: var(--fs-small); }
   .hidden { display: none !important; }
   .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
   @media (max-width: 30rem) { .viz-root { padding: 1.5rem 1rem 3rem; } }
@@ -1285,7 +1286,13 @@
         soilRows.forEach(r => {
           const line = document.createElement('div');
           line.className = r.passed ? 'ok' : 'bad';
-          line.textContent = (r.passed ? '✓ ' : '✗ ') + r.cmdFile + ' — ' + r.note;
+          // Show the loaded object count next to the verdict. "9 invariants, 0 failures" is a
+          // vacuous result on an empty state, and USE reports exactly that when a fixture's
+          // `open *.soil' fails -- so the count is the evidence that the verdict means anything.
+          // (SoilValidationRunner already fails such a fixture; this makes it visible in the report
+          // rather than only in the runner's note.)
+          const objects = r.numObjectsInState == null ? 'no object count' : r.numObjectsInState + ' objects';
+          line.textContent = (r.passed ? '✓ ' : '✗ ') + r.cmdFile + ' [' + objects + '] — ' + r.note;
           soilWrap.appendChild(line);
         });
       }
@@ -1591,7 +1598,17 @@
       ? 'safety=off (no timeout/watchdog)'
       : `safety=on (outer ${RUN_METADATA.overallTimeoutSeconds}s timeout + watchdog)`);
   }
-  document.getElementById('footNote').innerHTML =
+  // A killed run produces the same files as a complete one, just with fewer rows -- which no reader
+  // would notice. run-benchmark.sh rewrites benchmarkStatus after the run precisely so this banner
+  // can say it out loud. Rendered first in the footer, and loudly, because every number above it is
+  // then a partial measurement.
+  const RUN_STATUS = RUN_METADATA.benchmarkStatus || '';
+  const incompleteBanner = (RUN_STATUS === 'timed-out' || RUN_STATUS === 'failed' || RUN_STATUS === 'running')
+    ? `<strong class="incomplete-run">INCOMPLETE RUN (benchmarkStatus=${escapeHtml(RUN_STATUS)}${
+        RUN_METADATA.benchmarkExitCode == null ? '' : ', exit ' + escapeHtml(String(RUN_METADATA.benchmarkExitCode))
+      }): the benchmark step did not finish, so the finding results below cover only the cells written before it stopped. Timings and counts are partial.</strong><br>`
+    : '';
+  document.getElementById('footNote').innerHTML = incompleteBanner +
     `${MANIFEST.length} scenarios, ${RESULTS.length} (scenario, solver) benchmark cells, ${SOLVERS.length} solver backends. ` +
     `"Time" is this benchmark's own wall-clock measurement around the backend's complete model-finder call; ` +
     `"Solve/translate (backend-reported)" is shown only when a backend exposes that internal timing breakdown ` +

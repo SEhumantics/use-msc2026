@@ -17,6 +17,14 @@ public class SoilValidationResult {
 	public Integer numInvariantsChecked; // null if the summary line couldn't be parsed
 	public Integer numFailures; // null if the summary line couldn't be parsed
 	public List<String> failedInvariants; // qualified names ("Class::invariant"), possibly empty
+	// Objects present when `info state' ran, from its per-class report; null if the transcript has no
+	// such report. This is the evidence that the fixture's hand-built instance actually loaded: USE's
+	// -nogui shell does not abort on a failed `open', so without it a fixture whose .soil is missing
+	// reports every invariant OK on an empty state and would pass vacuously.
+	public Integer numObjectsInState;
+	// Every USE error line ("Error: ...", "error in ...", "exception ...") found in the transcript,
+	// after echoed script lines are stripped. Non-empty always fails the fixture.
+	public List<String> errorLines;
 	public int exitCode;
 	public String note; // human-readable explanation, especially on failure/timeout/unparseable output
 }

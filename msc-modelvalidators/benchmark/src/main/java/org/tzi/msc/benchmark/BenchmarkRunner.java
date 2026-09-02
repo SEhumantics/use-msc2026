@@ -3,10 +3,13 @@ package org.tzi.msc.benchmark;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -218,11 +221,32 @@ public class BenchmarkRunner {
 	 * cheap at this scale (dozens of cells, a JSON payload well under a megabyte) and means an
 	 * external {@code timeout} kill (see the class javadoc) loses at most the one cell that was
 	 * actually in progress, not every cell measured before it.
+	 *
+	 * <p>Written to a sibling temp file and then renamed onto the destination, never truncated and
+	 * rewritten in place. The two mechanisms are directly in tension otherwise: the same outer
+	 * {@code timeout -k} kill that incremental writing exists to survive can land in the middle of an
+	 * in-place rewrite, leaving a half-written {@code results.json} that is not valid JSON at all --
+	 * losing every cell rather than the one in progress. A rename is atomic, so a reader (or a kill)
+	 * ever sees either the complete previous file or the complete new one.
 	 */
-	private static void writeResults(List<SolverResult> allResults, File outputJson) throws java.io.IOException {
+	static void writeResults(List<SolverResult> allResults, File outputJson) throws java.io.IOException {
 		Gson outGson = new GsonBuilder().setPrettyPrinting().create();
-		try (PrintWriter w = new PrintWriter(new FileWriter(outputJson, StandardCharsets.UTF_8))) {
-			w.write(outGson.toJson(allResults));
+		Path destination = outputJson.toPath().toAbsolutePath();
+		Path directory = destination.getParent();
+		// The temp file must be a sibling: ATOMIC_MOVE is only guaranteed within one filesystem, and
+		// the system temp directory routinely is not the same one.
+		Path temp = Files.createTempFile(directory, ".results-", ".json.tmp");
+		try {
+			Files.writeString(temp, outGson.toJson(allResults), StandardCharsets.UTF_8);
+			try {
+				Files.move(temp, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+			} catch (AtomicMoveNotSupportedException e) {
+				// Some filesystems (and some network mounts) refuse ATOMIC_MOVE. A plain replace is
+				// still strictly better than truncating the destination and writing into it.
+				Files.move(temp, destination, StandardCopyOption.REPLACE_EXISTING);
+			}
+		} finally {
+			Files.deleteIfExists(temp); // no-op on the success path, since the move consumed it
 		}
 	}
 

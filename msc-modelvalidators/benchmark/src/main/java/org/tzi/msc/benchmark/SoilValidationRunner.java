@@ -46,6 +46,43 @@ public class SoilValidationRunner {
 	// INVARIANT_LINE/CHECK_SUMMARY a second time when scanned unfiltered, double-counting a failure
 	// that only happened once. Strip echoed input lines before matching either pattern.
 	private static final Pattern ECHOED_SCRIPT_LINE = Pattern.compile("^\\S+\\.(cmd|soil)>.*$", Pattern.MULTILINE);
+	// Every command/compile/load failure the -nogui shell can report goes through use-core's
+	// org.tzi.use.util.Log (Log.java:192-227), which has exactly three error formats:
+	//   "Error: <msg>"            -- Log.error(String), used by every Shell.cmd* failure path; also
+	//                                SoilCompiler's compile-failure prefix (SoilCompiler.java:268)
+	//                                and Shell.java:1727's direct
+	//                                Log.println("Error: File `<f>' could not be found!"), which is
+	//                                what a missing `open <x>.soil' target actually prints
+	//   "error in <class>: <msg>" -- Log.error(Object, String)
+	//   "exception <class>: <msg>" -- Log.error(Exception) / Log.error(String, Exception)
+	// All three are anchored at line start so that ordinary output which merely CONTAINS one of
+	// these words is not mistaken for a USE error -- notably the JVM's own
+	// "java.lang.UnsatisfiedLinkError: no natGNUReadline ..." readline warning, which every one of
+	// these runs emits on a machine without GNU readline.
+	private static final Pattern USE_ERROR_LINE = Pattern
+			.compile("^(?:Error: .*|error in \\S+: .*|exception \\S+: .*)$", Pattern.MULTILINE);
+	// `info state' prints "State: <name>" and then two Report tables (Shell.cmdInfoState,
+	// Shell.java:851-926): objects per class first, links per association second. Each ends with a
+	// dashed ruler followed by a "total : <n>" row. The FIRST ruler+total pair after the "State:"
+	// header is therefore the object count -- the evidence that the fixture's hand-built instance
+	// actually loaded.
+	//
+	// Two details keep a CLASS row from being read as the summary row (a model may legitimately
+	// contain a class named "total", and the object table's header ruler sits directly above its
+	// first class row): the row must follow a ruler, AND the number must be the last thing on the
+	// line. A class row carries two numbers ("#objects" and "+ #objects in subclasses"), so it can
+	// never satisfy the second condition; the summary row's third cell is empty, so it always does.
+	//
+	// The count is written by NumberFormat.getInstance(), whose grouping separator is
+	// locale-dependent -- ',' and '.' (and the no-break spaces Java uses for e.g. fr) are accepted
+	// and stripped in parseObjectTotal. A locale that groups with a plain ASCII space is
+	// indistinguishable from this Report's column padding, so it does not match at all and the
+	// fixture fails closed with "no `info state' object report found" rather than silently reading a
+	// wrong count. (CHECK_SUMMARY above already assumes a '.' decimal separator, so such a locale
+	// was never supported here in the first place.)
+	private static final Pattern STATE_HEADER = Pattern.compile("^State: .*$", Pattern.MULTILINE);
+	private static final Pattern REPORT_TOTAL_ROW = Pattern.compile(
+			"^-{2,}[ \\t]*$\\R^total[ \\t]*:[ \\t]*([0-9][0-9.,\\u00A0\\u202F]*)[ \\t]*$", Pattern.MULTILINE);
 
 	public static void main(String[] args) throws Exception {
 		if (args.length < 3) {
@@ -84,6 +121,7 @@ public class SoilValidationRunner {
 					missing.cmdFile = cmdFile.getName();
 					missing.kind = kind;
 					missing.passed = false;
+					missing.errorLines = Collections.emptyList();
 					missing.note = "expected fixture file not found: " + cmdFile;
 					allResults.add(missing);
 					System.err.println("  MISSING " + cmdFile);
@@ -148,6 +186,9 @@ public class SoilValidationRunner {
 		boolean finished = waitForProcessAndCollectOutput(process, output, timeoutSeconds);
 		if (!finished) {
 			result.exitCode = -1;
+			// Scanned even here: a fixture that hangs often prints the error that led to the hang
+			// first, and the field must not be null in the emitted JSON either way.
+			result.errorLines = collectErrorLines(ECHOED_SCRIPT_LINE.matcher(output.toString()).replaceAll(""));
 			result.note = "timed out after " + timeoutSeconds + "s";
 			return result;
 		}
@@ -238,10 +279,23 @@ public class SoilValidationRunner {
 	 * result} in place. Pulled out of {@link #runCmd} as a pure string-in function (no process/file
 	 * I/O) specifically so a test can exercise the parsing and pass/fail decision directly against a
 	 * captured transcript, without spawning a real subprocess. Package-private for that reason.
+	 *
+	 * <p>The invariant verdicts alone are NOT sufficient evidence that a fixture did its job. USE's
+	 * {@code -nogui} shell does not abort on a failed {@code open}: it prints one {@code Error:} line,
+	 * carries on with the empty state it already had, and then reports every invariant {@code OK} with
+	 * {@code 0 failures} and exit code 0. A "valid-instance" fixture whose {@code open *.soil} target
+	 * is missing or unparseable therefore passes vacuously if only the {@code checking invariant} /
+	 * {@code checked N invariants, M failures.} lines are consulted -- proving nothing about the
+	 * instance the fixture claims to validate. Three independent gates close that hole, and each is
+	 * applied to BOTH kinds of fixture: a non-zero exit code, any USE error line, or a state that
+	 * holds no objects at all fails the fixture outright, whatever the invariant verdicts said.
 	 */
 	static void applyParsedOutcome(SoilValidationResult result, String output, String kind,
 			List<String> knownOutOfScopeInvariants) {
 		String engineOutput = ECHOED_SCRIPT_LINE.matcher(output).replaceAll("");
+
+		result.errorLines = collectErrorLines(engineOutput);
+		result.numObjectsInState = parseObjectTotal(engineOutput);
 
 		List<String> failedInvariants = new ArrayList<>();
 		Matcher invM = INVARIANT_LINE.matcher(engineOutput);
@@ -285,9 +339,87 @@ public class SoilValidationRunner {
 				}
 			}
 		} else {
+			// Include the transcript tail: this branch fires when the run produced something other
+			// than a completed `check -v', and "no summary line, exit=0" on its own is not enough to
+			// tell a broken fixture from a truncated capture. (Observed once, unreproduced in 60
+			// repeats of the same fixture -- without the tail there was nothing to diagnose.)
 			result.passed = false;
 			result.note = "could not find USE's 'checked N invariants..., M failures.' summary line in output"
-					+ " (exit=" + result.exitCode + ")";
+					+ " (exit=" + result.exitCode + "); last output was: " + tail(engineOutput, 400);
 		}
+
+		applyEvidenceGates(result);
+	}
+
+	/**
+	 * Overrides an otherwise-clean invariant verdict when the transcript shows the run itself was not
+	 * sound. Runs last so that a fixture which already failed on its invariants keeps that (more
+	 * specific) note appended rather than replaced.
+	 */
+	private static void applyEvidenceGates(SoilValidationResult result) {
+		List<String> blockers = new ArrayList<>();
+		if (result.exitCode != 0) {
+			blockers.add("USE exited with code " + result.exitCode);
+		}
+		if (!result.errorLines.isEmpty()) {
+			blockers.add("USE reported " + result.errorLines.size() + " error line(s): " + result.errorLines);
+		}
+		if (result.numObjectsInState == null) {
+			blockers.add("no `info state' object report found in the transcript, so there is no evidence the"
+					+ " fixture's instance loaded at all -- add `info state' to the .cmd file between its"
+					+ " `open' and its `check -v'");
+		} else if (result.numObjectsInState == 0) {
+			blockers.add("`info state' reports 0 objects: the hand-built instance did not load, so every"
+					+ " invariant verdict below was reached vacuously on an empty state");
+		}
+		if (blockers.isEmpty()) {
+			return;
+		}
+		String previousNote = result.note;
+		result.passed = false;
+		result.note = String.join("; ", blockers)
+				+ (previousNote == null || previousNote.isEmpty() ? "" : " [invariant verdict was: " + previousNote + "]");
+	}
+
+	/** Last {@code maxChars} characters of {@code text}, blank-line-collapsed, for a diagnostic note. */
+	private static String tail(String text, int maxChars) {
+		String collapsed = text.replaceAll("(?m)^\\s*$\\R", "").trim();
+		if (collapsed.isEmpty()) {
+			return "<no output>";
+		}
+		return collapsed.length() <= maxChars ? collapsed
+				: "..." + collapsed.substring(collapsed.length() - maxChars);
+	}
+
+	/** All USE error lines in an echo-stripped transcript, in the order USE printed them. */
+	private static List<String> collectErrorLines(String engineOutput) {
+		List<String> errors = new ArrayList<>();
+		Matcher m = USE_ERROR_LINE.matcher(engineOutput);
+		while (m.find()) {
+			errors.add(m.group().trim());
+		}
+		return errors;
+	}
+
+	/**
+	 * Total object count from {@code info state}'s first (per-class) report, or {@code null} if the
+	 * transcript contains no such report. Digits are extracted rather than parsed directly because
+	 * {@code cmdInfoState} formats through {@link java.text.NumberFormat}, whose grouping separator is
+	 * locale-dependent ({@code 1,024} / {@code 1.024} / {@code 1 024} all mean the same count).
+	 */
+	static Integer parseObjectTotal(String engineOutput) {
+		Matcher state = STATE_HEADER.matcher(engineOutput);
+		if (!state.find()) {
+			return null;
+		}
+		Matcher total = REPORT_TOTAL_ROW.matcher(engineOutput);
+		if (!total.find(state.end())) {
+			return null;
+		}
+		String digits = total.group(1).replaceAll("\\D", "");
+		if (digits.isEmpty() || digits.length() > 9) {
+			return null;
+		}
+		return Integer.valueOf(digits);
 	}
 }

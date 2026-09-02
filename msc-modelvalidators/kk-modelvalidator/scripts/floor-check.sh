@@ -48,7 +48,12 @@ BASELINE_FILE="$MODULE_DIR/scripts/known-failing-tests.txt"
 # semantics -- see that commit's message. The original 461 failures are unchanged (see
 # scripts/known-failing-tests.txt, still exactly the 9 classes documented above); this floor tracks
 # ADDED evidence, not a regression.
-FLOOR_MIN_TESTS=3321
+# Bumped 2026-09-02 from 3321 to 3323: TrackedPluginJarFreshnessTest (2 tests, 0 failures) lands in
+# the same commit. It is a build-hygiene guard, not a semantics change -- it asserts that the tracked
+# dev-tree plugin jar use-gui/lib/plugins/KK-ModelValidator-1.0.jar still matches this module's
+# compiled classes, which nothing checked before (the jar had been stale since commit 28b64986). The
+# failing set is unchanged, so FLOOR_MAX_FAILURES stays at 462.
+FLOOR_MIN_TESTS=3323
 FLOOR_MAX_FAILURES=462
 FLOOR_MAX_ERRORS=0
 

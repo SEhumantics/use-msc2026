@@ -93,6 +93,96 @@ Demo0.cmd> !create d0:Department;
 For more information about the graphical user interface please refer
 to the [quick tour](http://www.db.informatik.uni-bremen.de/projects/USE/).
 
+## SMT model validator plugin (Z3)
+
+This distribution bundles an SMT-based model finder
+(`lib/plugins/unc-modelvalidator-*-plugin.jar`) alongside the Kodkod-based
+`modelvalidator` plugin. It adds one shell command:
+
+```
+smtmodelvalidator -validate <properties-file> [section]
+```
+
+with the alias `smv -validate`. `<properties-file>` is required -- unlike
+`mv -validate`, no generic configuration is created for you, because this
+finder's configurations need explicitly bounded domains. The optional
+`section` selects one `[name]` section from that file. `plugins` lists the
+command with its help text at any time. For example, from the shipped
+`examples/KK-ModelValidator/Library` directory:
+
+```
+use> smtmodelvalidator -validate Library.properties
+[smtmodelvalidator] outcome: SATISFIABLE
+[smtmodelvalidator] all 9 active invariant(s) hold.
+```
+
+### Z3 is required and is not bundled
+
+The plugin runs the [Z3](https://github.com/Z3Prover/z3) SMT solver as a
+separate process. **No Z3 binary ships in this distribution** -- you have to
+install it yourself. The version is pinned and asserted at startup; a
+different version is a hard error, not a warning, because results from
+another solver version are not comparable:
+
+```
+[smtmodelvalidator] error: SMT solver version mismatch: solver.properties pins 5.1.0
+but /path/to/z3 reports 4.16.0. ...
+```
+
+The pinned version for this release is **Z3 5.1.0**.
+
+The source tree vendors that exact binary at `tools/z3/bin/z3`, and
+`tools/fetch-z3.sh` re-fetches and re-verifies it:
+
+```bash
+tools/fetch-z3.sh            # or: tools/fetch-z3.sh 4.16.0
+```
+
+It downloads the official release archive, verifies the SHA-256 of both the
+archive and the extracted binary against checksums recorded in the script,
+installs it to `tools/z3/bin/z3`, and prints its version. It refuses any
+version it has no recorded checksum for rather than installing an unverified
+binary. Both the script and the vendored binary are part of the source tree
+only; neither is included in the binary distribution.
+
+### Telling the plugin where Z3 is
+
+The location is resolved in this order, first match wins:
+
+1. the JVM system property `-Dmsc.solver.path=<path>`
+2. the environment variable `MSC_SOLVER_PATH=<path>`
+3. `solver.path` from the plugin's bundled `solver.properties`
+
+Each accepts an absolute path, or a bare executable name (`z3`), which is
+looked up on `PATH`.
+
+**The built-in default only works inside the source tree.** `solver.properties`
+ships `solver.path = tools/z3/bin/z3`, a *relative* path, and a relative path is
+resolved against the **process working directory** -- the directory you were in
+when you launched USE -- walking upwards from there through at most 8 parent
+directories. Starting USE from anywhere else (which is the normal case for an
+installed distribution) therefore cannot find Z3, and the command reports:
+
+```
+[smtmodelvalidator] error: SMT solver 'tools/z3/bin/z3' was not found on PATH and is
+not an executable file. Install it, or override the location with -Dmsc.solver.path=...
+or MSC_SOLVER_PATH, or correct solver.properties.
+```
+
+So for an installed distribution, set the location explicitly. With the
+`bin/use` launcher, the environment variable is the simplest route:
+
+```bash
+export MSC_SOLVER_PATH=/opt/z3-5.1.0/bin/z3
+cd examples/KK-ModelValidator/Library
+use -nogui Library.use
+use> smtmodelvalidator -validate Library.properties
+```
+
+`-Dmsc.solver.path=...` does the same and takes precedence, for invocations
+where you control the JVM arguments directly (`java -D... -jar lib/use-gui.jar
+...`, a Maven run, or by adding it to `VMARGS` in `bin/use`).
+
 ## Documentation
 
 Documentation is available in the [manual](manual/main.md) directory.

@@ -142,6 +142,99 @@ public class ReportBuilderTest {
 		assertEquals("and nothing may be reported as agreement", 0, summary.get("agreements").getAsInt());
 	}
 
+	/**
+	 * A run killed by run-benchmark.sh's outer {@code timeout} produces the same file set as a
+	 * complete one -- same manifest, same report.html, just fewer rows in results.json, which nobody
+	 * reading the HTML would notice. run-benchmark.sh therefore rewrites {@code benchmarkStatus} in
+	 * run-metadata.json AFTER the run, and the report footer renders an INCOMPLETE banner from it.
+	 * That only works if ReportBuilder passes the field through, so this pins it: the marker written
+	 * by the script must survive verbatim into the rendered page's run-metadata block, and the
+	 * template must actually read it.
+	 */
+	@Test
+	public void carriesTheKilledRunMarkerFromRunMetadataIntoTheReport() throws Exception {
+		File tmpDir = Files.createTempDirectory("report-builder-timeout-test").toFile();
+		File manifestFile = new File(tmpDir, "manifest.json");
+		File resultsFile = new File(tmpDir, "results.json");
+		File runMetadataFile = new File(tmpDir, "run-metadata.json");
+		File outputFile = new File(tmpDir, "report.html");
+
+		try (FileWriter w = new FileWriter(manifestFile, StandardCharsets.UTF_8)) {
+			w.write("{\"examples\":[{\"id\":\"X\",\"directory\":\"x\",\"useFile\":\"x.use\","
+					+ "\"category\":\"expressiveness\",\"mode\":\"finding\",\"hasValidationTests\":false,"
+					+ "\"provenanceType\":\"authored-for-thesis\",\"features\":[]}]}");
+		}
+		try (FileWriter w = new FileWriter(resultsFile, StandardCharsets.UTF_8)) {
+			w.write("[{\"exampleId\":\"X\",\"solver\":\"test\",\"outcome\":\"SATISFIABLE\"}]");
+		}
+		try (FileWriter w = new FileWriter(runMetadataFile, StandardCharsets.UTF_8)) {
+			w.write("{\"benchmarkStatus\":\"timed-out\",\"benchmarkExitCode\":124}");
+		}
+
+		ReportBuilder.main(new String[] { manifestFile.getPath(), resultsFile.getPath(), outputFile.getPath(),
+				"", runMetadataFile.getPath() });
+
+		String html = Files.readString(outputFile.toPath(), StandardCharsets.UTF_8);
+		com.google.gson.JsonObject metadata = com.google.gson.JsonParser
+				.parseString(extractScriptBlock(html, "run-metadata-json")).getAsJsonObject();
+		assertEquals("timed-out", metadata.get("benchmarkStatus").getAsString());
+		assertEquals(124, metadata.get("benchmarkExitCode").getAsInt());
+		assertTrue("the footer must actually consume benchmarkStatus, not just carry it",
+				html.contains("RUN_METADATA.benchmarkStatus"));
+	}
+
+	/**
+	 * The killed-run banner only works if two files agree on one vocabulary: run-benchmark.sh writes
+	 * the {@code benchmarkStatus} strings, report-template.html decides which of them mean "this run
+	 * did not finish". Nothing else couples them -- renaming a status on either side would silently
+	 * restore exactly the F6 symptom (a killed run rendering as a complete one), because the report
+	 * would simply never match. This test is that coupling: every status the script can write, other
+	 * than the one success value, must appear in the template's banner condition.
+	 *
+	 * <p>Deliberately a source-text check. The banner is rendered by the page's own JavaScript, which
+	 * no test in this module executes; asserting the rendered HTML contains the banner text would
+	 * pass unconditionally, since that text is part of the template either way.
+	 */
+	@Test
+	public void everyUnfinishedRunStatusTheScriptWritesIsOneTheReportFooterFlags() throws Exception {
+		String script = Files.readString(repoFile("msc-modelvalidators/benchmark/scripts/run-benchmark.sh"),
+				StandardCharsets.UTF_8);
+		String template = Files.readString(
+				repoFile("msc-modelvalidators/benchmark/src/main/resources/report-template.html"),
+				StandardCharsets.UTF_8);
+
+		Matcher calls = Pattern.compile("(?m)^\\s*write_run_metadata\\s+([a-z-]+)\\s").matcher(script);
+		java.util.Set<String> written = new java.util.TreeSet<>();
+		while (calls.find()) {
+			written.add(calls.group(1));
+		}
+		assertTrue("the script must actually call write_run_metadata", written.size() >= 2);
+		assertTrue("a completed run must be one of the statuses", written.contains("completed"));
+
+		for (String status : written) {
+			if (status.equals("completed")) {
+				continue;
+			}
+			assertTrue("report-template.html's footer does not flag benchmarkStatus=" + status
+					+ ", so a run in that state would render as a complete one",
+					template.contains("RUN_STATUS === '" + status + "'"));
+		}
+	}
+
+	/** Resolves a repo-relative path by walking up from the module directory Surefire runs in. */
+	private static java.nio.file.Path repoFile(String repoRelative) {
+		java.nio.file.Path base = java.nio.file.Paths.get("").toAbsolutePath();
+		for (int depth = 0; depth <= 8 && base != null; depth++) {
+			java.nio.file.Path candidate = base.resolve(repoRelative);
+			if (java.nio.file.Files.isRegularFile(candidate)) {
+				return candidate;
+			}
+			base = base.getParent();
+		}
+		throw new AssertionError("could not locate " + repoRelative + " from "
+				+ java.nio.file.Paths.get("").toAbsolutePath());
+	}
+
 	private static String extractScriptBlock(String html, String id) {
 		Pattern p = Pattern.compile(
 				"<script type=\"application/json\" id=\"" + id + "\">(.*?)</script>", Pattern.DOTALL);

@@ -45,8 +45,37 @@ load the readline library at runtime.
 3. Basic Installation
 ---------------------
 
-There are no additional libraries required. You should only make sure
-that the "java" program is in your program search path.
+There are no additional libraries required for USE itself. You should
+only make sure that the "java" program is in your program search path.
+
+One bundled plugin does have an external requirement. The SMT model
+validator (lib/plugins/unc-modelvalidator-*-plugin.jar, shell command
+"smtmodelvalidator -validate", see README) drives the Z3 SMT solver as a
+separate process, and Z3 is NOT part of this distribution -- no z3
+binary is shipped in the archive. Everything else in USE, including the
+Kodkod model validator and its vendored SAT solvers under
+lib/plugins/modelValidatorPlugin, works without it; only the
+"smtmodelvalidator" command needs Z3.
+
+The required version is pinned and is checked at runtime: the plugin
+asserts that the solver reports the exact expected version and refuses
+to run on any other one, rather than silently producing results that
+cannot be compared. As of this release the pinned version is
+
+	Z3 5.1.0
+
+Install it in whichever way suits your platform (an official release
+binary from https://github.com/Z3Prover/z3/releases, or your package
+manager if it offers that exact version), then tell the plugin where it
+is -- see "SMT model validator plugin (Z3)" in the README for the
+MSC_SOLVER_PATH / -Dmsc.solver.path settings and for why an unset
+location usually fails when USE is started from an arbitrary directory.
+
+If you are working from the USE *source* tree rather than from this
+binary distribution, the pinned binary is already vendored there at
+tools/z3/bin/z3, and tools/fetch-z3.sh re-downloads and re-verifies it
+(neither the script nor the vendored binary is included in this
+distribution).
 
 
 4. Running USE

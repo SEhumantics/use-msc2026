@@ -2,14 +2,27 @@ package org.tzi.msc.benchmark;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import org.junit.Assume;
 import org.junit.Test;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonParser;
 
 /**
  * Regression test for the exact P0 bug this session found and fixed: a substring check
@@ -188,5 +201,72 @@ public class BenchmarkRunnerTest {
 	@Test
 	public void errorMessageFromValidationErrorIsNullWhenValidateDidNotThrow() {
 		assertNull(BenchmarkRunner.errorMessageFromValidationError(null));
+	}
+
+	// ------------------------------------------------------- results.json is written atomically
+
+	/**
+	 * BenchmarkRunner rewrites results.json after EVERY completed cell so that the outer
+	 * {@code timeout -k} kill in run-benchmark.sh loses at most the cell in progress. Truncating the
+	 * destination and writing into it turns that safety net into its own hazard: a kill landing inside
+	 * the rewrite leaves a half-written file that is not valid JSON at all, losing every cell rather
+	 * than one. A rename cannot be observed half-done, so the destination must be a NEW file each
+	 * time -- which is exactly what this asserts, via the file's identity rather than its contents
+	 * (identical content would prove nothing about how it got there).
+	 */
+	@Test
+	public void writeResultsReplacesTheDestinationByRenameNotByTruncatingItInPlace() throws Exception {
+		Path dir = Files.createTempDirectory("benchmark-write-results");
+		File out = dir.resolve("results.json").toFile();
+
+		BenchmarkRunner.writeResults(cells(40), out);
+		Object identityAfterFirstWrite = fileKeyOf(out.toPath());
+		long sizeAfterFirstWrite = Files.size(out.toPath());
+
+		BenchmarkRunner.writeResults(cells(1), out);
+
+		Assume.assumeNotNull("this filesystem does not expose a file identity", identityAfterFirstWrite);
+		assertNotEquals("an in-place truncate+rewrite keeps the same file; an atomic rename must not",
+				identityAfterFirstWrite, fileKeyOf(out.toPath()));
+		assertTrue("the smaller payload must fully replace the larger one, not be written over it",
+				Files.size(out.toPath()) < sizeAfterFirstWrite);
+	}
+
+	@Test
+	public void writeResultsLeavesValidJsonAndNoTemporaryFileBehind() throws Exception {
+		Path dir = Files.createTempDirectory("benchmark-write-results-residue");
+		File out = dir.resolve("results.json").toFile();
+
+		BenchmarkRunner.writeResults(cells(40), out);
+		BenchmarkRunner.writeResults(cells(3), out);
+
+		JsonArray written = JsonParser.parseString(Files.readString(out.toPath(), StandardCharsets.UTF_8))
+				.getAsJsonArray();
+		assertEquals("the destination must hold exactly the last payload", 3, written.size());
+
+		List<String> leftOver;
+		try (Stream<Path> entries = Files.list(dir)) {
+			leftOver = entries.map(p -> p.getFileName().toString()).sorted().collect(Collectors.toList());
+		}
+		// The temp file is a SIBLING of the destination (ATOMIC_MOVE is only guaranteed within one
+		// filesystem, and the system temp dir routinely is not the same one), so a leaked one would
+		// land here next to results.json.
+		assertEquals("no temp file may survive a successful write", List.of("results.json"), leftOver);
+	}
+
+	private static Object fileKeyOf(Path path) throws Exception {
+		return Files.readAttributes(path, BasicFileAttributes.class).fileKey();
+	}
+
+	private static List<SolverResult> cells(int count) {
+		List<SolverResult> results = new ArrayList<>();
+		for (int i = 0; i < count; i++) {
+			SolverResult result = new SolverResult();
+			result.exampleId = "Example" + i;
+			result.solver = "DefaultSAT4J";
+			result.outcome = "SATISFIABLE";
+			results.add(result);
+		}
+		return results;
 	}
 }
