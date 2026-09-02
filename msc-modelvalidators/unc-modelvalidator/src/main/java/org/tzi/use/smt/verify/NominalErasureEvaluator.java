@@ -2,28 +2,17 @@ package org.tzi.use.smt.verify;
 
 import org.tzi.use.smt.config.InvariantOutcome;
 import org.tzi.use.uml.ocl.expr.EvalContext;
-import org.tzi.use.uml.ocl.expr.ExpAllInstances;
 import org.tzi.use.uml.ocl.expr.ExpAttrOp;
-import org.tzi.use.uml.ocl.expr.ExpConstBoolean;
-import org.tzi.use.uml.ocl.expr.ExpConstEnum;
-import org.tzi.use.uml.ocl.expr.ExpConstInteger;
-import org.tzi.use.uml.ocl.expr.ExpConstReal;
-import org.tzi.use.uml.ocl.expr.ExpConstString;
 import org.tzi.use.uml.ocl.expr.ExpExists;
 import org.tzi.use.uml.ocl.expr.ExpForAll;
-import org.tzi.use.uml.ocl.expr.ExpIsKindOf;
-import org.tzi.use.uml.ocl.expr.ExpIsTypeOf;
+import org.tzi.use.uml.ocl.expr.ExpIf;
+import org.tzi.use.uml.ocl.expr.ExpLet;
 import org.tzi.use.uml.ocl.expr.ExpNavigation;
-import org.tzi.use.uml.ocl.expr.ExpObjAsSet;
-import org.tzi.use.uml.ocl.expr.ExpObjRef;
 import org.tzi.use.uml.ocl.expr.ExpQuery;
 import org.tzi.use.uml.ocl.expr.ExpStdOp;
-import org.tzi.use.uml.ocl.expr.ExpUndefined;
 import org.tzi.use.uml.ocl.expr.ExpVariable;
 import org.tzi.use.uml.ocl.expr.Expression;
 import org.tzi.use.uml.ocl.expr.VarDeclList;
-import org.tzi.use.uml.ocl.type.CollectionType;
-import org.tzi.use.uml.ocl.type.Type;
 import org.tzi.use.uml.ocl.value.BooleanValue;
 import org.tzi.use.uml.ocl.value.CollectionValue;
 import org.tzi.use.uml.ocl.value.IntegerValue;
@@ -91,6 +80,22 @@ import org.tzi.use.uml.ocl.value.Value;
  * THESIS_SMT_MODEL_FINDER_PLAN.md} §5.1's degenerate case, and it mirrors {@code
  * ExpressionTranslator}, whose NOMINAL and UNCERTAIN encodings differ in exactly one place ({@code
  * uRealThreshold}).
+ *
+ * <p>CORRECTED 2026-09-02. "Provably free of U-typed subexpressions" is a claim about the WHOLE
+ * subtree, and until this correction {@link #containsUncertainty} did not make it: it recognised
+ * nine node classes and answered "uncertain" for every other {@code Expression} subclass whatever
+ * it contained. Fail-closed defaults belong where crispness genuinely cannot be decided; this one
+ * sat where it could be, and so REFUSED provably crisp bodies -- {@code let k : Integer = self.n in
+ * k > 0} and {@code if self.n > 0 then true else false endif} came back as "Boolean expression
+ * shape ExpLet"/"ExpIf", and {@code Set{1,2}->includes(1)} as "operator includes over an uncertain
+ * operand", with nothing uncertain anywhere in any of them. {@link UncertaintyScan} now decides the
+ * question by visiting every node, and states the two shapes it still refuses and why.
+ *
+ * <p>The corollary is that this oracle now INHERITS {@link ThreeValuedEvaluator}'s own stated
+ * boundary for crisp bodies rather than adding a second one on top: a crisp {@code
+ * select}/{@code reject}/{@code any} is read exactly as the U-aware oracle reads it, collapse and
+ * all, instead of being refused here for a different reason. That is the right coupling -- the two
+ * oracles are supposed to differ in the erasure and nowhere else.
  */
 public final class NominalErasureEvaluator {
   private NominalErasureEvaluator() {}
@@ -106,6 +111,12 @@ public final class NominalErasureEvaluator {
     }
     if (expression instanceof ExpExists exists) {
       return quantify(exists, true, ctx);
+    }
+    if (expression instanceof ExpLet letExpr) {
+      return erasedLet(letExpr, ctx);
+    }
+    if (expression instanceof ExpIf ifExpr) {
+      return erasedIf(ifExpr, ctx);
     }
     if (expression instanceof ExpStdOp op) {
       Expression[] args = op.args();
@@ -283,10 +294,57 @@ public final class NominalErasureEvaluator {
       // it as ambiguous and reported separately, not as a second semantics.
       return BooleanValue.get(bool.probability() >= 0.5);
     }
-    if (value.type() != null && isUncertain(value.type())) {
+    if (value.type() != null && UncertaintyScan.isUncertain(value.type())) {
       throw unsupported("no nominal-erasure rule for the U-value " + value);
     }
     return value;
+  }
+
+  /**
+   * {@code E( let v : T = e in b ) = let v : T = E(e) in E(b)}: erasure distributes over the
+   * binding, because a {@code let} introduces no value of its own -- it names one. The SAME single
+   * binding {@code ExpLet#eval} pushes and pops is pushed here, carrying the ERASED initializer, so
+   * every later mention of {@code v} reads the erased value. That is what makes a U-typed binding
+   * work: {@code let u : UReal = self.speed in (u > 0.30).toBooleanC(0.95)} binds the
+   * representative {@code 0.31}, and the confidence projection over {@code u} then erases to the
+   * CRISP comparison exactly as it does over {@code self.speed} written out in place -- which is
+   * the whole point of the fragility question, since the U-aware reading of the same body rejects.
+   *
+   * <p>A Boolean-typed initializer is read through {@link #eval} (i.e. through erasure) and
+   * converted back to a {@code Value}, mirroring {@link ThreeValuedEvaluator}'s own {@code let}:
+   * otherwise a nested {@code let} in a Boolean initializer would be raw-evaluated by {@code
+   * ExpLet#eval} and silently answer the U-AWARE question. Any other initializer goes through
+   * {@link #eraseValue}, which erases a stored U-value through the proposal's table and refuses
+   * anything it has no rule for.
+   */
+  private static InvariantOutcome erasedLet(ExpLet letExpr, EvalContext ctx) {
+    Expression varExpr = letExpr.getVarExpression();
+    Value bound =
+        varExpr.type() != null && varExpr.type().isTypeOfBoolean()
+            ? ThreeValuedEvaluator.valueOf(eval(varExpr, ctx))
+            : eraseValue(varExpr, ctx);
+    ctx.pushVarBinding(letExpr.getVarname(), bound);
+    try {
+      return eval(letExpr.getInExpression(), ctx);
+    } finally {
+      // See ThreeValuedEvaluator: EvalContext.popVarBinding() is package-private in use-core.
+      ctx.varBindings().pop();
+    }
+  }
+
+
+  /**
+   * {@code E( if c then a else b endif ) = if E(c) then E(a) else E(b) endif}. The condition rule
+   * is {@code ExpIf#eval}'s ACTUAL one, not its docstring's (the two disagree; {@link
+   * ThreeValuedEvaluator#ifThenElse} documents the same discrepancy): an undefined condition makes
+   * the whole expression undefined without either branch being touched.
+   */
+  private static InvariantOutcome erasedIf(ExpIf ifExpr, EvalContext ctx) {
+    return switch (eval(ifExpr.getCondition(), ctx)) {
+      case TRUE -> eval(ifExpr.getThenExpression(), ctx);
+      case FALSE -> eval(ifExpr.getElseExpression(), ctx);
+      case UNDEFINED -> InvariantOutcome.UNDEFINED;
+    };
   }
 
   private static InvariantOutcome quantify(ExpQuery query, boolean existential, EvalContext ctx) {
@@ -356,66 +414,22 @@ public final class NominalErasureEvaluator {
   }
 
   /**
-   * Whether any U-typed value can reach this expression. The answer defaults to {@code true} for a
-   * shape this method does not recognise, so an unrecognised construct is routed to the erasure
-   * rules -- which refuse it -- instead of being silently handed to the U-AWARE evaluator, which
-   * would answer the wrong question without saying so.
+   * Whether any U-typed value can reach this expression -- a WHOLE-TREE structural question,
+   * delegated to {@link UncertaintyScan}, which proves the "no" by visiting every node rather than
+   * by recognising a handful of them.
+   *
+   * <p>This method used to be an {@code instanceof} chain ending in a whitelist, so every {@code
+   * Expression} subclass outside that whitelist answered "uncertain" whatever it actually
+   * contained. That is not a conservative margin: an expression called uncertain is routed into the
+   * erasure dispatch, which has no rule for a crisp {@code let}, {@code if} or collection literal
+   * and so REFUSES it -- flatly contradicting this class's own "a crisp expression erases to
+   * itself", and taking the whole {@code let}/{@code if}/collection-literal family of D1/D2/D3
+   * diagnostic rows and {@code fragile(...)} witnesses with it.
    */
   private static boolean containsUncertainty(Expression expression) {
-    if (isUncertain(expression.type())) {
-      return true;
-    }
-    if (expression instanceof ExpStdOp op) {
-      for (Expression argument : op.args()) {
-        if (containsUncertainty(argument)) {
-          return true;
-        }
-      }
-      return false;
-    }
-    if (expression instanceof ExpAttrOp attribute) {
-      return containsUncertainty(attribute.objExp());
-    }
-    if (expression instanceof ExpNavigation navigation) {
-      return containsUncertainty(navigation.getObjectExpression());
-    }
-    if (expression instanceof ExpObjAsSet objAsSet) {
-      return containsUncertainty(objAsSet.getObjectExpression());
-    }
-    if (expression instanceof ExpIsKindOf isKindOf) {
-      return containsUncertainty(isKindOf.getSourceExpr());
-    }
-    if (expression instanceof ExpIsTypeOf isTypeOf) {
-      return containsUncertainty(isTypeOf.getSourceExpr());
-    }
-    if (expression instanceof ExpQuery query) {
-      return containsUncertainty(query.getRangeExpression())
-          || containsUncertainty(query.getQueryExpression());
-    }
-    return !(expression instanceof ExpVariable
-        || expression instanceof ExpAllInstances
-        || expression instanceof ExpObjRef
-        || expression instanceof ExpUndefined
-        || expression instanceof ExpConstInteger
-        || expression instanceof ExpConstReal
-        || expression instanceof ExpConstString
-        || expression instanceof ExpConstBoolean
-        || expression instanceof ExpConstEnum);
+    return UncertaintyScan.reaches(expression);
   }
 
-  private static boolean isUncertain(Type type) {
-    if (type == null) {
-      return true;
-    }
-    if (type.isTypeOfUReal()
-        || type.isTypeOfUInteger()
-        || type.isTypeOfUBoolean()
-        || type.isTypeOfUString()
-        || type.isTypeOfSBoolean()) {
-      return true;
-    }
-    return type instanceof CollectionType collection && isUncertain(collection.elemType());
-  }
 
   private static Double asNumber(Value value) {
     if (value instanceof RealValue real) {

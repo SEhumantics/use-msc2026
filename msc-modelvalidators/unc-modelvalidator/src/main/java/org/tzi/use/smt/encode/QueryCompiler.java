@@ -108,45 +108,64 @@ public final class QueryCompiler {
    *
    * <p>Fixing the target is structural here -- one desugared core is reused for every scenario --
    * so all that remains is the disjunction clause. A core is TARGET-DETERMINATE when every branch
-   * of every {@code or} diagnoses the same invariants, where "diagnoses" means naming one in an
-   * atom that is not a plain U-aware {@code true}: a defined-false, an undefined, or a nominal
+   * of every DISJUNCTION diagnoses the same invariants, where "diagnoses" means constraining one to
+   * anything other than plain U-aware {@code true}: a defined-false, an undefined, or a nominal
    * atom. {@code satisfy}, {@code counterexample(j)} and {@code fragile(j)} are all determinate by
    * construction; {@code false(m,i) or false(m,k)} is exactly the shape the rule excludes.
+   *
+   * <p>Both halves of that sentence are read on the SEMANTIC CONTENT of the core, not on its
+   * literal node shape, and POLARITY is what makes the two readings differ. §5.3's
+   * non-distributivity ({@code not false(m,i)} is {@code undef(m,i) or true(m,i)}) is exactly why:
+   * negation does not merely relabel an atom, it changes which classifications the branch admits.
+   * So the walk below carries a {@code negated} flag instead of ignoring {@code not}, and two
+   * things follow that a shape-only walk gets backwards.
+   *
+   * <ul>
+   *   <li>{@code not true(uncertain,i)} DIAGNOSES {@code i}. It asserts precisely "{@code i} is
+   *       F_U or X_U", which is a diagnosis of {@code i} in every sense the rule cares about --
+   *       only the UNNEGATED {@code true(uncertain,i)} is the benign "this invariant simply holds"
+   *       reading that {@code satisfy} and the {@code others} aggregate are built from. Treating
+   *       the negated atom as benign let {@code cover (not true(u,A) or not true(u,B))} through as
+   *       a respelling of the refused {@code cover (false(u,A) or false(u,B))}, and made the mixed
+   *       {@code not true(u,A) or false(u,B)} report the nonsense "branches diagnose [] and [B]".
+   *   <li>An {@code or} under an ODD number of negations is a CONJUNCTION, and a conjunction pins
+   *       every invariant it names in every scenario -- there is nothing for two scenarios to
+   *       disagree about, so no branch-agreement obligation applies. {@code cover (not (false(u,A)
+   *       or false(u,B)))} is therefore genuinely target-determinate and is accepted. Its De Morgan
+   *       dual is the mirror image and is refused for the same reason it would be were it spelled
+   *       out: {@code not (false(u,A) and false(u,B))} IS a disjunction.
+   * </ul>
    */
   public static void requireTargetDeterminate(QueryExpr core, ScenarioProfile profile) {
     if (profile == ScenarioProfile.EXISTS) {
       return;
     }
-    checkDeterminate(core, profile);
+    checkDeterminate(core, false, profile);
   }
 
-  private static void checkDeterminate(QueryExpr node, ScenarioProfile profile) {
+  /**
+   * @param negated whether this node sits under an ODD number of {@code not}s, i.e. whether it is
+   *     read through De Morgan. An {@code and} under a negation is a disjunction and an {@code or}
+   *     under a negation is a conjunction, so it is the flag -- not the node's class -- that
+   *     decides which node owes the branch-agreement obligation.
+   */
+  private static void checkDeterminate(QueryExpr node, boolean negated, ScenarioProfile profile) {
     switch (node) {
       case QueryExpr.Or or -> {
-        Set<String> left = new LinkedHashSet<>();
-        Set<String> right = new LinkedHashSet<>();
-        collectDiagnosed(or.left(), left);
-        collectDiagnosed(or.right(), right);
-        if (!left.equals(right)) {
-          throw new IllegalArgumentException(
-              "scenario profile "
-                  + profile
-                  + " refuses an untargeted disjunction: its branches diagnose "
-                  + left
-                  + " and "
-                  + right
-                  + ", so different scenarios could silently diagnose different target invariants"
-                  + " under one aggregate result. Version 1 permits an untargeted disjunction only"
-                  + " with EXISTS; name the target explicitly instead");
+        if (!negated) {
+          requireBranchesAgree(or.left(), or.right(), false, profile);
         }
-        checkDeterminate(or.left(), profile);
-        checkDeterminate(or.right(), profile);
+        checkDeterminate(or.left(), negated, profile);
+        checkDeterminate(or.right(), negated, profile);
       }
       case QueryExpr.And and -> {
-        checkDeterminate(and.left(), profile);
-        checkDeterminate(and.right(), profile);
+        if (negated) {
+          requireBranchesAgree(and.left(), and.right(), true, profile);
+        }
+        checkDeterminate(and.left(), negated, profile);
+        checkDeterminate(and.right(), negated, profile);
       }
-      case QueryExpr.Not not -> checkDeterminate(not.operand(), profile);
+      case QueryExpr.Not not -> checkDeterminate(not.operand(), !negated, profile);
       default -> {
         // Atoms and constants diagnose at most one invariant and cannot vary per scenario.
       }
@@ -154,24 +173,58 @@ public final class QueryCompiler {
   }
 
   /**
-   * The invariants a core singles out, i.e. names any atom other than {@code true(uncertain,i)}.
+   * @param negated the polarity the two branches are read at, which is also exactly when this
+   *     obligation came from a NEGATED CONJUNCTION rather than a written-out {@code or} -- the two
+   *     coincide because De Morgan is the only thing that turns one into the other.
    */
-  private static void collectDiagnosed(QueryExpr node, Set<String> into) {
+  private static void requireBranchesAgree(
+      QueryExpr left, QueryExpr right, boolean negated, ScenarioProfile profile) {
+    Set<String> leftDiagnosed = new LinkedHashSet<>();
+    Set<String> rightDiagnosed = new LinkedHashSet<>();
+    collectDiagnosed(left, negated, leftDiagnosed);
+    collectDiagnosed(right, negated, rightDiagnosed);
+    if (leftDiagnosed.equals(rightDiagnosed)) {
+      return;
+    }
+    throw new IllegalArgumentException(
+        "scenario profile "
+            + profile
+            + " refuses an untargeted disjunction"
+            + (negated ? " (this negated conjunction is a disjunction by De Morgan)" : "")
+            + ": its branches diagnose "
+            + leftDiagnosed
+            + " and "
+            + rightDiagnosed
+            + ", so different scenarios could silently diagnose different target invariants"
+            + " under one aggregate result. Version 1 permits an untargeted disjunction only"
+            + " with EXISTS; name the target explicitly instead");
+  }
+
+  /**
+   * The invariants a core singles out AT THE POLARITY IT OCCURS: every atom diagnoses the invariant
+   * it names except an UNNEGATED {@code true(uncertain,i)}, the one reading that says "this
+   * invariant simply holds" and so targets nothing. A negated {@code true(uncertain,i)} is a
+   * diagnosis -- it asserts F_U or X_U -- which is why the flag is threaded through rather than
+   * dropped at the {@code not}.
+   */
+  private static void collectDiagnosed(QueryExpr node, boolean negated, Set<String> into) {
     switch (node) {
       case QueryExpr.Classification atom -> {
-        if (atom.mode() != TranslationMode.UNCERTAIN || atom.outcome() != InvariantOutcome.TRUE) {
+        boolean plainUncertainTrue =
+            atom.mode() == TranslationMode.UNCERTAIN && atom.outcome() == InvariantOutcome.TRUE;
+        if (negated || !plainUncertainTrue) {
           into.add(atom.invariantName());
         }
       }
       case QueryExpr.And and -> {
-        collectDiagnosed(and.left(), into);
-        collectDiagnosed(and.right(), into);
+        collectDiagnosed(and.left(), negated, into);
+        collectDiagnosed(and.right(), negated, into);
       }
       case QueryExpr.Or or -> {
-        collectDiagnosed(or.left(), into);
-        collectDiagnosed(or.right(), into);
+        collectDiagnosed(or.left(), negated, into);
+        collectDiagnosed(or.right(), negated, into);
       }
-      case QueryExpr.Not not -> collectDiagnosed(not.operand(), into);
+      case QueryExpr.Not not -> collectDiagnosed(not.operand(), !negated, into);
       default -> {
         // Constants name nothing; no other node survives desugaring.
       }

@@ -200,6 +200,83 @@ public class QueryCompilerAlgebraTest {
     assertTrue(compiled("exists (" + untargeted + ")").startsWith("(or "));
   }
 
+  /**
+   * The target-determinacy rule is about the SEMANTIC CONTENT of a branch, not the literal atom
+   * shape, so respelling a refused disjunction through {@code not} must not smuggle it past.
+   *
+   * <p>{@code not (uncertain i is true)} asserts exactly "i is F_U or X_U" -- a diagnosis of {@code
+   * i}, since {@code true(uncertain,i)} is the ONLY reading the rule treats as benign. A branch
+   * carrying it therefore diagnoses {@code i} just as {@code false(uncertain,i)} does, and two
+   * branches carrying it for DIFFERENT invariants are exactly the untargeted disjunction the
+   * proposal excludes from COVER/UNIFORM. Both profiles are checked, because the rule is stated for
+   * both and the polarity is tracked in one shared walk.
+   *
+   * <p>The mixed spelling is the third case, and it is the one that used to produce a NONSENSE
+   * message: the left branch was reported as diagnosing nothing at all ({@code []}) while the right
+   * diagnosed {@code QIsOne}, so the refusal was right by accident and its explanation was wrong.
+   */
+  @Test
+  public void aNegatedTrueAtomDiagnosesItsInvariantAndCannotSmugglePastCoverOrUniform()
+      throws Exception {
+    String negated =
+        "not uncertain Sample::PIsOne is true or not uncertain Sample::QIsOne is true";
+    for (String profile : List.of("cover", "uniform")) {
+      IllegalArgumentException refused =
+          assertThrows(
+              IllegalArgumentException.class, () -> compiled(profile + " (" + negated + ")"));
+      assertTrue(refused.getMessage(), refused.getMessage().contains("untargeted disjunction"));
+      assertTrue(
+          "the branches must be reported by the invariants they really diagnose: "
+              + refused.getMessage(),
+          refused.getMessage().contains("[Sample::PIsOne] and [Sample::QIsOne]"));
+    }
+    assertTrue(
+        "the same disjunction still compiles under EXISTS",
+        compiled("exists (" + negated + ")").startsWith("(or "));
+
+    IllegalArgumentException mixed =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                compiled(
+                    "cover (not uncertain Sample::PIsOne is true or uncertain Sample::QIsOne is"
+                        + " false)"));
+    assertTrue(
+        "a negated true atom diagnoses its own invariant, not nothing: " + mixed.getMessage(),
+        mixed.getMessage().contains("[Sample::PIsOne] and [Sample::QIsOne]"));
+  }
+
+  /**
+   * The flip side of the same rule, and the reason polarity has to be tracked rather than merely
+   * counted at the atoms: {@code not (false(u,A) or false(u,B))} is by De Morgan the CONJUNCTION
+   * {@code not false(u,A) and not false(u,B)}, which pins both invariants in every scenario and is
+   * therefore genuinely target-determinate. It used to be refused, because the walk saw a bare
+   * {@code or} node and never asked which side of a negation it sat on.
+   *
+   * <p>The dual is refused for the same reason: {@code not (false(u,A) and false(u,B))} IS a
+   * disjunction under De Morgan, so its two branches must agree -- and they do not.
+   */
+  @Test
+  public void aNegatedDisjunctionIsAConjunctionAndIsAccepted() throws Exception {
+    String determinate =
+        "cover (not (uncertain Sample::PIsOne is false or uncertain Sample::QIsOne is false))";
+    assertTrue(
+        "a negated disjunction is a conjunction, which pins both invariants in every scenario",
+        compiled(determinate).startsWith("(not (or "));
+
+    IllegalArgumentException refused =
+        assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                compiled(
+                    "cover (not (uncertain Sample::PIsOne is false and uncertain Sample::QIsOne is"
+                        + " false))"));
+    assertTrue(refused.getMessage(), refused.getMessage().contains("untargeted disjunction"));
+    assertTrue(
+        refused.getMessage(),
+        refused.getMessage().contains("[Sample::PIsOne] and [Sample::QIsOne]"));
+  }
+
   /** An atom naming an invariant outside the active set A_K has no witness predicate to state. */
   @Test
   public void anAtomAboutAnInactiveInvariantFailsClosed() throws Exception {

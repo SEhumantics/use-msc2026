@@ -240,6 +240,55 @@ public class ScenarioProfileTest {
         SmtModelFinder.find(model, configuration(model, "untargetedDisjunctionExists")).outcome());
   }
 
+  /**
+   * The same guard, end-to-end, against the two spellings that used to slip past it or trip it
+   * wrongly -- polarity is now read on the semantic content of the core rather than on the literal
+   * atom shape.
+   *
+   * <p>{@code not (uncertain i is true)} asserts precisely "{@code i} is F_U or X_U", so it
+   * diagnoses {@code i} exactly as {@code false(uncertain,i)} does; a disjunction of two such
+   * branches over DIFFERENT invariants is the very shape the rule excludes, and used to compile and
+   * solve happily under both stronger profiles.
+   *
+   * <p>Its converse, {@code not (false(u,A) or false(u,B))}, is a CONJUNCTION by De Morgan and
+   * pins both invariants in every scenario, so it is genuinely target-determinate -- it used to be
+   * refused because the walk saw a bare {@code or} node without asking which side of a negation it
+   * sat on. It is checked here all the way through a real solve, and the delivered witness is held
+   * to the query it claims: neither invariant may be defined-FALSE in either scenario.
+   */
+  @Test
+  public void negationIsReadSemanticallyByTheTargetDeterminacyGuard() throws Exception {
+    MModel model = compile("ScenarioProfiles.use");
+
+    for (String section :
+        List.of("negatedUntargetedDisjunctionCover", "negatedUntargetedDisjunctionUniform")) {
+      IllegalArgumentException rejected =
+          org.junit.Assert.assertThrows(
+              section,
+              IllegalArgumentException.class,
+              () -> SmtModelFinder.find(model, configuration(model, section)));
+      assertTrue(rejected.getMessage(), rejected.getMessage().contains("untargeted disjunction"));
+      assertTrue(
+          "a negated true atom diagnoses its own invariant: " + rejected.getMessage(),
+          rejected.getMessage().contains("[" + FAST + "] and [" + NOT_VERY_FAST + "]"));
+    }
+
+    ModelFinderResult conjunction =
+        SmtModelFinder.find(model, configuration(model, "negatedDisjunctionIsAConjunctionCover"));
+    assertEquals(ProfileOutcome.SATISFIED, conjunction.outcome());
+    assertEquals(2, conjunction.scenarios().size());
+    for (ScenarioReport report : conjunction.scenarios()) {
+      assertNotEquals(
+          "the conjunction forbids a defined-FALSE " + FAST + " in every scenario",
+          InvariantOutcome.FALSE,
+          outcomeOf(report.verdicts(), FAST));
+      assertNotEquals(
+          "and a defined-FALSE " + NOT_VERY_FAST + " in every scenario",
+          InvariantOutcome.FALSE,
+          outcomeOf(report.verdicts(), NOT_VERY_FAST));
+    }
+  }
+
   @Test
   public void coverIsRefusedWhenTheScenarioSpaceIsNotFinite() throws Exception {
     MModel model = compile("ScenarioProfiles.use");

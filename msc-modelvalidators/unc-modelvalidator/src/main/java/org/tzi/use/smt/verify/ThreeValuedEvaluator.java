@@ -349,7 +349,8 @@ final class ThreeValuedEvaluator {
     }
   }
 
-  private static Value valueOf(InvariantOutcome outcome) {
+  /** Shared with {@link NominalErasureEvaluator#erasedLet}: one outcome-to-Value mapping. */
+  static Value valueOf(InvariantOutcome outcome) {
     return switch (outcome) {
       case TRUE -> BooleanValue.TRUE;
       case FALSE -> BooleanValue.FALSE;
