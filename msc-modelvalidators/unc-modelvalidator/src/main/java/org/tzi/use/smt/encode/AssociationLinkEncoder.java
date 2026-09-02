@@ -33,9 +33,9 @@ public final class AssociationLinkEncoder {
   }
 
   /**
-   * @param rangesPerB the bEnd's OWN declared multiplicity, as one {@link Multiplicity} per
+   * @param rangesPerB the aEnd's OWN declared multiplicity, as one {@link Multiplicity} per
    *     declared range ({@code 1,3..5} = two entries); bounds each bEnd slot's COLUMN sum.
-   * @param rangesPerA the aEnd's own declared multiplicity; bounds each aEnd slot's ROW sum.
+   * @param rangesPerA the bEnd's own declared multiplicity; bounds each aEnd slot's ROW sum.
    */
   public static AssociationLinks encode(
       SmtScript script,

@@ -252,6 +252,133 @@ public class NaryAssociationTest {
     assertFalse("both parts must carry sku 'p1': not unique", miss.satisfiable());
   }
 
+  /**
+   * THE FIBER-DEGREE SOUNDNESS DISCRIMINATOR (2026-09-02 adversarial audit). A ternary
+   * association where two tuples share the SAME (A,B) pair but land in two DIFFERENT C slots:
+   * {@code Tern_0=(a0,b0,c0)}, {@code Tern_1=(a0,b0,c1)}. C's declared multiplicity is
+   * {@code 0..1}, and UML/OCL n-ary semantics bind that per FIXED (A,B) combination -- here there
+   * is only ONE such combination, {@code (a0,b0)}, and it has TWO C's linked to it, so this MUST
+   * be UNSAT. The bug this pins: summing each C slot's tuple-booleans across every (A,B)
+   * combination instead of per-combination made both {@code c0} and {@code c1} individually look
+   * like "1 out of an unconstrained aggregate", so the old encoder wrongly reported SAT -- A and B
+   * are both {@code 0..*} (unbounded) specifically so neither end's degree constraint can produce
+   * an UNSAT unrelated to the discriminator; only C's {@code 0..1} can.
+   */
+  private static final String TERNARY_MODEL =
+      """
+      model Tern
+      class A
+      attributes
+        name : String
+      end
+      class B
+      attributes
+        name : String
+      end
+      class C
+      attributes
+        name : String
+      end
+      association Tern between
+        A[0..*] role a
+        B[0..*] role b
+        C[0..1] role c
+      end
+      constraints
+      """;
+
+  @Test
+  public void twoTuplesSharingTheSameOtherEndsPairViolateTheThirdEndsFiberDegree()
+      throws Exception {
+    MModel model = compile(TERNARY_MODEL);
+    AnalysisConfiguration config =
+        new AnalysisConfiguration(
+            List.of(
+                new ClassScope("A", 2, 2, List.of("a0", "a1")),
+                new ClassScope("B", 1, 1, List.of("b0")),
+                new ClassScope("C", 2, 2, List.of("c0", "c1"))),
+            List.of(
+                new AssociationScope(
+                    "Tern",
+                    2,
+                    2,
+                    List.of(List.of("a0", "b0", "c0"), List.of("a0", "b0", "c1")))),
+            List.of(
+                new AttributeDomain("A", "name", null, List.of("'a'"), null, null),
+                new AttributeDomain("B", "name", null, List.of("'b'"), null, null),
+                new AttributeDomain("C", "name", null, List.of("'c'"), null, null)),
+            Set.of(),
+            QueryParser.parse("satisfy", ConfigurationVocabulary.fromModel(model)),
+            Duration.ofSeconds(30),
+            1);
+    ModelFinderResult miss = SmtModelFinder.find(model, config);
+    assertFalse(
+        "(a0,b0) has two C's linked to it, violating C's declared 0..1 -- must be UNSAT",
+        miss.satisfiable());
+  }
+
+  /**
+   * THE MIRROR REGRESSION: this project's own history (the seventy-seventh turn) hit exactly this
+   * bug from the OTHER side while first authoring {@code NaryAssociationTest} -- pinning Supplier
+   * to {@code [1]} with two links through distinct (Part,Project) combinations wrongly came back
+   * UNSAT (the old aggregate summed both links into one Supplier-slot total of 2, over the
+   * declared max of 1), so the fixture was loosened to {@code [0..2]} to route around it rather
+   * than fix the encoder. With the fiber-degree fix this is genuinely SAT: each combination --
+   * {@code (Part=p1,Project=j1)} and {@code (Part=p1,Project=j2)} -- individually sees exactly
+   * ONE Supplier, which is exactly what {@code Supplier[1]} requires.
+   */
+  private static final String SUPPLIER_MULTIPLICITY_ONE_MODEL =
+      """
+      model Nary
+      class Supplier
+      attributes
+        name : String
+      end
+      class Part
+      attributes
+        sku : String
+      end
+      class Project
+      attributes
+        title : String
+      end
+      association Supplies between
+        Supplier[1] role supplier
+        Part[0..2] role part
+        Project[0..2] role project
+      end
+      constraints
+      context s : Supplier inv navigatedPartPresent:
+        s.part->notEmpty()
+      context j : Project inv navigatedPartPresentFromProject:
+        j.part->notEmpty()
+      """;
+
+  @Test
+  public void pinnedSupplierMultiplicityStillAllowsTwoLinksThroughDistinctOtherEndsCombinations()
+      throws Exception {
+    MModel model = compile(SUPPLIER_MULTIPLICITY_ONE_MODEL);
+    AnalysisConfiguration config =
+        new AnalysisConfiguration(
+            List.of(
+                new ClassScope("Supplier", 1, 1, List.of("sup")),
+                new ClassScope("Part", 1, 1, List.of("p1")),
+                new ClassScope("Project", 2, 2)),
+            List.of(new AssociationScope("Supplies", 2, 2)),
+            DOMAINS,
+            BOTH_INVARIANTS,
+            QueryParser.parse("satisfy", ConfigurationVocabulary.fromModel(model)),
+            Duration.ofSeconds(30),
+            1);
+    ModelFinderResult match = SmtModelFinder.find(model, config);
+    assertTrue(
+        "Supplier pinned to exactly 1 must still allow two links, one per distinct"
+            + " (Part,Project) combination -- the false-UNSAT this project hit once before the"
+            + " fiber-degree fix",
+        match.satisfiable());
+    assertTrue(verdictFor(match, "Project::navigatedPartPresentFromProject").holds());
+  }
+
   private static final Set<String> BOTH_INVARIANTS =
       Set.of("Supplier::navigatedPartPresent", "Project::navigatedPartPresentFromProject");
 
