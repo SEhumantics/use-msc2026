@@ -99,17 +99,20 @@ public class CounterexampleQueryTest {
     AnalysisConfiguration config =
         withQuery(model, readConfig(model, null), "invariant-independence");
 
-    Map<String, ModelFinderResult> sweep = SmtModelFinder.independenceSweep(model, config);
+    IndependenceSweepResult sweep = SmtModelFinder.independenceSweep(model, config);
 
     assertEquals(
-        "one obligation per active invariant", config.activeInvariants().size(), sweep.size());
-    assertEquals(config.activeInvariants(), sweep.keySet());
+        "Library's own active set has a witness, so its entries mean what they say",
+        ActiveSetOutcome.SATISFIABLE,
+        sweep.activeSet());
+    assertTrue("the baseline is a real, independently re-checked witness",
+        sweep.baseline().allActiveInvariantsHold());
+    assertEquals(
+        "one obligation per active invariant",
+        config.activeInvariants().size(),
+        sweep.entries().size());
+    assertEquals(config.activeInvariants(), sweep.entries().keySet());
 
-    Set<String> independent =
-        sweep.entrySet().stream()
-            .filter(entry -> entry.getValue().satisfiable())
-            .map(Map.Entry::getKey)
-            .collect(java.util.stream.Collectors.toCollection(java.util.TreeSet::new));
     assertEquals(
         new java.util.TreeSet<>(
             java.util.List.of(
@@ -117,21 +120,25 @@ public class CounterexampleQueryTest {
                 "Copy::signatureIsKey",
                 "User::nameIsKey",
                 "User::noDoubleBorrowings")),
-        independent);
-
-    for (Map.Entry<String, ModelFinderResult> entry : sweep.entrySet()) {
-      if (!entry.getValue().satisfiable()) {
+        new java.util.TreeSet<>(sweep.independent()));
+    assertTrue("nothing in Library times out at this scope", sweep.unresolved().isEmpty());
+    for (IndependenceEntry entry : sweep.entries().values()) {
+      assertFalse(
+          entry.invariantName() + ": every Library context class has object slots, so no verdict"
+              + " here is a zero-capacity artefact",
+          entry.boundedScopeArtefact());
+      if (entry.verdict() != IndependenceVerdict.INDEPENDENT) {
         continue;
       }
-      Map<String, InvariantOutcome> outcomes = outcomes(entry.getValue());
+      Map<String, InvariantOutcome> outcomes = outcomes(entry.result());
       assertEquals(
-          entry.getKey() + " must be the only violated invariant in its own witness",
+          entry.invariantName() + " must be the only violated invariant in its own witness",
           InvariantOutcome.FALSE,
-          outcomes.get(entry.getKey()));
+          outcomes.get(entry.invariantName()));
       for (String other : config.activeInvariants()) {
-        if (!other.equals(entry.getKey())) {
+        if (!other.equals(entry.invariantName())) {
           assertEquals(
-              other + " must stay true in " + entry.getKey() + "'s witness",
+              other + " must stay true in " + entry.invariantName() + "'s witness",
               InvariantOutcome.TRUE,
               outcomes.get(other));
         }

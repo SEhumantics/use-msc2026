@@ -51,7 +51,21 @@ public final class ObjectSlotEncoder {
     return result;
   }
 
-  private static ObjectSlots encodeOne(SmtScript script, ClassScope scope) {
+  /**
+   * How many candidate object slots {@link #encode} declares for one class scope -- the single
+   * source of truth for that count, so a caller that needs to know a class's capacity WITHOUT
+   * emitting a script (see {@code SmtModelFinder.independenceSweep}, which reports a zero-capacity
+   * context class as the bound that decided an entry) cannot drift away from what is actually
+   * declared.
+   */
+  public static int candidateSlotCount(ClassScope scope) {
+    validate(scope);
+    return scope.max() == -1
+        ? Math.max(scope.min(), scope.objectNames().size()) + UNBOUNDED_CANDIDATE_HEADROOM
+        : scope.max();
+  }
+
+  private static void validate(ClassScope scope) {
     if (scope.min() < 0 || (scope.max() != -1 && scope.max() < scope.min())) {
       throw new IllegalArgumentException(
           "invalid class scope for '"
@@ -61,11 +75,11 @@ public final class ObjectSlotEncoder {
               + ", max="
               + scope.max());
     }
+  }
+
+  private static ObjectSlots encodeOne(SmtScript script, ClassScope scope) {
     boolean unbounded = scope.max() == -1;
-    int candidateCount =
-        unbounded
-            ? Math.max(scope.min(), scope.objectNames().size()) + UNBOUNDED_CANDIDATE_HEADROOM
-            : scope.max();
+    int candidateCount = candidateSlotCount(scope);
     List<String> slotNames = new ArrayList<>();
     List<String> existsNames = new ArrayList<>();
     List<String> objectNames = new ArrayList<>();

@@ -2,6 +2,7 @@ package org.tzi.msc.benchmark;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.FileReader;
@@ -37,6 +38,8 @@ import org.tzi.use.smt.config.ConfigurationReader;
 import org.tzi.use.smt.config.ConfigurationVocabulary;
 import org.tzi.use.smt.config.QueryParser;
 import org.tzi.use.smt.config.RawConfiguration;
+import org.tzi.use.smt.finder.ActiveSetOutcome;
+import org.tzi.use.smt.finder.IndependenceSweepResult;
 import org.tzi.use.smt.finder.ModelFinderResult;
 import org.tzi.use.smt.finder.SmtModelFinder;
 import org.tzi.use.uml.mm.MModel;
@@ -87,6 +90,31 @@ public class QueryMacroParityTest {
           "MultipleInheritance.properties", null),
       new Row("MultipleInheritance-UNSAT", "MultipleInheritance", "MultipleInheritance.use",
           "MultipleInheritance.properties", "collision"));
+
+  /**
+   * The 3 intersection rows whose ACTIVE INVARIANT SET has a model -- the only rows on which a
+   * per-invariant independence verdict is a meaningful thing to compare at all.
+   */
+  private static final List<Row> JOINTLY_SATISFIABLE = INTERSECTION.stream()
+      .filter(row -> !row.id().endsWith("-UNSAT")).toList();
+
+  /**
+   * The 3 intersection rows whose active set is JOINTLY UNSATISFIABLE, each by construction: the
+   * section narrows exactly one bound until exactly one named invariant has no model (Library's
+   * {@code titleCollision} breaks {@code Book::titleIsKey} by pigeonhole, Vehicle's
+   * {@code nonpositivewheels} breaks {@code Vehicle::PositiveWheels} by domain,
+   * MultipleInheritance's {@code collision} breaks {@code D::LevelsDiffer} by singleton pools --
+   * all three documented in
+   * the .properties files themselves). Mapped to that invariant, because it is the one the
+   * incumbent's sweep inverts.
+   */
+  private static final Map<String, String> UNSATISFIABLE_BY = Map.of(
+      "Library-UNSAT", "Book::titleIsKey",
+      "Inheritance-UNSAT", "Vehicle::PositiveWheels",
+      "MultipleInheritance-UNSAT", "D::LevelsDiffer");
+
+  private static final List<Row> JOINTLY_UNSATISFIABLE = INTERSECTION.stream()
+      .filter(row -> row.id().endsWith("-UNSAT")).toList();
 
   /** The six {@code ScenarioProfiles} rows, whose {@code query} key Kodkod has no concept of. */
   private static final List<Row> SCENARIO_PROFILE_ROWS = List.of(
@@ -143,12 +171,22 @@ public class QueryMacroParityTest {
    * {@code Not independent for given properties} (UNSATISFIABLE). The last two are the same verdict
    * split by how Kodkod's own translator happened to discharge it, so both map to "not
    * independent"; only the independent/not-independent distinction is compared.
+   *
+   * <p><b>The denominator dropped from 30 to 15, and that is the point.</b> This test used to sweep
+   * all 6 intersection rows and report 30/30 agreement. 15 of those 30 obligations were over the
+   * three {@code -UNSAT} rows, whose active invariant set has NO model -- and over such a set every
+   * {@code counterexample(j)} answer is inverted (see {@link
+   * #theSweepRefusesTheVerdictsTheIncumbentInvertsOnAJointlyUnsatisfiableActiveSet()}). Both
+   * engines agreed there because both engines had the SAME defect, which is agreement about
+   * nothing. This
+   * project now refuses those 15, so parity is claimed on the 15 obligations that were ever
+   * meaningful and nowhere else.
    */
   @Test
   public void derivedCounterexampleSweepAgreesWithIncumbentInvIndepObligationForObligation()
       throws Exception {
     int obligations = 0;
-    for (Row row : INTERSECTION) {
+    for (Row row : JOINTLY_SATISFIABLE) {
       MModel model = compile(row);
       Map<String, Boolean> kodkod = kodkodIndependence(model, row);
       Map<String, Boolean> smt = smtIndependence(model, row);
@@ -159,9 +197,48 @@ public class QueryMacroParityTest {
           kodkod, smt);
       obligations += kodkod.size();
     }
-    assertEquals(
-        "9 (Library) + 9 (Library-UNSAT) + 3 + 3 (Inheritance) + 3 + 3 (MultipleInheritance)", 30,
-        obligations);
+    assertEquals("9 (Library) + 3 (Inheritance) + 3 (MultipleInheritance)", 15, obligations);
+  }
+
+  /**
+   * The other 15 obligations, and why they are not parity evidence. On each {@code -UNSAT} row the
+   * section deliberately makes exactly ONE active invariant unsatisfiable, so the active set has no
+   * model and {@code COUNTEREXAMPLE(j) = F_U(j) AND (AND over i != j of T_U(i))} inverts: the
+   * pathological invariant's own obligation is satisfiable (its conjunct only has to be FALSE) and
+   * every sound invariant's is refuted (the pathological one sits in its "all others are true"
+   * conjunct).
+   *
+   * <p>Measured here, not assumed: on all three rows the incumbent publishes a full verdict set in
+   * which the ONE unsatisfiable invariant -- and only it -- is reported {@code Independent}, which
+   * is the exact inverse of the truth. This project reports {@link
+   * ActiveSetOutcome#JOINTLY_UNSATISFIABLE} and no per-invariant verdict at all.
+   */
+  @Test
+  public void theSweepRefusesTheVerdictsTheIncumbentInvertsOnAJointlyUnsatisfiableActiveSet()
+      throws Exception {
+    int refused = 0;
+    for (Row row : JOINTLY_UNSATISFIABLE) {
+      MModel model = compile(row);
+      AnalysisConfiguration config = readConfig(model, row, "invariant-independence");
+      IndependenceSweepResult sweep = SmtModelFinder.independenceSweep(model, config);
+
+      assertEquals(row.id() + ": this section has no model for its own active set",
+          ActiveSetOutcome.JOINTLY_UNSATISFIABLE, sweep.activeSet());
+      assertTrue(row.id() + ": no verdict may be published over an unusable premise",
+          sweep.entries().isEmpty());
+      assertThrows(IllegalStateException.class, sweep::independent);
+
+      Map<String, Boolean> kodkod = kodkodIndependence(compile(row), row);
+      assertEquals(row.id() + ": the incumbent publishes a verdict for every active invariant"
+          + " regardless", config.activeInvariants().size(), kodkod.size());
+      assertEquals(row.id() + ": and exactly the UNSATISFIABLE invariant is the one it calls"
+          + " Independent -- the inversion, measured",
+          List.of(UNSATISFIABLE_BY.get(row.id())),
+          kodkod.entrySet().stream().filter(Map.Entry::getValue).map(Map.Entry::getKey).toList());
+      refused += config.activeInvariants().size();
+    }
+    assertEquals("9 (Library-UNSAT) + 3 (Inheritance-UNSAT) + 3 (MultipleInheritance-UNSAT)", 15,
+        refused);
   }
 
   /**
@@ -314,11 +391,20 @@ public class QueryMacroParityTest {
     return result.satisfiable() ? Bucket.SAT : Bucket.UNSAT;
   }
 
+  /**
+   * This project's per-invariant independence verdicts for one row. {@link
+   * IndependenceSweepResult#independent()} throws unless the sweep's baseline established that the
+   * active set has a model, so a row whose set is jointly unsatisfiable cannot silently produce a
+   * comparable-looking map here.
+   */
   private static Map<String, Boolean> smtIndependence(MModel model, Row row) throws Exception {
     AnalysisConfiguration config = readConfig(model, row, "invariant-independence");
+    IndependenceSweepResult sweep = SmtModelFinder.independenceSweep(model, config);
     Map<String, Boolean> verdicts = new TreeMap<>();
-    SmtModelFinder.independenceSweep(model, config)
-        .forEach((target, result) -> verdicts.put(target, result.satisfiable()));
+    sweep.independent().forEach(target -> verdicts.put(target, Boolean.TRUE));
+    sweep.notIndependent().forEach(target -> verdicts.put(target, Boolean.FALSE));
+    assertTrue(row.id() + ": an unresolved obligation is not a verdict and must not be compared"
+        + " as one", sweep.unresolved().isEmpty());
     return verdicts;
   }
 

@@ -14,6 +14,7 @@ import org.tzi.use.main.Session;
 import org.tzi.use.smt.config.AnalysisConfiguration;
 import org.tzi.use.smt.config.AssociationScope;
 import org.tzi.use.smt.config.AttributeDomain;
+import org.tzi.use.smt.config.ClassScope;
 import org.tzi.use.smt.config.QueryExpr;
 import org.tzi.use.smt.config.QueryRequirements;
 import org.tzi.use.smt.config.Scenario;
@@ -122,12 +123,38 @@ public final class SmtModelFinder {
    * The incumbent invariant-independence check, reproduced over the query algebra: activate the
    * configured invariant set, then solve one targeted {@code counterexample(j)} obligation per
    * active invariant {@code j} -- exactly what {@code kk-modelvalidator}'s {@code
-   * InvariantIndepChecker} does by negating one invariant at a time. An entry is satisfiable
-   * precisely when {@code j} is independent of the others, and its witness is already attributed to
-   * {@code j} alone by the same oracle every other query result goes through. All solves share one
-   * persistent solver process, since the sweep is by construction many solves of one model.
+   * InvariantIndepChecker} does by negating one invariant at a time. Each obligation's witness is
+   * attributed to {@code j} alone by the same oracle every other query result goes through. All
+   * solves share one persistent solver process, since the sweep is by construction many solves of
+   * one model.
+   *
+   * <p><b>The BASELINE solve comes first, and the sweep is meaningless without it.</b> {@code
+   * COUNTEREXAMPLE(j)} desugars to {@code F_U(j) AND (AND over i != j of T_U(i))}, so it presumes
+   * the active set has a model at all. If ONE active invariant is unsatisfiable within the
+   * configured bounds, that invariant sits inside every OTHER entry's "all others are true"
+   * conjunct and refutes it, while its OWN entry only ever needed it to be FALSE and is satisfied:
+   * the sweep then reports the pathological invariant INDEPENDENT and every sound one NOT
+   * INDEPENDENT, the exact inverse of the truth, with nothing in any entry to show for it. So one
+   * extra {@code satisfy} solve over the same active set runs FIRST, and unless it delivers an
+   * independently re-checked witness NO per-invariant verdict is emitted at all -- see {@link
+   * IndependenceSweepResult}, whose {@code entries()} is empty and whose {@code independent()}
+   * throws in that case, rather than a {@code Map} of verdicts a caller could read straight past.
+   *
+   * <p>Each entry's verdict is read from {@link ModelFinderResult#outcome()}, NOT from {@code
+   * satisfiable()}: {@link ProfileOutcome#PARTIAL} (a timeout or an {@code unknown}) becomes {@link
+   * IndependenceVerdict#UNRESOLVED} and never masquerades as the substantive claim "the other
+   * invariants already force this one". Entries also carry their context class's configured
+   * capacity, because a context class with ZERO object slots makes its invariant vacuously true and
+   * so NOT INDEPENDENT for a reason that is purely a bound -- see {@link
+   * IndependenceEntry#boundedScopeArtefact()}.
+   *
+   * <p>A TAUTOLOGY ({@code inv AlwaysTrue: true}) is reported NOT INDEPENDENT, and that is the
+   * intended answer rather than a further artefact: nothing can violate it, so it constrains
+   * nothing the rest of the set does not already allow, which is precisely what the verdict claims.
+   * The incumbent agrees -- Kodkod's negated-invariant solve for a tautology is
+   * TRIVIALLY_UNSATISFIABLE, which it prints as {@code Dependent}.
    */
-  public static Map<String, ModelFinderResult> independenceSweep(
+  public static IndependenceSweepResult independenceSweep(
       MModel model, AnalysisConfiguration config) throws UseApiException {
     QueryExpr requested = config.query();
     if (requested instanceof QueryExpr.Profiled profiled) {
@@ -146,27 +173,70 @@ public final class SmtModelFinder {
       throw new IllegalArgumentException(
           "independenceSweep requires the invariant-independence query, got: " + config.query());
     }
-    Map<String, ModelFinderResult> sweep = new LinkedHashMap<>();
     try (SolverProcess shared =
         SolverProcess.persistent(SolverBinary.resolve(), config.timeout())) {
+      ModelFinderResult baseline = find(model, sweepStep(config, QueryExpr.SATISFY), shared);
+      if (baseline.outcome() != ProfileOutcome.SATISFIED) {
+        return IndependenceSweepResult.withoutEntries(baseline);
+      }
+      Map<String, IndependenceEntry> entries = new LinkedHashMap<>();
       for (MClassInvariant invariant : model.classInvariants(true)) {
         String name = invariant.qualifiedName();
         if (!config.activeInvariants().contains(name)) {
           continue;
         }
-        AnalysisConfiguration targeted =
-            new AnalysisConfiguration(
-                config.classScopes(),
-                config.associationScopes(),
-                config.attributeDomains(),
-                config.activeInvariants(),
-                new QueryExpr.Profiled(ScenarioProfile.EXISTS, new QueryExpr.Counterexample(name)),
-                config.timeout(),
-                config.modelLimit());
-        sweep.put(name, find(model, targeted, shared));
+        QueryExpr obligation =
+            new QueryExpr.Profiled(ScenarioProfile.EXISTS, new QueryExpr.Counterexample(name));
+        ModelFinderResult result = find(model, sweepStep(config, obligation), shared);
+        entries.put(
+            name,
+            new IndependenceEntry(
+                name,
+                IndependenceVerdict.of(result.outcome()),
+                contextCapacity(invariant, config),
+                result));
+      }
+      return new IndependenceSweepResult(ActiveSetOutcome.SATISFIABLE, baseline, entries);
+    }
+  }
+
+  /**
+   * One step of the sweep: the caller's configuration with ONLY the query replaced, so every solve
+   * in the sweep -- baseline included -- is bounded by exactly the same scopes, domains, timeout,
+   * model limit and {@code aggregationcyclefreeness} toggle. The toggle in particular has to be
+   * carried explicitly: the 7-argument {@link AnalysisConfiguration} constructor defaults it to
+   * {@code false}, so building each step with that form would have silently dropped a configured
+   * {@code aggregationcyclefreeness = on} and swept a DIFFERENT model than the one configured.
+   */
+  private static AnalysisConfiguration sweepStep(AnalysisConfiguration config, QueryExpr query) {
+    return new AnalysisConfiguration(
+        config.classScopes(),
+        config.associationScopes(),
+        config.attributeDomains(),
+        config.activeInvariants(),
+        query,
+        config.timeout(),
+        config.modelLimit(),
+        config.requireAggregationCycleFreedom());
+  }
+
+  /**
+   * How many candidate object slots the configuration leaves the invariant's context range -- its
+   * context class plus every descendant, the same polymorphic range {@code InvariantAssembler}
+   * quantifies the context variables over, counted with {@code ObjectSlotEncoder}'s own rule. Zero
+   * means no snapshot in scope contains an instance the invariant could be violated by.
+   */
+  private static int contextCapacity(MClassInvariant invariant, AnalysisConfiguration config) {
+    Set<String> range = new HashSet<>();
+    range.add(invariant.cls().name());
+    invariant.cls().allChildren().forEach(child -> range.add(child.name()));
+    int capacity = 0;
+    for (ClassScope scope : config.classScopes()) {
+      if (range.contains(scope.className())) {
+        capacity += ObjectSlotEncoder.candidateSlotCount(scope);
       }
     }
-    return sweep;
+    return capacity;
   }
 
   /**
