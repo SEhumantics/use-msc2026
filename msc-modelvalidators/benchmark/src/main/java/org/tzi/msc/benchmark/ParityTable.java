@@ -57,6 +57,19 @@ public final class ParityTable {
 	/** Printed in the Kodkod column when the five SAT backends did not all reach the same outcome. */
 	static final String MIXED = "MIXED";
 
+	/**
+	 * Printed in the Kodkod column when FEWER than all five SAT backends in {@link
+	 * BenchmarkRunner#SOLVERS} have a result cell for this row at all -- a partial or truncated
+	 * {@code results.json} (a benchmark run killed mid-write; {@link ReportBuilder}'s own javadoc
+	 * documents exactly this failure mode), not a complete run. This is checked BEFORE the
+	 * single-outcome/{@link #MIXED} distinction in {@link #agreedKodkodOutcome}: a subset of cells
+	 * that happen to agree with each other (or with the SMT result) is a coincidence over partial
+	 * data, never the full 5-way corroboration that a bare outcome name in this column claims. Never
+	 * silently folded into a real verdict -- see the class javadoc's "silent drift in the flattering
+	 * direction" warning, which this constant exists to close off.
+	 */
+	static final String PARTIAL = "PARTIAL";
+
 	private ParityTable() {
 	}
 
@@ -352,22 +365,43 @@ public final class ParityTable {
 
 	/**
 	 * The incumbent's outcome for a row, which is only well defined when all five of its SAT backends
-	 * agree. They are five different SAT solvers behind one translation, so a split is a finding in
-	 * its own right, not something to average -- {@link #MIXED} is never a real verdict, so a split
-	 * row leaves the intersection instead of being resolved by majority.
+	 * are PRESENT and agree. They are five different SAT solvers behind one translation, so a split
+	 * is a finding in its own right, not something to average -- {@link #MIXED} is never a real
+	 * verdict, so a split row leaves the intersection instead of being resolved by majority.
+	 *
+	 * <p>Presence is checked FIRST, before agreement: a real, documented failure mode
+	 * ({@link ReportBuilder}'s javadoc names a benchmark run killed mid-write) can leave a row with
+	 * only some of the five cells written. If those happen to agree with each other -- the most
+	 * dangerous case, since a lone surviving cell trivially "agrees with itself" -- that is NOT the
+	 * 5-way corroboration a bare outcome name in this column claims, so it must never reach the
+	 * {@code outcomes.size() == 1} shortcut below. {@link #PARTIAL} is returned instead, which is
+	 * never in {@link #REAL_VERDICTS} and so can never be silently counted as agreement.
 	 */
 	private static String agreedKodkodOutcome(Map<String, SolverResult> cells) {
 		Set<String> outcomes = new LinkedHashSet<>();
+		List<String> missing = new ArrayList<>();
 		for (String solver : BenchmarkRunner.SOLVERS) {
 			SolverResult r = cells.get(solver);
 			if (r != null) {
 				outcomes.add(r.outcome);
+			} else {
+				missing.add(solver);
 			}
 		}
 		if (outcomes.isEmpty()) {
 			return "ABSENT";
 		}
+		if (!missing.isEmpty()) {
+			int present = BenchmarkRunner.SOLVERS.length - missing.size();
+			return PARTIAL + " (" + present + "/" + BenchmarkRunner.SOLVERS.length + " present, missing "
+					+ String.join(", ", missing) + ")";
+		}
 		return outcomes.size() == 1 ? outcomes.iterator().next() : MIXED + outcomes;
+	}
+
+	/** Whether an {@link #agreedKodkodOutcome} value is the {@link #PARTIAL} state, not a real verdict. */
+	private static boolean isPartialKodkodResult(String kodkodResult) {
+		return kodkodResult != null && kodkodResult.startsWith(PARTIAL);
 	}
 
 	private static String noteFor(ParityClass parityClass, Row row) {
@@ -385,9 +419,15 @@ public final class ParityTable {
 			case UNCLASSIFIED_DISAGREEMENT -> "undeclared disagreement with no ground truth to settle it";
 			case SMT_NO_VERDICT -> "SMT translation refused this model (fail-closed, outside the "
 					+ "supported OCL fragment); no verdict, so no parity claim";
-			case KODKOD_NO_REAL_VERDICT -> "Kodkod returned " + row.kodkodResult + ", a verdict reached "
-					+ "without search; not agreement";
-			case NEITHER_VERDICT -> "neither backend reached a real verdict";
+			case KODKOD_NO_REAL_VERDICT -> isPartialKodkodResult(row.kodkodResult)
+					? "Kodkod's results for this row are INCOMPLETE (" + row.kodkodResult + ") -- a "
+							+ "partial/truncated results.json, never full 5-way corroboration; not agreement"
+					: "Kodkod returned " + row.kodkodResult + ", a verdict reached "
+							+ "without search; not agreement";
+			case NEITHER_VERDICT -> isPartialKodkodResult(row.kodkodResult)
+					? "Kodkod's results for this row are INCOMPLETE (" + row.kodkodResult + ") and the SMT "
+							+ "backend reached no verdict either; nothing is claimable"
+					: "neither backend reached a real verdict";
 		};
 	}
 

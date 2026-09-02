@@ -127,6 +127,59 @@ public class ParityTableTest {
 				ParityTable.classify("TRIVIALLY_SATISFIABLE", "ERROR", false, "SATISFIABLE"));
 	}
 
+	/**
+	 * The robustness gap this test pins: a partial/truncated {@code results.json} (a run killed
+	 * mid-write; see {@code ReportBuilder}'s own javadoc) can leave a row with only SOME of the five
+	 * Kodkod SAT backends present. The old {@code agreedKodkodOutcome} unioned whichever cells
+	 * happened to exist and, whenever that subset agreed with itself, returned it as if it were the
+	 * full 5-way corroboration -- so a single surviving cell that happens to match the SMT outcome
+	 * (the most flattering, and most dangerous, case: an actual disagreement among the missing four
+	 * would never even surface) was silently counted as AGREE. Four of the five Kodkod cells are
+	 * missing here on purpose, and the one that remains matches the SMT outcome exactly, to pin that
+	 * this can no longer slip through as agreement -- the row must instead be visibly flagged
+	 * incomplete.
+	 */
+	@Test
+	public void aRowMissingFourOfFiveKodkodSolverCellsIsFlaggedIncompleteNotSilentlyAgreed() {
+		ExampleEntry ex = new ExampleEntry();
+		ex.id = "PartialRun";
+		ex.mode = "finding";
+
+		SolverResult onlyKodkodCell = new SolverResult();
+		onlyKodkodCell.exampleId = "PartialRun";
+		onlyKodkodCell.solver = "DefaultSAT4J"; // the only one of the five present -- LightSAT4J,
+													// MiniSat, MiniSatProver, Lingeling are all missing
+		onlyKodkodCell.outcome = "SATISFIABLE";
+
+		SolverResult smtCell = new SolverResult();
+		smtCell.exampleId = "PartialRun";
+		smtCell.solver = ParityTable.SMT_SOLVER;
+		smtCell.outcome = "SATISFIABLE"; // matches the lone surviving Kodkod cell exactly
+
+		ParityTable.Table t = ParityTable.compute(List.of(ex), List.of(onlyKodkodCell, smtCell));
+
+		assertEquals(1, t.rows.size());
+		ParityTable.Row row = t.rows.get(0);
+
+		assertTrue("a partial Kodkod result must be visibly flagged, not printed as a bare verdict name: "
+				+ row.kodkodResult, row.kodkodResult.startsWith("PARTIAL"));
+		assertNotEquals("must be its own state, not folded into MIXED", "MIXED", row.kodkodResult);
+		assertNotEquals("must be its own state, not folded into ABSENT", "ABSENT", row.kodkodResult);
+		assertFalse("an incomplete result must never be treated as a real, searched verdict",
+				row.kodkodRealVerdict);
+		assertFalse("must not enter the parity intersection with only 1/5 Kodkod solvers present",
+				row.inIntersection);
+		assertNull("agreement is undefined for a row that never entered the intersection", row.agree);
+		assertNotEquals("must never be silently folded into AGREE", ParityClass.AGREE,
+				ParityClass.valueOf(row.parityClass));
+		assertTrue("the note must say the data is incomplete, not claim a verdict was reached: " + row.note,
+				row.note.contains("INCOMPLETE"));
+
+		String md = ParityTable.toMarkdown(t);
+		assertFalse("the rendered report must never show this row as agreement",
+				md.contains("| PartialRun | 0 | " + row.kodkodResult + " | SATISFIABLE | yes |"));
+	}
+
 	// ------------------------------------------------------- over the real corpus run
 
 	/**
