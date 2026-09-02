@@ -128,10 +128,26 @@ import org.tzi.use.uml.sys.MInstance;
  *
  * <p>Boundary, stated rather than hidden: the collection-filtering constructs USE also collapses
  * undefined inside ({@code select}/{@code reject}, {@code any}, {@code uSelect}) are NOT walked
- * here. None of them is in the supported SMT translation fragment -- {@code ExpressionTranslator}
- * fails closed on every one of them -- so no witness this oracle checks can contain one in a
- * translated invariant. ({@code one} USED to belong on this list too; it does not any more --
- * {@code ExpressionTranslator.visitOne} genuinely translates it, so it is walked above instead.)
+ * here. ({@code one} USED to belong on this list too; it does not any more -- {@code
+ * ExpressionTranslator.visitOne} genuinely translates it, so it is walked above instead.)
+ *
+ * <p>CORRECTED 2026-09-02 -- the justification this paragraph used to carry ("None of them is in
+ * the supported SMT translation fragment -- {@code ExpressionTranslator} fails closed on every one
+ * of them -- so no witness this oracle checks can contain one in a translated invariant") is
+ * FALSE, and only the STANDALONE half of it was ever true. {@code ExpressionTranslator.visitSelect}
+ * / {@code visitReject} / {@code visitAny} do throw for a bare, standalone occurrence, but three
+ * consumer positions translate {@code select}/{@code reject} without ever reaching those visitors:
+ * {@code populationOf} (a {@code select}/{@code reject} over {@code allInstances()} as a
+ * quantifier/{@code isUnique} range), {@code collectionSize} (the {@code
+ * X.allInstances()->select(pred)->size()} shape), and {@code collectionEmptiness} ({@code isEmpty}
+ * / {@code notEmpty} over the same source) -- each routing through {@code
+ * selectedAllInstancesPopulation}. {@code any} likewise translates as a let initializer via {@code
+ * objectAnyLet}. So a translated invariant CAN contain one, and such an expression falls through
+ * {@link #eval}'s dispatch to the raw {@code expression.eval(ctx)} tail, i.e. to USE's own
+ * two-valued collapse -- exactly the collapse this class exists to avoid, just not yet fixed for
+ * these constructs. Stated as a real, currently-open boundary rather than argued away: it bounds
+ * what this oracle can detect on invariants using those shapes. No behaviour is changed by this
+ * comment correction.
  */
 final class ThreeValuedEvaluator {
   private ThreeValuedEvaluator() {}
