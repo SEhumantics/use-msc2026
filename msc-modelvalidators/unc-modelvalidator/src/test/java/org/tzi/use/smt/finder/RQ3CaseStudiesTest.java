@@ -71,7 +71,8 @@ public class RQ3CaseStudiesTest {
   }
 
   /** Drifted sensor (sigma=2.5): n=10 no longer clears the alarm -- the scenario changed
-   * the rounded bound. The notFrostAlarm invariant (n>=12 threshold) is also refuted. */
+   * the rounded bound. The notFrostAlarm invariant (n>=12 threshold) is also refuted at
+   * this same n, confirmed directly below by {@link #driftedSensorAtSameNAlsoRefutesNotFrostAlarm}. */
   @Test
   public void driftedSensorAtSameNRefutesTheAlarm() throws Exception {
     MModel model = compile(FROST_MODEL, "FrostAlarm");
@@ -88,6 +89,29 @@ public class RQ3CaseStudiesTest {
             1);
     ModelFinderResult miss = SmtModelFinder.find(model, config);
     assertFalse("drifted sigma=2.5: n=10 no longer clears 0.9-confidence",
+        miss.satisfiable());
+  }
+
+  /** Companion to {@link #driftedSensorAtSameNRefutesTheAlarm}, backing that test's own
+   * javadoc claim about notFrostAlarm with a real assertion: activating ONLY notFrostAlarm
+   * (n&gt;=12 threshold, confidence 0.9) against the SAME drifted n=10, sigma=2.5 singleton
+   * state confirms it is refuted too -- Phi((12-10)/2.5) is far short of 0.9. */
+  @Test
+  public void driftedSensorAtSameNAlsoRefutesNotFrostAlarm() throws Exception {
+    MModel model = compile(FROST_MODEL, "FrostAlarm");
+    AnalysisConfiguration config =
+        new AnalysisConfiguration(
+            List.of(new ClassScope("FrostSensor", 1, 1, List.of("f1"))),
+            List.of(),
+            List.of(
+                new AttributeDomain("FrostSensor", "crossings", "value", List.of("10"), null, null),
+                new AttributeDomain("FrostSensor", "crossings", "uncertainty", List.of("2.5"), null, null)),
+            Set.of("FrostSensor::notFrostAlarm"),
+            QueryParser.parse("satisfy", ConfigurationVocabulary.fromModel(model)),
+            Duration.ofSeconds(30),
+            1);
+    ModelFinderResult miss = SmtModelFinder.find(model, config);
+    assertFalse("drifted sigma=2.5 at n=10: notFrostAlarm's n>=12 threshold is not met either",
         miss.satisfiable());
   }
 
