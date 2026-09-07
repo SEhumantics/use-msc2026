@@ -31,6 +31,7 @@ import org.tzi.use.smt.encode.DerivedAssociationEncoder;
 import org.tzi.use.smt.encode.FragmentBoundary;
 import org.tzi.use.smt.encode.FragmentChecker;
 import org.tzi.use.smt.encode.FragmentCoverageLedger;
+import org.tzi.use.smt.encode.QuantileInstrumentation;
 import org.tzi.use.smt.encode.Multiplicity;
 import org.tzi.use.smt.encode.ObjectSlotEncoder;
 import org.tzi.use.smt.encode.ExpressionTranslator;
@@ -53,6 +54,7 @@ import org.tzi.use.smt.reconstruct.SmtValueDecoder;
 import org.tzi.use.smt.reconstruct.SystemStateReconstructor;
 import org.tzi.use.smt.solver.SmtModelParser;
 import org.tzi.use.smt.solver.SmtScript;
+import org.tzi.use.smt.solver.SolveInstrumentation;
 import org.tzi.use.smt.solver.SmtValue;
 import org.tzi.use.smt.solver.SolverBinary;
 import org.tzi.use.smt.solver.SolverOutcome;
@@ -298,6 +300,20 @@ public final class SmtModelFinder {
   private static ModelFinderResult run(
       Session session, MModel model, AnalysisConfiguration config, SolverProcess solverProcess)
       throws UseApiException {
+    // Bracket the encode/solve so the enclosure count belongs to THIS run and cannot inherit a
+    // stale value or leak into the caller's. See QuantileInstrumentation: instrumentation only.
+    int enclosingCount = QuantileInstrumentation.snapshotAndReset();
+    try {
+      return runProfile(session, model, config, solverProcess)
+          .withQuantileEnclosures(QuantileInstrumentation.count());
+    } finally {
+      QuantileInstrumentation.restore(enclosingCount);
+    }
+  }
+
+  private static ModelFinderResult runProfile(
+      Session session, MModel model, AnalysisConfiguration config, SolverProcess solverProcess)
+      throws UseApiException {
     ScenarioProfile profile = profileOf(config.query());
     if (profile == ScenarioProfile.EXISTS) {
       Solved solved = solve(model, config, solverProcess, null);
@@ -391,6 +407,24 @@ public final class SmtModelFinder {
       Scenario scenario,
       boolean intoSession)
       throws UseApiException {
+    // Instrumentation only -- see SolveInstrumentation. Reconstruction and the independent USE
+    // re-evaluation are the non-solver half of a run's cost, and COVER pays it once per scenario.
+    long witnessStarted = System.nanoTime();
+    try {
+      return witnessTimed(session, model, solved, copy, scenario, intoSession);
+    } finally {
+      SolveInstrumentation.recordWitnessTime(System.nanoTime() - witnessStarted);
+    }
+  }
+
+  private static ScenarioReport witnessTimed(
+      Session session,
+      MModel model,
+      Solved solved,
+      Copy copy,
+      Scenario scenario,
+      boolean intoSession)
+      throws UseApiException {
     MSystem system =
         session != null && intoSession
             ? SystemStateReconstructor.reconstruct(
@@ -476,6 +510,18 @@ public final class SmtModelFinder {
     return outcomes.contains(ScenarioOutcome.UNRESOLVED)
         ? ProfileOutcome.PARTIAL
         : ProfileOutcome.SATISFIED;
+  }
+
+  /**
+   * The complete configured scenario space {@link #find} would solve this configuration under,
+   * refused rather than sampled when it is not finite. Exposed so experiment harnesses can record
+   * the configured scenario count -- the number the query quantifies over -- without re-deriving
+   * which attribute slots own scenario coordinates, a rule that lives in {@link ScenarioSpace}
+   * and must not be duplicated by its consumers.
+   */
+  public static List<Scenario> configuredScenarioSpace(
+      MModel model, AnalysisConfiguration config, ScenarioProfile profile) {
+    return scenarioSpace(model, config, profile);
   }
 
   /** {@code Sigma_K} for the configuration, refused rather than sampled when it is not finite. */

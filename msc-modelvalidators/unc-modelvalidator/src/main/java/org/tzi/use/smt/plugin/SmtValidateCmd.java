@@ -13,6 +13,7 @@ import org.tzi.use.smt.config.ConfigurationReader;
 import org.tzi.use.smt.config.ConfigurationVocabulary;
 import org.tzi.use.smt.config.RawConfiguration;
 import org.tzi.use.smt.finder.ModelFinderResult;
+import org.tzi.use.smt.finder.ResultClassification;
 import org.tzi.use.smt.finder.SmtModelFinder;
 import org.tzi.use.uml.mm.MModel;
 
@@ -63,8 +64,11 @@ public class SmtValidateCmd implements IPluginShellCmdDelegate {
         return;
       }
       String section = arguments.length >= 2 ? arguments[1].trim() : null;
-      ModelFinderResult result = validate(session, model, propertiesFile, section, out);
-      report(out, result);
+      ValidatedResult validated = validate(session, model, propertiesFile, section, out);
+      report(out, validated);
+    } catch (org.tzi.use.smt.encode.SmtTranslationException e) {
+      out.println(PREFIX + " outcome: UNSUPPORTED");
+      out.println(PREFIX + " error: " + e.getMessage());
     } catch (RuntimeException | org.tzi.use.api.UseApiException e) {
       out.println(PREFIX + " error: " + e.getMessage());
     }
@@ -74,14 +78,20 @@ public class SmtValidateCmd implements IPluginShellCmdDelegate {
    * Runs the finder for the currently loaded model against one configuration file, optionally
    * selecting a named section, streaming the finder's own progress to {@code out}.
    */
-  static ModelFinderResult validate(
+  record ValidatedResult(ModelFinderResult result, ResultClassification classification,
+      java.util.Set<String> activeInvariants) {}
+
+  static ValidatedResult validate(
       Session session, MModel model, Path propertiesFile, String section, PrintStream out)
       throws org.tzi.use.api.UseApiException {
     ConfigurationVocabulary vocabulary = ConfigurationVocabulary.fromModel(model);
     RawConfiguration raw = ConfigurationReader.read(propertiesFile, section);
     AnalysisConfiguration config =
         ConfigurationReader.normalize(raw, vocabulary).requireSupported();
-    return SmtModelFinder.find(session, model, config);
+    ModelFinderResult result = SmtModelFinder.find(session, model, config);
+    ResultClassification classification =
+        ResultClassification.of(result, config.activeInvariants());
+    return new ValidatedResult(result, classification, config.activeInvariants());
   }
 
   /**
@@ -89,20 +99,31 @@ public class SmtValidateCmd implements IPluginShellCmdDelegate {
    * {@code UNSATISFIABLE}), so scripts written against either tool read the same; the follow-up
    * line summarizes the active invariants' fate in the returned witness.
    */
-  static void report(PrintStream out, ModelFinderResult result) {
-    out.println(
-        PREFIX + " outcome: " + (result.satisfiable() ? "SATISFIABLE" : "UNSATISFIABLE"));
-    if (result.satisfiable()) {
-      long failing = result.verdicts().stream().filter(v -> !v.holds()).count();
+  static void report(PrintStream out, ValidatedResult validated) {
+    out.println(PREFIX + " outcome: " + validated.classification());
+    if (!validated.result().satisfiable()
+        && validated.classification() == ResultClassification.INCONCLUSIVE_NUMERICAL) {
+      out.println(
+          PREFIX
+              + " satisfiability was not decided: the negative rests on"
+              + " numerical enclosures and is not an exact refutation.");
+    } else if (!validated.result().satisfiable()
+        && validated.classification() == ResultClassification.SOLVER_UNKNOWN) {
+      out.println(PREFIX + " satisfiability was not decided by the solver.");
+    } else if (validated.result().satisfiable()) {
+      long failing =
+          validated.result().verdicts().stream().filter(v -> !v.holds()).count();
       if (failing == 0) {
-        out.println(PREFIX + " all " + result.verdicts().size() + " active invariant(s) hold.");
+        out.println(
+            PREFIX + " all " + validated.result().verdicts().size()
+                + " active invariant(s) hold.");
       } else {
         out.println(
             PREFIX
                 + " "
                 + failing
                 + " of "
-                + result.verdicts().size()
+                + validated.result().verdicts().size()
                 + " active invariant(s) do NOT hold in the witness.");
       }
     }

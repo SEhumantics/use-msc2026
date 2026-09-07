@@ -1,0 +1,408 @@
+{
+  "model": "RobotBattleBanded",
+  "policy": "cover",
+  "coverClassification": "SAT_VALIDATED",
+  "uniformClassification": "INCONCLUSIVE_NUMERICAL",
+  "scenarios": [
+    {
+      "index": 0,
+      "bindings": [
+        "Robot.speed_uncertainty \u003d 0.02",
+        "Robot.lastMovement_uncertainty \u003d 1",
+        "UnidentifiedObject.speed_uncertainty \u003d 0.1"
+      ],
+      "outcome": "WITNESSED",
+      "objects": [
+        {
+          "name": "r1",
+          "class": "Robot",
+          "attributes": [
+            "lastMovement \u003d UInteger(20, 1.0)",
+            "speed \u003d UReal(0.35, 0.02)"
+          ]
+        },
+        {
+          "name": "u1",
+          "class": "UnidentifiedObject",
+          "attributes": [
+            "id \u003d UString(\u0027U-77\u0027, 0.85)",
+            "speed \u003d UReal(0.8, 0.1)"
+          ]
+        },
+        {
+          "name": "m1",
+          "class": "Mark",
+          "attributes": [
+            "hitsTarget \u003d UBoolean(true, 0.9)"
+          ]
+        }
+      ],
+      "links": [
+        [
+          "Engagement",
+          [
+            "r1",
+            "u1"
+          ]
+        ],
+        [
+          "Decision",
+          [
+            "m1",
+            "u1"
+          ]
+        ]
+      ]
+    },
+    {
+      "index": 1,
+      "bindings": [
+        "Robot.speed_uncertainty \u003d 0.02",
+        "Robot.lastMovement_uncertainty \u003d 1",
+        "UnidentifiedObject.speed_uncertainty \u003d 0.5"
+      ],
+      "outcome": "WITNESSED",
+      "objects": [
+        {
+          "name": "r1",
+          "class": "Robot",
+          "attributes": [
+            "lastMovement \u003d UInteger(20, 1.0)",
+            "speed \u003d UReal(0.35, 0.02)"
+          ]
+        },
+        {
+          "name": "u1",
+          "class": "UnidentifiedObject",
+          "attributes": [
+            "id \u003d UString(\u0027U-77\u0027, 0.85)",
+            "speed \u003d UReal(0.8, 0.5)"
+          ]
+        },
+        {
+          "name": "m1",
+          "class": "Mark",
+          "attributes": [
+            "hitsTarget \u003d UBoolean(true, 0.9)"
+          ]
+        }
+      ],
+      "links": [
+        [
+          "Engagement",
+          [
+            "r1",
+            "u1"
+          ]
+        ],
+        [
+          "Decision",
+          [
+            "m1",
+            "u1"
+          ]
+        ]
+      ]
+    },
+    {
+      "index": 2,
+      "bindings": [
+        "Robot.speed_uncertainty \u003d 0.02",
+        "Robot.lastMovement_uncertainty \u003d 3",
+        "UnidentifiedObject.speed_uncertainty \u003d 0.1"
+      ],
+      "outcome": "WITNESSED",
+      "objects": [
+        {
+          "name": "r1",
+          "class": "Robot",
+          "attributes": [
+            "lastMovement \u003d UInteger(20, 3.0)",
+            "speed \u003d UReal(0.35, 0.02)"
+          ]
+        },
+        {
+          "name": "u1",
+          "class": "UnidentifiedObject",
+          "attributes": [
+            "id \u003d UString(\u0027U-77\u0027, 0.85)",
+            "speed \u003d UReal(0.8, 0.1)"
+          ]
+        },
+        {
+          "name": "m1",
+          "class": "Mark",
+          "attributes": [
+            "hitsTarget \u003d UBoolean(true, 0.9)"
+          ]
+        }
+      ],
+      "links": [
+        [
+          "Engagement",
+          [
+            "r1",
+            "u1"
+          ]
+        ],
+        [
+          "Decision",
+          [
+            "m1",
+            "u1"
+          ]
+        ]
+      ]
+    },
+    {
+      "index": 3,
+      "bindings": [
+        "Robot.speed_uncertainty \u003d 0.02",
+        "Robot.lastMovement_uncertainty \u003d 3",
+        "UnidentifiedObject.speed_uncertainty \u003d 0.5"
+      ],
+      "outcome": "WITNESSED",
+      "objects": [
+        {
+          "name": "r1",
+          "class": "Robot",
+          "attributes": [
+            "lastMovement \u003d UInteger(20, 3.0)",
+            "speed \u003d UReal(0.35, 0.02)"
+          ]
+        },
+        {
+          "name": "u1",
+          "class": "UnidentifiedObject",
+          "attributes": [
+            "id \u003d UString(\u0027U-77\u0027, 0.85)",
+            "speed \u003d UReal(0.8, 0.5)"
+          ]
+        },
+        {
+          "name": "m1",
+          "class": "Mark",
+          "attributes": [
+            "hitsTarget \u003d UBoolean(true, 0.9)"
+          ]
+        }
+      ],
+      "links": [
+        [
+          "Engagement",
+          [
+            "r1",
+            "u1"
+          ]
+        ],
+        [
+          "Decision",
+          [
+            "m1",
+            "u1"
+          ]
+        ]
+      ]
+    },
+    {
+      "index": 4,
+      "bindings": [
+        "Robot.speed_uncertainty \u003d 0.06",
+        "Robot.lastMovement_uncertainty \u003d 1",
+        "UnidentifiedObject.speed_uncertainty \u003d 0.1"
+      ],
+      "outcome": "WITNESSED",
+      "objects": [
+        {
+          "name": "r1",
+          "class": "Robot",
+          "attributes": [
+            "lastMovement \u003d UInteger(20, 1.0)",
+            "speed \u003d UReal(0.42, 0.06)"
+          ]
+        },
+        {
+          "name": "u1",
+          "class": "UnidentifiedObject",
+          "attributes": [
+            "id \u003d UString(\u0027U-77\u0027, 0.85)",
+            "speed \u003d UReal(0.8, 0.1)"
+          ]
+        },
+        {
+          "name": "m1",
+          "class": "Mark",
+          "attributes": [
+            "hitsTarget \u003d UBoolean(true, 0.9)"
+          ]
+        }
+      ],
+      "links": [
+        [
+          "Engagement",
+          [
+            "r1",
+            "u1"
+          ]
+        ],
+        [
+          "Decision",
+          [
+            "m1",
+            "u1"
+          ]
+        ]
+      ]
+    },
+    {
+      "index": 5,
+      "bindings": [
+        "Robot.speed_uncertainty \u003d 0.06",
+        "Robot.lastMovement_uncertainty \u003d 1",
+        "UnidentifiedObject.speed_uncertainty \u003d 0.5"
+      ],
+      "outcome": "WITNESSED",
+      "objects": [
+        {
+          "name": "r1",
+          "class": "Robot",
+          "attributes": [
+            "lastMovement \u003d UInteger(20, 1.0)",
+            "speed \u003d UReal(0.42, 0.06)"
+          ]
+        },
+        {
+          "name": "u1",
+          "class": "UnidentifiedObject",
+          "attributes": [
+            "id \u003d UString(\u0027U-77\u0027, 0.85)",
+            "speed \u003d UReal(0.8, 0.5)"
+          ]
+        },
+        {
+          "name": "m1",
+          "class": "Mark",
+          "attributes": [
+            "hitsTarget \u003d UBoolean(true, 0.9)"
+          ]
+        }
+      ],
+      "links": [
+        [
+          "Engagement",
+          [
+            "r1",
+            "u1"
+          ]
+        ],
+        [
+          "Decision",
+          [
+            "m1",
+            "u1"
+          ]
+        ]
+      ]
+    },
+    {
+      "index": 6,
+      "bindings": [
+        "Robot.speed_uncertainty \u003d 0.06",
+        "Robot.lastMovement_uncertainty \u003d 3",
+        "UnidentifiedObject.speed_uncertainty \u003d 0.1"
+      ],
+      "outcome": "WITNESSED",
+      "objects": [
+        {
+          "name": "r1",
+          "class": "Robot",
+          "attributes": [
+            "lastMovement \u003d UInteger(20, 3.0)",
+            "speed \u003d UReal(0.42, 0.06)"
+          ]
+        },
+        {
+          "name": "u1",
+          "class": "UnidentifiedObject",
+          "attributes": [
+            "id \u003d UString(\u0027U-77\u0027, 0.85)",
+            "speed \u003d UReal(0.8, 0.1)"
+          ]
+        },
+        {
+          "name": "m1",
+          "class": "Mark",
+          "attributes": [
+            "hitsTarget \u003d UBoolean(true, 0.9)"
+          ]
+        }
+      ],
+      "links": [
+        [
+          "Engagement",
+          [
+            "r1",
+            "u1"
+          ]
+        ],
+        [
+          "Decision",
+          [
+            "m1",
+            "u1"
+          ]
+        ]
+      ]
+    },
+    {
+      "index": 7,
+      "bindings": [
+        "Robot.speed_uncertainty \u003d 0.06",
+        "Robot.lastMovement_uncertainty \u003d 3",
+        "UnidentifiedObject.speed_uncertainty \u003d 0.5"
+      ],
+      "outcome": "WITNESSED",
+      "objects": [
+        {
+          "name": "r1",
+          "class": "Robot",
+          "attributes": [
+            "lastMovement \u003d UInteger(20, 3.0)",
+            "speed \u003d UReal(0.42, 0.06)"
+          ]
+        },
+        {
+          "name": "u1",
+          "class": "UnidentifiedObject",
+          "attributes": [
+            "id \u003d UString(\u0027U-77\u0027, 0.85)",
+            "speed \u003d UReal(0.8, 0.5)"
+          ]
+        },
+        {
+          "name": "m1",
+          "class": "Mark",
+          "attributes": [
+            "hitsTarget \u003d UBoolean(true, 0.9)"
+          ]
+        }
+      ],
+      "links": [
+        [
+          "Engagement",
+          [
+            "r1",
+            "u1"
+          ]
+        ],
+        [
+          "Decision",
+          [
+            "m1",
+            "u1"
+          ]
+        ]
+      ]
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 package org.tzi.use.smt.finder;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -87,6 +88,8 @@ public class RobotBattleCaseStudyTest {
         (u.id = 'U-77').toBooleanC(0.7)
       context u : UnidentifiedObject inv recentlyMoved:
         (u.speed > 0.5).toBooleanC(0.6)
+      context m : Mark inv hitConfirmed:
+        m.hitsTarget.toBooleanC(0.8)
       """;
 
   // ============================================= CLAIM 1: four-type synthesis
@@ -409,6 +412,234 @@ public class RobotBattleCaseStudyTest {
       }
     }
     throw new AssertionError("missing invariant " + name);
+  }
+
+  // ================================= CLAIM 5: the WHOLE model under all three policies
+
+  /**
+   * THE UNREDUCED CASE STUDY UNDER THE THREE SCENARIO POLICIES. Every other policy test in
+   * this file narrows the model to ONE class and ONE invariant; this one runs the model
+   * whole -- all three classes, BOTH associations, all four invariants active, all four
+   * U-types present -- over a genuine eight-scenario space (three uncertainty-typed slots,
+   * two candidate deviations each, so |Sigma_K| = 2^3).
+   *
+   * <p>The assertions read {@link ModelFinderResult#outcome()}, NOT {@code satisfiable()}:
+   * {@code satisfiable()} is {@code outcome == SATISFIED}, so {@code
+   * assertFalse(satisfiable())} passes on {@link ProfileOutcome#PARTIAL} -- a solver timeout
+   * or {@code unknown} -- exactly as it passes on a refutation. Only asserting REFUTED
+   * distinguishes a qualified UNSAT from an unresolved solve.
+   *
+   * <ol>
+   * <li><b>EXISTS separates from COVER and UNIFORM.</b> With the robot's speed pinned to the
+   * single representative 0.35, the reduction mu &gt;= 0.30 + z_0.95*sigma admits sigma=0.02
+   * (window opens at 0.3329) but not sigma=0.06 (0.3987), so exactly the four scenarios
+   * carrying sigma=0.02 are witnessed and COVER is REFUTED on the other four.
+   * <li><b>COVER and UNIFORM do NOT separate, and cannot.</b> Admitting a second, faster
+   * representative 0.42 clears the widest deviation, so COVER succeeds -- and UNIFORM
+   * succeeds with it, on that same shared representative. Every threshold in the published
+   * model is POSITIVE with theta &gt;= 1/2, hence antitone in sigma, so this is exactly what
+   * the monotone-collapse proposition requires. Separating COVER from UNIFORM needs an
+   * invariant whose satisfying window SHIFTS rather than widens, which is why the
+   * ScenarioProfiles fixture negates an upper threshold; this test is the evidence that the
+   * real case study cannot supply that separation on its own.
+   * </ol>
+   */
+  @Test
+  public void wholeModelUnderThreeScenarioPolicies() throws Exception {
+    MModel model = compile();
+    ConfigurationVocabulary vocab = ConfigurationVocabulary.fromModel(model);
+
+    List<ClassScope> scopes = List.of(
+        new ClassScope("Robot", 1, 1, List.of("r1")),
+        new ClassScope("UnidentifiedObject", 1, 1, List.of("u1")),
+        new ClassScope("Mark", 1, 1, List.of("m1")));
+    List<AssociationScope> associations = List.of(
+        new AssociationScope("Engagement", 1, 1, List.of(List.of("r1", "u1"))),
+        new AssociationScope("Decision", 1, 1, List.of(List.of("m1", "u1"))));
+    Set<String> everyInvariant = Set.of(
+        "Robot::reliablyFast", "Robot::movedRecently", "Mark::hitConfirmed",
+        "UnidentifiedObject::identified", "UnidentifiedObject::recentlyMoved");
+
+    // Held fixed across both configurations; only Robot.speed's REPRESENTATIVE domain varies.
+    List<AttributeDomain> shared = List.of(
+        new AttributeDomain("Robot", "speed", "uncertainty", List.of("0.02", "0.06"), null, null),
+        new AttributeDomain("Robot", "lastMovement", "value", List.of("20"), null, null),
+        new AttributeDomain("Robot", "lastMovement", "uncertainty", List.of("1", "3"), null, null),
+        new AttributeDomain("UnidentifiedObject", "id", "value", List.of("U-77"), null, null),
+        new AttributeDomain("UnidentifiedObject", "id", "confidence", List.of("0.85"), null, null),
+        new AttributeDomain("UnidentifiedObject", "speed", "value", List.of("0.8"), null, null),
+        new AttributeDomain("UnidentifiedObject", "speed", "uncertainty", List.of("0.1", "0.5"),
+            null, null),
+        new AttributeDomain("Mark", "hitsTarget", "probability", List.of("0.9"), null, null));
+
+    for (String[] expectation : new String[][] {
+        // representative domain   EXISTS       COVER        UNIFORM      witnessed under COVER
+        {"0.35",                   "SATISFIED", "REFUTED",   "REFUTED",   "4"},
+        {"0.35,0.42",              "SATISFIED", "SATISFIED", "SATISFIED", "8"}}) {
+
+      List<AttributeDomain> domains = new java.util.ArrayList<>(shared);
+      domains.add(new AttributeDomain("Robot", "speed", "value",
+          List.of(expectation[0].split(",")), null, null));
+      String label = "Robot.speed value domain {" + expectation[0] + "}: ";
+
+      ModelFinderResult exists = SmtModelFinder.find(model, new AnalysisConfiguration(
+          scopes, associations, domains, everyInvariant,
+          QueryParser.parse("exists satisfy", vocab), Duration.ofSeconds(60), 1));
+      assertEquals(label + "EXISTS", ProfileOutcome.valueOf(expectation[1]), exists.outcome());
+
+      ModelFinderResult cover = SmtModelFinder.find(model, new AnalysisConfiguration(
+          scopes, associations, domains, everyInvariant,
+          QueryParser.parse("cover satisfy", vocab), Duration.ofSeconds(60), 1));
+      assertEquals(label + "COVER", ProfileOutcome.valueOf(expectation[2]), cover.outcome());
+      assertEquals(label + "|Sigma_K| is the cross product of the three uncertainty slots",
+          8, cover.scenarios().size());
+      assertEquals(label + "scenarios witnessed under COVER",
+          Long.parseLong(expectation[4]),
+          cover.scenarios().stream().filter(s -> s.outcome() == ScenarioOutcome.WITNESSED).count());
+
+      ModelFinderResult uniform = SmtModelFinder.find(model, new AnalysisConfiguration(
+          scopes, associations, domains, everyInvariant,
+          QueryParser.parse("uniform satisfy", vocab), Duration.ofSeconds(60), 1));
+      assertEquals(label + "UNIFORM", ProfileOutcome.valueOf(expectation[3]), uniform.outcome());
+    }
+  }
+
+  /**
+   * The published model plus ONE added requirement: the robot must not be confidently faster
+   * than 0.36 either. Negating a threshold reverses its monotonicity in sigma, so the
+   * satisfying window SHIFTS with the measurement quality instead of widening -- which is
+   * precisely what the monotone-collapse proposition says is needed before COVER can separate
+   * from UNIFORM. Everything else is the case study unchanged.
+   */
+  private static final String BANDED_MODEL = MODEL
+      + "context r : Robot inv notVeryFast:\n"
+      + "  not ((r.speed > 0.36).toBooleanC(0.95))\n";
+
+  /**
+   * COVER WITHOUT UNIFORM, on the unreduced case study. Same three classes, both
+   * associations and eight-scenario space as {@link #wholeModelUnderThreeScenarioPolicies},
+   * with the banded demand added and both representatives 0.35 and 0.42 admitted. Applying
+   * mu &gt;= 0.30 + z*sigma and mu &lt; 0.36 + z*sigma gives the disjoint windows
+   * [0.3329, 0.3929) for sigma=0.02 and [0.3987, 0.4587) for sigma=0.06: 0.35 lies in the
+   * first only and 0.42 in the second only, so every scenario is met but NO single
+   * representative meets them all. Contrast the unbanded run, where the same configuration
+   * satisfies UNIFORM as well.
+   */
+  @Test
+  public void bandedCaseStudySeparatesCoverFromUniform() throws Exception {
+    ModelFactory factory = new ModelFactory();
+    java.io.StringWriter buffer = new java.io.StringWriter();
+    PrintWriter err = new PrintWriter(buffer, true);
+    MModel model = USECompiler.compileSpecification(BANDED_MODEL, "RobotBattleBanded", err, factory);
+    err.flush();
+    if (model == null) {
+      throw new AssertionError("banded fixture did not compile:\n" + buffer);
+    }
+    ConfigurationVocabulary vocab = ConfigurationVocabulary.fromModel(model);
+
+    List<AttributeDomain> domains = List.of(
+        new AttributeDomain("Robot", "speed", "value", List.of("0.35", "0.42"), null, null),
+        new AttributeDomain("Robot", "speed", "uncertainty", List.of("0.02", "0.06"), null, null),
+        new AttributeDomain("Robot", "lastMovement", "value", List.of("20"), null, null),
+        new AttributeDomain("Robot", "lastMovement", "uncertainty", List.of("1", "3"), null, null),
+        new AttributeDomain("UnidentifiedObject", "id", "value", List.of("U-77"), null, null),
+        new AttributeDomain("UnidentifiedObject", "id", "confidence", List.of("0.85"), null, null),
+        new AttributeDomain("UnidentifiedObject", "speed", "value", List.of("0.8"), null, null),
+        new AttributeDomain("UnidentifiedObject", "speed", "uncertainty", List.of("0.1", "0.5"),
+            null, null),
+        new AttributeDomain("Mark", "hitsTarget", "probability", List.of("0.9"), null, null));
+    List<ClassScope> scopes = List.of(
+        new ClassScope("Robot", 1, 1, List.of("r1")),
+        new ClassScope("UnidentifiedObject", 1, 1, List.of("u1")),
+        new ClassScope("Mark", 1, 1, List.of("m1")));
+    List<AssociationScope> associations = List.of(
+        new AssociationScope("Engagement", 1, 1, List.of(List.of("r1", "u1"))),
+        new AssociationScope("Decision", 1, 1, List.of(List.of("m1", "u1"))));
+    Set<String> everyInvariant = Set.of(
+        "Robot::reliablyFast", "Robot::movedRecently", "Robot::notVeryFast",
+        "Mark::hitConfirmed",
+        "UnidentifiedObject::identified", "UnidentifiedObject::recentlyMoved");
+
+    ModelFinderResult cover = SmtModelFinder.find(model, new AnalysisConfiguration(
+        scopes, associations, domains, everyInvariant,
+        QueryParser.parse("cover satisfy", vocab), Duration.ofSeconds(60), 1));
+    assertEquals("banded case study: COVER", ProfileOutcome.SATISFIED, cover.outcome());
+    assertEquals("banded case study: every one of the eight scenarios is met", 8L,
+        cover.scenarios().stream().filter(s -> s.outcome() == ScenarioOutcome.WITNESSED).count());
+
+    ModelFinderResult uniform = SmtModelFinder.find(model, new AnalysisConfiguration(
+        scopes, associations, domains, everyInvariant,
+        QueryParser.parse("uniform satisfy", vocab), Duration.ofSeconds(60), 1));
+    assertEquals("banded case study: UNIFORM, on the SAME configuration COVER satisfied",
+        ProfileOutcome.REFUTED, uniform.outcome());
+  }
+
+  // =========================== CLAIM 6: the configuration is not vacuously satisfiable
+
+  /**
+   * THE MOTIVATING EXAMPLE IS NOT VACUOUS. Every OCL invariant in the model is universally
+   * quantified over {@code allInstances}, so the EMPTY object population satisfies all of them
+   * trivially, and so does a population with no links: {@code recentlyMoved} constrains the objects
+   * that exist, not that any exist.
+   *
+   * <p>A configuration is therefore only evidence of anything if its BOUNDS force the population.
+   * This test pins both halves of that: the intended configuration produces a witness that actually
+   * contains the three objects and both links, and the same model under a relaxed lower bound is
+   * satisfied by an empty state instead. The second half is the reason the first is worth asserting.
+   */
+  @Test
+  public void theConfiguredExampleForcesObjectsAndLinksRatherThanBeingVacuous() throws Exception {
+    MModel model = compile();
+    ConfigurationVocabulary vocab = ConfigurationVocabulary.fromModel(model);
+    Set<String> everyInvariant = Set.of(
+        "Robot::reliablyFast", "Robot::movedRecently", "Mark::hitConfirmed",
+        "UnidentifiedObject::identified", "UnidentifiedObject::recentlyMoved");
+    List<AttributeDomain> domains = List.of(
+        new AttributeDomain("Robot", "speed", "value", List.of("0.45"), null, null),
+        new AttributeDomain("Robot", "speed", "uncertainty", List.of("0.02"), null, null),
+        new AttributeDomain("Robot", "lastMovement", "value", List.of("20"), null, null),
+        new AttributeDomain("Robot", "lastMovement", "uncertainty", List.of("1"), null, null),
+        new AttributeDomain("UnidentifiedObject", "id", "value", List.of("U-77"), null, null),
+        new AttributeDomain("UnidentifiedObject", "id", "confidence", List.of("0.85"), null, null),
+        new AttributeDomain("UnidentifiedObject", "speed", "value", List.of("0.8"), null, null),
+        new AttributeDomain("UnidentifiedObject", "speed", "uncertainty", List.of("0.1"), null, null),
+        new AttributeDomain("Mark", "hitsTarget", "probability", List.of("0.9"), null, null));
+
+    ModelFinderResult intended = SmtModelFinder.find(model, new AnalysisConfiguration(
+        List.of(
+            new ClassScope("Robot", 1, 1, List.of("r1")),
+            new ClassScope("UnidentifiedObject", 1, 1, List.of("u1")),
+            new ClassScope("Mark", 1, 1, List.of("m1"))),
+        List.of(
+            new AssociationScope("Engagement", 1, 1, List.of(List.of("r1", "u1"))),
+            new AssociationScope("Decision", 1, 1, List.of(List.of("m1", "u1")))),
+        domains, everyInvariant,
+        QueryParser.parse("exists satisfy", vocab), Duration.ofSeconds(60), 1));
+
+    assertEquals("intended configuration", ProfileOutcome.SATISFIED, intended.outcome());
+    org.tzi.use.uml.sys.MSystemState state = intended.system().state();
+    assertEquals("one Robot", 1, state.objectsOfClass(model.getClass("Robot")).size());
+    assertEquals("one UnidentifiedObject", 1,
+        state.objectsOfClass(model.getClass("UnidentifiedObject")).size());
+    assertEquals("one Mark", 1, state.objectsOfClass(model.getClass("Mark")).size());
+    assertEquals("the Engagement link is present", 1,
+        state.linksOfAssociation(model.getAssociation("Engagement")).size());
+    assertEquals("the Decision link is present", 1,
+        state.linksOfAssociation(model.getAssociation("Decision")).size());
+
+    // Same model, same invariants, lower bounds relaxed and no forced links: now the EMPTY state
+    // satisfies every universally quantified invariant, which is exactly the vacuous answer the
+    // bounds above exist to exclude.
+    ModelFinderResult relaxed = SmtModelFinder.find(model, new AnalysisConfiguration(
+        List.of(
+            new ClassScope("Robot", 0, 1, List.of()),
+            new ClassScope("UnidentifiedObject", 0, 1, List.of()),
+            new ClassScope("Mark", 0, 1, List.of())),
+        List.of(), domains, everyInvariant,
+        QueryParser.parse("exists satisfy", vocab), Duration.ofSeconds(60), 1));
+    assertEquals("relaxed configuration", ProfileOutcome.SATISFIED, relaxed.outcome());
+    assertTrue("the relaxed bounds admit the vacuous empty witness",
+        relaxed.system().state().allObjects().isEmpty());
   }
 
   private static MModel compile() {

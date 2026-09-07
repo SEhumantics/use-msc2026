@@ -92,7 +92,14 @@ public final class SolverProcess implements AutoCloseable {
   }
 
   public SolverResult run(String smtLib) {
-    return persistentMode ? runPersistent(smtLib) : runOneShot(smtLib);
+    // Instrumentation only -- see SolveInstrumentation. Wrapping the single dispatch point counts
+    // both the one-shot and the persistent path without duplicating the accounting in each.
+    long started = System.nanoTime();
+    try {
+      return persistentMode ? runPersistent(smtLib) : runOneShot(smtLib);
+    } finally {
+      SolveInstrumentation.recordSolverCall(smtLib.length(), System.nanoTime() - started);
+    }
   }
 
   /** Releases the persistent process, if one was ever started. A no-op in one-shot mode. */

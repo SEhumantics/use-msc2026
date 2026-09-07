@@ -1,5 +1,6 @@
 package org.tzi.use.smt.finder;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -18,13 +19,18 @@ import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
 
 /**
- * LIVE AUDIT for the three-valued (Kleene) {@code and}/{@code or} over an UNDEFINED operand --
- * the {@code prim.boolean-undefined-strictness} shape. The entry's evidence predated the
- * oclundefined-literal closure (which made the placeholder + false-definedness pair generic over
- * every type, Boolean included) and the booleanAnd/booleanOr absorbing-value implementation, so
- * this audit pins the actual live behavior: {@code b and undef} is the ABSORBING false
- * (satisfiable exactly when it is not enforced), and {@code b or undef} holds exactly when b can
- * be true (a false-or-undefined read is undefined, hence violated when enforced).
+ * LIVE AUDIT for the three-valued (strong Kleene) {@code and}/{@code or} over an UNDEFINED operand
+ * -- the {@code prim.boolean-undefined-strictness} shape. READ THE OUTCOMES CAREFULLY -- they are
+ * NOT interchangeable:
+ *
+ * <ul>
+ *   <li>{@code true and undef} is UNDEFINED (only {@code false and undef} is defined-FALSE); an
+ *       enforced invariant whose read is UNDEFINED is not satisfied, so the run is refuted -- but
+ *       the refutation is NOT a defined-false counterexample;
+ *   <li>{@code false and undef} IS defined-FALSE (the decisive false dominates);
+ *   <li>{@code b or undef} holds exactly when b can be true; with b forced false the read is
+ *       UNDEFINED, hence violated when enforced.
+ * </ul>
  */
 public class KleeneStrictnessTest {
 
@@ -42,11 +48,30 @@ public class KleeneStrictnessTest {
         x.b or oclUndefined(Boolean)
       """;
 
-  /** and(undef) is absorbing-false: it holds for NO value of b, so enforcing refutes. */
+  /**
+   * true-and-undef is UNDEFINED under strong Kleene (never definitely true), so enforcing refutes;
+   * no quantile enclosure enters a Boolean-only encoding, so the negative is an exact bounded
+   * refutation. The verdict-level UNDEFINED-vs-FALSE distinction for these same expressions is
+   * pinned by OracleSemanticKernelMatrixTest (the re-evaluation runs only on witnesses).
+   */
   @Test
-  public void andWithUndefinedIsAbsorbingFalse() throws Exception {
+  public void andWithUndefinedWhenTrueRefutesExactly() throws Exception {
     ModelFinderResult result = find("andUndef", List.of("true"));
-    assertFalse("b and undef is false even when b is true", result.satisfiable());
+    assertFalse(
+        "true and undef is not definitely true, so enforcing refutes", result.satisfiable());
+    assertTrue("a refuted run has no witness and is never re-checked",
+        result.verdicts().isEmpty());
+    assertEquals(
+        "no enclosure, no unknown: the negative is exact within the bounds",
+        org.tzi.use.smt.finder.ResultClassification.UNSAT_EXACT,
+        org.tzi.use.smt.finder.ResultClassification.of(result, Set.of("X::andUndef")));
+  }
+
+  /** false-and-undef is also a refutation, here decided by the DEFINED-FALSE operand. */
+  @Test
+  public void andWithUndefinedWhenFalseIsDefinedFalse() throws Exception {
+    ModelFinderResult result = find("andUndef", List.of("false"));
+    assertFalse("false and undef is defined false", result.satisfiable());
   }
 
   /** or(undef) holds exactly when b can be true. */

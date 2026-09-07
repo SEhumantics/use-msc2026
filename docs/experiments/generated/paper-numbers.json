@@ -1,0 +1,46 @@
+{
+  "classification": {
+    "INCONCLUSIVE_NUMERICAL": 7,
+    "SAT_VALIDATED": 44,
+    "UNSAT_EXACT": 29,
+    "UNSUPPORTED": 2
+  },
+  "classificationOfReferenceUnsatRows": {
+    "INCONCLUSIVE_NUMERICAL": 7,
+    "UNSAT_EXACT": 29,
+    "UNSUPPORTED": 1
+  },
+  "corpusConfigurations": 82,
+  "corpusModels": 35,
+  "featureInventory": "UNAVAILABLE from raw results: the 74/50/11 feature counts come from the hand-built taxonomy in docs/modelvalidator-feature-matrix.json, not from a measured run",
+  "kkDefaultSAT4J": {
+    "max": 17805.7,
+    "mean": 831.0,
+    "median": 1.84,
+    "q1": 1.02,
+    "q3": 6.74
+  },
+  "kkFasterOn": 41,
+  "medianRatioSmtOverKk": 3.65,
+  "referenceSat": 45,
+  "referenceUnsat": 37,
+  "repeatsPerConfiguration": [
+    5
+  ],
+  "scaling": "UNAVAILABLE (run ScenarioScalingRunner first)",
+  "slowestSingleSolveMs": 52316.4,
+  "slowestSingleSolveOn": "Sudoku-UNSAT / MiniSatProver",
+  "smtFasterOn": 5,
+  "timingSetSize": 46,
+  "verdictsOnReferenceUnsatRows": 36,
+  "warmupsPerConfiguration": [
+    1
+  ],
+  "z3": {
+    "max": 13286.2,
+    "mean": 477.3,
+    "median": 5.92,
+    "q1": 4.04,
+    "q3": 43.17
+  }
+}

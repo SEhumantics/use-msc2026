@@ -9,10 +9,36 @@ public class SolverResult {
 	public int repeats;
 	public int warmups; // discarded iterations run before the measured `repeats`, for JIT warm-up
 	public String outcome; // SATISFIABLE | UNSATISFIABLE | ERROR
+	/**
+	 * The unambiguous classification of this run: SAT_VALIDATED, UNSAT_EXACT,
+	 * INCONCLUSIVE_NUMERICAL, UNSUPPORTED, SOLVER_UNKNOWN or VALIDATION_ERROR. Null on the
+	 * Kodkod rows, which have no equivalent notion. The {@code outcome} field above cannot
+	 * carry this: it has only three values, so it reports a numerically-qualified negative and
+	 * an unresolved solve as if both were refutations.
+	 */
+	public String classification;
 	public int numSearches; // internal solve/retry attempts within one -validate call
 	public double medianWallMs; // this benchmark's own nanoTime() wrap around validate()
 	public double minWallMs;
 	public double maxWallMs;
+	/**
+	 * Every measured repeat's wall time, in repeat order (warm-ups excluded -- they are discarded
+	 * from {@link #medianWallMs} too, so the two must agree). Lets a reader recompute any robust
+	 * statistic without trusting our choice of one; empty list on an ERROR cell.
+	 */
+	public List<Double> wallMsPerRepeat = List.of();
+	/**
+	 * SMT rows only. The scenario policy the configuration's query requested -- EXISTS, COVER or
+	 * UNIFORM -- and the size of the configured scenario space it quantifies over, plus how many
+	 * of those scenarios the profile actually solved (EXISTS reports the one chosen; COVER and
+	 * UNIFORM report the complete set). Null on the Kodkod rows, which have no scenario notion.
+	 */
+	public String policy;
+	public Integer configuredScenarios;
+	public Integer reportedScenarios;
+	/** SMT rows only: solver invocations and total SMT-LIB characters of one measured repeat. */
+	public Long solverCalls;
+	public Long scriptCharacters;
 	public long medianKodkodSolvingMs; // Kodkod's own Statistics.solvingTime() (ms resolution)
 	public long medianKodkodTranslationMs;
 	public String witnessDigest; // first repeat's digest; null on UNSATISFIABLE/ERROR

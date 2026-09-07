@@ -38,7 +38,27 @@ public record ModelFinderResult(
     ScenarioProfile profile,
     ProfileOutcome outcome,
     List<ScenarioReport> scenarios,
-    BoundedCompletenessQualification qualification) {
+    BoundedCompletenessQualification qualification,
+    int quantileEnclosures) {
+
+  /**
+   * A result carrying no enclosure count yet. {@link SmtModelFinder} fills it in once, at the
+   * boundary of a run, via {@link #withQuantileEnclosures(int)}; the five construction sites inside
+   * the profile dispatch do not each have to thread the instrumentation.
+   */
+  public ModelFinderResult(
+      FragmentCoverageLedger ledger,
+      ScenarioProfile profile,
+      ProfileOutcome outcome,
+      List<ScenarioReport> scenarios,
+      BoundedCompletenessQualification qualification) {
+    this(ledger, profile, outcome, scenarios, qualification, 0);
+  }
+
+  /** The same result, recording how many quantile enclosures its encoding performed. */
+  public ModelFinderResult withQuantileEnclosures(int enclosures) {
+    return new ModelFinderResult(ledger, profile, outcome, scenarios, qualification, enclosures);
+  }
 
   public ModelFinderResult {
     scenarios = List.copyOf(scenarios);

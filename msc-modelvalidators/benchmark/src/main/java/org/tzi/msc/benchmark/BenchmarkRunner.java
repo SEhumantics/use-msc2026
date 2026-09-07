@@ -30,8 +30,12 @@ import org.tzi.use.parser.use.USECompiler;
 import org.tzi.use.smt.config.AnalysisConfiguration;
 import org.tzi.use.smt.config.ConfigurationReader;
 import org.tzi.use.smt.config.ConfigurationVocabulary;
+import org.tzi.use.smt.config.QueryExpr;
 import org.tzi.use.smt.config.RawConfiguration;
+import org.tzi.use.smt.config.ScenarioProfile;
 import org.tzi.use.smt.finder.ModelFinderResult;
+import org.tzi.use.smt.finder.ResultClassification;
+import org.tzi.use.smt.solver.SolveInstrumentation;
 import org.tzi.use.smt.finder.SmtModelFinder;
 import org.tzi.use.smt.solver.SolverBinary;
 import org.tzi.use.smt.solver.SolverProcess;
@@ -273,8 +277,19 @@ public class BenchmarkRunner {
 		List<Double> wallMs = new ArrayList<>();
 		List<String> digests = new ArrayList<>();
 		String outcome = null;
+		String classification = null;
 		Boolean reconstructed = null;
 		Boolean useChecked = null;
+		Exception lastException = null;
+
+		// Policy and configured-scenario provenance come off the normalized configuration on the
+		// first repeat that gets that far: configuration facts, not run outcomes, recorded from
+		// the finder's own enumeration so the count is the number the query quantifies over
+		// rather than a re-derivation of which slots own coordinates. A configuration the reader
+		// or the scenario space refuses leaves them null and gets its refusal from the loop.
+		String policy = null;
+		int configuredScenarios = -1;
+		int reportedScenarios = -1;
 
 		for (int i = 0; i < warmups + repeats; i++) {
 			boolean isWarmup = i < warmups;
@@ -283,13 +298,26 @@ public class BenchmarkRunner {
 				RawConfiguration raw = ConfigurationReader
 						.read(new File(exDir, ex.propertiesFile).toPath(), ex.section);
 				AnalysisConfiguration config = ConfigurationReader.normalize(raw, vocabulary).requireSupported();
+				if (policy == null) {
+					policy = policyLabel(config.query());
+				}
+				if (configuredScenarios < 0) {
+					configuredScenarios = SmtModelFinder
+							.configuredScenarioSpace(mModel, config, scenarioProfile(config.query())).size();
+				}
 
+				long[] saved = SolveInstrumentation.snapshot();
 				long t0 = System.nanoTime();
 				ModelFinderResult finderResult = SmtModelFinder.find(mModel, config, smtSolverProcess);
 				long t1 = System.nanoTime();
 				if (!isWarmup) {
 					wallMs.add((t1 - t0) / 1_000_000.0);
+					// Same scope as the scaling runner: the LAST measured repeat's counters, so the
+					// recorded script size and call count describe one repeat, not their sum.
+					result.solverCalls = SolveInstrumentation.solverCalls();
+					result.scriptCharacters = SolveInstrumentation.scriptCharacters();
 				}
+				SolveInstrumentation.restore(saved);
 
 				// ModelFinderResult#allActiveInvariantsHold() checks EVERY invariant declared in
 				// the model, not merely the ones this scenario's own .properties section marked
@@ -306,7 +334,16 @@ public class BenchmarkRunner {
 						&& finderResult.verdicts().stream()
 								.filter(v -> config.activeInvariants().contains(v.invariantName()))
 								.allMatch(InvariantVerdict::holds);
+				// The three-valued `outcome` string is kept for the Kodkod-comparable parity table,
+				// which has only SATISFIABLE/UNSATISFIABLE/ERROR to compare against. It is NOT the
+				// reportable answer: `satisfiable()` is `outcome == SATISFIED`, so this line alone
+				// would record a ProfileOutcome.PARTIAL run -- a solver `unknown` or a timeout -- as
+				// a refutation, which ProfileOutcome's own documentation forbids. The classification
+				// below is the one every report, script and table reads.
 				outcome = sat ? "SATISFIABLE" : "UNSATISFIABLE";
+				classification =
+						ResultClassification.of(finderResult, config.activeInvariants()).name();
+				reportedScenarios = finderResult.scenarios().size();
 				// Two independent facts, read off two independent accessors -- see
 				// SolverResult#reconstructed. system() is non-null exactly when a scenario was
 				// witnessed (a snapshot exists at all); allActiveInvariantsHold() additionally
@@ -319,14 +356,72 @@ public class BenchmarkRunner {
 			} catch (Exception e) {
 				System.err.println("  " + (isWarmup ? "warmup " : "repeat ") + i + " failed: " + e);
 				result.outcome = "ERROR";
-				result.error = e.getClass().getSimpleName() + ": " + e.getMessage();
-				break;
-			}
+			result.error = e.getClass().getSimpleName() + ": " + e.getMessage();
+			lastException = e;
+			break;
 		}
+	}
 
 		finalizeResult(result, outcome, wallMs, List.of(), List.of(), digests);
+		// A run the fragment refused or an unexpected exception interrupted never produced a
+		// finder result. Fragment refusals (SmtTranslationException) are UNSUPPORTED; other
+		// exceptions during finding are SOLVER_UNKNOWN. Witness-checking failures are already
+		// classified VALIDATION_ERROR by ResultClassification.of() inside the try block.
+		result.classification =
+				classification != null
+						? classification
+						: (lastException instanceof org.tzi.use.smt.encode.SmtTranslationException
+								|| lastException instanceof org.tzi.use.smt.config.ConfigurationReadException
+								? org.tzi.use.smt.finder.ResultClassification.ofRefusal().name()
+								: org.tzi.use.smt.finder.ResultClassification.SOLVER_UNKNOWN.name());
+		result.policy = policy;
+		result.configuredScenarios = configuredScenarios >= 0 ? configuredScenarios : null;
+		result.reportedScenarios = reportedScenarios >= 0 ? reportedScenarios : null;
 		recordReconstruction(result, reconstructed, useChecked);
 		return result;
+	}
+
+	/**
+	 * The scenario policy a query requests: the outermost profiled expression's profile, or EXISTS
+	 * for the bare incumbent-compatible macros, which are defined to be existential
+	 * ({@code QueryExpr.SATISFY} is {@code Profiled(EXISTS, Satisfy)}). Recurses through the
+	 * logical combinators so an aggregate over a profiled subquery still reports its profile.
+	 */
+	static String policyLabel(QueryExpr query) {
+		if (query instanceof QueryExpr.Profiled profiled) {
+			return profiled.profile().name();
+		}
+		if (query instanceof QueryExpr.And and) {
+			String label = policyLabel(and.left());
+			return label != null ? label : policyLabel(and.right());
+		}
+		if (query instanceof QueryExpr.Or or) {
+			String label = policyLabel(or.left());
+			return label != null ? label : policyLabel(or.right());
+		}
+		if (query instanceof QueryExpr.Not not) {
+			return policyLabel(not.operand());
+		}
+		return "EXISTS";
+	}
+
+	/** The {@link ScenarioProfile} of a query, resolved the same way {@link #policyLabel} does. */
+	static ScenarioProfile scenarioProfile(QueryExpr query) {
+		if (query instanceof QueryExpr.Profiled profiled) {
+			return profiled.profile();
+		}
+		if (query instanceof QueryExpr.And and) {
+			ScenarioProfile profile = scenarioProfile(and.left());
+			return profile != null ? profile : scenarioProfile(and.right());
+		}
+		if (query instanceof QueryExpr.Or or) {
+			ScenarioProfile profile = scenarioProfile(or.left());
+			return profile != null ? profile : scenarioProfile(or.right());
+		}
+		if (query instanceof QueryExpr.Not not) {
+			return scenarioProfile(not.operand());
+		}
+		return ScenarioProfile.EXISTS;
 	}
 
 	private static MModel compile(File useFile) throws Exception {
@@ -501,6 +596,7 @@ public class BenchmarkRunner {
 		result.medianWallMs = median(wallMs);
 		result.minWallMs = wallMs.stream().mapToDouble(Double::doubleValue).min().orElse(0);
 		result.maxWallMs = wallMs.stream().mapToDouble(Double::doubleValue).max().orElse(0);
+		result.wallMsPerRepeat = List.copyOf(wallMs);
 		result.medianKodkodSolvingMs = (long) medianLong(kodkodSolveMs);
 		result.medianKodkodTranslationMs = (long) medianLong(kodkodTranslateMs);
 		if ("ERROR".equals(result.outcome)) {

@@ -125,6 +125,18 @@ RUN_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 JAVA_VERSION="$(java -version 2>&1 | head -1 | tr -d '"')"
 OS_DESC="$(uname -srm)"
 HOST_NAME="$(hostname)"
+# Reproducibility provenance beyond the bare Java/OS pair: the exact CPU model and memory size
+# (timings are hardware-dependent), the Z3 version the SMT rows actually used (resolved the same
+# way SolverBinary.resolve() resolves it: repo tools/z3/bin/z3 when present, else $PATH), and the
+# USE release this checkout carries (root pom version).
+CPU_MODEL="$(awk -F: '/model name/ {gsub(/^ /,"",$2); print $2; exit}' /proc/cpuinfo 2>/dev/null)"
+MEM_TOTAL_KB="$(awk '/^MemTotal/ {print $2}' /proc/meminfo 2>/dev/null)"
+case "$MEM_TOTAL_KB" in (*[!0-9]*|"") MEM_TOTAL_KB=0;; esac
+Z3_BIN="$USE_MSC2026_DIR/tools/z3/bin/z3"
+[ -x "$Z3_BIN" ] || Z3_BIN="$(command -v z3 || true)"
+Z3_VERSION="unknown"
+if [ -n "$Z3_BIN" ]; then Z3_VERSION="$("$Z3_BIN" --version 2>/dev/null | head -1)"; fi
+USE_VERSION="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p' "$USE_MSC2026_DIR/pom.xml" | head -1)"
 
 # benchmarkStatus is what tells a complete run from a killed one. It is written "running" before the
 # run and REWRITTEN afterwards, because a report built from a killed run is otherwise
@@ -143,6 +155,10 @@ write_run_metadata() {
   "javaVersion": "$JAVA_VERSION",
   "os": "$OS_DESC",
   "hostname": "$HOST_NAME",
+  "cpuModel": "$CPU_MODEL",
+  "memoryTotalKb": $MEM_TOTAL_KB,
+  "z3Version": "$Z3_VERSION",
+  "useVersion": "$USE_VERSION",
   "repeats": $REPEATS,
   "warmups": $WARMUPS,
   "soilTimeoutSeconds": $SOIL_TIMEOUT,

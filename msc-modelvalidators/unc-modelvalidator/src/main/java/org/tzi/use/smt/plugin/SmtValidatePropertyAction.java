@@ -15,6 +15,7 @@ import org.tzi.use.smt.config.ConfigurationReader;
 import org.tzi.use.smt.config.ConfigurationVocabulary;
 import org.tzi.use.smt.config.RawConfiguration;
 import org.tzi.use.smt.finder.ModelFinderResult;
+import org.tzi.use.smt.finder.ResultClassification;
 import org.tzi.use.smt.finder.SmtModelFinder;
 import org.tzi.use.uml.mm.MModel;
 
@@ -49,8 +50,8 @@ public class SmtValidatePropertyAction implements IPluginActionDelegate {
     }
 
     try {
-      ModelFinderResult result = validate(session, model, fileChooser.getSelectedFile().toPath());
-      report(pluginAction, result);
+      ValidatedResult validated = validate(session, model, fileChooser.getSelectedFile().toPath());
+      report(pluginAction, validated);
     } catch (RuntimeException | UseApiException e) {
       JOptionPane.showMessageDialog(
           pluginAction.getParent(),
@@ -60,47 +61,92 @@ public class SmtValidatePropertyAction implements IPluginActionDelegate {
     }
   }
 
-  private static ModelFinderResult validate(Session session, MModel model, Path propertiesFile)
-      throws UseApiException {
+  record ValidatedResult(ModelFinderResult result, ResultClassification classification,
+      java.util.Set<String> activeInvariants) {}
+
+  private static ValidatedResult validate(
+      Session session, MModel model, Path propertiesFile) throws UseApiException {
     ConfigurationVocabulary vocabulary = ConfigurationVocabulary.fromModel(model);
     RawConfiguration raw = ConfigurationReader.read(propertiesFile, null);
     AnalysisConfiguration config =
         ConfigurationReader.normalize(raw, vocabulary).requireSupported();
-    return SmtModelFinder.find(session, model, config);
+    ModelFinderResult result = SmtModelFinder.find(session, model, config);
+    ResultClassification classification =
+        ResultClassification.of(result, config.activeInvariants());
+    return new ValidatedResult(result, classification, config.activeInvariants());
   }
 
-  private static void report(IPluginAction pluginAction, ModelFinderResult result) {
-    if (!result.satisfiable()) {
-      JOptionPane.showMessageDialog(
-          pluginAction.getParent(),
-          "No valid instance exists within the configured scope (UNSATISFIABLE).",
-          "SMT Validation",
-          JOptionPane.INFORMATION_MESSAGE);
-      return;
+  private static void report(
+      IPluginAction pluginAction, ValidatedResult validated) {
+    ModelFinderResult result = validated.result();
+    ResultClassification classification = validated.classification();
+
+    switch (classification) {
+      case SAT_VALIDATED -> {
+        var activeVerdicts = result.verdicts().stream()
+            .filter(v -> validated.activeInvariants().contains(v.invariantName())).toList();
+        long failing = activeVerdicts.stream().filter(v -> !v.holds()).count();
+        String message =
+            failing == 0
+                ? "A valid instance was found; all "
+                    + activeVerdicts.size()
+                    + " active invariant(s) hold (SAT_VALIDATED)."
+                : failing
+                    + " of "
+                    + activeVerdicts.size()
+                    + " active invariant(s) do not hold in the found instance"
+                    + " (FALSE and UNDEFINED are not interchangeable): "
+                    + activeVerdicts.stream()
+                        .filter(v -> !v.holds())
+                        .map(v -> v.invariantName() + " [" + v.outcome() + "]")
+                        .collect(java.util.stream.Collectors.joining(", "));
+        JOptionPane.showMessageDialog(
+            pluginAction.getParent(), message, "SMT Validation",
+            JOptionPane.INFORMATION_MESSAGE);
+      }
+      case UNSAT_EXACT -> {
+        JOptionPane.showMessageDialog(
+            pluginAction.getParent(),
+            "No valid instance exists within the configured scope"
+                + " (exact bounded refutation: UNSAT_EXACT).",
+            "SMT Validation",
+            JOptionPane.INFORMATION_MESSAGE);
+      }
+      case INCONCLUSIVE_NUMERICAL -> {
+        JOptionPane.showMessageDialog(
+            pluginAction.getParent(),
+            "Satisfiability was not decided: the encoding used a numerical"
+                + " enclosure, so this negative result is inconclusive"
+                + " (INCONCLUSIVE_NUMERICAL), not an exact refutation.",
+            "SMT Validation",
+            JOptionPane.WARNING_MESSAGE);
+      }
+      case SOLVER_UNKNOWN -> {
+        JOptionPane.showMessageDialog(
+            pluginAction.getParent(),
+            "The solver did not decide satisfiability within the configured"
+                + " bounds (SOLVER_UNKNOWN).",
+            "SMT Validation",
+            JOptionPane.WARNING_MESSAGE);
+      }
+      case UNSUPPORTED -> {
+        JOptionPane.showMessageDialog(
+            pluginAction.getParent(),
+            "The configuration uses constructs outside the supported"
+                + " fragment and was refused (UNSUPPORTED).",
+            "SMT Validation",
+            JOptionPane.ERROR_MESSAGE);
+      }
+      case VALIDATION_ERROR -> {
+        JOptionPane.showMessageDialog(
+            pluginAction.getParent(),
+            "The oracle contradicted the solver on the reconstructed"
+                + " witness (VALIDATION_ERROR); this signals a defect in"
+                + " the encoding or the checker.",
+            "SMT Validation",
+            JOptionPane.ERROR_MESSAGE);
+      }
     }
-    long failing = result.verdicts().stream().filter(v -> !v.holds()).count();
-    String message;
-    if (failing == 0) {
-      message =
-          "A valid instance was found; all "
-              + result.verdicts().size()
-              + " active invariant(s) hold.";
-    } else {
-      String failingNames =
-          result.verdicts().stream()
-              .filter(v -> !v.holds())
-              .map(v -> v.invariantName() + " [" + v.outcome() + "]")
-              .collect(Collectors.joining(", "));
-      message =
-          failing
-              + " of "
-              + result.verdicts().size()
-              + " active invariant(s) do not hold in the found instance"
-              + " (FALSE and UNDEFINED are not interchangeable): "
-              + failingNames;
-    }
-    JOptionPane.showMessageDialog(
-        pluginAction.getParent(), message, "SMT Validation", JOptionPane.INFORMATION_MESSAGE);
   }
 
   private static File modelDirectoryOf(MModel model) {

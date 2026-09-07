@@ -86,6 +86,10 @@ final class URealThresholdBoundary {
    * that silent degradation into a located refusal naming the unreachable confidence.
    */
   private static Enclosure bisect(BigDecimal confidence, DoubleUnaryOperator probability) {
+    // Instrumentation only -- see QuantileInstrumentation. Counting here, at the single point
+    // where USE's CDF approximation enters the encoding, is what lets a refutation be reported
+    // as INCONCLUSIVE_NUMERICAL rather than UNSAT_EXACT without re-deriving the condition.
+    QuantileInstrumentation.recordEnclosure();
     double target = confidence.doubleValue();
     if (!(target > 0.0 && target < 1.0)) {
       // Inside 7.2's toBooleanC core, but outside the threshold shape it fixes: USE's own

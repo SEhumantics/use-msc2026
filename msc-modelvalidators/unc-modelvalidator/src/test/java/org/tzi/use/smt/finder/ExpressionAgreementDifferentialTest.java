@@ -41,12 +41,14 @@ import org.tzi.use.uncertainty.datatypes.UString;
  * re-implements either side.
  *
  * <p><b>Scope, stated rather than fabricated.</b> 7.2's U-type core names {@code UReal}, {@code
- * UInteger}, {@code UBoolean} and {@code UString}. The first three are translated; {@code UString}
- * is not. The generator therefore ranges over exactly those three, and {@link
- * #theGeneratorsScopeIsBoundedByWhatIsActuallyTranslated} pins that restriction to {@code
- * AttributeType} itself rather than leaving it as a claim in a comment, so the day the fourth
- * family lands this test fails and forces the generator to be widened again. It has now fired twice
- * and been widened twice, never suppressed.
+ * UInteger}, {@code UBoolean} and {@code UString}. All four are translated as of the UString
+ * closure ({@code UStringFragmentTest} and the corpus's {@code UStringThreshold} rows are the
+ * evidence; when this test's comments last said "UString is not translated" that was true and the
+ * generator covered three families -- it now covers all four). {@link
+ * #theGeneratorsScopeIsBoundedByWhatIsActuallyTranslated} still pins the generator's range to
+ * {@code AttributeType} itself rather than leaving it as a claim in a comment, so the day a fifth
+ * family lands this test fails and forces the generator to be widened again -- it has already
+ * been widened twice, never suppressed.
  *
  * <p><b>Why the {@code UBoolean} points slide the CONFIDENCE rather than a representative.</b>
  * {@code UBoolean} has no representative and no normal CDF: its rules are exact algebra over

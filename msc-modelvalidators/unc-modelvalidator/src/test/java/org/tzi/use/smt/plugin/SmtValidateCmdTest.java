@@ -17,7 +17,6 @@ import org.tzi.use.main.Session;
 import org.tzi.use.main.shell.runtime.IPluginShellCmd;
 import org.tzi.use.parser.use.USECompiler;
 import org.tzi.use.smt.config.ConfigurationReadException;
-import org.tzi.use.smt.finder.ModelFinderResult;
 import org.tzi.use.uml.mm.MModel;
 import org.tzi.use.uml.mm.ModelFactory;
 import org.tzi.use.uml.sys.MSystem;
@@ -26,16 +25,9 @@ import org.w3c.dom.NodeList;
 
 /**
  * Tests for the {@code smtmodelvalidator -validate} shell command ({@link SmtValidateCmd}) and its
- * registration in {@code useplugin.xml} -- the command path the {@code cmd.validate} row names.
- * Mirrors the incumbent's {@code KodkodValidateCmd} contract: no-model guard, an optional
- * properties-file path with an optional named section, and the outcome printed DIRECTLY to the
- * invoking shell's stream (the incumbent's own {@code reportOutcomeDirectly} documents why: log4j
- * output cannot reliably reach the console in a multi-plugin distribution).
- *
- * <p>One documented divergence, deliberate: with NO arguments the incumbent auto-creates a generic
- * configuration file next to the specification, but this finder's configurations require
- * explicitly bounded domains (an auto-generated one would be meaningless), so the command prints
- * its usage instead.
+ * registration in {@code useplugin.xml}. The outcome line now names the six-way classification
+ * (SAT_VALIDATED, UNSAT_EXACT, INCONCLUSIVE_NUMERICAL, UNSUPPORTED, SOLVER_UNKNOWN,
+ * VALIDATION_ERROR) rather than a bare SATISFIABLE/UNSATISFIABLE.
  */
 public class SmtValidateCmdTest {
 
@@ -53,40 +45,39 @@ public class SmtValidateCmdTest {
 
   private static final Path PROPERTIES = Paths.get("src/test/resources/CmdValidate.properties");
 
-  /** The core: validate() runs the finder and the report names the outcome for the shell. */
   @Test
-  public void validateRunsTheFinderAndTheReportNamesTheOutcome() throws Exception {
+  public void validateRunsTheFinderAndTheReportNamesTheClassification() throws Exception {
     Session session = sessionWithModel();
     ByteArrayOutputStream out = new ByteArrayOutputStream();
 
-    ModelFinderResult result =
+    var validated =
         SmtValidateCmd.validate(session, session.system().model(), PROPERTIES, null, newPrintStream(out));
-    SmtValidateCmd.report(newPrintStream(out), result);
+    SmtValidateCmd.report(newPrintStream(out), validated);
 
-    assertTrue("the [main] section's configuration is satisfiable", result.satisfiable());
+    assertTrue("the [main] section's configuration is satisfiable",
+        validated.result().satisfiable());
     assertTrue(
-        "the shell must learn the outcome directly, not via log4j",
-        out.toString().contains("[smtmodelvalidator] outcome: SATISFIABLE"));
+        "the shell must see the six-way classification, not a bare SATISFIABLE",
+        out.toString().contains("[smtmodelvalidator] outcome: SAT_VALIDATED"));
     assertTrue(out.toString().contains("all 1 active invariant(s) hold."));
   }
 
-  /** A named section selects a different configuration: [tight] shrinks the domain to force UNSAT. */
   @Test
   public void aNamedSectionSelectsADifferentConfiguration() throws Exception {
     Session session = sessionWithModel();
     ByteArrayOutputStream out = new ByteArrayOutputStream();
 
-    ModelFinderResult result =
+    var validated =
         SmtValidateCmd.validate(session, session.system().model(), PROPERTIES, "tight", newPrintStream(out));
-    SmtValidateCmd.report(newPrintStream(out), result);
+    SmtValidateCmd.report(newPrintStream(out), validated);
 
-    assertFalse("the [tight] section pins i to 3, contradicting i = 5", result.satisfiable());
+    assertFalse("the [tight] section pins i to 3, contradicting i = 5",
+        validated.result().satisfiable());
     assertTrue(
-        "the shell outcome line must say UNSATISFIABLE",
-        out.toString().contains("[smtmodelvalidator] outcome: UNSATISFIABLE"));
+        "the shell outcome line must carry the classification",
+        out.toString().contains("[smtmodelvalidator] outcome: UNSAT_EXACT"));
   }
 
-  /** The fail-closed configuration policy surfaces as a caught, printed error -- never a crash. */
   @Test
   public void anUnsupportedConfigurationIsRefusedByTheReader() throws Exception {
     Session session = sessionWithModel();
@@ -103,7 +94,6 @@ public class SmtValidateCmdTest {
     }
   }
 
-  /** The command delegate itself degrades gracefully when no model is loaded. */
   @Test
   public void performCommandWithoutAModelPrintsAGracefulMessage() {
     Session emptySession = new Session();
@@ -129,19 +119,6 @@ public class SmtValidateCmdTest {
         out.toString().contains("[smtmodelvalidator] No model loaded."));
   }
 
-  /**
-   * Regression guard for the actual production escape route: {@code QueryParser}'s recursive-
-   * descent parser previously had no recursion-depth bound, so a deeply-nested {@code query} value
-   * could overflow the raw Java call stack with a {@link StackOverflowError} -- an {@link Error},
-   * not a {@link RuntimeException}, escaping THIS very command's own {@code catch
-   * (RuntimeException | UseApiException)} and crashing the shell instead of degrading to a printed
-   * error line, contradicting this class's own javadoc promise ("every failure ... degrades to a
-   * printed {@code [smtmodelvalidator] error: ...} line rather than an exception escaping into the
-   * shell"). Runs the real, unmodified {@code performCommand} entry point end to end against a
-   * properties file whose {@code query} key nests 50,000 levels of parentheses -- comfortably past
-   * both the fix's own 300-level bound and, unguarded, the depth at which a default JVM thread
-   * stack actually overflows (reproduced directly for this same recursive shape).
-   */
   @Test(timeout = 20_000)
   public void aDeeplyNestedQueryDegradesToAPrintedErrorRatherThanCrashingTheShell()
       throws Exception {
@@ -184,11 +161,6 @@ public class SmtValidateCmdTest {
         out.toString().contains("[smtmodelvalidator] error:"));
   }
 
-  /**
-   * The plugin manifest must register the command on the SAME extension surface the incumbent
-   * uses: a {@code <commands>} block with {@code shellcmd="smtmodelvalidator -validate"} and the
-   * delegate class wired as both id and class.
-   */
   @Test
   public void usepluginXmlRegistersTheValidateShellCommand() throws Exception {
     try (InputStream in =
